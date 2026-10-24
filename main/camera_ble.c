@@ -1,6 +1,8 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "esp_bt.h"
@@ -25,6 +27,9 @@
 #define WIFI_CONTROL_CHAR_UUID 0x0002
 #define MAX_COMMAND_LEN 20
 #define SCAN_DURATION_SECONDS 30
+#define MAX_BLE_DATA_LEN 31
+#define MAX_NOTIFICATION_CHARACTERISTICS 16
+#define CLIENT_CHARACTERISTIC_CONFIG_UUID 0x2902
 
 static const char *TAG = "trailcamhub_ble";
 static esp_ble_scan_params_t scan_params = {
@@ -38,6 +43,8 @@ static esp_ble_scan_params_t scan_params = {
 
 static esp_gatt_if_t s_gatt_if = ESP_GATT_IF_NONE;
 static uint16_t s_conn_id;
+static uint16_t s_gatt_start_handle;
+static uint16_t s_gatt_end_handle;
 static uint16_t s_service_start_handle;
 static uint16_t s_service_end_handle;
 static uint8_t s_command[MAX_COMMAND_LEN];
@@ -46,6 +53,90 @@ static esp_bd_addr_t s_camera_address;
 static esp_ble_addr_type_t s_camera_address_type;
 static bool s_camera_selected;
 static bool s_write_with_response;
+static uint16_t s_notification_handles[MAX_NOTIFICATION_CHARACTERISTICS];
+static uint16_t s_notification_configs[MAX_NOTIFICATION_CHARACTERISTICS];
+static size_t s_notification_count;
+static size_t s_notification_index;
+
+static void log_hex_data(const char *label, const uint8_t *data, size_t length)
+{
+    char formatted[3 * MAX_BLE_DATA_LEN + 1];
+    if (length == 0) {
+        ESP_LOGI(TAG, "%s: empty", label);
+        return;
+    }
+
+    for (size_t offset = 0; offset < length; offset += MAX_BLE_DATA_LEN) {
+        size_t chunk_len = length - offset;
+        size_t formatted_len = 0;
+        if (chunk_len > MAX_BLE_DATA_LEN) {
+            chunk_len = MAX_BLE_DATA_LEN;
+        }
+
+        for (size_t i = 0; i < chunk_len; i++) {
+            int written = snprintf(formatted + formatted_len,
+                                   sizeof(formatted) - formatted_len,
+                                   i == 0 ? "%02X" : " %02X",
+                                   data[offset + i]);
+            if (written < 0 ||
+                (size_t)written >= sizeof(formatted) - formatted_len) {
+                ESP_LOGE(TAG, "Could not format %s", label);
+                return;
+            }
+            formatted_len += (size_t)written;
+        }
+
+        if (length <= MAX_BLE_DATA_LEN) {
+            ESP_LOGI(TAG, "%s (%u bytes): %s", label, (unsigned)length,
+                     formatted);
+        } else {
+            ESP_LOGI(TAG, "%s bytes %u-%u of %u: %s", label,
+                     (unsigned)offset, (unsigned)(offset + chunk_len - 1),
+                     (unsigned)length, formatted);
+        }
+    }
+}
+
+static void log_camera_advertisement(const esp_ble_gap_cb_param_t *param)
+{
+    const uint8_t *address = param->scan_rst.bda;
+    size_t adv_len = param->scan_rst.adv_data_len;
+    size_t scan_rsp_len = param->scan_rst.scan_rsp_len;
+
+    ESP_LOGI(TAG,
+             "Camera BLE advertisement: address=%02X:%02X:%02X:%02X:%02X:%02X "
+             "address_type=%u RSSI=%d dBm event_type=%u",
+             address[0], address[1], address[2], address[3], address[4],
+             address[5], (unsigned)param->scan_rst.ble_addr_type,
+             param->scan_rst.rssi, (unsigned)param->scan_rst.ble_evt_type);
+    if (adv_len + scan_rsp_len > sizeof(param->scan_rst.ble_adv)) {
+        ESP_LOGW(TAG, "BLE advertisement data lengths exceed the available buffer");
+        return;
+    }
+
+    log_hex_data("BLE advertising data", param->scan_rst.ble_adv, adv_len);
+    if (scan_rsp_len > 0) {
+        log_hex_data("BLE scan response",
+                     param->scan_rst.ble_adv + adv_len, scan_rsp_len);
+    }
+}
+
+static void log_gatt_uuid(const char *kind, const esp_bt_uuid_t *uuid)
+{
+    if (uuid->len == ESP_UUID_LEN_16) {
+        ESP_LOGI(TAG, "Discovered GATT %s UUID=0x%04x", kind,
+                 uuid->uuid.uuid16);
+    } else if (uuid->len == ESP_UUID_LEN_32) {
+        ESP_LOGI(TAG, "Discovered GATT %s UUID=0x%08lx", kind,
+                 (unsigned long)uuid->uuid.uuid32);
+    } else if (uuid->len == ESP_UUID_LEN_128) {
+        ESP_LOGI(TAG, "Discovered GATT %s with a 128-bit UUID", kind);
+        log_hex_data("GATT UUID bytes", uuid->uuid.uuid128, ESP_UUID_LEN_128);
+    } else {
+        ESP_LOGW(TAG, "Discovered GATT %s with unsupported UUID length %u",
+                 kind, (unsigned)uuid->len);
+    }
+}
 
 static int hex_value(char value)
 {
@@ -99,6 +190,160 @@ static void start_scan(void)
     }
 }
 
+static uint16_t notification_config_for_handle(uint16_t handle)
+{
+    for (size_t i = 0; i < s_notification_count; i++) {
+        if (s_notification_handles[i] == handle) {
+            return s_notification_configs[i];
+        }
+    }
+    return 0;
+}
+
+static void queue_characteristic_updates(
+    const esp_gattc_char_elem_t *characteristic)
+{
+    uint16_t config = 0;
+
+    if ((characteristic->properties & ESP_GATT_CHAR_PROP_BIT_NOTIFY) != 0) {
+        config |= 0x0001;
+    }
+    if ((characteristic->properties & ESP_GATT_CHAR_PROP_BIT_INDICATE) != 0) {
+        config |= 0x0002;
+    }
+    if (config == 0) {
+        return;
+    }
+    if (s_notification_count >= MAX_NOTIFICATION_CHARACTERISTICS) {
+        ESP_LOGW(TAG, "Too many update characteristics; skipping handle %u",
+                 characteristic->char_handle);
+        return;
+    }
+
+    s_notification_handles[s_notification_count] = characteristic->char_handle;
+    s_notification_configs[s_notification_count] = config;
+    s_notification_count++;
+}
+
+static void discover_characteristics(void)
+{
+    esp_gattc_char_elem_t *characteristics;
+    uint16_t count = 0;
+    esp_err_t status;
+
+    status = esp_ble_gattc_get_attr_count(
+        s_gatt_if, s_conn_id, ESP_GATT_DB_CHARACTERISTIC, s_gatt_start_handle,
+        s_gatt_end_handle, ESP_GATT_INVALID_HANDLE, &count);
+    if (status != ESP_GATT_OK) {
+        ESP_LOGE(TAG, "Could not count camera characteristics: %d", status);
+        return;
+    }
+    if (count == 0) {
+        ESP_LOGW(TAG, "Camera service has no discovered characteristics");
+        return;
+    }
+
+    characteristics = calloc(count, sizeof(*characteristics));
+    if (characteristics == NULL) {
+        ESP_LOGE(TAG, "Could not allocate memory for %u characteristics",
+                 count);
+        return;
+    }
+
+    status = esp_ble_gattc_get_all_char(
+        s_gatt_if, s_conn_id, s_service_start_handle, s_service_end_handle,
+        characteristics, &count, 0);
+    if (status != ESP_GATT_OK) {
+        ESP_LOGE(TAG, "Could not read camera characteristics: %d", status);
+        free(characteristics);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Discovered %u characteristic(s)", count);
+    for (uint16_t i = 0; i < count; i++) {
+        ESP_LOGI(TAG, "Characteristic handle=%u properties=0x%02x",
+                 characteristics[i].char_handle, characteristics[i].properties);
+        log_gatt_uuid("characteristic", &characteristics[i].uuid);
+        queue_characteristic_updates(&characteristics[i]);
+    }
+    free(characteristics);
+}
+
+static void start_next_characteristic_subscription(void);
+static void find_control_characteristic(void);
+
+static void complete_characteristic_subscription(void)
+{
+    s_notification_index++;
+    start_next_characteristic_subscription();
+}
+
+static void enable_characteristic_updates(uint16_t characteristic_handle)
+{
+    esp_bt_uuid_t config_uuid = {
+        .len = ESP_UUID_LEN_16,
+        .uuid.uuid16 = CLIENT_CHARACTERISTIC_CONFIG_UUID,
+    };
+    esp_gattc_descr_elem_t descriptor;
+    uint16_t count = 1;
+    uint16_t config = notification_config_for_handle(characteristic_handle);
+    uint8_t value[2] = {(uint8_t)(config & 0xff), (uint8_t)(config >> 8)};
+    esp_err_t status;
+
+    if (config == 0) {
+        ESP_LOGW(TAG, "No update configuration found for handle %u",
+                 characteristic_handle);
+        complete_characteristic_subscription();
+        return;
+    }
+
+    status = esp_ble_gattc_get_descr_by_char_handle(
+        s_gatt_if, s_conn_id, characteristic_handle, config_uuid, &descriptor,
+        &count);
+    if (status != ESP_GATT_OK || count == 0) {
+        ESP_LOGE(TAG, "Client configuration descriptor not found for handle %u",
+                 characteristic_handle);
+        complete_characteristic_subscription();
+        return;
+    }
+
+    status = esp_ble_gattc_write_char_descr(
+        s_gatt_if, s_conn_id, descriptor.handle, sizeof(value), value,
+        ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
+    if (status != ESP_GATT_OK) {
+        ESP_LOGE(TAG, "Could not enable updates for handle %u: %d",
+                 characteristic_handle, status);
+        complete_characteristic_subscription();
+    } else {
+        ESP_LOGI(TAG, "Enabling updates for characteristic handle %u",
+                 characteristic_handle);
+    }
+}
+
+static void start_next_characteristic_subscription(void)
+{
+    if (s_notification_index >= s_notification_count) {
+        find_control_characteristic();
+        return;
+    }
+
+    uint16_t handle = s_notification_handles[s_notification_index];
+    uint16_t config = s_notification_configs[s_notification_index];
+    esp_err_t error = esp_ble_gattc_register_for_notify(
+        s_gatt_if, s_camera_address, handle);
+
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "Could not register for updates on handle %u: %s",
+                 handle, esp_err_to_name(error));
+        complete_characteristic_subscription();
+        return;
+    }
+
+    ESP_LOGI(TAG, "Registering for %s on characteristic handle %u",
+             config == 0x0003 ? "notifications and indications" :
+             (config == 0x0001 ? "notifications" : "indications"), handle);
+}
+
 static void select_camera(esp_ble_gap_cb_param_t *param)
 {
     const uint8_t *name;
@@ -116,6 +361,7 @@ static void select_camera(esp_ble_gap_cb_param_t *param)
         return;
     }
 
+    log_camera_advertisement(param);
     memcpy(s_camera_address, param->scan_rst.bda, sizeof(s_camera_address));
     s_camera_address_type = param->scan_rst.ble_addr_type;
     s_camera_selected = true;
@@ -148,8 +394,10 @@ static void find_control_characteristic(void)
         return;
     }
 
-    ESP_LOGI(TAG, "Found characteristic 0x%04x (properties 0x%02x)",
-             WIFI_CONTROL_CHAR_UUID, characteristic.properties);
+    ESP_LOGI(TAG,
+             "Found characteristic 0x%04x at handle %u (properties 0x%02x)",
+             WIFI_CONTROL_CHAR_UUID, characteristic.char_handle,
+             characteristic.properties);
     if ((characteristic.properties & ESP_GATT_CHAR_PROP_BIT_WRITE) != 0) {
         s_write_with_response = true;
     } else if ((characteristic.properties & ESP_GATT_CHAR_PROP_BIT_WRITE_NR) != 0) {
@@ -242,19 +490,63 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         esp_ble_gattc_search_service(gattc_if, s_conn_id, NULL);
         break;
     case ESP_GATTC_SEARCH_RES_EVT:
+        log_gatt_uuid("service", &param->search_res.srvc_id.uuid);
+        if (s_gatt_start_handle == 0 ||
+            param->search_res.start_handle < s_gatt_start_handle) {
+            s_gatt_start_handle = param->search_res.start_handle;
+        }
+        if (param->search_res.end_handle > s_gatt_end_handle) {
+            s_gatt_end_handle = param->search_res.end_handle;
+        }
         if (param->search_res.srvc_id.uuid.len == ESP_UUID_LEN_16 &&
             param->search_res.srvc_id.uuid.uuid.uuid16 == CAMERA_SERVICE_UUID) {
             s_service_start_handle = param->search_res.start_handle;
             s_service_end_handle = param->search_res.end_handle;
-            ESP_LOGI(TAG, "Found camera service 0x%04x", CAMERA_SERVICE_UUID);
+            ESP_LOGI(TAG, "Found camera service 0x%04x (handles %u-%u)",
+                     CAMERA_SERVICE_UUID, s_service_start_handle,
+                     s_service_end_handle);
         }
         break;
     case ESP_GATTC_SEARCH_CMPL_EVT:
         if (param->search_cmpl.status == ESP_GATT_OK) {
-            find_control_characteristic();
+            discover_characteristics();
+            s_notification_index = 0;
+            start_next_characteristic_subscription();
         } else {
             ESP_LOGE(TAG, "GATT service discovery failed: %d",
                      param->search_cmpl.status);
+        }
+        break;
+    case ESP_GATTC_REG_FOR_NOTIFY_EVT:
+        if (param->reg_for_notify.status == ESP_GATT_OK) {
+            ESP_LOGI(TAG, "Registered for updates on handle %u",
+                     param->reg_for_notify.handle);
+            enable_characteristic_updates(param->reg_for_notify.handle);
+        } else {
+            ESP_LOGE(TAG, "Could not register for updates on handle %u: %d",
+                     param->reg_for_notify.handle,
+                     param->reg_for_notify.status);
+            complete_characteristic_subscription();
+        }
+        break;
+    case ESP_GATTC_WRITE_DESCR_EVT:
+        if (param->write.status == ESP_GATT_OK) {
+            ESP_LOGI(TAG, "Characteristic update subscription confirmed");
+        } else {
+            ESP_LOGE(TAG, "Characteristic update subscription failed: %d",
+                     param->write.status);
+        }
+        complete_characteristic_subscription();
+        break;
+    case ESP_GATTC_NOTIFY_EVT:
+        ESP_LOGI(TAG, "Received %s on handle %u (%u bytes)",
+                 param->notify.is_notify ? "notification" : "indication",
+                 param->notify.handle, param->notify.value_len);
+        if (param->notify.value_len > 0 && param->notify.value == NULL) {
+            ESP_LOGE(TAG, "BLE update payload is unavailable");
+        } else {
+            log_hex_data("BLE update payload", param->notify.value,
+                         param->notify.value_len);
         }
         break;
     case ESP_GATTC_WRITE_CHAR_EVT:
@@ -270,8 +562,12 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
     case ESP_GATTC_DISCONNECT_EVT:
         ESP_LOGW(TAG, "Camera disconnected; restarting discovery");
         s_camera_selected = false;
+        s_gatt_start_handle = 0;
+        s_gatt_end_handle = 0;
         s_service_start_handle = 0;
         s_service_end_handle = 0;
+        s_notification_count = 0;
+        s_notification_index = 0;
         start_scan();
         break;
     default:
