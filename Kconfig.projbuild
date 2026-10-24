@@ -1,0 +1,16 @@
+menu "TrailCamHub PoC"
+
+config CAMERA_BLE_DEVICE_NAME
+    string "Camera BLE advertised name"
+    default "PR5000-WF"
+    help
+        Exact local name advertised by the camera. Change this if its BLE name differs.
+
+config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
+    string "Wi-Fi enable payload (hex)"
+    default ""
+    help
+        Exact bytes to write to characteristic 0x0002, separated by optional spaces,
+        colons, or hyphens. Leave empty to discover the characteristic without writing.
+
+endmenu

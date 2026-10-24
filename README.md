@@ -1,0 +1,105 @@
+# TrailCamHub
+
+An open-source trail camera bridge: an ESP32-S3 with an A7670E 4G modem is intended to retrieve media from supported trail cameras and transfer it to a configurable cloud storage service.
+
+> **Status:** Concept / early draft. Hardware, camera compatibility, wireless protocols, and cloud integration have not yet been implemented or verified.
+
+TrailCamHub aims to reproduce and automate the workflow of the **Trailcam Go** app for compatible cameras. The goal is interoperability with a camera owned by the user, not copying or distributing the proprietary app. TrailCamHub is an independent project and is not affiliated with Trailcam Go, its provider, or any camera manufacturer.
+
+## Goals
+
+1. Discover a camera in range and identify its available media.
+2. Exchange control and connection information over Bluetooth Low Energy (BLE), where supported by the camera model.
+3. Connect to the camera over Wi-Fi and download new photos and videos.
+4. Buffer files locally and persist their upload status.
+5. Transfer files to cloud storage over 4G using the A7670E modem.
+6. Resume reliably after interruptions without losing files or creating unnecessary duplicate uploads.
+
+## Proposed Architecture
+
+```mermaid
+flowchart LR
+    Camera[Trail camera] <-->|BLE: discovery and control| Bridge[ESP32-S3]
+    Camera <-->|Wi-Fi: media retrieval| Bridge
+    Bridge <--> Modem[A7670E 4G modem]
+    Modem -->|HTTPS| Cloud[Cloud storage]
+    Config[Setup and configuration] --> Bridge
+```
+
+The wireless links have different roles: BLE is expected to handle discovery and control, while Wi-Fi is intended for media retrieval. The cellular modem provides a separate internet uplink. Whether a specific camera follows this workflow depends on its model and firmware and must be verified first.
+
+## Architecture Approach
+
+The firmware should be divided into clearly separated components:
+
+- **Camera discovery:** BLE scanning, supported-model identification, and connection status.
+- **Camera adapter:** model-specific flows for authentication, Wi-Fi connection, file listing, and downloads. Shared functionality should remain separate from vendor-specific behavior.
+- **Transfer queue:** a persistent list of discovered files with checksums, sizes, timestamps, and upload status.
+- **Network manager:** manages the camera Wi-Fi connection and cellular uplink. Switching between these networks must not lose download or upload state.
+- **Cloud adapter:** interchangeable upload destinations, initially over HTTPS. Credentials and endpoints should be configured rather than hard-coded in firmware.
+- **Configuration and diagnostics:** secure setup of camera and cloud credentials, status reporting, and actionable error codes.
+
+The firmware platform for the initial BLE proof of concept is ESP-IDF. The cloud destination will be selected after the board, modem interface, and initial camera protocols have been evaluated.
+
+## Hardware and Open Questions
+
+The planned hardware is a board with an **ESP32-S3 and A7670E 4G modem**, identified as `ESP32-S3-A76703-4G-EN`. Before implementation, verify the exact board revision and, in particular:
+
+- Pinout and ESP32-S3-to-modem interface, typically UART
+- Power supply and cellular modem peak current requirements
+- Supported LTE bands, SIM format, and antenna connections for the deployment location
+- ESP32-S3 BLE and Wi-Fi capabilities during simultaneous operation
+- Storage capacity for a robust local upload queue
+
+A camera and a cellular subscription are required for testing. Camera credentials and SIM PINs must not be committed to the repository.
+
+## Compatibility and Protocol Investigation
+
+Compatibility with cameras supported by Trailcam Go is a development goal, not a confirmed feature. First, investigate the normal connection flow and data formats for a specific camera model owned by the project team. Then implement a focused camera adapter and verify it using test media.
+
+Protocol observations should be documented reproducibly without publishing credentials, private images, or personal data. TrailCamHub must not bypass security mechanisms. Verify compatibility, authorization, and applicable terms of use before testing.
+
+### BLE Wi-Fi Activation PoC
+
+The initial ESP-IDF PoC scans for the configured camera name, connects to it, discovers service `0x8801`, and looks for writable characteristic `0x0002`. These UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified.
+
+The Wi-Fi-enable payload is camera-specific and is not yet known. The default configuration is intentionally empty: the firmware discovers the characteristic and reports it, but does not write to it. Configure a payload only after confirming the exact bytes for this camera and firmware version using an authorized, reproducible capture.
+
+Build and flash with ESP-IDF:
+
+```sh
+idf.py set-target esp32s3
+idf.py menuconfig
+idf.py build flash monitor
+```
+
+In `menuconfig`, open **TrailCamHub PoC** and set the BLE advertised device name. Set **Wi-Fi enable payload (hex)** only when the exact payload is known. Spaces, colons, and hyphens may separate hex bytes. The PoC uses a GATT write with response when supported by the characteristic; it does not infer or guess a command payload.
+
+The **Firmware Package** GitHub Actions workflow builds the ESP32-S3 firmware and publishes a `trailcamhub-esp32s3` artifact containing a merged flash image, the individual firmware images, checksums, and deployment instructions. The default CI build has no Wi-Fi-enable payload configured and therefore performs discovery only.
+
+## Reliability and Security
+
+- Mark files as locally available only after a successful download and a reasonable integrity check.
+- Make uploads idempotent and resumable after power or network failures.
+- Store credentials securely on-device and never include them in logs.
+- Encrypt cloud connections and validate certificates correctly.
+- Bound storage usage and define when successfully transferred files may be deleted locally.
+- Make errors and diagnostics useful for maintaining a device without a display.
+
+## Development Milestones
+
+1. Verify the board revision, pinout, power supply, and modem interface.
+2. Select a supported camera and document its BLE/Wi-Fi workflow using test data.
+3. Implement BLE discovery and a controlled Wi-Fi connection.
+4. Enable a single media download with an integrity check.
+5. Add a persistent queue and resumable uploads.
+6. Connect an initial HTTPS cloud adapter and run end-to-end tests.
+7. Expand setup, diagnostics, camera support, and security features.
+
+## Contributing
+
+Contributions are welcome. During this early phase, verified information about board revisions, camera models, and reproducible connection steps is especially useful. Do not submit private media, credentials, or firmware images obtained without authorization.
+
+## License
+
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).

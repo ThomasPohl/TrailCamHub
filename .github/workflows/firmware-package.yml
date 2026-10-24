@@ -1,0 +1,57 @@
+name: Firmware Package
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ESP32-S3 deployment package
+    runs-on: ubuntu-latest
+    container: espressif/idf:release-v5.3
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build firmware and merged flash image
+        shell: bash
+        run: |
+          idf.py set-target esp32s3
+          idf.py build
+          idf.py merge-bin -o build/trailcamhub-esp32s3-merged.bin
+
+      - name: Assemble deployment package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="dist/trailcamhub-esp32s3"
+          mkdir -p "$package_dir"
+          cp build/trailcamhub_ble_poc.bin "$package_dir/app.bin"
+          cp build/bootloader/bootloader.bin "$package_dir/bootloader.bin"
+          cp build/partition_table/partition-table.bin "$package_dir/partition-table.bin"
+          cp build/trailcamhub-esp32s3-merged.bin "$package_dir/trailcamhub-esp32s3.bin"
+          cp build/flasher_args.json "$package_dir/flasher_args.json"
+          cp deployment/README.md "$package_dir/README.md"
+          printf 'Git commit: %s\nESP-IDF: release-v5.3\nTarget: esp32s3\n' \
+            "$GITHUB_SHA" > "$package_dir/BUILD_INFO.txt"
+          (
+            cd dist
+            sha256sum trailcamhub-esp32s3/* > trailcamhub-esp32s3/SHA256SUMS
+            tar -czf trailcamhub-esp32s3.tar.gz trailcamhub-esp32s3
+          )
+
+      - name: Upload deployment package
+        uses: actions/upload-artifact@v4
+        with:
+          name: trailcamhub-esp32s3
+          path: dist/trailcamhub-esp32s3.tar.gz
+          if-no-files-found: error
+          retention-days: 30
