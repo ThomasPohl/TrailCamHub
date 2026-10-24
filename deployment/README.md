@@ -22,6 +22,6 @@ The merged image includes the bootloader, partition table, and application. The 
 
 ## PoC behavior
 
-The default CI build scans nearby BLE devices and connects to them in turn to inspect their GATT profiles; it does not filter by advertised name. It logs characteristics from discovered services and sends ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) only when service `0x8801` has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. The payload can be changed or disabled in `menuconfig`. Use this firmware where connecting to nearby BLE devices for inspection is authorized.
+The default CI build scans nearby BLE devices and connects to connectable advertisements in turn to inspect their GATT profiles; it does not filter by advertised name and skips non-connectable advertisements. It logs characteristics from discovered services and sends ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) only when service `0x8801` has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. The payload can be changed or disabled in `menuconfig`. Use this firmware where connecting to nearby BLE devices for inspection is authorized.
 
 The firmware logs status over its serial console. Use an authorized camera and review its status before leaving the device unattended.

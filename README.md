@@ -61,7 +61,7 @@ Protocol observations should be documented reproducibly without publishing crede
 
 ### BLE Wi-Fi Activation PoC
 
-The initial ESP-IDF PoC scans nearby BLE devices and connects to them in turn to inspect their GATT profiles; it does not filter by advertised name. It logs the characteristics of every discovered service and identifies potential protocol matches by inspecting service `0x8801`. It only sends the Wi-Fi-enable command when that service has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. These UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified for the TC100.
+The initial ESP-IDF PoC scans nearby BLE devices and connects to connectable advertisements in turn to inspect their GATT profiles; it does not filter by advertised name and skips non-connectable advertisements. It logs the characteristics of every discovered service and identifies potential protocol matches by inspecting service `0x8801`. It only sends the Wi-Fi-enable command when that service has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. Scan and connection callbacks are serialized so a failed connection does not trigger overlapping scans. These UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified for the TC100.
 
 The default Wi-Fi-enable payload is ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex), based on the reported BLE command for enabling the camera's Wi-Fi. The firmware writes it to characteristic `0x0002` after discovering the configured service and characteristic. The UUIDs still need to be independently verified for the TC100.
 
