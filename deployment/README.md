@@ -6,7 +6,7 @@ This archive contains the firmware images for the ESP32-S3 BLE proof of concept.
 
 For the latest `main` build, use the hosted [TrailCamHub browser installer](https://thomaspohl.github.io/TrailCamHub/). It requires a desktop Chromium-based browser with Web Serial support and an HTTPS connection. Connect the board with a USB data cable, choose its serial port, and confirm the browser's prompt. After installation completes, connect to the serial console on the same page to view ESP-IDF output at 115200 baud.
 
-The installer page is deployed by the **Firmware Package** GitHub Actions workflow after pushes to `main`. Pull requests build a package but do not update the public installer. The page's merged image and manifest come from the same workflow build. The default CI firmware performs BLE discovery only; it does not send a Wi-Fi-enable payload.
+The installer page is deployed by the **Firmware Package** GitHub Actions workflow after pushes to `main`. Pull requests build a package but do not update the public installer. The page's merged image and manifest come from the same workflow build. The default CI firmware sends the `BT_KEY_ON` Wi-Fi-enable payload after BLE discovery.
 
 ## Flash the merged image
 
@@ -22,6 +22,6 @@ The merged image includes the bootloader, partition table, and application. The 
 
 ## PoC behavior
 
-The default CI build has an empty Wi-Fi-enable payload. It scans for the configured BLE camera name and discovers service `0x8801` and characteristic `0x0002`, but it does not write to the camera. A verified payload must be configured and built before the firmware can request that the camera enable Wi-Fi.
+The default CI build scans for the configured BLE camera name and discovers service `0x8801` and characteristic `0x0002`. It then writes ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) to request Wi-Fi activation. The payload can be changed or disabled in `menuconfig`.
 
 The firmware logs status over its serial console. Use an authorized camera and review its status before leaving the device unattended.

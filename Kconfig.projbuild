@@ -8,9 +8,9 @@ config CAMERA_BLE_DEVICE_NAME
 
 config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
     string "Wi-Fi enable payload (hex)"
-    default ""
+    default "42545F4B45595F4F4E"
     help
-        Exact bytes to write to characteristic 0x0002, separated by optional spaces,
-        colons, or hyphens. Leave empty to discover the characteristic without writing.
+        Payload to write to characteristic 0x0002, separated by optional spaces,
+        colons, or hyphens. The default is ASCII "BT_KEY_ON".
 
 endmenu

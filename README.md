@@ -63,7 +63,7 @@ Protocol observations should be documented reproducibly without publishing crede
 
 The initial ESP-IDF PoC defaults to scanning for the observed BLE name `TC100_ED3B`, connects to a matching device, discovers service `0x8801`, and looks for writable characteristic `0x0002`. The service and characteristic UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified for the TC100.
 
-The Wi-Fi-enable payload is camera-specific and is not yet known. The default configuration is intentionally empty: the firmware discovers the characteristic and reports it, but does not write to it. Configure a payload only after confirming the exact bytes for this camera and firmware version using an authorized, reproducible capture.
+The default Wi-Fi-enable payload is ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex), based on the reported BLE command for enabling the camera's Wi-Fi. The firmware writes it to characteristic `0x0002` after discovering the configured service and characteristic. The UUIDs still need to be independently verified for the TC100.
 
 Build and flash with ESP-IDF:
 
@@ -73,9 +73,9 @@ idf.py menuconfig
 idf.py build flash monitor
 ```
 
-In `menuconfig`, open **TrailCamHub PoC** and set the exact BLE advertised device name if it differs from `TC100_ED3B`. Set **Wi-Fi enable payload (hex)** only when the exact payload is known. Spaces, colons, and hyphens may separate hex bytes. The PoC uses a GATT write with response when supported by the characteristic; it does not infer or guess a command payload.
+In `menuconfig`, open **TrailCamHub PoC** and set the exact BLE advertised device name if it differs from `TC100_ED3B`. **Wi-Fi enable payload (hex)** defaults to the bytes for ASCII `BT_KEY_ON`; spaces, colons, and hyphens may separate hex bytes. Set the option to an empty string to discover the characteristic without writing. The PoC uses a GATT write with response when supported by the characteristic.
 
-The **Firmware Package** GitHub Actions workflow builds the ESP32-S3 firmware and publishes a `trailcamhub-esp32s3` artifact containing a merged flash image, the individual firmware images, checksums, and deployment instructions. The default CI build has no Wi-Fi-enable payload configured and therefore performs discovery only.
+The **Firmware Package** GitHub Actions workflow builds the ESP32-S3 firmware and publishes a `trailcamhub-esp32s3` artifact containing a merged flash image, the individual firmware images, checksums, and deployment instructions. The default CI build includes the `BT_KEY_ON` Wi-Fi-enable payload and sends it after GATT discovery.
 
 ### Browser Installer and Serial Console
 
@@ -89,7 +89,7 @@ Use a desktop Chromium-based browser with Web Serial support, such as current Go
 
 The manual merged image and its SHA-256 checksum are also available on the installer page. Alternatively, download the `trailcamhub-esp32s3` artifact from a successful GitHub Actions run and follow its deployment instructions.
 
-The installer does not configure the camera name or Wi-Fi-enable payload. It installs the default CI build, which performs BLE discovery only. Do not install firmware unless you trust its source, and use the installer only with a board you are authorized to modify.
+The installer does not configure the camera name or Wi-Fi-enable payload. It installs the default CI build, which sends `BT_KEY_ON` to request Wi-Fi activation after BLE discovery. Do not install firmware unless you trust its source, and use the installer only with a board you are authorized to modify.
 
 ## Reliability and Security
 
