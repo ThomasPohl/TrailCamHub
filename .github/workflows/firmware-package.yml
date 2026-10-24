@@ -17,6 +17,8 @@ jobs:
     name: Build ESP32-S3 deployment package
     runs-on: ubuntu-latest
     container: espressif/idf:release-v5.3
+    env:
+      IDF_PATH: /opt/esp/idf
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -24,6 +26,7 @@ jobs:
       - name: Build firmware and merged flash image
         shell: bash
         run: |
+          source "$IDF_PATH/export.sh"
           idf.py set-target esp32s3
           idf.py build
           idf.py merge-bin -o build/trailcamhub-esp32s3-merged.bin
