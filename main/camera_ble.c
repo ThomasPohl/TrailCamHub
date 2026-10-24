@@ -12,6 +12,7 @@
 #include "esp_gatt_common_api.h"
 #include "esp_gattc_api.h"
 #include "esp_log.h"
+#include "cJSON.h"
 
 #include "camera_ble.h"
 
@@ -30,6 +31,13 @@
 #define MAX_BLE_DATA_LEN 31
 #define MAX_NOTIFICATION_CHARACTERISTICS 16
 #define CLIENT_CHARACTERISTIC_CONFIG_UUID 0x2902
+#define WIFI_RESPONSE_CHAR_UUID 0x0003
+#define WIFI_RESPONSE_HEADER_LEN 8
+#define MAX_WIFI_RESPONSE_JSON_LEN 512
+#define MAX_WIFI_RESPONSE_FRAME_LEN \
+    (WIFI_RESPONSE_HEADER_LEN + MAX_WIFI_RESPONSE_JSON_LEN)
+#define WIFI_RESPONSE_MAGIC_0 0x13
+#define WIFI_RESPONSE_MAGIC_1 0x57
 
 static const char *TAG = "trailcamhub_ble";
 static esp_ble_scan_params_t scan_params = {
@@ -57,6 +65,10 @@ static uint16_t s_notification_handles[MAX_NOTIFICATION_CHARACTERISTICS];
 static uint16_t s_notification_configs[MAX_NOTIFICATION_CHARACTERISTICS];
 static size_t s_notification_count;
 static size_t s_notification_index;
+static uint16_t s_wifi_response_handle;
+static uint8_t s_wifi_response_frame[MAX_WIFI_RESPONSE_FRAME_LEN];
+static size_t s_wifi_response_frame_len;
+static size_t s_wifi_response_expected_len;
 
 static void log_hex_data(const char *label, const uint8_t *data, size_t length)
 {
@@ -135,6 +147,117 @@ static void log_gatt_uuid(const char *kind, const esp_bt_uuid_t *uuid)
     } else {
         ESP_LOGW(TAG, "Discovered GATT %s with unsupported UUID length %u",
                  kind, (unsigned)uuid->len);
+    }
+}
+
+static void reset_wifi_response_frame(void)
+{
+    s_wifi_response_frame_len = 0;
+    s_wifi_response_expected_len = 0;
+}
+
+static void log_wifi_response_json(const uint8_t *json, size_t json_len,
+                                   uint16_t message_type)
+{
+    cJSON *root = cJSON_ParseWithLength((const char *)json, json_len);
+    if (root == NULL || !cJSON_IsObject(root)) {
+        ESP_LOGE(TAG, "Could not parse Wi-Fi response JSON");
+        cJSON_Delete(root);
+        return;
+    }
+
+    cJSON *ret = cJSON_GetObjectItemCaseSensitive(root, "ret");
+    cJSON *ssid = cJSON_GetObjectItemCaseSensitive(root, "ssid");
+    cJSON *bssid = cJSON_GetObjectItemCaseSensitive(root, "bssid");
+    cJSON *password = cJSON_GetObjectItemCaseSensitive(root, "pwd");
+
+    ESP_LOGI(TAG, "Parsed Wi-Fi response (message_type=0x%04x, %u JSON bytes)",
+             message_type, (unsigned)json_len);
+    if (cJSON_IsNumber(ret)) {
+        ESP_LOGI(TAG, "Camera response status: %d", ret->valueint);
+    } else {
+        ESP_LOGW(TAG, "Wi-Fi response has no numeric ret field");
+    }
+    if (cJSON_IsString(ssid) && ssid->valuestring != NULL) {
+        ESP_LOGI(TAG, "Camera Wi-Fi SSID: %s", ssid->valuestring);
+    } else {
+        ESP_LOGW(TAG, "Wi-Fi response has no string ssid field");
+    }
+    if (cJSON_IsString(bssid) && bssid->valuestring != NULL) {
+        ESP_LOGI(TAG, "Camera Wi-Fi BSSID: %s", bssid->valuestring);
+    } else {
+        ESP_LOGW(TAG, "Wi-Fi response has no string bssid field");
+    }
+    if (cJSON_IsString(password) && password->valuestring != NULL) {
+        ESP_LOGI(TAG, "Camera Wi-Fi password: [REDACTED]");
+    } else {
+        ESP_LOGW(TAG, "Wi-Fi response has no string pwd field");
+    }
+
+    cJSON_Delete(root);
+}
+
+static void complete_wifi_response_frame(void)
+{
+    size_t json_len = s_wifi_response_expected_len - WIFI_RESPONSE_HEADER_LEN;
+    uint16_t message_type = (uint16_t)s_wifi_response_frame[2] |
+                            ((uint16_t)s_wifi_response_frame[3] << 8);
+
+    log_wifi_response_json(s_wifi_response_frame + WIFI_RESPONSE_HEADER_LEN,
+                           json_len, message_type);
+    reset_wifi_response_frame();
+}
+
+static void process_wifi_response_byte(uint8_t byte)
+{
+    if (s_wifi_response_frame_len == 0) {
+        if (byte == WIFI_RESPONSE_MAGIC_0) {
+            s_wifi_response_frame[s_wifi_response_frame_len++] = byte;
+        }
+        return;
+    }
+    if (s_wifi_response_frame_len == 1 && byte != WIFI_RESPONSE_MAGIC_1) {
+        reset_wifi_response_frame();
+        if (byte == WIFI_RESPONSE_MAGIC_0) {
+            s_wifi_response_frame[s_wifi_response_frame_len++] = byte;
+        }
+        return;
+    }
+
+    if (s_wifi_response_frame_len >= sizeof(s_wifi_response_frame)) {
+        ESP_LOGE(TAG, "Wi-Fi response frame exceeded its buffer; discarding it");
+        reset_wifi_response_frame();
+        return;
+    }
+    s_wifi_response_frame[s_wifi_response_frame_len++] = byte;
+
+    if (s_wifi_response_frame_len == WIFI_RESPONSE_HEADER_LEN) {
+        uint32_t json_len = (uint32_t)s_wifi_response_frame[4] |
+                            ((uint32_t)s_wifi_response_frame[5] << 8) |
+                            ((uint32_t)s_wifi_response_frame[6] << 16) |
+                            ((uint32_t)s_wifi_response_frame[7] << 24);
+        if (json_len == 0 || json_len > MAX_WIFI_RESPONSE_JSON_LEN) {
+            ESP_LOGE(TAG, "Invalid Wi-Fi response JSON length: %lu bytes",
+                     (unsigned long)json_len);
+            reset_wifi_response_frame();
+            return;
+        }
+        s_wifi_response_expected_len = WIFI_RESPONSE_HEADER_LEN + json_len;
+        ESP_LOGI(TAG, "Wi-Fi response frame received; JSON payload is %lu bytes",
+                 (unsigned long)json_len);
+    }
+
+    if (s_wifi_response_expected_len != 0 &&
+        s_wifi_response_frame_len == s_wifi_response_expected_len) {
+        complete_wifi_response_frame();
+    }
+}
+
+static void process_wifi_response_notification(const uint8_t *data,
+                                              size_t data_len)
+{
+    for (size_t i = 0; i < data_len; i++) {
+        process_wifi_response_byte(data[i]);
     }
 }
 
@@ -264,6 +387,12 @@ static void discover_characteristics(void)
         ESP_LOGI(TAG, "Characteristic handle=%u properties=0x%02x",
                  characteristics[i].char_handle, characteristics[i].properties);
         log_gatt_uuid("characteristic", &characteristics[i].uuid);
+        if (characteristics[i].uuid.len == ESP_UUID_LEN_16 &&
+            characteristics[i].uuid.uuid.uuid16 == WIFI_RESPONSE_CHAR_UUID) {
+            s_wifi_response_handle = characteristics[i].char_handle;
+            ESP_LOGI(TAG, "Wi-Fi response characteristic handle=%u",
+                     s_wifi_response_handle);
+        }
         queue_characteristic_updates(&characteristics[i]);
     }
     free(characteristics);
@@ -544,9 +673,12 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                  param->notify.handle, param->notify.value_len);
         if (param->notify.value_len > 0 && param->notify.value == NULL) {
             ESP_LOGE(TAG, "BLE update payload is unavailable");
+        } else if (param->notify.handle == s_wifi_response_handle) {
+            process_wifi_response_notification(param->notify.value,
+                                               param->notify.value_len);
         } else {
-            log_hex_data("BLE update payload", param->notify.value,
-                         param->notify.value_len);
+            ESP_LOGI(TAG, "No decoder registered for notification handle %u",
+                     param->notify.handle);
         }
         break;
     case ESP_GATTC_WRITE_CHAR_EVT:
@@ -568,6 +700,8 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         s_service_end_handle = 0;
         s_notification_count = 0;
         s_notification_index = 0;
+        s_wifi_response_handle = 0;
+        reset_wifi_response_frame();
         start_scan();
         break;
     default:
