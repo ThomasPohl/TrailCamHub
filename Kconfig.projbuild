@@ -1,11 +1,5 @@
 menu "TrailCamHub PoC"
 
-config CAMERA_BLE_DEVICE_NAME
-    string "Camera BLE advertised name"
-    default "TC100_ED3B"
-    help
-        Exact local name advertised by the camera. Change this if its BLE name differs.
-
 config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
     string "Wi-Fi enable payload (hex)"
     default "42545F4B45595F4F4E"

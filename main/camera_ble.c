@@ -16,10 +16,6 @@
 
 #include "camera_ble.h"
 
-#ifndef CONFIG_CAMERA_BLE_DEVICE_NAME
-#define CONFIG_CAMERA_BLE_DEVICE_NAME "TC100_ED3B"
-#endif
-
 #ifndef CONFIG_CAMERA_WIFI_ENABLE_PAYLOAD_HEX
 #define CONFIG_CAMERA_WIFI_ENABLE_PAYLOAD_HEX "42545F4B45595F4F4E"
 #endif
@@ -29,6 +25,7 @@
 #define MAX_COMMAND_LEN 20
 #define SCAN_DURATION_SECONDS 30
 #define MAX_BLE_DATA_LEN 31
+#define MAX_DISCOVERED_SERVICES 32
 #define MAX_NOTIFICATION_CHARACTERISTICS 16
 #define CLIENT_CHARACTERISTIC_CONFIG_UUID 0x2902
 #define WIFI_RESPONSE_CHAR_UUID 0x0003
@@ -38,6 +35,12 @@
     (WIFI_RESPONSE_HEADER_LEN + MAX_WIFI_RESPONSE_JSON_LEN)
 #define WIFI_RESPONSE_MAGIC_0 0x13
 #define WIFI_RESPONSE_MAGIC_1 0x57
+
+typedef struct {
+    uint16_t start_handle;
+    uint16_t end_handle;
+    esp_bt_uuid_t uuid;
+} discovered_service_t;
 
 static const char *TAG = "trailcamhub_ble";
 static esp_ble_scan_params_t scan_params = {
@@ -51,15 +54,16 @@ static esp_ble_scan_params_t scan_params = {
 
 static esp_gatt_if_t s_gatt_if = ESP_GATT_IF_NONE;
 static uint16_t s_conn_id;
-static uint16_t s_gatt_start_handle;
-static uint16_t s_gatt_end_handle;
+static discovered_service_t s_discovered_services[MAX_DISCOVERED_SERVICES];
+static size_t s_discovered_service_count;
+static bool s_discovered_service_overflow;
 static uint16_t s_service_start_handle;
 static uint16_t s_service_end_handle;
 static uint8_t s_command[MAX_COMMAND_LEN];
 static size_t s_command_len;
 static esp_bd_addr_t s_camera_address;
 static esp_ble_addr_type_t s_camera_address_type;
-static bool s_camera_selected;
+static bool s_device_selected;
 static bool s_write_with_response;
 static uint16_t s_notification_handles[MAX_NOTIFICATION_CHARACTERISTICS];
 static uint16_t s_notification_configs[MAX_NOTIFICATION_CHARACTERISTICS];
@@ -109,14 +113,14 @@ static void log_hex_data(const char *label, const uint8_t *data, size_t length)
     }
 }
 
-static void log_camera_advertisement(const esp_ble_gap_cb_param_t *param)
+static void log_ble_device(const esp_ble_gap_cb_param_t *param)
 {
     const uint8_t *address = param->scan_rst.bda;
     size_t adv_len = param->scan_rst.adv_data_len;
     size_t scan_rsp_len = param->scan_rst.scan_rsp_len;
 
     ESP_LOGI(TAG,
-             "Camera BLE advertisement: address=%02X:%02X:%02X:%02X:%02X:%02X "
+             "BLE device advertisement: address=%02X:%02X:%02X:%02X:%02X:%02X "
              "address_type=%u RSSI=%d dBm event_type=%u",
              address[0], address[1], address[2], address[3], address[4],
              address[5], (unsigned)param->scan_rst.ble_addr_type,
@@ -313,6 +317,18 @@ static void start_scan(void)
     }
 }
 
+static void reject_connected_device(const char *reason)
+{
+    ESP_LOGI(TAG, "%s; disconnecting and resuming BLE scan", reason);
+    esp_err_t error = esp_ble_gattc_close(s_gatt_if, s_conn_id);
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "Could not disconnect incompatible BLE device: %s",
+                 esp_err_to_name(error));
+        s_device_selected = false;
+        start_scan();
+    }
+}
+
 static uint16_t notification_config_for_handle(uint16_t handle)
 {
     for (size_t i = 0; i < s_notification_count; i++) {
@@ -348,54 +364,126 @@ static void queue_characteristic_updates(
     s_notification_count++;
 }
 
-static void discover_characteristics(void)
+static bool discover_characteristics(void)
 {
-    esp_gattc_char_elem_t *characteristics;
-    uint16_t count = 0;
-    esp_err_t status;
+    bool found_camera_service = false;
+    bool has_wifi_control = false;
+    bool has_wifi_response = false;
 
-    status = esp_ble_gattc_get_attr_count(
-        s_gatt_if, s_conn_id, ESP_GATT_DB_CHARACTERISTIC, s_gatt_start_handle,
-        s_gatt_end_handle, ESP_GATT_INVALID_HANDLE, &count);
-    if (status != ESP_GATT_OK) {
-        ESP_LOGE(TAG, "Could not count camera characteristics: %d", status);
-        return;
-    }
-    if (count == 0) {
-        ESP_LOGW(TAG, "Camera service has no discovered characteristics");
-        return;
+    if (s_discovered_service_overflow) {
+        ESP_LOGE(TAG, "Too many GATT services to inspect safely");
+        return false;
     }
 
-    characteristics = calloc(count, sizeof(*characteristics));
-    if (characteristics == NULL) {
-        ESP_LOGE(TAG, "Could not allocate memory for %u characteristics",
-                 count);
-        return;
-    }
+    for (size_t service_index = 0;
+         service_index < s_discovered_service_count; service_index++) {
+        const discovered_service_t *service =
+            &s_discovered_services[service_index];
+        bool is_camera_service =
+            service->uuid.len == ESP_UUID_LEN_16 &&
+            service->uuid.uuid.uuid16 == CAMERA_SERVICE_UUID;
+        esp_gattc_char_elem_t *characteristics;
+        uint16_t count = 0;
+        esp_err_t status = esp_ble_gattc_get_attr_count(
+            s_gatt_if, s_conn_id, ESP_GATT_DB_CHARACTERISTIC,
+            service->start_handle, service->end_handle,
+            ESP_GATT_INVALID_HANDLE, &count);
 
-    status = esp_ble_gattc_get_all_char(
-        s_gatt_if, s_conn_id, s_service_start_handle, s_service_end_handle,
-        characteristics, &count, 0);
-    if (status != ESP_GATT_OK) {
-        ESP_LOGE(TAG, "Could not read camera characteristics: %d", status);
-        free(characteristics);
-        return;
-    }
-
-    ESP_LOGI(TAG, "Discovered %u characteristic(s)", count);
-    for (uint16_t i = 0; i < count; i++) {
-        ESP_LOGI(TAG, "Characteristic handle=%u properties=0x%02x",
-                 characteristics[i].char_handle, characteristics[i].properties);
-        log_gatt_uuid("characteristic", &characteristics[i].uuid);
-        if (characteristics[i].uuid.len == ESP_UUID_LEN_16 &&
-            characteristics[i].uuid.uuid.uuid16 == WIFI_RESPONSE_CHAR_UUID) {
-            s_wifi_response_handle = characteristics[i].char_handle;
-            ESP_LOGI(TAG, "Wi-Fi response characteristic handle=%u",
-                     s_wifi_response_handle);
+        if (status != ESP_GATT_OK) {
+            ESP_LOGE(TAG,
+                     "Could not count characteristics for GATT service "
+                     "handles %u-%u: %d",
+                     service->start_handle, service->end_handle, status);
+            if (is_camera_service) {
+                return false;
+            }
+            continue;
         }
-        queue_characteristic_updates(&characteristics[i]);
+        if (count == 0) {
+            ESP_LOGI(TAG, "GATT service handles %u-%u has no characteristics",
+                     service->start_handle, service->end_handle);
+            if (is_camera_service) {
+                found_camera_service = true;
+            }
+            continue;
+        }
+
+        characteristics = calloc(count, sizeof(*characteristics));
+        if (characteristics == NULL) {
+            ESP_LOGE(TAG, "Could not allocate memory for %u characteristics",
+                     count);
+            if (is_camera_service) {
+                return false;
+            }
+            continue;
+        }
+
+        status = esp_ble_gattc_get_all_char(
+            s_gatt_if, s_conn_id, service->start_handle, service->end_handle,
+            characteristics, &count, 0);
+        if (status != ESP_GATT_OK) {
+            ESP_LOGE(TAG,
+                     "Could not read characteristics for GATT service "
+                     "handles %u-%u: %d",
+                     service->start_handle, service->end_handle, status);
+            free(characteristics);
+            if (is_camera_service) {
+                return false;
+            }
+            continue;
+        }
+
+        log_gatt_uuid("service", &service->uuid);
+        ESP_LOGI(TAG, "GATT service handles %u-%u has %u characteristic(s)",
+                 service->start_handle, service->end_handle, count);
+        if (is_camera_service) {
+            found_camera_service = true;
+            s_service_start_handle = service->start_handle;
+            s_service_end_handle = service->end_handle;
+        }
+
+        for (uint16_t i = 0; i < count; i++) {
+            ESP_LOGI(TAG, "Characteristic handle=%u properties=0x%02x",
+                     characteristics[i].char_handle,
+                     characteristics[i].properties);
+            log_gatt_uuid("characteristic", &characteristics[i].uuid);
+
+            if (!is_camera_service ||
+                characteristics[i].uuid.len != ESP_UUID_LEN_16) {
+                continue;
+            }
+            if (characteristics[i].uuid.uuid.uuid16 ==
+                    WIFI_CONTROL_CHAR_UUID &&
+                (characteristics[i].properties &
+                 (ESP_GATT_CHAR_PROP_BIT_WRITE |
+                  ESP_GATT_CHAR_PROP_BIT_WRITE_NR)) != 0) {
+                has_wifi_control = true;
+            } else if (characteristics[i].uuid.uuid.uuid16 ==
+                           WIFI_RESPONSE_CHAR_UUID &&
+                       (characteristics[i].properties &
+                        (ESP_GATT_CHAR_PROP_BIT_NOTIFY |
+                         ESP_GATT_CHAR_PROP_BIT_INDICATE)) != 0) {
+                has_wifi_response = true;
+                s_wifi_response_handle = characteristics[i].char_handle;
+                queue_characteristic_updates(&characteristics[i]);
+            }
+        }
+        free(characteristics);
     }
-    free(characteristics);
+
+    if (!found_camera_service || !has_wifi_control || !has_wifi_response) {
+        ESP_LOGI(TAG,
+                 "BLE device is not compatible: service 0x%04x has no "
+                 "writable 0x%04x and notify/indicate 0x%04x pair",
+                 CAMERA_SERVICE_UUID, WIFI_CONTROL_CHAR_UUID,
+                 WIFI_RESPONSE_CHAR_UUID);
+        s_notification_count = 0;
+        s_wifi_response_handle = 0;
+        return false;
+    }
+
+    ESP_LOGI(TAG, "BLE device matches the expected camera GATT profile");
+    return true;
 }
 
 static void start_next_characteristic_subscription(void);
@@ -473,28 +561,21 @@ static void start_next_characteristic_subscription(void)
              (config == 0x0001 ? "notifications" : "indications"), handle);
 }
 
-static void select_camera(esp_ble_gap_cb_param_t *param)
+static void select_ble_device(esp_ble_gap_cb_param_t *param)
 {
-    const uint8_t *name;
-    uint8_t name_len = 0;
-    size_t configured_name_len = strlen(CONFIG_CAMERA_BLE_DEVICE_NAME);
-
-    name = esp_ble_resolve_adv_data(param->scan_rst.ble_adv,
-                                    ESP_BLE_AD_TYPE_NAME_CMPL, &name_len);
-    if (name == NULL) {
-        name = esp_ble_resolve_adv_data(param->scan_rst.ble_adv,
-                                        ESP_BLE_AD_TYPE_NAME_SHORT, &name_len);
-    }
-    if (name == NULL || name_len != configured_name_len ||
-        memcmp(name, CONFIG_CAMERA_BLE_DEVICE_NAME, configured_name_len) != 0) {
-        return;
-    }
-
-    log_camera_advertisement(param);
+    log_ble_device(param);
     memcpy(s_camera_address, param->scan_rst.bda, sizeof(s_camera_address));
     s_camera_address_type = param->scan_rst.ble_addr_type;
-    s_camera_selected = true;
-    ESP_LOGI(TAG, "Found camera %s; stopping scan", CONFIG_CAMERA_BLE_DEVICE_NAME);
+    s_device_selected = true;
+    s_service_start_handle = 0;
+    s_service_end_handle = 0;
+    s_discovered_service_count = 0;
+    s_discovered_service_overflow = false;
+    s_notification_count = 0;
+    s_notification_index = 0;
+    s_wifi_response_handle = 0;
+    reset_wifi_response_frame();
+    ESP_LOGI(TAG, "Found BLE device; stopping scan to inspect its GATT profile");
     esp_ble_gap_stop_scanning();
 }
 
@@ -564,7 +645,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event,
         break;
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
         if (param->scan_start_cmpl.status == ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGI(TAG, "Scanning for camera %s", CONFIG_CAMERA_BLE_DEVICE_NAME);
+            ESP_LOGI(TAG, "Scanning for BLE devices to inspect service 0x%04x",
+                     CAMERA_SERVICE_UUID);
         } else {
             ESP_LOGE(TAG, "BLE scan start failed: %d",
                      param->scan_start_cmpl.status);
@@ -572,21 +654,23 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event,
         break;
     case ESP_GAP_BLE_SCAN_RESULT_EVT:
         if (param->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT &&
-            !s_camera_selected) {
-            select_camera(param);
+            !s_device_selected) {
+            select_ble_device(param);
         } else if (param->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_CMPL_EVT &&
-                   !s_camera_selected) {
-            ESP_LOGW(TAG, "Camera not found; restarting scan");
+                   !s_device_selected) {
+            ESP_LOGW(TAG, "No BLE device found; restarting scan");
             start_scan();
         }
         break;
     case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
-        if (s_camera_selected) {
+        if (s_device_selected) {
             esp_err_t error = esp_ble_gattc_open(s_gatt_if, s_camera_address,
                                                  s_camera_address_type, true);
             if (error != ESP_OK) {
-                ESP_LOGE(TAG, "Could not connect to camera: %s",
+                ESP_LOGE(TAG, "Could not connect to BLE device: %s",
                          esp_err_to_name(error));
+                s_device_selected = false;
+                start_scan();
             }
         }
         break;
@@ -611,21 +695,47 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         break;
     case ESP_GATTC_OPEN_EVT:
         if (param->open.status != ESP_GATT_OK) {
-            ESP_LOGE(TAG, "Camera connection failed: %d", param->open.status);
+            ESP_LOGW(TAG, "BLE device connection failed: %d",
+                     param->open.status);
+            s_device_selected = false;
+            start_scan();
             break;
         }
         s_conn_id = param->open.conn_id;
-        ESP_LOGI(TAG, "Connected; discovering GATT services");
-        esp_ble_gattc_search_service(gattc_if, s_conn_id, NULL);
-        break;
-    case ESP_GATTC_SEARCH_RES_EVT:
-        log_gatt_uuid("service", &param->search_res.srvc_id.uuid);
-        if (s_gatt_start_handle == 0 ||
-            param->search_res.start_handle < s_gatt_start_handle) {
-            s_gatt_start_handle = param->search_res.start_handle;
+        ESP_LOGI(TAG, "Connected to BLE device; discovering GATT services");
+        esp_err_t search_error = esp_ble_gattc_search_service(
+            gattc_if, s_conn_id, NULL);
+        if (search_error != ESP_OK) {
+            ESP_LOGE(TAG, "Could not start GATT service discovery: %s",
+                     esp_err_to_name(search_error));
+            reject_connected_device("Service discovery could not be started");
         }
-        if (param->search_res.end_handle > s_gatt_end_handle) {
-            s_gatt_end_handle = param->search_res.end_handle;
+        break;
+    case ESP_GATTC_SEARCH_RES_EVT: {
+        log_gatt_uuid("service", &param->search_res.srvc_id.uuid);
+        bool service_already_recorded = false;
+        for (size_t i = 0; i < s_discovered_service_count; i++) {
+            if (s_discovered_services[i].start_handle ==
+                    param->search_res.start_handle &&
+                s_discovered_services[i].end_handle ==
+                    param->search_res.end_handle) {
+                service_already_recorded = true;
+                break;
+            }
+        }
+        if (!service_already_recorded) {
+            if (s_discovered_service_count < MAX_DISCOVERED_SERVICES) {
+                discovered_service_t *service =
+                    &s_discovered_services[s_discovered_service_count++];
+                service->start_handle = param->search_res.start_handle;
+                service->end_handle = param->search_res.end_handle;
+                service->uuid = param->search_res.srvc_id.uuid;
+            } else {
+                s_discovered_service_overflow = true;
+                ESP_LOGW(TAG, "More than %u GATT services found; "
+                         "remaining services cannot be inspected",
+                         MAX_DISCOVERED_SERVICES);
+            }
         }
         if (param->search_res.srvc_id.uuid.len == ESP_UUID_LEN_16 &&
             param->search_res.srvc_id.uuid.uuid.uuid16 == CAMERA_SERVICE_UUID) {
@@ -636,14 +746,17 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                      s_service_end_handle);
         }
         break;
+    }
     case ESP_GATTC_SEARCH_CMPL_EVT:
-        if (param->search_cmpl.status == ESP_GATT_OK) {
-            discover_characteristics();
-            s_notification_index = 0;
-            start_next_characteristic_subscription();
-        } else {
+        if (param->search_cmpl.status != ESP_GATT_OK) {
             ESP_LOGE(TAG, "GATT service discovery failed: %d",
                      param->search_cmpl.status);
+            reject_connected_device("GATT service discovery failed");
+        } else if (!discover_characteristics()) {
+            reject_connected_device("GATT characteristics do not match");
+        } else {
+            s_notification_index = 0;
+            start_next_characteristic_subscription();
         }
         break;
     case ESP_GATTC_REG_FOR_NOTIFY_EVT:
@@ -692,12 +805,12 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         }
         break;
     case ESP_GATTC_DISCONNECT_EVT:
-        ESP_LOGW(TAG, "Camera disconnected; restarting discovery");
-        s_camera_selected = false;
-        s_gatt_start_handle = 0;
-        s_gatt_end_handle = 0;
+        ESP_LOGW(TAG, "BLE device disconnected; restarting discovery");
+        s_device_selected = false;
         s_service_start_handle = 0;
         s_service_end_handle = 0;
+        s_discovered_service_count = 0;
+        s_discovered_service_overflow = false;
         s_notification_count = 0;
         s_notification_index = 0;
         s_wifi_response_handle = 0;
@@ -717,7 +830,7 @@ esp_err_t camera_ble_start(void)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(TAG, "Starting BLE PoC for %s", CONFIG_CAMERA_BLE_DEVICE_NAME);
+    ESP_LOGI(TAG, "Starting BLE PoC; identifying devices by GATT profile");
     if (s_command_len == 0) {
         ESP_LOGW(TAG, "Payload is empty; this run will not write to the camera");
     }

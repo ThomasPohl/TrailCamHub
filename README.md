@@ -61,13 +61,13 @@ Protocol observations should be documented reproducibly without publishing crede
 
 ### BLE Wi-Fi Activation PoC
 
-The initial ESP-IDF PoC defaults to scanning for the observed BLE name `TC100_ED3B`, connects to a matching device, discovers service `0x8801`, and looks for writable characteristic `0x0002`. The service and characteristic UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified for the TC100.
+The initial ESP-IDF PoC scans nearby BLE devices and connects to them in turn to inspect their GATT profiles; it does not filter by advertised name. It logs the characteristics of every discovered service and identifies potential protocol matches by inspecting service `0x8801`. It only sends the Wi-Fi-enable command when that service has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. These UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified for the TC100.
 
 The default Wi-Fi-enable payload is ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex), based on the reported BLE command for enabling the camera's Wi-Fi. The firmware writes it to characteristic `0x0002` after discovering the configured service and characteristic. The UUIDs still need to be independently verified for the TC100.
 
 The serial log also reports the camera's BLE address, address type, signal strength (RSSI), advertisement and scan-response bytes, discovered services and characteristics, and the properties and handles of those characteristics. For characteristics that support notifications or indications, the firmware subscribes. It reassembles the framed JSON response from characteristic `0x0003` and prints the response status, SSID, and BSSID. The Wi-Fi password is deliberately redacted; BLE packet contents for this response are not logged in hex because they contain credentials.
 
-The Wi-Fi name cannot currently be predicted reliably from the BLE name. A camera may derive an SSID suffix from an address or another device identifier, but that mapping has not been verified. Compare the SSID (for example, `TrailCam_897B`) with the BLE address and captured advertisement data from the serial log before assuming there is a stable relationship; BLE addresses may also be randomized.
+The Wi-Fi name cannot currently be predicted reliably from a BLE device name. A camera may derive an SSID suffix from an address or another device identifier, but that mapping has not been verified. Compare the SSID (for example, `TrailCam_897B`) with the BLE address and captured advertisement data from the serial log before assuming there is a stable relationship; BLE addresses may also be randomized.
 
 Build and flash with ESP-IDF:
 
@@ -77,7 +77,7 @@ idf.py menuconfig
 idf.py build flash monitor
 ```
 
-In `menuconfig`, open **TrailCamHub PoC** and set the exact BLE advertised device name if it differs from `TC100_ED3B`. **Wi-Fi enable payload (hex)** defaults to the bytes for ASCII `BT_KEY_ON`; spaces, colons, and hyphens may separate hex bytes. Set the option to an empty string to discover the characteristic without writing. The PoC uses a GATT write with response when supported by the characteristic.
+In `menuconfig`, open **TrailCamHub PoC**. **Wi-Fi enable payload (hex)** defaults to the bytes for ASCII `BT_KEY_ON`; spaces, colons, and hyphens may separate hex bytes. Set the option to an empty string to inspect GATT profiles without writing. The PoC uses a GATT write with response when supported by the characteristic.
 
 The **Firmware Package** GitHub Actions workflow builds the ESP32-S3 firmware and publishes a `trailcamhub-esp32s3` artifact containing a merged flash image, the individual firmware images, checksums, and deployment instructions. The default CI build includes the `BT_KEY_ON` Wi-Fi-enable payload and sends it after GATT discovery.
 

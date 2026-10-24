@@ -29,7 +29,7 @@
           <span slot="unsupported">Use a desktop Chromium-based browser that supports Web Serial, such as Chrome or Edge.</span>
           <span slot="not-allowed">Open this page over HTTPS and allow serial-port access in your browser.</span>
         </esp-web-install-button>
-        <p class="note">This installs the current CI build. The default firmware scans for the configured BLE camera, discovers its control characteristic, and sends the <code>BT_KEY_ON</code> Wi-Fi-enable command.</p>
+        <p class="note">This installs the current CI build. The firmware connects to nearby BLE devices in turn to inspect their GATT characteristics. It sends the <code>BT_KEY_ON</code> Wi-Fi-enable command only to devices matching the expected camera profile. Use it where those connections are authorized.</p>
       </section>
 
       <section aria-labelledby="console-heading">
