@@ -2,6 +2,12 @@
 
 This archive contains the firmware images for the ESP32-S3 BLE proof of concept.
 
+## Browser installer
+
+For the latest `main` build, use the hosted [TrailCamHub browser installer](https://thomaspohl.github.io/TrailCamHub/). It requires a desktop Chromium-based browser with Web Serial support and an HTTPS connection. Connect the board with a USB data cable, choose its serial port, and confirm the browser's prompt. After installation completes, connect to the serial console on the same page to view ESP-IDF output at 115200 baud.
+
+The installer page is deployed by the **Firmware Package** GitHub Actions workflow after pushes to `main`. Pull requests build a package but do not update the public installer. The page's merged image and manifest come from the same workflow build. The default CI firmware performs BLE discovery only; it does not send a Wi-Fi-enable payload.
+
 ## Flash the merged image
 
 Connect the board over USB, identify its serial port, and run:

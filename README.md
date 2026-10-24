@@ -77,6 +77,20 @@ In `menuconfig`, open **TrailCamHub PoC** and set the BLE advertised device name
 
 The **Firmware Package** GitHub Actions workflow builds the ESP32-S3 firmware and publishes a `trailcamhub-esp32s3` artifact containing a merged flash image, the individual firmware images, checksums, and deployment instructions. The default CI build has no Wi-Fi-enable payload configured and therefore performs discovery only.
 
+### Browser Installer and Serial Console
+
+The GitHub Pages site provides a browser-based firmware installer and serial console:
+
+**https://thomaspohl.github.io/TrailCamHub/**
+
+The installer uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) to flash the merged ESP32-S3 image. The image and manifest are published together on GitHub Pages by the **Firmware Package** workflow after a push to `main`. Pull requests build the deployment package but do not publish the site. The installer reflects the latest successful deployment from `main`; it is not a version-pinned release installer. To enable the deployment the first time, open the repository's **Settings → Pages** and select **GitHub Actions** as the build and deployment source. The workflow then publishes the page automatically.
+
+Use a desktop Chromium-based browser with Web Serial support, such as current Google Chrome or Microsoft Edge. Open the HTTPS installer page, connect the ESP32-S3 using a USB data cable, select its serial port, and confirm the browser's install prompt. Close or finish the installer before opening the serial console; then click **Connect to serial output**, choose the board's port, and view ESP-IDF logs at 115200 baud. Browser serial access requires explicit permission and may not be available in other browsers or on mobile devices.
+
+The manual merged image and its SHA-256 checksum are also available on the installer page. Alternatively, download the `trailcamhub-esp32s3` artifact from a successful GitHub Actions run and follow its deployment instructions.
+
+The installer does not configure the camera name or Wi-Fi-enable payload. It installs the default CI build, which performs BLE discovery only. Do not install firmware unless you trust its source, and use the installer only with a board you are authorized to modify.
+
 ## Reliability and Security
 
 - Mark files as locally available only after a successful download and a reasonable integrity check.

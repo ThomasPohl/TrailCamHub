@@ -1,0 +1,108 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #111820;
+  color: #e8edf2;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  width: min(760px, calc(100% - 2rem));
+  margin: 3rem auto;
+}
+
+header,
+section {
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid #344353;
+  border-radius: 0.75rem;
+  background: #18212b;
+}
+
+h1,
+h2 {
+  margin-top: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 6vw, 3rem);
+}
+
+.eyebrow {
+  color: #8eb5dc;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+li {
+  margin: 0.5rem 0;
+}
+
+button {
+  min-height: 2.75rem;
+  padding: 0.6rem 1rem;
+  border: 0;
+  border-radius: 0.4rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.primary-button {
+  background: #90c8ff;
+  color: #102030;
+}
+
+.secondary-button {
+  border: 1px solid #67809a;
+  background: #243342;
+  color: #e8edf2;
+}
+
+.console-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+#serial-status,
+.note,
+footer {
+  color: #bac8d5;
+}
+
+#serial-output {
+  box-sizing: border-box;
+  height: 18rem;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid #344353;
+  border-radius: 0.4rem;
+  background: #090d11;
+  color: #b8e3b8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+a {
+  color: #90c8ff;
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 0.25rem;
+}
