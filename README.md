@@ -61,7 +61,7 @@ Protocol observations should be documented reproducibly without publishing crede
 
 ### BLE Wi-Fi Activation PoC
 
-The initial ESP-IDF PoC scans for the configured camera name, connects to it, discovers service `0x8801`, and looks for writable characteristic `0x0002`. These UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified.
+The initial ESP-IDF PoC defaults to scanning for the observed BLE name `TC100_ED3B`, connects to a matching device, discovers service `0x8801`, and looks for writable characteristic `0x0002`. The service and characteristic UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified for the TC100.
 
 The Wi-Fi-enable payload is camera-specific and is not yet known. The default configuration is intentionally empty: the firmware discovers the characteristic and reports it, but does not write to it. Configure a payload only after confirming the exact bytes for this camera and firmware version using an authorized, reproducible capture.
 
@@ -73,7 +73,7 @@ idf.py menuconfig
 idf.py build flash monitor
 ```
 
-In `menuconfig`, open **TrailCamHub PoC** and set the BLE advertised device name. Set **Wi-Fi enable payload (hex)** only when the exact payload is known. Spaces, colons, and hyphens may separate hex bytes. The PoC uses a GATT write with response when supported by the characteristic; it does not infer or guess a command payload.
+In `menuconfig`, open **TrailCamHub PoC** and set the exact BLE advertised device name if it differs from `TC100_ED3B`. Set **Wi-Fi enable payload (hex)** only when the exact payload is known. Spaces, colons, and hyphens may separate hex bytes. The PoC uses a GATT write with response when supported by the characteristic; it does not infer or guess a command payload.
 
 The **Firmware Package** GitHub Actions workflow builds the ESP32-S3 firmware and publishes a `trailcamhub-esp32s3` artifact containing a merged flash image, the individual firmware images, checksums, and deployment instructions. The default CI build has no Wi-Fi-enable payload configured and therefore performs discovery only.
 

@@ -2,7 +2,7 @@ menu "TrailCamHub PoC"
 
 config CAMERA_BLE_DEVICE_NAME
     string "Camera BLE advertised name"
-    default "PR5000-WF"
+    default "TC100_ED3B"
     help
         Exact local name advertised by the camera. Change this if its BLE name differs.
 
