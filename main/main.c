@@ -11,7 +11,7 @@
 #include "esp_gatt_common_api.h"
 #include "esp_gattc_api.h"
 #include "esp_log.h"
-#include "esp_nvs_flash.h"
+#include "nvs_flash.h"
 
 #ifndef CONFIG_CAMERA_BLE_DEVICE_NAME
 #define CONFIG_CAMERA_BLE_DEVICE_NAME "PR5000-WF"
@@ -96,7 +96,7 @@ static void start_scan(void)
     }
 }
 
-static void select_camera(const esp_ble_gap_cb_param_t *param)
+static void select_camera(esp_ble_gap_cb_param_t *param)
 {
     const uint8_t *name;
     uint8_t name_len = 0;
@@ -137,7 +137,7 @@ static void find_control_characteristic(void)
 
     status = esp_ble_gattc_get_char_by_uuid(s_gatt_if, s_conn_id,
                                             s_service_start_handle,
-                                            s_service_end_handle, &char_uuid,
+                                            s_service_end_handle, char_uuid,
                                             &characteristic, &count);
     if (status != ESP_GATT_OK || count == 0) {
         ESP_LOGE(TAG, "Writable characteristic 0x%04x was not found",
@@ -183,10 +183,11 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event,
         start_scan();
         break;
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
-        if (param->scan_start.status == ESP_BT_STATUS_SUCCESS) {
+        if (param->scan_start_cmpl.status == ESP_BT_STATUS_SUCCESS) {
             ESP_LOGI(TAG, "Scanning for camera %s", CONFIG_CAMERA_BLE_DEVICE_NAME);
         } else {
-            ESP_LOGE(TAG, "BLE scan start failed: %d", param->scan_start.status);
+            ESP_LOGE(TAG, "BLE scan start failed: %d",
+                     param->scan_start_cmpl.status);
         }
         break;
     case ESP_GAP_BLE_SCAN_RESULT_EVT:
@@ -238,8 +239,8 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         esp_ble_gattc_search_service(gattc_if, s_conn_id, NULL);
         break;
     case ESP_GATTC_SEARCH_RES_EVT:
-        if (param->search_res.srvc_id.id.uuid.len == ESP_UUID_LEN_16 &&
-            param->search_res.srvc_id.id.uuid.uuid.uuid16 == CAMERA_SERVICE_UUID) {
+        if (param->search_res.srvc_id.uuid.len == ESP_UUID_LEN_16 &&
+            param->search_res.srvc_id.uuid.uuid.uuid16 == CAMERA_SERVICE_UUID) {
             s_service_start_handle = param->search_res.start_handle;
             s_service_end_handle = param->search_res.end_handle;
             ESP_LOGI(TAG, "Found camera service 0x%04x", CAMERA_SERVICE_UUID);
@@ -277,11 +278,11 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
 
 void app_main(void)
 {
-    esp_err_t error = esp_nvs_flash_init();
+    esp_err_t error = nvs_flash_init();
     if (error == ESP_ERR_NVS_NO_FREE_PAGES ||
         error == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(esp_nvs_flash_erase());
-        error = esp_nvs_flash_init();
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        error = nvs_flash_init();
     }
     ESP_ERROR_CHECK(error);
 

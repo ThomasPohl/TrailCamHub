@@ -29,7 +29,7 @@ jobs:
           source "$IDF_PATH/export.sh"
           idf.py set-target esp32s3
           idf.py build
-          idf.py merge-bin -o build/trailcamhub-esp32s3-merged.bin
+          idf.py merge-bin -o trailcamhub-esp32s3-merged.bin
 
       - name: Assemble deployment package
         shell: bash
