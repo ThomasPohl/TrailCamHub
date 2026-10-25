@@ -9,6 +9,7 @@
 
 ## Local ESP-IDF Builds
 
+- Local builds run in GitHub Codespaces, where CPU and memory are shared and may be limited. Avoid starting expensive firmware builds unless they are relevant to the change, and do not repeat a build that already passed without a code or configuration change.
 - Keep the local `build/` directory between builds. It is ignored by Git and contains the CMake/Ninja state and compiled artifacts needed for incremental builds.
 - For firmware changes, run `idf.py build` from the repository root once when a build is needed. Do not delete `build/`, run `idf.py fullclean`, or rerun `idf.py set-target esp32s3` unless the target or build configuration has changed or the existing build state is demonstrably stale.
 - Do not run a firmware build for documentation-only or web-only changes.
