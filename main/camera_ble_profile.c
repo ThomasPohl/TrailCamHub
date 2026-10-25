@@ -13,6 +13,7 @@
 #define WIFI_RESPONSE_CHAR_UUID 0x0003
 #define MAX_DISCOVERED_SERVICES 32
 #define MAX_NOTIFICATION_CHARACTERISTICS 16
+#define MAX_DEVICE_NAME_LEN 32
 
 typedef struct {
     uint16_t start_handle;
@@ -21,6 +22,7 @@ typedef struct {
 } discovered_service_t;
 
 static const char *TAG = "trailcamhub_ble";
+static char s_device_name[MAX_DEVICE_NAME_LEN] = "unknown";
 static discovered_service_t s_discovered_services[MAX_DISCOVERED_SERVICES];
 static size_t s_discovered_service_count;
 static bool s_discovered_service_overflow;
@@ -34,13 +36,14 @@ static uint16_t s_wifi_response_handle;
 static void log_gatt_uuid(const char *kind, const esp_bt_uuid_t *uuid)
 {
     if (uuid->len == ESP_UUID_LEN_16) {
-        ESP_LOGI(TAG, "Discovered GATT %s UUID=0x%04x", kind,
-                 uuid->uuid.uuid16);
+        ESP_LOGI(TAG, "Device=\"%s\": discovered GATT %s UUID=0x%04x",
+                 s_device_name, kind, uuid->uuid.uuid16);
     } else if (uuid->len == ESP_UUID_LEN_32) {
-        ESP_LOGI(TAG, "Discovered GATT %s UUID=0x%08lx", kind,
-                 (unsigned long)uuid->uuid.uuid32);
+        ESP_LOGI(TAG, "Device=\"%s\": discovered GATT %s UUID=0x%08lx",
+                 s_device_name, kind, (unsigned long)uuid->uuid.uuid32);
     } else if (uuid->len == ESP_UUID_LEN_128) {
-        ESP_LOGI(TAG, "Discovered GATT %s with a 128-bit UUID", kind);
+        ESP_LOGI(TAG, "Device=\"%s\": discovered GATT %s with a 128-bit UUID",
+                 s_device_name, kind);
         char formatted[3 * ESP_UUID_LEN_128 + 1];
         size_t formatted_len = 0;
         for (size_t i = 0; i < ESP_UUID_LEN_128; i++) {
@@ -55,10 +58,13 @@ static void log_gatt_uuid(const char *kind, const esp_bt_uuid_t *uuid)
             }
             formatted_len += (size_t)written;
         }
-        ESP_LOGI(TAG, "GATT UUID bytes (16 bytes): %s", formatted);
+        ESP_LOGI(TAG, "Device=\"%s\": GATT UUID bytes (16 bytes): %s",
+                 s_device_name, formatted);
     } else {
-        ESP_LOGW(TAG, "Discovered GATT %s with unsupported UUID length %u",
-                 kind, (unsigned)uuid->len);
+        ESP_LOGW(TAG,
+                 "Device=\"%s\": discovered GATT %s with unsupported UUID "
+                 "length %u",
+                 s_device_name, kind, (unsigned)uuid->len);
     }
 }
 
@@ -95,12 +101,21 @@ static void queue_characteristic_updates(
 
 void camera_ble_profile_reset(void)
 {
+    snprintf(s_device_name, sizeof(s_device_name), "unknown");
     s_discovered_service_count = 0;
     s_discovered_service_overflow = false;
     s_service_start_handle = 0;
     s_service_end_handle = 0;
     s_notification_count = 0;
     s_wifi_response_handle = 0;
+}
+
+void camera_ble_profile_set_device_name(const char *device_name)
+{
+    snprintf(s_device_name, sizeof(s_device_name), "%s",
+             device_name != NULL && device_name[0] != '\0'
+                 ? device_name
+                 : "unknown");
 }
 
 void camera_ble_profile_add_service(const esp_bt_uuid_t *uuid,
@@ -136,9 +151,11 @@ void camera_ble_profile_add_service(const esp_bt_uuid_t *uuid,
     if (is_camera_service(uuid)) {
         s_service_start_handle = start_handle;
         s_service_end_handle = end_handle;
-        ESP_LOGI(TAG, "Found camera service 0x%04x (handles %u-%u)",
-                 CAMERA_BLE_SERVICE_UUID, s_service_start_handle,
-                 s_service_end_handle);
+        ESP_LOGI(TAG,
+                 "Device=\"%s\": found camera service 0x%04x "
+                 "(handles %u-%u)",
+                 s_device_name, CAMERA_BLE_SERVICE_UUID,
+                 s_service_start_handle, s_service_end_handle);
     }
 }
 

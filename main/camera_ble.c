@@ -18,6 +18,7 @@
 #define WIFI_CONTROL_CHAR_UUID 0x0002
 #define SCAN_DURATION_SECONDS 30
 #define MAX_BLE_DATA_LEN 31
+#define MAX_BLE_DEVICE_NAME_LEN 32
 #define MAX_SURVEY_DEVICES 16
 #define CLIENT_CHARACTERISTIC_CONFIG_UUID 0x2902
 
@@ -36,6 +37,7 @@ typedef enum {
 typedef struct {
     esp_bd_addr_t address;
     esp_ble_addr_type_t address_type;
+    char name[MAX_BLE_DEVICE_NAME_LEN];
 } survey_device_t;
 
 static const char *TAG = "trailcamhub_ble";
@@ -126,6 +128,29 @@ static void log_ble_device(const esp_ble_gap_cb_param_t *param)
         log_hex_data("BLE scan response",
                      param->scan_rst.ble_adv + adv_len, scan_rsp_len);
     }
+}
+
+static void get_ble_device_name(esp_ble_gap_cb_param_t *param, char *name,
+                                size_t name_capacity)
+{
+    uint8_t name_len = 0;
+    uint8_t *advertised_name = esp_ble_resolve_adv_data(
+        param->scan_rst.ble_adv, ESP_BLE_AD_TYPE_NAME_CMPL, &name_len);
+    if (advertised_name == NULL) {
+        advertised_name = esp_ble_resolve_adv_data(
+            param->scan_rst.ble_adv, ESP_BLE_AD_TYPE_NAME_SHORT, &name_len);
+    }
+
+    if (advertised_name == NULL || name_len == 0) {
+        snprintf(name, name_capacity, "unknown");
+        return;
+    }
+
+    size_t copy_len = name_len < name_capacity - 1
+                          ? name_len
+                          : name_capacity - 1;
+    memcpy(name, advertised_name, copy_len);
+    name[copy_len] = '\0';
 }
 
 static void start_scan(void)
@@ -297,6 +322,7 @@ static void collect_survey_device(esp_ble_gap_cb_param_t *param)
     survey_device_t *device = &s_survey_devices[s_survey_device_count++];
     memcpy(device->address, param->scan_rst.bda, sizeof(device->address));
     device->address_type = param->scan_rst.ble_addr_type;
+    get_ble_device_name(param, device->name, sizeof(device->name));
     ESP_LOGI(TAG, "Queued BLE device for GATT profile inspection (%u/%u)",
              (unsigned)s_survey_device_count, MAX_SURVEY_DEVICES);
 }
@@ -337,6 +363,9 @@ static void select_target_camera(esp_ble_gap_cb_param_t *param)
     s_device_selected = true;
     s_disconnected_while_opening = false;
     clear_device_profile();
+    char device_name[MAX_BLE_DEVICE_NAME_LEN];
+    get_ble_device_name(param, device_name, sizeof(device_name));
+    camera_ble_profile_set_device_name(device_name);
     ESP_LOGI(TAG,
              "Found compatible camera candidate; stopping scan before connection");
     s_scan_state = BLE_SCAN_STOPPING;
@@ -369,10 +398,12 @@ static void start_next_survey_device(void)
     s_camera_address_type = device->address_type;
     s_device_selected = true;
     clear_device_profile();
+    camera_ble_profile_set_device_name(device->name);
     s_disconnected_while_opening = false;
     s_connection_open_pending = true;
-    ESP_LOGI(TAG, "Inspecting GATT profile for surveyed device %u/%u",
-             (unsigned)s_survey_device_index, (unsigned)s_survey_device_count);
+    ESP_LOGI(TAG, "Inspecting GATT profile for device \"%s\" (%u/%u)",
+             device->name, (unsigned)s_survey_device_index,
+             (unsigned)s_survey_device_count);
 
     esp_err_t error = esp_ble_gattc_open(
         s_gatt_if, s_camera_address, s_camera_address_type, true);

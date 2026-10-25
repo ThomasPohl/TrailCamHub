@@ -7,6 +7,7 @@
 #include "esp_gattc_api.h"
 
 void camera_ble_profile_reset(void);
+void camera_ble_profile_set_device_name(const char *device_name);
 void camera_ble_profile_add_service(const esp_bt_uuid_t *uuid,
                                     uint16_t start_handle,
                                     uint16_t end_handle);
