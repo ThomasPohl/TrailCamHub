@@ -26,9 +26,11 @@
 #define SCAN_DURATION_SECONDS 30
 #define MAX_BLE_DATA_LEN 31
 #define MAX_DISCOVERED_SERVICES 32
+#define MAX_SURVEY_DEVICES 16
 #define MAX_NOTIFICATION_CHARACTERISTICS 16
 #define CLIENT_CHARACTERISTIC_CONFIG_UUID 0x2902
 #define WIFI_RESPONSE_CHAR_UUID 0x0003
+#define TARGET_CAMERA_NAME "TC100_ED3B"
 #define WIFI_RESPONSE_HEADER_LEN 8
 #define MAX_WIFI_RESPONSE_JSON_LEN 512
 #define MAX_WIFI_RESPONSE_FRAME_LEN \
@@ -49,6 +51,16 @@ typedef enum {
     BLE_SCAN_STOPPING,
 } ble_scan_state_t;
 
+typedef enum {
+    BLE_PHASE_SURVEY,
+    BLE_PHASE_TARGET_CAMERA,
+} ble_phase_t;
+
+typedef struct {
+    esp_bd_addr_t address;
+    esp_ble_addr_type_t address_type;
+} survey_device_t;
+
 static const char *TAG = "trailcamhub_ble";
 static esp_ble_scan_params_t scan_params = {
     .scan_type = BLE_SCAN_TYPE_ACTIVE,
@@ -62,6 +74,14 @@ static esp_ble_scan_params_t scan_params = {
 static esp_gatt_if_t s_gatt_if = ESP_GATT_IF_NONE;
 static uint16_t s_conn_id;
 static ble_scan_state_t s_scan_state = BLE_SCAN_STOPPED;
+static ble_phase_t s_phase = BLE_PHASE_SURVEY;
+static survey_device_t s_survey_devices[MAX_SURVEY_DEVICES];
+static size_t s_survey_device_count;
+static size_t s_survey_device_index;
+static bool s_survey_overflow;
+static bool s_connection_open_pending;
+static bool s_connection_active;
+static bool s_disconnected_while_opening;
 static discovered_service_t s_discovered_services[MAX_DISCOVERED_SERVICES];
 static size_t s_discovered_service_count;
 static bool s_discovered_service_overflow;
@@ -333,17 +353,33 @@ static void start_scan(void)
     s_scan_state = BLE_SCAN_STARTING;
 }
 
-static void reject_connected_device(const char *reason)
+static void clear_device_profile(void)
+{
+    s_service_start_handle = 0;
+    s_service_end_handle = 0;
+    s_discovered_service_count = 0;
+    s_discovered_service_overflow = false;
+    s_notification_count = 0;
+    s_notification_index = 0;
+    s_wifi_response_handle = 0;
+    reset_wifi_response_frame();
+}
+
+static void start_next_survey_device(void);
+
+static void disconnect_current_device(const char *reason)
 {
     ESP_LOGI(TAG, "%s; disconnecting BLE device", reason);
-    esp_err_t error = esp_ble_gattc_close(s_gatt_if, s_conn_id);
+    esp_err_t error = esp_ble_gap_disconnect(s_camera_address);
     if (error != ESP_OK) {
-        ESP_LOGE(TAG, "Could not close incompatible BLE connection: %s",
+        ESP_LOGE(TAG, "Could not disconnect BLE device: %s",
                  esp_err_to_name(error));
-        error = esp_ble_gap_disconnect(s_camera_address);
-        if (error != ESP_OK) {
-            ESP_LOGE(TAG, "Could not disconnect incompatible BLE device: %s",
-                     esp_err_to_name(error));
+        s_connection_active = false;
+        s_device_selected = false;
+        if (s_phase == BLE_PHASE_SURVEY) {
+            start_next_survey_device();
+        } else {
+            start_scan();
         }
     }
 }
@@ -580,12 +616,88 @@ static void start_next_characteristic_subscription(void)
              (config == 0x0001 ? "notifications" : "indications"), handle);
 }
 
-static void select_ble_device(esp_ble_gap_cb_param_t *param)
+static bool is_connectable_advertisement(esp_ble_evt_type_t event_type)
 {
-    if (param->scan_rst.ble_evt_type != ESP_BLE_EVT_CONN_ADV &&
-        param->scan_rst.ble_evt_type != ESP_BLE_EVT_CONN_DIR_ADV) {
-        ESP_LOGD(TAG, "Skipping non-connectable BLE advertisement (event_type=%u)",
+    return event_type == ESP_BLE_EVT_CONN_ADV ||
+           event_type == ESP_BLE_EVT_CONN_DIR_ADV;
+}
+
+static void collect_survey_device(const esp_ble_gap_cb_param_t *param)
+{
+    if (!is_connectable_advertisement(param->scan_rst.ble_evt_type)) {
+        ESP_LOGI(TAG,
+                 "BLE device %02X:%02X:%02X:%02X:%02X:%02X is not "
+                 "connectable (event_type=%u); GATT profile unavailable",
+                 param->scan_rst.bda[0], param->scan_rst.bda[1],
+                 param->scan_rst.bda[2], param->scan_rst.bda[3],
+                 param->scan_rst.bda[4], param->scan_rst.bda[5],
                  (unsigned)param->scan_rst.ble_evt_type);
+        return;
+    }
+
+    for (size_t i = 0; i < s_survey_device_count; i++) {
+        if (s_survey_devices[i].address_type ==
+                param->scan_rst.ble_addr_type &&
+            memcmp(s_survey_devices[i].address, param->scan_rst.bda,
+                   sizeof(esp_bd_addr_t)) == 0) {
+            return;
+        }
+    }
+    if (s_survey_device_count >= MAX_SURVEY_DEVICES) {
+        if (!s_survey_overflow) {
+            ESP_LOGW(TAG, "Survey device limit (%u) reached; "
+                     "additional devices will be skipped",
+                     MAX_SURVEY_DEVICES);
+            s_survey_overflow = true;
+        }
+        return;
+    }
+
+    log_ble_device(param);
+    survey_device_t *device = &s_survey_devices[s_survey_device_count++];
+    memcpy(device->address, param->scan_rst.bda, sizeof(device->address));
+    device->address_type = param->scan_rst.ble_addr_type;
+    ESP_LOGI(TAG, "Queued BLE device for GATT profile inspection (%u/%u)",
+             (unsigned)s_survey_device_count, MAX_SURVEY_DEVICES);
+}
+
+static bool is_target_camera_advertisement(esp_ble_gap_cb_param_t *param)
+{
+    uint8_t name_len = 0;
+    const uint8_t *name = esp_ble_resolve_adv_data(
+        param->scan_rst.ble_adv, ESP_BLE_AD_TYPE_NAME_CMPL, &name_len);
+
+    if (name == NULL) {
+        name = esp_ble_resolve_adv_data(param->scan_rst.ble_adv,
+                                        ESP_BLE_AD_TYPE_NAME_SHORT, &name_len);
+    }
+    return name != NULL && name_len == strlen(TARGET_CAMERA_NAME) &&
+           memcmp(name, TARGET_CAMERA_NAME, name_len) == 0;
+}
+
+static bool was_surveyed_connectable_device(
+    const esp_ble_gap_cb_param_t *param)
+{
+    for (size_t i = 0; i < s_survey_device_count; i++) {
+        if (s_survey_devices[i].address_type ==
+                param->scan_rst.ble_addr_type &&
+            memcmp(s_survey_devices[i].address, param->scan_rst.bda,
+                   sizeof(esp_bd_addr_t)) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void select_target_camera(esp_ble_gap_cb_param_t *param)
+{
+    bool connectable = is_connectable_advertisement(
+        param->scan_rst.ble_evt_type);
+    bool known_scan_response =
+        param->scan_rst.ble_evt_type == ESP_BLE_EVT_SCAN_RSP &&
+        was_surveyed_connectable_device(param);
+    if (!connectable && !known_scan_response) {
+        ESP_LOGD(TAG, "Ignoring non-connectable advertisement for target name");
         return;
     }
 
@@ -593,21 +705,53 @@ static void select_ble_device(esp_ble_gap_cb_param_t *param)
     memcpy(s_camera_address, param->scan_rst.bda, sizeof(s_camera_address));
     s_camera_address_type = param->scan_rst.ble_addr_type;
     s_device_selected = true;
-    s_service_start_handle = 0;
-    s_service_end_handle = 0;
-    s_discovered_service_count = 0;
-    s_discovered_service_overflow = false;
-    s_notification_count = 0;
-    s_notification_index = 0;
-    s_wifi_response_handle = 0;
-    reset_wifi_response_frame();
-    ESP_LOGI(TAG, "Found connectable BLE device; stopping scan to inspect its GATT profile");
+    s_disconnected_while_opening = false;
+    clear_device_profile();
+    ESP_LOGI(TAG, "Found %s; stopping scan before connection",
+             TARGET_CAMERA_NAME);
     s_scan_state = BLE_SCAN_STOPPING;
     esp_err_t error = esp_ble_gap_stop_scanning();
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "Could not stop BLE scan: %s", esp_err_to_name(error));
         s_scan_state = BLE_SCAN_ACTIVE;
         s_device_selected = false;
+    }
+}
+
+static void start_next_survey_device(void)
+{
+    if (s_phase != BLE_PHASE_SURVEY || s_connection_open_pending ||
+        s_connection_active) {
+        return;
+    }
+
+    if (s_survey_device_index >= s_survey_device_count) {
+        s_phase = BLE_PHASE_TARGET_CAMERA;
+        s_device_selected = false;
+        ESP_LOGI(TAG, "GATT survey complete (%u device(s)); scanning for %s",
+                 (unsigned)s_survey_device_count, TARGET_CAMERA_NAME);
+        start_scan();
+        return;
+    }
+
+    survey_device_t *device = &s_survey_devices[s_survey_device_index++];
+    memcpy(s_camera_address, device->address, sizeof(s_camera_address));
+    s_camera_address_type = device->address_type;
+    s_device_selected = true;
+    clear_device_profile();
+    s_disconnected_while_opening = false;
+    s_connection_open_pending = true;
+    ESP_LOGI(TAG, "Inspecting GATT profile for surveyed device %u/%u",
+             (unsigned)s_survey_device_index, (unsigned)s_survey_device_count);
+
+    esp_err_t error = esp_ble_gattc_open(
+        s_gatt_if, s_camera_address, s_camera_address_type, true);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not connect to surveyed BLE device: %s",
+                 esp_err_to_name(error));
+        s_connection_open_pending = false;
+        s_device_selected = false;
+        start_next_survey_device();
     }
 }
 
@@ -678,8 +822,12 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event,
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
         if (param->scan_start_cmpl.status == ESP_BT_STATUS_SUCCESS) {
             s_scan_state = BLE_SCAN_ACTIVE;
-            ESP_LOGI(TAG, "Scanning for BLE devices to inspect service 0x%04x",
-                     CAMERA_SERVICE_UUID);
+            if (s_phase == BLE_PHASE_SURVEY) {
+                ESP_LOGI(TAG, "Surveying connectable BLE devices for %u seconds",
+                         SCAN_DURATION_SECONDS);
+            } else {
+                ESP_LOGI(TAG, "Scanning for BLE camera %s", TARGET_CAMERA_NAME);
+            }
         } else {
             s_scan_state = BLE_SCAN_STOPPED;
             ESP_LOGE(TAG, "BLE scan start failed: %d",
@@ -687,15 +835,29 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event,
         }
         break;
     case ESP_GAP_BLE_SCAN_RESULT_EVT:
-        if (param->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT &&
-            !s_device_selected && s_scan_state == BLE_SCAN_ACTIVE) {
-            select_ble_device(param);
-        } else if (param->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_CMPL_EVT &&
-                   !s_device_selected &&
-                   s_scan_state == BLE_SCAN_ACTIVE) {
+        if (s_scan_state != BLE_SCAN_ACTIVE) {
+            break;
+        }
+        if (param->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
+            if (s_phase == BLE_PHASE_SURVEY) {
+                collect_survey_device(param);
+            } else if (!s_device_selected &&
+                       is_target_camera_advertisement(param)) {
+                select_target_camera(param);
+            }
+        } else if (param->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_CMPL_EVT) {
             s_scan_state = BLE_SCAN_STOPPED;
-            ESP_LOGI(TAG, "BLE scan window completed; restarting scan");
-            start_scan();
+            if (s_phase == BLE_PHASE_SURVEY) {
+                ESP_LOGI(TAG, "BLE survey scan complete; inspecting %u "
+                         "connectable device(s)",
+                         (unsigned)s_survey_device_count);
+                s_survey_device_index = 0;
+                start_next_survey_device();
+            } else {
+                ESP_LOGI(TAG, "%s not found; restarting target scan",
+                         TARGET_CAMERA_NAME);
+                start_scan();
+            }
         }
         break;
     case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
@@ -708,15 +870,19 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event,
         } else {
             s_scan_state = BLE_SCAN_STOPPED;
             if (s_device_selected) {
+                s_connection_open_pending = true;
+                s_disconnected_while_opening = false;
                 esp_err_t error = esp_ble_gattc_open(
                     s_gatt_if, s_camera_address, s_camera_address_type, true);
                 if (error != ESP_OK) {
                     ESP_LOGE(TAG, "Could not connect to BLE device: %s",
                              esp_err_to_name(error));
+                    s_connection_open_pending = false;
                     s_device_selected = false;
                     start_scan();
                 }
             } else {
+                ESP_LOGW(TAG, "Scan stopped without a selected target device");
                 start_scan();
             }
         }
@@ -744,18 +910,37 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         if (param->open.status != ESP_GATT_OK) {
             ESP_LOGW(TAG, "BLE device connection failed: %d",
                      param->open.status);
+            s_connection_open_pending = false;
             s_device_selected = false;
-            start_scan();
+            if (s_phase == BLE_PHASE_SURVEY) {
+                start_next_survey_device();
+            } else {
+                start_scan();
+            }
             break;
         }
         s_conn_id = param->open.conn_id;
-        ESP_LOGI(TAG, "Connected to BLE device; discovering GATT services");
+        s_connection_open_pending = false;
+        s_connection_active = true;
+        ESP_LOGI(TAG, "Connected to %s; discovering GATT services",
+                 s_phase == BLE_PHASE_SURVEY ? "surveyed BLE device" :
+                 TARGET_CAMERA_NAME);
+        if (s_disconnected_while_opening) {
+            s_connection_active = false;
+            s_device_selected = false;
+            if (s_phase == BLE_PHASE_SURVEY) {
+                start_next_survey_device();
+            } else {
+                start_scan();
+            }
+            break;
+        }
         esp_err_t search_error = esp_ble_gattc_search_service(
             gattc_if, s_conn_id, NULL);
         if (search_error != ESP_OK) {
             ESP_LOGE(TAG, "Could not start GATT service discovery: %s",
                      esp_err_to_name(search_error));
-            reject_connected_device("Service discovery could not be started");
+            disconnect_current_device("Service discovery could not be started");
         }
         break;
     case ESP_GATTC_SEARCH_RES_EVT: {
@@ -798,9 +983,12 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         if (param->search_cmpl.status != ESP_GATT_OK) {
             ESP_LOGE(TAG, "GATT service discovery failed: %d",
                      param->search_cmpl.status);
-            reject_connected_device("GATT service discovery failed");
+            disconnect_current_device("GATT service discovery failed");
+        } else if (s_phase == BLE_PHASE_SURVEY) {
+            discover_characteristics();
+            disconnect_current_device("GATT profile inspection complete");
         } else if (!discover_characteristics()) {
-            reject_connected_device("GATT characteristics do not match");
+            disconnect_current_device("GATT characteristics do not match");
         } else {
             s_notification_index = 0;
             start_next_characteristic_subscription();
@@ -852,17 +1040,24 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         }
         break;
     case ESP_GATTC_DISCONNECT_EVT:
-        ESP_LOGW(TAG, "BLE device disconnected; restarting discovery");
+        ESP_LOGW(TAG, "BLE device disconnected");
+        if (s_connection_open_pending) {
+            s_disconnected_while_opening = true;
+            break;
+        }
+        if (!s_connection_active) {
+            ESP_LOGD(TAG, "Ignoring disconnect callback without an active connection");
+            break;
+        }
+        s_connection_active = false;
         s_device_selected = false;
-        s_service_start_handle = 0;
-        s_service_end_handle = 0;
-        s_discovered_service_count = 0;
-        s_discovered_service_overflow = false;
-        s_notification_count = 0;
-        s_notification_index = 0;
-        s_wifi_response_handle = 0;
-        reset_wifi_response_frame();
-        start_scan();
+        clear_device_profile();
+        if (s_phase == BLE_PHASE_SURVEY) {
+            start_next_survey_device();
+        } else {
+            ESP_LOGI(TAG, "Restarting scan for %s", TARGET_CAMERA_NAME);
+            start_scan();
+        }
         break;
     default:
         break;
@@ -877,7 +1072,8 @@ esp_err_t camera_ble_start(void)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(TAG, "Starting BLE PoC; identifying devices by GATT profile");
+    ESP_LOGI(TAG, "Starting BLE survey; target camera is %s",
+             TARGET_CAMERA_NAME);
     if (s_command_len == 0) {
         ESP_LOGW(TAG, "Payload is empty; this run will not write to the camera");
     }
