@@ -61,7 +61,9 @@ Protocol observations should be documented reproducibly without publishing crede
 
 ### BLE Wi-Fi Activation PoC
 
-For the PoC, firmware first scans for 30 seconds, then connects to up to 16 observed connectable BLE devices in turn and logs their GATT services and characteristics. Non-connectable advertisements are logged but cannot be inspected over GATT. After the survey, it scans for the advertised name `TC100_ED3B` and connects only to that device for the camera protocol. The GATT profile remains the compatibility check: service `0x8801` must include writable characteristic `0x0002` and notification/indication characteristic `0x0003` before the Wi-Fi-enable command is sent. Scan and connection callbacks are serialized so failed survey connections do not trigger overlapping scans. These UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified for the TC100.
+For the PoC, firmware scans for 30 seconds and queues up to 16 connectable advertisements that match a known camera name or advertise service UUID `0x8801`. It connects to those candidates in turn and checks their GATT profile; unrelated nearby devices are not connected or surveyed. The current name allowlist contains `TC100_ED3B`. Non-connectable advertisements cannot be inspected over GATT. The final compatibility check requires service `0x8801` to include writable characteristic `0x0002` and notification/indication characteristic `0x0003` before the Wi-Fi-enable command is sent. Candidate filtering is only a fast pre-filter, not proof of compatibility. Scan and connection callbacks are serialized so failed connections do not trigger overlapping scans. These UUIDs were reported for a Lutranstra PR5000-WF but have not yet been independently verified for the TC100.
+
+The BLE implementation is separated by responsibility: `camera_ble.c` owns scan/connection state and GAP/GATT callbacks, `camera_ble_discovery.c` filters advertisements, `camera_ble_profile.c` discovers and validates GATT services and characteristics, and `camera_ble_protocol.c` parses the configured command and framed JSON responses. Camera names and advertised service UUIDs can be extended in the discovery module as additional models are investigated.
 
 The default Wi-Fi-enable payload is ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex), based on the reported BLE command for enabling the camera's Wi-Fi. The firmware writes it to characteristic `0x0002` after discovering the configured service and characteristic. The UUIDs still need to be independently verified for the TC100.
 
@@ -76,6 +78,31 @@ idf.py set-target esp32s3
 idf.py menuconfig
 idf.py build flash monitor
 ```
+
+#### GitHub Codespaces build environment
+
+The repository's [Dev Container configuration](./.devcontainer/devcontainer.json) uses the same `espressif/idf:release-v5.3` image as the firmware CI workflow, sets `IDF_PATH` to `/opt/esp/idf`, and mounts the repository at `/project`. Keeping this mount point stable is important: CMake records absolute source and build paths in `build/CMakeCache.txt`. If a Codespace previously built the project from another path, the existing cache can no longer be used from that different path.
+
+To apply the Dev Container configuration to an existing Codespace, run **Codespaces: Rebuild Container** from the VS Code Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`). If that command is not available, use **Dev Containers: Rebuild Container**. This rebuilds the Codespace container; it does not delete the repository's `build/` directory. After reconnecting, verify the environment from the integrated terminal:
+
+```sh
+printf 'IDF_PATH=%s\n' "$IDF_PATH"
+idf.py --version
+```
+
+`IDF_PATH` should be `/opt/esp/idf`, and the ESP-IDF version should be 5.3.x. Build the firmware with the default VS Code build task **ESP-IDF: Build firmware** (`Ctrl+Shift+B`) or run this command from the repository root:
+
+```sh
+idf.py build
+```
+
+For a fresh checkout, select the target once before the first build:
+
+```sh
+idf.py set-target esp32s3
+```
+
+The `build/` directory is intentionally ignored by Git and should be kept between builds for incremental compilation. The generated `sdkconfig` is also local and ignored; project defaults belong in the tracked `sdkconfig.defaults`. Do not routinely delete `build/` or run `idf.py fullclean`. The stable `/project` mount avoids cache path mismatches across Codespace restarts/rebuilds. If the ESP-IDF image/version or target changes, follow ESP-IDF's documented reconfiguration process for that change rather than clearing the build directory as a routine step.
 
 In `menuconfig`, open **TrailCamHub PoC**. **Wi-Fi enable payload (hex)** defaults to the bytes for ASCII `BT_KEY_ON`; spaces, colons, and hyphens may separate hex bytes. Set the option to an empty string to inspect GATT profiles without writing. The PoC uses a GATT write with response when supported by the characteristic.
 

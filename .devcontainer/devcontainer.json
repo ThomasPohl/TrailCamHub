@@ -1,0 +1,11 @@
+{
+  "name": "TrailCamHub ESP-IDF",
+  "image": "espressif/idf:release-v5.3",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/project,type=bind,consistency=cached",
+  "workspaceFolder": "/project",
+  "remoteUser": "root",
+  "containerEnv": {
+    "IDF_PATH": "/opt/esp/idf"
+  },
+  "postCreateCommand": "bash -lc 'source \"$IDF_PATH/export.sh\" >/dev/null && idf.py --version'"
+}
