@@ -1,3 +1,8 @@
+/*
+ * This module coordinates BLE scanning, device surveys, camera connections,
+ * GATT discovery, characteristic subscriptions, and command writes.
+ */
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

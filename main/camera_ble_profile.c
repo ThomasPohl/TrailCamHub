@@ -1,3 +1,8 @@
+/*
+ * This module records discovered GATT services and inspects characteristics
+ * to determine whether a device supports the expected camera profile.
+ */
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>

@@ -1,3 +1,8 @@
+/*
+ * This module identifies BLE advertisements that may belong to the target
+ * camera by checking connectability, advertised names, and service UUIDs.
+ */
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

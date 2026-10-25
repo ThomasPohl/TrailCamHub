@@ -1,3 +1,8 @@
+/*
+ * This module converts the configured command from hexadecimal bytes and
+ * assembles BLE notifications into framed Wi-Fi response JSON messages.
+ */
+
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -8,6 +13,7 @@
 #include "cJSON.h"
 
 #include "camera_ble_protocol.h"
+#include "camera_wifi.h"
 
 #ifndef CONFIG_CAMERA_WIFI_ENABLE_PAYLOAD_HEX
 #define CONFIG_CAMERA_WIFI_ENABLE_PAYLOAD_HEX "42545F4B45595F4F4E"
@@ -47,6 +53,11 @@ static void log_wifi_response_json(const uint8_t *json, size_t json_len,
     cJSON *ssid = cJSON_GetObjectItemCaseSensitive(root, "ssid");
     cJSON *bssid = cJSON_GetObjectItemCaseSensitive(root, "bssid");
     cJSON *password = cJSON_GetObjectItemCaseSensitive(root, "pwd");
+    bool credentials_valid = cJSON_IsNumber(ret) && ret->valuedouble == 0.0 &&
+                             cJSON_IsString(ssid) &&
+                             ssid->valuestring != NULL &&
+                             cJSON_IsString(password) &&
+                             password->valuestring != NULL;
 
     ESP_LOGI(TAG, "Parsed Wi-Fi response (message_type=0x%04x, %u JSON bytes)",
              message_type, (unsigned)json_len);
@@ -69,6 +80,18 @@ static void log_wifi_response_json(const uint8_t *json, size_t json_len,
         ESP_LOGI(TAG, "Camera Wi-Fi password: [REDACTED]");
     } else {
         ESP_LOGW(TAG, "Wi-Fi response has no string pwd field");
+    }
+
+    if (credentials_valid) {
+        esp_err_t error = camera_wifi_connect(ssid->valuestring,
+                                              password->valuestring);
+        if (error != ESP_OK) {
+            ESP_LOGE(TAG, "Could not connect to camera Wi-Fi: %s",
+                     esp_err_to_name(error));
+        }
+    } else {
+        ESP_LOGW(TAG, "Camera Wi-Fi credentials are missing or response "
+                 "status is not successful");
     }
 
     cJSON_Delete(root);

@@ -1,6 +1,6 @@
 # TrailCamHub ESP32-S3 Deployment Package
 
-This archive contains the firmware images for the ESP32-S3 BLE proof of concept.
+This archive contains the firmware images for the ESP32-S3 BLE/Wi-Fi proof of concept.
 
 ## Browser installer
 
@@ -23,5 +23,7 @@ The merged image includes the bootloader, partition table, and application. The 
 ## PoC behavior
 
 The default CI build first scans for 30 seconds, then connects to up to 16 observed connectable BLE devices in turn and logs their GATT profiles. Non-connectable advertisements are logged but cannot be inspected over GATT. After the survey, it scans for the advertised name `TC100_ED3B` and connects only to that camera. It sends ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) only if the camera's service `0x8801` has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. The payload can be changed or disabled in `menuconfig`. Use this firmware where connecting to nearby BLE devices for inspection is authorized.
+
+After the camera returns Wi-Fi credentials over BLE, the firmware connects to its access point and requests the storage summary over HTTP from `192.168.1.8`. This address and API flow are based on the Dsoon camera investigation and have not yet been verified with this project's target camera. File enumeration and media downloads are not implemented. The single-app partition is 1.5 MB and does not support OTA updates; the board must have at least 2 MB of flash.
 
 The firmware logs status over its serial console. Use an authorized camera and review its status before leaving the device unattended.

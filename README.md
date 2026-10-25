@@ -2,7 +2,7 @@
 
 An open-source trail camera bridge: an ESP32-S3 with an A7670E 4G modem is intended to retrieve media from supported trail cameras and transfer it to a configurable cloud storage service.
 
-> **Status:** Concept / early draft. Hardware, camera compatibility, wireless protocols, and cloud integration have not yet been implemented or verified.
+> **Status:** Concept / early draft. Hardware support, camera compatibility, wireless interoperability, and cloud integration have not yet been verified.
 
 TrailCamHub aims to reproduce and automate the workflow of the **Trailcam Go** app for compatible cameras. The goal is interoperability with a camera owned by the user, not copying or distributing the proprietary app. TrailCamHub is an independent project and is not affiliated with Trailcam Go, its provider, or any camera manufacturer.
 
@@ -71,6 +71,12 @@ The serial log also reports the camera's BLE address, address type, signal stren
 
 The Wi-Fi name cannot currently be predicted reliably from a BLE device name. A camera may derive an SSID suffix from an address or another device identifier, but that mapping has not been verified. Compare the SSID (for example, `TrailCam_897B`) with the BLE address and captured advertisement data from the serial log before assuming there is a stable relationship; BLE addresses may also be randomized.
 
+### Camera Wi-Fi PoC
+
+After a successful BLE Wi-Fi response, the firmware now uses the returned SSID and password to join the camera access point. Credentials are kept in runtime memory only and are not logged or saved to NVS. Once connected, it requests `SetMode?Storage` and `Storage?GetDirFileInfo` from the camera at `192.168.1.8` and logs the bounded directory-summary response. The camera address and API flow are based on the [Dsoon Wi-Fi/BLE investigation](https://geekitguide.com/wifi-ble-trailcam-investigation-part-2/) and have not yet been verified with this project's target camera. File-page enumeration and media downloads are not implemented yet.
+
+The firmware uses ESP-IDF's single-app 1.5 MB partition layout to fit the BLE and Wi-Fi implementation; this layout does not support OTA updates and requires at least 2 MB of flash.
+
 Build and flash with ESP-IDF:
 
 ```sh
@@ -135,7 +141,7 @@ The installer does not configure the camera name or Wi-Fi-enable payload. It ins
 
 1. Verify the board revision, pinout, power supply, and modem interface.
 2. Select a supported camera and document its BLE/Wi-Fi workflow using test data.
-3. Implement BLE discovery and a controlled Wi-Fi connection.
+3. Verify the BLE-controlled camera Wi-Fi connection and initial API requests on a supported camera.
 4. Enable a single media download with an integrity check.
 5. Add a persistent queue and resumable uploads.
 6. Connect an initial HTTPS cloud adapter and run end-to-end tests.
