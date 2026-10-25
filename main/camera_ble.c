@@ -281,12 +281,15 @@ static void collect_survey_device(esp_ble_gap_cb_param_t *param)
 {
     if (!camera_ble_is_connectable_advertisement(
             param->scan_rst.ble_evt_type)) {
+        char device_name[MAX_BLE_DEVICE_NAME_LEN];
+        get_ble_device_name(param, device_name, sizeof(device_name));
         ESP_LOGI(TAG,
-                 "BLE device %02X:%02X:%02X:%02X:%02X:%02X is not "
-                 "connectable (event_type=%u); GATT profile unavailable",
+                 "BLE device %02X:%02X:%02X:%02X:%02X:%02X (name=\"%s\") "
+                 "is not connectable (event_type=%u); "
+                 "GATT profile unavailable",
                  param->scan_rst.bda[0], param->scan_rst.bda[1],
                  param->scan_rst.bda[2], param->scan_rst.bda[3],
-                 param->scan_rst.bda[4], param->scan_rst.bda[5],
+                 param->scan_rst.bda[4], param->scan_rst.bda[5], device_name,
                  (unsigned)param->scan_rst.ble_evt_type);
         return;
     }
