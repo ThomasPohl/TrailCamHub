@@ -14,7 +14,7 @@
 
 static const char *TAG = "trailcamhub";
 
-void app_main(void)
+extern "C" void app_main(void)
 {
     esp_err_t error = nvs_flash_init();
     if (error == ESP_ERR_NVS_NO_FREE_PAGES ||

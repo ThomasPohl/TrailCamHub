@@ -401,7 +401,7 @@ static esp_err_t wait_for_artemis_packets(
         }
 
         uint8_t packet[512];
-        struct sockaddr_in source = {0};
+        struct sockaddr_in source = {};
         ssize_t received = camera_udp_receive_packet(
             socket_fd, packet, sizeof(packet), &source, "ARTEMIS");
         if (received < 0) {
@@ -496,10 +496,11 @@ static esp_err_t send_prelogin(int socket_fd,
             return ESP_ERR_TIMEOUT;
         }
 
-        struct timeval response_timeout = {
-            .tv_sec = remaining_us / 1000000,
-            .tv_usec = remaining_us % 1000000,
-        };
+        struct timeval response_timeout = {};
+        response_timeout.tv_sec =
+            static_cast<decltype(response_timeout.tv_sec)>(remaining_us / 1000000);
+        response_timeout.tv_usec =
+            static_cast<decltype(response_timeout.tv_usec)>(remaining_us % 1000000);
         if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &response_timeout,
                        sizeof(response_timeout)) < 0) {
             ESP_LOGE(TAG, "Could not set PRE_LOGIN response timeout: errno %d",
@@ -508,7 +509,7 @@ static esp_err_t send_prelogin(int socket_fd,
         }
 
         uint8_t response[256];
-        struct sockaddr_in source = {0};
+        struct sockaddr_in source = {};
         ssize_t received = camera_udp_receive_packet(
             socket_fd, response, sizeof(response), &source, "PRE_LOGIN");
         if (received < 0) {
@@ -568,11 +569,10 @@ static esp_err_t discover_camera(void)
         return ESP_FAIL;
     }
 
-    struct sockaddr_in local = {
-        .sin_family = AF_INET,
-        .sin_port = htons(CAMERA_DISCOVERY_LOCAL_PORT),
-        .sin_addr = {.s_addr = htonl(INADDR_ANY)},
-    };
+    struct sockaddr_in local = {};
+    local.sin_family = AF_INET;
+    local.sin_port = htons(CAMERA_DISCOVERY_LOCAL_PORT);
+    local.sin_addr.s_addr = htonl(INADDR_ANY);
     ESP_LOGI(TAG, "Binding camera UDP socket to local port %u",
              CAMERA_DISCOVERY_LOCAL_PORT);
     if (bind(socket_fd, (struct sockaddr *)&local, sizeof(local)) < 0) {
@@ -604,11 +604,10 @@ static esp_err_t discover_camera(void)
          port_index < sizeof(s_camera_discovery_ports) /
                           sizeof(s_camera_discovery_ports[0]);
          port_index++) {
-        struct sockaddr_in destination = {
-            .sin_family = AF_INET,
-            .sin_port = htons(s_camera_discovery_ports[port_index]),
-            .sin_addr = {.s_addr = s_camera_gateway.addr},
-        };
+        struct sockaddr_in destination = {};
+        destination.sin_family = AF_INET;
+        destination.sin_port = htons(s_camera_discovery_ports[port_index]);
+        destination.sin_addr.s_addr = s_camera_gateway.addr;
         ssize_t sent = camera_udp_send_packet(
             socket_fd, s_camera_discovery_packet,
             sizeof(s_camera_discovery_packet), &destination,
@@ -622,7 +621,7 @@ static esp_err_t discover_camera(void)
     while ((esp_timer_get_time() - discovery_started_us) / 1000 <
            CAMERA_DISCOVERY_TIMEOUT_MS) {
         uint8_t response[256];
-        struct sockaddr_in source = {0};
+        struct sockaddr_in source = {};
         ssize_t received = camera_udp_receive_packet(
             socket_fd, response, sizeof(response), &source,
             "camera discovery");
