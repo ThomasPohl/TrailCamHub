@@ -26,7 +26,7 @@
 #define CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS 500
 #define CAMERA_DISCOVERY_DRAIN_MAX_MS 1000
 #define CAMERA_DISCOVERY_DRAIN_SILENCE_MS 150
-#define CAMERA_DISCOVERY_LOG_BYTES 64
+#define CAMERA_UDP_MAX_PACKET_LEN 512
 #define CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS 1000
 #define CAMERA_PRELOGIN_MAX_PACKET_LEN 128
 #define CAMERA_RUDP_DATA_TYPE 0xd0
@@ -102,29 +102,6 @@ static esp_ip4_addr_t s_camera_gateway;
 static bool s_camera_gateway_valid;
 static uint8_t s_camera_rudp_sequence;
 
-static size_t format_packet_hex(const uint8_t *packet, size_t packet_len,
-                                char *output, size_t output_size)
-{
-    size_t prefix_len = packet_len < CAMERA_DISCOVERY_LOG_BYTES
-                            ? packet_len
-                            : CAMERA_DISCOVERY_LOG_BYTES;
-    size_t output_len = 0;
-
-    if (output_size == 0) {
-        return 0;
-    }
-    output[0] = '\0';
-    for (size_t i = 0; i < prefix_len && output_len < output_size; i++) {
-        int written = snprintf(output + output_len, output_size - output_len,
-                               "%s%02X", i == 0 ? "" : " ", packet[i]);
-        if (written < 0 || (size_t)written >= output_size - output_len) {
-            break;
-        }
-        output_len += (size_t)written;
-    }
-    return output_len == 0 ? 0 : (output_len + 1) / 3;
-}
-
 static size_t format_packet_hex_full(const uint8_t *packet, size_t packet_len,
                                      char *output, size_t output_size)
 {
@@ -143,6 +120,53 @@ static size_t format_packet_hex_full(const uint8_t *packet, size_t packet_len,
         output_len += (size_t)written;
     }
     return output_len == 0 ? 0 : (output_len + 1) / 3;
+}
+
+static ssize_t udp_send_packet(int socket_fd, const uint8_t *packet,
+                               size_t packet_len,
+                               const struct sockaddr_in *destination,
+                               const char *context)
+{
+    ssize_t sent = sendto(socket_fd, packet, packet_len, 0,
+                          (const struct sockaddr *)destination,
+                          sizeof(*destination));
+    esp_ip4_addr_t destination_ip = {.addr = destination->sin_addr.s_addr};
+    if (sent < 0 || (size_t)sent != packet_len) {
+        ESP_LOGE(TAG, "UDP TX [%s] to " IPSTR ":%u failed: errno %d",
+                 context, IP2STR(&destination_ip),
+                 ntohs(destination->sin_port), sent < 0 ? errno : EIO);
+        return sent < 0 ? sent : -1;
+    }
+
+    char packet_hex[CAMERA_UDP_MAX_PACKET_LEN * 3 + 1];
+    format_packet_hex_full(packet, packet_len, packet_hex,
+                           sizeof(packet_hex));
+    ESP_LOGI(TAG, "UDP TX [%s] to " IPSTR ":%u (%u bytes): %s",
+             context, IP2STR(&destination_ip), ntohs(destination->sin_port),
+             (unsigned)sent, packet_hex);
+    return sent;
+}
+
+static ssize_t udp_receive_packet(int socket_fd, uint8_t *packet,
+                                  size_t packet_capacity,
+                                  struct sockaddr_in *source,
+                                  const char *context)
+{
+    socklen_t source_len = sizeof(*source);
+    ssize_t received = recvfrom(socket_fd, packet, packet_capacity, 0,
+                                (struct sockaddr *)source, &source_len);
+    if (received < 0) {
+        return received;
+    }
+
+    esp_ip4_addr_t source_ip = {.addr = source->sin_addr.s_addr};
+    char packet_hex[CAMERA_UDP_MAX_PACKET_LEN * 3 + 1];
+    format_packet_hex_full(packet, (size_t)received, packet_hex,
+                           sizeof(packet_hex));
+    ESP_LOGI(TAG, "UDP RX [%s] from " IPSTR ":%u (%u bytes): %s",
+             context, IP2STR(&source_ip), ntohs(source->sin_port),
+             (unsigned)received, packet_hex);
+    return received;
 }
 
 static const char *wifi_disconnect_reason_name(uint8_t reason)
@@ -188,9 +212,8 @@ static void drain_discovery_traffic(int socket_fd,
            CAMERA_DISCOVERY_DRAIN_MAX_MS) {
         uint8_t packet[256];
         struct sockaddr_in source = {0};
-        socklen_t source_len = sizeof(source);
-        ssize_t received = recvfrom(socket_fd, packet, sizeof(packet), 0,
-                                    (struct sockaddr *)&source, &source_len);
+        ssize_t received = udp_receive_packet(
+            socket_fd, packet, sizeof(packet), &source, "discovery drain");
         if (received < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 ESP_LOGI(TAG, "Discovery drain stopped after %u ms of silence",
@@ -377,21 +400,11 @@ static esp_err_t send_rudp_packet(int socket_fd,
         return error;
     }
 
-    ssize_t sent = sendto(socket_fd, packet, packet_len, 0,
-                          (const struct sockaddr *)camera_address,
-                          sizeof(*camera_address));
+    ssize_t sent = udp_send_packet(socket_fd, packet, packet_len,
+                                   camera_address, packet_name);
     if (sent < 0 || (size_t)sent != packet_len) {
-        ESP_LOGE(TAG, "Could not send RUDP type 0x%02X packet: errno %d",
-                 packet_type, errno);
         return ESP_FAIL;
     }
-    char packet_hex[sizeof(packet) * 3 + 1];
-    format_packet_hex_full(packet, packet_len, packet_hex,
-                           sizeof(packet_hex));
-    esp_ip4_addr_t camera_ip = {.addr = camera_address->sin_addr.s_addr};
-    ESP_LOGI(TAG, "Sent %s to " IPSTR ":%u (%u bytes): %s",
-             packet_name, IP2STR(&camera_ip),
-             ntohs(camera_address->sin_port), (unsigned)sent, packet_hex);
     return ESP_OK;
 }
 
@@ -477,45 +490,30 @@ static esp_err_t wait_for_artemis_packets(
             if (error != ESP_OK) {
                 return error;
             }
-            ssize_t sent = sendto(
-                socket_fd, pending_packet, pending_packet_len, 0,
-                (const struct sockaddr *)camera_address,
-                sizeof(*camera_address));
+            ssize_t sent = udp_send_packet(
+                socket_fd, pending_packet, pending_packet_len,
+                camera_address, "ARTEMIS heartbeat");
             if (sent < 0 || (size_t)sent != pending_packet_len) {
-                ESP_LOGE(TAG, "Could not send ARTEMIS heartbeat: errno %d",
-                         errno);
                 return ESP_FAIL;
             }
             waiting_for_ack = true;
             last_heartbeat_us = now_us;
             last_retry_us = now_us;
-            char packet_hex[sizeof(pending_packet) * 3 + 1];
-            format_packet_hex_full(pending_packet, pending_packet_len,
-                                   packet_hex, sizeof(packet_hex));
-            ESP_LOGI(TAG, "Sent ARTEMIS heartbeat, command %u, sequence %u "
-                     "(%u bytes): %s",
-                     heartbeat_command_count, pending_sequence,
-                     (unsigned)pending_packet_len, packet_hex);
+            ESP_LOGI(TAG, "ARTEMIS heartbeat command %u, sequence %u "
+                     "awaiting ACK",
+                     heartbeat_command_count, pending_sequence);
         } else if (waiting_for_ack &&
                    now_us - last_retry_us >=
                        CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL) {
-            ssize_t sent = sendto(
-                socket_fd, pending_packet, pending_packet_len, 0,
-                (const struct sockaddr *)camera_address,
-                sizeof(*camera_address));
+            ssize_t sent = udp_send_packet(
+                socket_fd, pending_packet, pending_packet_len,
+                camera_address, "ARTEMIS heartbeat retransmission");
             if (sent < 0 || (size_t)sent != pending_packet_len) {
-                ESP_LOGE(TAG, "Could not retransmit ARTEMIS heartbeat "
-                         "sequence %u: errno %d", pending_sequence, errno);
                 return ESP_FAIL;
             }
             last_retry_us = now_us;
-            char packet_hex[sizeof(pending_packet) * 3 + 1];
-            format_packet_hex_full(pending_packet, pending_packet_len,
-                                   packet_hex, sizeof(packet_hex));
-            ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat sequence %u "
-                     "(%u bytes): %s",
-                     pending_sequence, (unsigned)pending_packet_len,
-                     packet_hex);
+            ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat sequence %u",
+                     pending_sequence);
         }
 
         struct timeval receive_timeout = {
@@ -548,9 +546,8 @@ static esp_err_t wait_for_artemis_packets(
 
         uint8_t packet[512];
         struct sockaddr_in source = {0};
-        socklen_t source_len = sizeof(source);
-        ssize_t received = recvfrom(socket_fd, packet, sizeof(packet), 0,
-                                    (struct sockaddr *)&source, &source_len);
+        ssize_t received = udp_receive_packet(
+            socket_fd, packet, sizeof(packet), &source, "ARTEMIS");
         if (received < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
@@ -565,18 +562,9 @@ static esp_err_t wait_for_artemis_packets(
             continue;
         }
 
-        esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
-        char packet_hex[CAMERA_DISCOVERY_LOG_BYTES * 3 + 1];
-        size_t logged_bytes =
-            format_packet_hex(packet, (size_t)received, packet_hex,
-                              sizeof(packet_hex));
-        ESP_LOGI(TAG, "ARTEMIS packet from " IPSTR ":%u, %u bytes, "
-                 "+%lld ms since discovery; first %u bytes: %s%s",
-                 IP2STR(&source_ip), ntohs(source.sin_port), (unsigned)received,
+        ESP_LOGI(TAG, "ARTEMIS packet received +%lld ms since discovery",
                  (long long)((esp_timer_get_time() - discovery_started_us) /
-                             1000),
-                 (unsigned)logged_bytes, packet_hex,
-                 (size_t)received > CAMERA_DISCOVERY_LOG_BYTES ? " ..." : "");
+                             1000));
 
         if (is_camera_data_packet(packet, (size_t)received)) {
             uint8_t received_sequence = packet[7];
@@ -622,21 +610,12 @@ static esp_err_t send_prelogin(int socket_fd,
         return error;
     }
 
-    esp_ip4_addr_t camera_ip = {.addr = camera_address->sin_addr.s_addr};
-    ssize_t sent = sendto(socket_fd, packet, packet_len, 0,
-                          (const struct sockaddr *)camera_address,
-                          sizeof(*camera_address));
+    ssize_t sent = udp_send_packet(socket_fd, packet, packet_len,
+                                   camera_address, "AES-encrypted PRE_LOGIN");
     if (sent < 0 || (size_t)sent != packet_len) {
         memset(packet, 0, sizeof(packet));
-        ESP_LOGE(TAG, "PRE_LOGIN send failed: errno %d", errno);
         return ESP_FAIL;
     }
-    char packet_hex[sizeof(packet) * 3 + 1];
-    format_packet_hex_full(packet, packet_len, packet_hex,
-                           sizeof(packet_hex));
-    ESP_LOGI(TAG, "Sent AES-encrypted PRE_LOGIN to " IPSTR ":%u "
-             "(%u bytes): %s", IP2STR(&camera_ip),
-             ntohs(camera_address->sin_port), (unsigned)sent, packet_hex);
     memset(packet, 0, sizeof(packet));
     int64_t sent_at_us = esp_timer_get_time();
 
@@ -676,9 +655,8 @@ static esp_err_t send_prelogin(int socket_fd,
 
         uint8_t response[256];
         struct sockaddr_in source = {0};
-        socklen_t source_len = sizeof(source);
-        ssize_t received = recvfrom(socket_fd, response, sizeof(response), 0,
-                                    (struct sockaddr *)&source, &source_len);
+        ssize_t received = udp_receive_packet(
+            socket_fd, response, sizeof(response), &source, "PRE_LOGIN");
         if (received < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 ESP_LOGW(TAG, "No DATA packet received within %u ms after "
@@ -691,22 +669,10 @@ static esp_err_t send_prelogin(int socket_fd,
         }
 
         int64_t received_at_us = esp_timer_get_time();
-        esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
-        char response_hex[CAMERA_DISCOVERY_LOG_BYTES * 3 + 1];
-        size_t logged_bytes =
-            format_packet_hex(response, (size_t)received, response_hex,
-                              sizeof(response_hex));
-        ESP_LOGI(TAG, "UDP packet after PRE_LOGIN from " IPSTR ":%u, %u bytes, "
-                 "+%lld ms after send / +%lld ms since discovery; %s %u bytes: "
-                 "%s%s",
-                 IP2STR(&source_ip), ntohs(source.sin_port), (unsigned)received,
+        ESP_LOGI(TAG, "PRE_LOGIN response received +%lld ms after send / "
+                 "+%lld ms since discovery",
                  (long long)((received_at_us - sent_at_us) / 1000),
-                 (long long)((received_at_us - discovery_started_us) / 1000),
-                 (size_t)received <= CAMERA_DISCOVERY_LOG_BYTES
-                     ? "full packet"
-                     : "first",
-                 (unsigned)logged_bytes, response_hex,
-                 (size_t)received > CAMERA_DISCOVERY_LOG_BYTES ? " ..." : "");
+                 (long long)((received_at_us - discovery_started_us) / 1000));
 
         bool from_camera =
             source.sin_addr.s_addr == camera_address->sin_addr.s_addr &&
@@ -775,14 +741,10 @@ static esp_err_t discover_camera(void)
         return ESP_FAIL;
     }
 
-    char request_hex[sizeof(s_camera_discovery_packet) * 3 + 1];
-    format_packet_hex(s_camera_discovery_packet,
-                      sizeof(s_camera_discovery_packet), request_hex,
-                      sizeof(request_hex));
     ESP_LOGI(TAG, "Camera discovery target " IPSTR ", source UDP port %u, "
-             "payload %u bytes: %s", IP2STR(&s_camera_gateway),
+             "payload %u bytes", IP2STR(&s_camera_gateway),
              CAMERA_DISCOVERY_LOCAL_PORT,
-             (unsigned)sizeof(s_camera_discovery_packet), request_hex);
+             (unsigned)sizeof(s_camera_discovery_packet));
 
     for (size_t port_index = 0;
          port_index < sizeof(s_camera_discovery_ports) /
@@ -793,29 +755,23 @@ static esp_err_t discover_camera(void)
             .sin_port = htons(s_camera_discovery_ports[port_index]),
             .sin_addr = {.s_addr = s_camera_gateway.addr},
         };
-        ssize_t sent = sendto(socket_fd, s_camera_discovery_packet,
-                              sizeof(s_camera_discovery_packet), 0,
-                              (struct sockaddr *)&destination,
-                              sizeof(destination));
+        ssize_t sent = udp_send_packet(
+            socket_fd, s_camera_discovery_packet,
+            sizeof(s_camera_discovery_packet), &destination,
+            "LBCS discovery");
         if (sent < 0 || (size_t)sent != sizeof(s_camera_discovery_packet)) {
-            ESP_LOGE(TAG, "Camera discovery send to " IPSTR ":%u failed: "
-                     "errno %d", IP2STR(&s_camera_gateway),
-                     s_camera_discovery_ports[port_index], errno);
             close(socket_fd);
             return ESP_FAIL;
         }
-        ESP_LOGI(TAG, "Camera discovery sent %u bytes to " IPSTR ":%u: %s",
-                 (unsigned)sent, IP2STR(&s_camera_gateway),
-                 s_camera_discovery_ports[port_index], request_hex);
     }
 
     while ((esp_timer_get_time() - discovery_started_us) / 1000 <
            CAMERA_DISCOVERY_TIMEOUT_MS) {
         uint8_t response[256];
         struct sockaddr_in source = {0};
-        socklen_t source_len = sizeof(source);
-        ssize_t received = recvfrom(socket_fd, response, sizeof(response), 0,
-                                    (struct sockaddr *)&source, &source_len);
+        ssize_t received = udp_receive_packet(
+            socket_fd, response, sizeof(response), &source,
+            "camera discovery");
         if (received < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
@@ -825,22 +781,9 @@ static esp_err_t discover_camera(void)
             return ESP_FAIL;
         }
 
-        int64_t received_at_us = esp_timer_get_time();
-        esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
-        char response_hex[CAMERA_DISCOVERY_LOG_BYTES * 3 + 1];
-        size_t logged_bytes =
-            format_packet_hex(response, (size_t)received, response_hex,
-                              sizeof(response_hex));
-        ESP_LOGI(TAG, "UDP reply from " IPSTR ":%u, %u bytes, +%lld ms; "
-                 "%s %u bytes: %s%s",
-                 IP2STR(&source_ip), ntohs(source.sin_port),
-                 (unsigned)received,
-                 (long long)((received_at_us - discovery_started_us) / 1000),
-                 (size_t)received <= CAMERA_DISCOVERY_LOG_BYTES
-                     ? "full packet"
-                     : "first",
-                 (unsigned)logged_bytes, response_hex,
-                 (size_t)received > CAMERA_DISCOVERY_LOG_BYTES ? " ..." : "");
+        ESP_LOGI(TAG, "Camera discovery reply received +%lld ms after start",
+                 (long long)((esp_timer_get_time() - discovery_started_us) /
+                             1000));
 
         if (received > 4 && response[0] == 0xf1 &&
             source.sin_addr.s_addr == s_camera_gateway.addr) {
