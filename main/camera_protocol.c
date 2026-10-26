@@ -20,8 +20,6 @@
 #define CAMERA_DISCOVERY_LOCAL_PORT 35281
 #define CAMERA_DISCOVERY_TIMEOUT_MS 1500
 #define CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS 500
-#define CAMERA_DISCOVERY_DRAIN_MAX_MS 1000
-#define CAMERA_DISCOVERY_DRAIN_SILENCE_MS 150
 #define CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS 1000
 #define CAMERA_PRELOGIN_MAX_PACKET_LEN 128
 #define CAMERA_RUDP_DATA_TYPE 0xd0
@@ -91,75 +89,6 @@ static const uint8_t s_artemis_heartbeat_suffix[] = {
 static esp_ip4_addr_t s_camera_gateway;
 static bool s_camera_gateway_valid;
 static uint8_t s_camera_rudp_sequence;
-
-static void drain_discovery_traffic(int socket_fd,
-                                    int64_t discovery_started_us)
-{
-    struct timeval drain_timeout = {
-        .tv_sec = 0,
-        .tv_usec = CAMERA_DISCOVERY_DRAIN_SILENCE_MS * 1000,
-    };
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &drain_timeout,
-                   sizeof(drain_timeout)) < 0) {
-        ESP_LOGE(TAG, "Could not set discovery-drain timeout: errno %d", errno);
-        return;
-    }
-
-    ESP_LOGI(TAG, "Draining queued discovery traffic for up to %u ms "
-             "(stop after %u ms of silence)",
-             CAMERA_DISCOVERY_DRAIN_MAX_MS,
-             CAMERA_DISCOVERY_DRAIN_SILENCE_MS);
-    int64_t drain_started_us = esp_timer_get_time();
-    unsigned drained_packets = 0;
-    unsigned drained_lbcs_packets = 0;
-
-    while ((esp_timer_get_time() - drain_started_us) / 1000 <
-           CAMERA_DISCOVERY_DRAIN_MAX_MS) {
-        uint8_t packet[256];
-        struct sockaddr_in source = {0};
-        ssize_t received = camera_udp_receive_packet(
-            socket_fd, packet, sizeof(packet), &source, "discovery drain");
-        if (received < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                ESP_LOGI(TAG, "Discovery drain stopped after %u ms of silence",
-                         CAMERA_DISCOVERY_DRAIN_SILENCE_MS);
-                break;
-            }
-            ESP_LOGE(TAG, "Discovery drain receive failed: errno %d", errno);
-            break;
-        }
-
-        drained_packets++;
-        bool is_lbcs = received >= 8 && packet[0] == 0xf1 &&
-                       packet[4] == 0x4c && packet[5] == 0x42 &&
-                       packet[6] == 0x43 && packet[7] == 0x53;
-        if (is_lbcs) {
-            drained_lbcs_packets++;
-        }
-        esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
-        ESP_LOGD(TAG, "Draining %s packet from " IPSTR ":%u (%u bytes)",
-                 is_lbcs ? "LBCS" : "other UDP",
-                 IP2STR(&source_ip), ntohs(source.sin_port),
-                 (unsigned)received);
-    }
-
-    struct timeval receive_timeout = {
-        .tv_sec = 0,
-        .tv_usec = CAMERA_DISCOVERY_TIMEOUT_MS * 1000,
-    };
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout,
-                   sizeof(receive_timeout)) < 0) {
-        ESP_LOGE(TAG, "Could not restore discovery receive timeout: errno %d",
-                 errno);
-    }
-    ESP_LOGI(TAG, "Discovery drain finished after %lld ms: %u packets "
-             "(%u LBCS)",
-             (long long)((esp_timer_get_time() - drain_started_us) / 1000),
-             drained_packets, drained_lbcs_packets);
-    ESP_LOGI(TAG, "Discovery-to-drain elapsed time: %lld ms",
-             (long long)((esp_timer_get_time() - discovery_started_us) /
-                         1000));
-}
 
 static esp_err_t build_prelogin_packet(uint8_t *packet, size_t packet_capacity,
                                        size_t *packet_len)
@@ -252,6 +181,28 @@ static bool is_camera_data_packet(const uint8_t *packet, size_t packet_len)
 
     uint16_t body_len = ((uint16_t)packet[2] << 8) | packet[3];
     return body_len >= 4 && (size_t)body_len == packet_len - 4;
+}
+
+static bool is_ack_for_sequence(const uint8_t *packet, size_t packet_len,
+                                uint8_t sequence)
+{
+    if (packet_len < 10 || packet[0] != 0xf1 ||
+        packet[1] != CAMERA_RUDP_ACK_TYPE || packet[4] != 0xd1 ||
+        packet[5] != 0 || packet[6] != 0) {
+        return false;
+    }
+
+    uint16_t body_len = ((uint16_t)packet[2] << 8) | packet[3];
+    if ((size_t)body_len != packet_len - 4 || packet[8] != 0 ||
+        packet[9] != sequence) {
+        return false;
+    }
+
+    if (body_len == 6) {
+        return true;
+    }
+
+    return body_len == 8 && packet[10] == 0 && packet[11] == sequence;
 }
 
 static esp_err_t build_rudp_packet(uint8_t packet_type, const uint8_t *payload,
@@ -480,14 +431,12 @@ static esp_err_t wait_for_artemis_packets(
             if (error != ESP_OK) {
                 return error;
             }
-        } else if (received >= 12 && packet[0] == 0xf1 &&
+        } else if (received >= 10 && packet[0] == 0xf1 &&
                    packet[1] == CAMERA_RUDP_ACK_TYPE) {
-            uint16_t body_len = ((uint16_t)packet[2] << 8) | packet[3];
             bool acknowledges_pending =
-                waiting_for_ack && body_len == (size_t)received - 4 &&
-                body_len >= 8 && packet[8] == 0 &&
-                packet[9] == pending_sequence && packet[10] == 0 &&
-                packet[11] == pending_sequence;
+                waiting_for_ack &&
+                is_ack_for_sequence(packet, (size_t)received,
+                                    pending_sequence);
             if (acknowledges_pending) {
                 ESP_LOGI(TAG, "Heartbeat sequence %u acknowledged",
                          pending_sequence);
@@ -694,7 +643,6 @@ static esp_err_t discover_camera(void)
             source.sin_addr.s_addr == s_camera_gateway.addr) {
             ESP_LOGI(TAG, "Camera UDP response accepted; using source port "
                      "%u for PRE_LOGIN", ntohs(source.sin_port));
-            drain_discovery_traffic(socket_fd, discovery_started_us);
             esp_err_t prelogin_error =
                 send_prelogin(socket_fd, &source, discovery_started_us);
             close(socket_fd);
