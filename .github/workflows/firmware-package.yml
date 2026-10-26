@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/migrate-firmware-to-cpp
     tags:
       - "v*"
   workflow_dispatch:
