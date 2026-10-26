@@ -3,17 +3,20 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "esp_check.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_random.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "mbedtls/aes.h"
 #include "lwip/sockets.h"
 
 #include "camera_wifi.h"
@@ -23,6 +26,10 @@
 #define CAMERA_DISCOVERY_RECEIVE_ATTEMPTS 2
 #define CAMERA_DISCOVERY_TIMEOUT_MS 500
 #define CAMERA_DISCOVERY_LOG_BYTES 64
+#define CAMERA_DISCOVERY_DRAIN_MAX_MS 1000
+#define CAMERA_DISCOVERY_DRAIN_SILENCE_MS 150
+#define CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS 1000
+#define CAMERA_PRELOGIN_MAX_PACKET_LEN 128
 #define WIFI_CONNECT_MAX_RETRIES 5
 #define WIFI_GOT_IP_BIT BIT0
 
@@ -31,6 +38,16 @@ static const uint8_t s_camera_discovery_packet[] = {
     0xf1, 0x41, 0x00, 0x14, 0x4c, 0x42, 0x43, 0x53,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x43, 0x43, 0x43, 0x4a, 0x4a, 0x00, 0x00, 0x00,
+};
+static const uint8_t s_prelogin_static_header[] = {
+    0x0c, 0xcb, 0x9a, 0x2b, 0x5f, 0x95, 0x1e, 0xb6,
+    0x69, 0xdf, 0xaa, 0x37, 0x5a, 0x6b, 0xbe, 0x3e,
+    0x76, 0x20, 0x2e, 0x13, 0xc9, 0xd1, 0xaa, 0x36,
+    0x31, 0xbe, 0x74, 0xe5,
+};
+static const uint8_t s_prelogin_aes_key[16] = {
+    'a', '0', '1', 'b', 'c', '2', '3', 'e',
+    'd', '4', '5', 'f', 'F', '5', '6', 'A',
 };
 static EventGroupHandle_t s_wifi_event_group;
 static bool s_wifi_connect_requested;
@@ -77,6 +94,232 @@ static const char *wifi_disconnect_reason_name(uint8_t reason)
     default:
         return "other";
     }
+}
+
+static void drain_discovery_traffic(int socket_fd,
+                                    int64_t discovery_started_us)
+{
+    struct timeval drain_timeout = {
+        .tv_sec = 0,
+        .tv_usec = CAMERA_DISCOVERY_DRAIN_SILENCE_MS * 1000,
+    };
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &drain_timeout,
+                   sizeof(drain_timeout)) < 0) {
+        ESP_LOGE(TAG, "Could not set discovery-drain timeout: errno %d", errno);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Draining queued discovery traffic for up to %u ms "
+             "(stop after %u ms of silence)",
+             CAMERA_DISCOVERY_DRAIN_MAX_MS,
+             CAMERA_DISCOVERY_DRAIN_SILENCE_MS);
+    int64_t drain_started_us = esp_timer_get_time();
+    unsigned drained_packets = 0;
+    unsigned drained_lbcs_packets = 0;
+
+    while ((esp_timer_get_time() - drain_started_us) / 1000 <
+           CAMERA_DISCOVERY_DRAIN_MAX_MS) {
+        uint8_t packet[256];
+        struct sockaddr_in source = {0};
+        socklen_t source_len = sizeof(source);
+        ssize_t received = recvfrom(socket_fd, packet, sizeof(packet), 0,
+                                    (struct sockaddr *)&source, &source_len);
+        if (received < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                ESP_LOGI(TAG, "Discovery drain stopped after %u ms of silence",
+                         CAMERA_DISCOVERY_DRAIN_SILENCE_MS);
+                break;
+            }
+            ESP_LOGE(TAG, "Discovery drain receive failed: errno %d", errno);
+            break;
+        }
+
+        drained_packets++;
+        bool is_lbcs = received >= 8 && packet[0] == 0xf1 &&
+                       packet[4] == 0x4c && packet[5] == 0x42 &&
+                       packet[6] == 0x43 && packet[7] == 0x53;
+        if (is_lbcs) {
+            drained_lbcs_packets++;
+        }
+        esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
+        ESP_LOGD(TAG, "Draining %s packet from " IPSTR ":%u (%u bytes)",
+                 is_lbcs ? "LBCS" : "other UDP",
+                 IP2STR(&source_ip), ntohs(source.sin_port),
+                 (unsigned)received);
+    }
+
+    struct timeval receive_timeout = {
+        .tv_sec = 0,
+        .tv_usec = CAMERA_DISCOVERY_TIMEOUT_MS * 1000,
+    };
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout,
+                   sizeof(receive_timeout)) < 0) {
+        ESP_LOGE(TAG, "Could not restore discovery receive timeout: errno %d",
+                 errno);
+    }
+    ESP_LOGI(TAG, "Discovery drain finished after %lld ms: %u packets "
+             "(%u LBCS)",
+             (long long)((esp_timer_get_time() - drain_started_us) / 1000),
+             drained_packets, drained_lbcs_packets);
+    ESP_LOGI(TAG, "Discovery-to-drain elapsed time: %lld ms",
+             (long long)((esp_timer_get_time() - discovery_started_us) /
+                         1000));
+}
+
+static esp_err_t build_prelogin_packet(uint8_t *packet, size_t packet_capacity,
+                                       size_t *packet_len)
+{
+    static const char *TAG_CRYPTO = "trailcamhub_wifi";
+    char json[96];
+    uint8_t plaintext[96];
+    uint8_t nonce[8];
+    uint8_t ciphertext[96];
+    size_t ciphertext_len;
+    time_t utc_time = time(NULL);
+
+    esp_fill_random(nonce, sizeof(nonce));
+    int json_len = snprintf(
+        json, sizeof(json),
+        "{\"utcTime\":%lld,\"nonce\":\"%02x%02x%02x%02x%02x%02x%02x%02x\"}",
+        (long long)utc_time, nonce[0], nonce[1], nonce[2], nonce[3], nonce[4],
+        nonce[5], nonce[6], nonce[7]);
+    if (json_len < 0 || (size_t)json_len >= sizeof(json)) {
+        ESP_LOGE(TAG_CRYPTO, "Could not format PRE_LOGIN JSON payload");
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (utc_time < 1700000000) {
+        ESP_LOGW(TAG_CRYPTO, "System UTC time appears unset (%lld); "
+                 "PRE_LOGIN timestamp may be rejected",
+                 (long long)utc_time);
+    }
+
+    size_t padding_len = 16 - ((size_t)json_len % 16);
+    ciphertext_len = (size_t)json_len + padding_len;
+    if (ciphertext_len > sizeof(ciphertext) ||
+        4 + sizeof(s_prelogin_static_header) + ciphertext_len >
+            packet_capacity ||
+        sizeof(s_prelogin_static_header) + ciphertext_len > UINT16_MAX) {
+        ESP_LOGE(TAG_CRYPTO, "PRE_LOGIN payload exceeds packet capacity");
+        return ESP_ERR_INVALID_SIZE;
+    }
+    memcpy(plaintext, json, (size_t)json_len);
+    memset(plaintext + json_len, (int)padding_len, padding_len);
+
+    mbedtls_aes_context aes;
+    mbedtls_aes_init(&aes);
+    int mbedtls_error =
+        mbedtls_aes_setkey_enc(&aes, s_prelogin_aes_key, 128);
+    if (mbedtls_error == 0) {
+        for (size_t offset = 0; offset < ciphertext_len; offset += 16) {
+            mbedtls_error = mbedtls_aes_crypt_ecb(
+                &aes, MBEDTLS_AES_ENCRYPT, plaintext + offset,
+                ciphertext + offset);
+            if (mbedtls_error != 0) {
+                break;
+            }
+        }
+    }
+    mbedtls_aes_free(&aes);
+    memset(plaintext, 0, sizeof(plaintext));
+    if (mbedtls_error != 0) {
+        ESP_LOGE(TAG_CRYPTO, "PRE_LOGIN AES encryption failed: %d",
+                 mbedtls_error);
+        memset(ciphertext, 0, sizeof(ciphertext));
+        return ESP_FAIL;
+    }
+
+    size_t body_len = sizeof(s_prelogin_static_header) + ciphertext_len;
+    packet[0] = 0xf1;
+    packet[1] = 0xf9;
+    packet[2] = (uint8_t)(body_len >> 8);
+    packet[3] = (uint8_t)body_len;
+    memcpy(packet + 4, s_prelogin_static_header,
+           sizeof(s_prelogin_static_header));
+    memcpy(packet + 4 + sizeof(s_prelogin_static_header), ciphertext,
+           ciphertext_len);
+    *packet_len = 4 + body_len;
+    memset(ciphertext, 0, sizeof(ciphertext));
+    ESP_LOGD(TAG_CRYPTO, "Built PRE_LOGIN with %u-byte JSON, %u-byte "
+             "ciphertext, UTC timestamp %lld",
+             (unsigned)json_len, (unsigned)ciphertext_len,
+             (long long)utc_time);
+    return ESP_OK;
+}
+
+static esp_err_t send_prelogin(int socket_fd,
+                               const struct sockaddr_in *camera_address,
+                               int64_t discovery_started_us)
+{
+    uint8_t packet[CAMERA_PRELOGIN_MAX_PACKET_LEN];
+    size_t packet_len;
+    esp_err_t error =
+        build_prelogin_packet(packet, sizeof(packet), &packet_len);
+    if (error != ESP_OK) {
+        return error;
+    }
+
+    esp_ip4_addr_t camera_ip = {.addr = camera_address->sin_addr.s_addr};
+    ESP_LOGI(TAG, "Sending AES-encrypted PRE_LOGIN to " IPSTR ":%u "
+             "(%u bytes)", IP2STR(&camera_ip),
+             ntohs(camera_address->sin_port), (unsigned)packet_len);
+    ssize_t sent = sendto(socket_fd, packet, packet_len, 0,
+                          (const struct sockaddr *)camera_address,
+                          sizeof(*camera_address));
+    memset(packet, 0, sizeof(packet));
+    if (sent < 0 || (size_t)sent != packet_len) {
+        ESP_LOGE(TAG, "PRE_LOGIN send failed: errno %d", errno);
+        return ESP_FAIL;
+    }
+    int64_t sent_at_us = esp_timer_get_time();
+
+    struct timeval response_timeout = {
+        .tv_sec = CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS / 1000,
+        .tv_usec =
+            (CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS % 1000) * 1000,
+    };
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &response_timeout,
+                   sizeof(response_timeout)) < 0) {
+        ESP_LOGE(TAG, "Could not set PRE_LOGIN response timeout: errno %d",
+                 errno);
+        return ESP_FAIL;
+    }
+
+    uint8_t response[256];
+    struct sockaddr_in source = {0};
+    socklen_t source_len = sizeof(source);
+    ssize_t received = recvfrom(socket_fd, response, sizeof(response), 0,
+                                (struct sockaddr *)&source, &source_len);
+    if (received < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            ESP_LOGW(TAG, "No UDP response observed within %u ms after "
+                     "PRE_LOGIN; handshake is not verified",
+                     CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS);
+            return ESP_ERR_TIMEOUT;
+        }
+        ESP_LOGE(TAG, "PRE_LOGIN response receive failed: errno %d", errno);
+        return ESP_FAIL;
+    }
+
+    int64_t received_at_us = esp_timer_get_time();
+    esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
+    char response_hex[CAMERA_DISCOVERY_LOG_BYTES * 3 + 1];
+    size_t logged_bytes =
+        format_packet_hex(response, (size_t)received, response_hex,
+                          sizeof(response_hex));
+    ESP_LOGI(TAG, "UDP packet after PRE_LOGIN from " IPSTR ":%u, %u bytes, "
+             "+%lld ms after send / +%lld ms since discovery; %s %u bytes: "
+             "%s%s",
+             IP2STR(&source_ip), ntohs(source.sin_port), (unsigned)received,
+             (long long)((received_at_us - sent_at_us) / 1000),
+             (long long)((received_at_us - discovery_started_us) / 1000),
+             (size_t)received <= CAMERA_DISCOVERY_LOG_BYTES
+                 ? "full packet"
+                 : "first",
+             (unsigned)logged_bytes, response_hex,
+             (size_t)received > CAMERA_DISCOVERY_LOG_BYTES ? " ..." : "");
+    ESP_LOGW(TAG, "PRE_LOGIN response observed; response validation and "
+             "ARTEMIS login are not implemented");
+    return ESP_OK;
 }
 
 static esp_err_t discover_camera(void)
@@ -209,6 +452,7 @@ static esp_err_t discover_camera(void)
 
             if (received >= 2 && response[0] == 0xf1 &&
                 response[1] == 0x42) {
+                struct sockaddr_in camera_address = source;
                 ESP_LOGI(TAG, "Camera discovery response received from "
                          IPSTR ":%u (%u bytes) after %lld ms",
                          IP2STR(&source_ip), ntohs(source.sin_port),
@@ -216,8 +460,12 @@ static esp_err_t discover_camera(void)
                          (long long)((esp_timer_get_time() -
                                       discovery_started_us) /
                                      1000));
+                drain_discovery_traffic(socket_fd, discovery_started_us);
+                esp_err_t prelogin_error =
+                    send_prelogin(socket_fd, &camera_address,
+                                  discovery_started_us);
                 close(socket_fd);
-                return ESP_OK;
+                return prelogin_error;
             }
 
             ESP_LOGW(TAG, "UDP packet did not match discovery response "
@@ -305,7 +553,11 @@ static void camera_wifi_worker(void *arg)
     while (true) {
         xEventGroupWaitBits(s_wifi_event_group, WIFI_GOT_IP_BIT, pdTRUE,
                             pdFALSE, portMAX_DELAY);
-        discover_camera();
+        esp_err_t error = discover_camera();
+        if (error != ESP_OK) {
+            ESP_LOGW(TAG, "Camera discovery/PRE_LOGIN stage ended with %s",
+                     esp_err_to_name(error));
+        }
     }
 }
 
