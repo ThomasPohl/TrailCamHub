@@ -161,7 +161,7 @@ esp_err_t camera_wifi_connect(const char *ssid, const char *password)
 
     size_t ssid_len = strlen(ssid);
     size_t password_len = strlen(password);
-    wifi_config_t wifi_config = {0};
+    wifi_config_t wifi_config = {};
     if (ssid_len == 0 || ssid_len > sizeof(wifi_config.sta.ssid) ||
         password_len > sizeof(wifi_config.sta.password)) {
         ESP_LOGE(TAG, "Camera Wi-Fi credentials exceed supported field lengths");

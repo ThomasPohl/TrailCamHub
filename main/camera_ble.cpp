@@ -211,10 +211,9 @@ static void complete_characteristic_subscription(void)
 
 static void enable_characteristic_updates(uint16_t characteristic_handle)
 {
-    esp_bt_uuid_t config_uuid = {
-        .len = ESP_UUID_LEN_16,
-        .uuid.uuid16 = CLIENT_CHARACTERISTIC_CONFIG_UUID,
-    };
+    esp_bt_uuid_t config_uuid = {};
+    config_uuid.len = ESP_UUID_LEN_16;
+    config_uuid.uuid.uuid16 = CLIENT_CHARACTERISTIC_CONFIG_UUID;
     esp_gattc_descr_elem_t descriptor;
     uint16_t count = 1;
     uint16_t config =
@@ -428,10 +427,9 @@ static void find_control_characteristic(void)
 {
     size_t command_len;
     uint8_t *command = camera_ble_protocol_command(&command_len);
-    esp_bt_uuid_t char_uuid = {
-        .len = ESP_UUID_LEN_16,
-        .uuid.uuid16 = WIFI_CONTROL_CHAR_UUID,
-    };
+    esp_bt_uuid_t char_uuid = {};
+    char_uuid.len = ESP_UUID_LEN_16;
+    char_uuid.uuid.uuid16 = WIFI_CONTROL_CHAR_UUID;
     esp_gattc_char_elem_t characteristic;
     uint16_t count = 1;
     esp_err_t status;
@@ -580,7 +578,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             ESP_LOGE(TAG, "Could not configure BLE scan");
         }
         break;
-    case ESP_GATTC_OPEN_EVT:
+    case ESP_GATTC_OPEN_EVT: {
         if (param->open.status != ESP_GATT_OK) {
             ESP_LOGW(TAG, "BLE device connection failed: %d",
                      param->open.status);
@@ -617,6 +615,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             disconnect_current_device("Service discovery could not be started");
         }
         break;
+    }
     case ESP_GATTC_SEARCH_RES_EVT: {
         camera_ble_profile_add_service(
             &param->search_res.srvc_id.uuid,

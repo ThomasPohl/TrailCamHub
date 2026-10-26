@@ -207,7 +207,8 @@ bool camera_ble_profile_discover_characteristics(esp_gatt_if_t gatt_if,
             continue;
         }
 
-        characteristics = calloc(count, sizeof(*characteristics));
+        characteristics = static_cast<esp_gattc_char_elem_t *>(
+            calloc(count, sizeof(*characteristics)));
         if (characteristics == NULL) {
             ESP_LOGE(TAG, "Could not allocate memory for %u characteristics",
                      count);
