@@ -14,7 +14,6 @@
 
 #include "camera_wifi.h"
 
-#define CAMERA_HTTP_HOST "192.168.1.8"
 #define CAMERA_HTTP_PORT 80
 #define CAMERA_HTTP_TIMEOUT_MS 10000
 #define CAMERA_HTTP_RESPONSE_MAX_LEN 1024
@@ -31,6 +30,8 @@ static const char *TAG = "trailcamhub_wifi";
 static EventGroupHandle_t s_wifi_event_group;
 static bool s_wifi_connect_requested;
 static unsigned s_wifi_connect_retries;
+static esp_ip4_addr_t s_camera_gateway;
+static bool s_camera_gateway_valid;
 
 static esp_err_t http_event_handler(esp_http_client_event_t *event)
 {
@@ -52,12 +53,20 @@ static esp_err_t http_event_handler(esp_http_client_event_t *event)
 static esp_err_t camera_http_get(const char *path, http_response_t *response)
 {
     char url[128];
-    int url_len = snprintf(url, sizeof(url), "http://%s:%d%s",
-                           CAMERA_HTTP_HOST, CAMERA_HTTP_PORT, path);
+    if (!s_camera_gateway_valid) {
+        ESP_LOGE(TAG, "Cannot request %s because the camera gateway is unknown",
+                 path);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    int url_len = snprintf(url, sizeof(url), "http://" IPSTR ":%d%s",
+                           IP2STR(&s_camera_gateway), CAMERA_HTTP_PORT, path);
     if (url_len < 0 || (size_t)url_len >= sizeof(url)) {
         ESP_LOGE(TAG, "Camera HTTP URL is too long");
         return ESP_ERR_INVALID_SIZE;
     }
+
+    ESP_LOGI(TAG, "Camera HTTP GET target: %s", url);
 
     memset(response, 0, sizeof(*response));
     esp_http_client_config_t config = {
@@ -139,8 +148,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *event = (const ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "Connected to camera Wi-Fi; IP address: " IPSTR,
-                 IP2STR(&event->ip_info.ip));
+        s_camera_gateway = event->ip_info.gw;
+        s_camera_gateway_valid = true;
+        ESP_LOGI(TAG,
+                 "Connected to camera Wi-Fi; IP address: " IPSTR
+                 ", netmask: " IPSTR ", gateway: " IPSTR,
+                 IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask),
+                 IP2STR(&event->ip_info.gw));
         s_wifi_connect_retries = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_GOT_IP_BIT);
     }
