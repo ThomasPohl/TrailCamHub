@@ -22,7 +22,7 @@
 #define CAMERA_DISCOVERY_ATTEMPTS 3
 #define CAMERA_DISCOVERY_RECEIVE_ATTEMPTS 2
 #define CAMERA_DISCOVERY_TIMEOUT_MS 500
-#define CAMERA_DISCOVERY_LOG_BYTES 16
+#define CAMERA_DISCOVERY_LOG_BYTES 64
 #define WIFI_CONNECT_MAX_RETRIES 5
 #define WIFI_GOT_IP_BIT BIT0
 
@@ -38,14 +38,18 @@ static unsigned s_wifi_connect_retries;
 static esp_ip4_addr_t s_camera_broadcast;
 static bool s_camera_broadcast_valid;
 
-static void format_packet_prefix(const uint8_t *packet, size_t packet_len,
-                                 char *output, size_t output_size)
+static size_t format_packet_hex(const uint8_t *packet, size_t packet_len,
+                                char *output, size_t output_size)
 {
     size_t prefix_len = packet_len < CAMERA_DISCOVERY_LOG_BYTES
                             ? packet_len
                             : CAMERA_DISCOVERY_LOG_BYTES;
     size_t output_len = 0;
 
+    if (output_size == 0) {
+        return 0;
+    }
+    output[0] = '\0';
     for (size_t i = 0; i < prefix_len && output_len < output_size; i++) {
         int written = snprintf(output + output_len, output_size - output_len,
                                "%s%02X", i == 0 ? "" : " ", packet[i]);
@@ -54,6 +58,7 @@ static void format_packet_prefix(const uint8_t *packet, size_t packet_len,
         }
         output_len += (size_t)written;
     }
+    return output_len == 0 ? 0 : (output_len + 1) / 3;
 }
 
 static const char *wifi_disconnect_reason_name(uint8_t reason)
@@ -129,10 +134,10 @@ static esp_err_t discover_camera(void)
         .sin_port = htons(CAMERA_PROTOCOL_PORT),
         .sin_addr = {.s_addr = s_camera_broadcast.addr},
     };
-    char request_hex[sizeof(s_camera_discovery_packet) * 3];
-    format_packet_prefix(s_camera_discovery_packet,
-                         sizeof(s_camera_discovery_packet), request_hex,
-                         sizeof(request_hex));
+    char request_hex[sizeof(s_camera_discovery_packet) * 3 + 1];
+    format_packet_hex(s_camera_discovery_packet,
+                      sizeof(s_camera_discovery_packet), request_hex,
+                      sizeof(request_hex));
     ESP_LOGI(TAG, "Camera discovery target " IPSTR ":%u, source UDP port %u, "
              "payload %u bytes: %s", IP2STR(&s_camera_broadcast),
              CAMERA_PROTOCOL_PORT, CAMERA_PROTOCOL_PORT,
@@ -152,6 +157,7 @@ static esp_err_t discover_camera(void)
             close(socket_fd);
             return ESP_FAIL;
         }
+        int64_t sent_at_us = esp_timer_get_time();
         ESP_LOGI(TAG, "Camera discovery attempt %u sent %u bytes",
                  attempt + 1, (unsigned)sent);
 
@@ -179,17 +185,27 @@ static esp_err_t discover_camera(void)
                 return ESP_FAIL;
             }
 
+            int64_t received_at_us = esp_timer_get_time();
             esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
-            char response_hex[CAMERA_DISCOVERY_LOG_BYTES * 3];
-            format_packet_prefix(response, (size_t)received, response_hex,
-                                 sizeof(response_hex));
-            ESP_LOGI(TAG, "UDP packet received from " IPSTR ":%u, %u bytes, "
-                     "first %u bytes: %s", IP2STR(&source_ip),
+            char response_hex[CAMERA_DISCOVERY_LOG_BYTES * 3 + 1];
+            size_t logged_bytes =
+                format_packet_hex(response, (size_t)received, response_hex,
+                                  sizeof(response_hex));
+            ESP_LOGI(TAG, "UDP reply during attempt %u, receive %u/%u, from "
+                     IPSTR ":%u, %u bytes, +%lld ms after send / +%lld ms "
+                     "total; %s %u bytes: %s%s",
+                     attempt + 1, receive_attempt + 1,
+                     CAMERA_DISCOVERY_RECEIVE_ATTEMPTS, IP2STR(&source_ip),
                      ntohs(source.sin_port), (unsigned)received,
-                     (unsigned)(received < CAMERA_DISCOVERY_LOG_BYTES
-                                    ? received
-                                    : CAMERA_DISCOVERY_LOG_BYTES),
-                     response_hex);
+                     (long long)((received_at_us - sent_at_us) / 1000),
+                     (long long)((received_at_us - discovery_started_us) /
+                                 1000),
+                     (size_t)received <= CAMERA_DISCOVERY_LOG_BYTES
+                         ? "full packet"
+                         : "first",
+                     (unsigned)logged_bytes, response_hex,
+                     (size_t)received > CAMERA_DISCOVERY_LOG_BYTES
+                         ? " ..." : "");
 
             if (received >= 2 && response[0] == 0xf1 &&
                 response[1] == 0x41) {
