@@ -21,19 +21,17 @@
 
 #include "camera_wifi.h"
 
-#define CAMERA_PROTOCOL_PORT 40611
-#define CAMERA_DISCOVERY_ATTEMPTS 3
-#define CAMERA_DISCOVERY_RECEIVE_ATTEMPTS 2
-#define CAMERA_DISCOVERY_TIMEOUT_MS 500
+#define CAMERA_DISCOVERY_LOCAL_PORT 35281
+#define CAMERA_DISCOVERY_TIMEOUT_MS 1500
+#define CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS 500
 #define CAMERA_DISCOVERY_LOG_BYTES 64
-#define CAMERA_DISCOVERY_DRAIN_MAX_MS 1000
-#define CAMERA_DISCOVERY_DRAIN_SILENCE_MS 150
 #define CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS 1000
 #define CAMERA_PRELOGIN_MAX_PACKET_LEN 128
 #define WIFI_CONNECT_MAX_RETRIES 5
 #define WIFI_GOT_IP_BIT BIT0
 
 static const char *TAG = "trailcamhub_wifi";
+static const uint16_t s_camera_discovery_ports[] = {40611, 3333};
 static const uint8_t s_camera_discovery_packet[] = {
     0xf1, 0x41, 0x00, 0x14, 0x4c, 0x42, 0x43, 0x53,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -52,8 +50,8 @@ static const uint8_t s_prelogin_aes_key[16] = {
 static EventGroupHandle_t s_wifi_event_group;
 static bool s_wifi_connect_requested;
 static unsigned s_wifi_connect_retries;
-static esp_ip4_addr_t s_camera_broadcast;
-static bool s_camera_broadcast_valid;
+static esp_ip4_addr_t s_camera_gateway;
+static bool s_camera_gateway_valid;
 
 static size_t format_packet_hex(const uint8_t *packet, size_t packet_len,
                                 char *output, size_t output_size)
@@ -94,76 +92,6 @@ static const char *wifi_disconnect_reason_name(uint8_t reason)
     default:
         return "other";
     }
-}
-
-static void drain_discovery_traffic(int socket_fd,
-                                    int64_t discovery_started_us)
-{
-    struct timeval drain_timeout = {
-        .tv_sec = 0,
-        .tv_usec = CAMERA_DISCOVERY_DRAIN_SILENCE_MS * 1000,
-    };
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &drain_timeout,
-                   sizeof(drain_timeout)) < 0) {
-        ESP_LOGE(TAG, "Could not set discovery-drain timeout: errno %d", errno);
-        return;
-    }
-
-    ESP_LOGI(TAG, "Draining queued discovery traffic for up to %u ms "
-             "(stop after %u ms of silence)",
-             CAMERA_DISCOVERY_DRAIN_MAX_MS,
-             CAMERA_DISCOVERY_DRAIN_SILENCE_MS);
-    int64_t drain_started_us = esp_timer_get_time();
-    unsigned drained_packets = 0;
-    unsigned drained_lbcs_packets = 0;
-
-    while ((esp_timer_get_time() - drain_started_us) / 1000 <
-           CAMERA_DISCOVERY_DRAIN_MAX_MS) {
-        uint8_t packet[256];
-        struct sockaddr_in source = {0};
-        socklen_t source_len = sizeof(source);
-        ssize_t received = recvfrom(socket_fd, packet, sizeof(packet), 0,
-                                    (struct sockaddr *)&source, &source_len);
-        if (received < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                ESP_LOGI(TAG, "Discovery drain stopped after %u ms of silence",
-                         CAMERA_DISCOVERY_DRAIN_SILENCE_MS);
-                break;
-            }
-            ESP_LOGE(TAG, "Discovery drain receive failed: errno %d", errno);
-            break;
-        }
-
-        drained_packets++;
-        bool is_lbcs = received >= 8 && packet[0] == 0xf1 &&
-                       packet[4] == 0x4c && packet[5] == 0x42 &&
-                       packet[6] == 0x43 && packet[7] == 0x53;
-        if (is_lbcs) {
-            drained_lbcs_packets++;
-        }
-        esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
-        ESP_LOGD(TAG, "Draining %s packet from " IPSTR ":%u (%u bytes)",
-                 is_lbcs ? "LBCS" : "other UDP",
-                 IP2STR(&source_ip), ntohs(source.sin_port),
-                 (unsigned)received);
-    }
-
-    struct timeval receive_timeout = {
-        .tv_sec = 0,
-        .tv_usec = CAMERA_DISCOVERY_TIMEOUT_MS * 1000,
-    };
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout,
-                   sizeof(receive_timeout)) < 0) {
-        ESP_LOGE(TAG, "Could not restore discovery receive timeout: errno %d",
-                 errno);
-    }
-    ESP_LOGI(TAG, "Discovery drain finished after %lld ms: %u packets "
-             "(%u LBCS)",
-             (long long)((esp_timer_get_time() - drain_started_us) / 1000),
-             drained_packets, drained_lbcs_packets);
-    ESP_LOGI(TAG, "Discovery-to-drain elapsed time: %lld ms",
-             (long long)((esp_timer_get_time() - discovery_started_us) /
-                         1000));
 }
 
 static esp_err_t build_prelogin_packet(uint8_t *packet, size_t packet_capacity,
@@ -325,8 +253,8 @@ static esp_err_t send_prelogin(int socket_fd,
 static esp_err_t discover_camera(void)
 {
     int64_t discovery_started_us = esp_timer_get_time();
-    if (!s_camera_broadcast_valid) {
-        ESP_LOGE(TAG, "Cannot discover camera because the Wi-Fi broadcast "
+    if (!s_camera_gateway_valid) {
+        ESP_LOGE(TAG, "Cannot discover camera because the Wi-Fi gateway "
                  "address is unknown");
         return ESP_ERR_INVALID_STATE;
     }
@@ -340,29 +268,22 @@ static esp_err_t discover_camera(void)
 
     struct sockaddr_in local = {
         .sin_family = AF_INET,
-        .sin_port = htons(CAMERA_PROTOCOL_PORT),
+        .sin_port = htons(CAMERA_DISCOVERY_LOCAL_PORT),
         .sin_addr = {.s_addr = htonl(INADDR_ANY)},
     };
-    ESP_LOGI(TAG, "Binding camera discovery UDP socket to port %u",
-             CAMERA_PROTOCOL_PORT);
+    ESP_LOGI(TAG, "Binding camera UDP socket to local port %u",
+             CAMERA_DISCOVERY_LOCAL_PORT);
     if (bind(socket_fd, (struct sockaddr *)&local, sizeof(local)) < 0) {
-        ESP_LOGE(TAG, "Could not bind camera discovery socket to UDP port %u: "
-                 "errno %d", CAMERA_PROTOCOL_PORT, errno);
-        close(socket_fd);
-        return ESP_FAIL;
-    }
-
-    int broadcast_enabled = 1;
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_BROADCAST, &broadcast_enabled,
-                   sizeof(broadcast_enabled)) < 0) {
-        ESP_LOGE(TAG, "Could not enable UDP broadcast: errno %d", errno);
+        ESP_LOGE(TAG, "Could not bind camera UDP socket to local port %u: "
+                 "errno %d", CAMERA_DISCOVERY_LOCAL_PORT, errno);
         close(socket_fd);
         return ESP_FAIL;
     }
 
     struct timeval receive_timeout = {
-        .tv_sec = 0,
-        .tv_usec = CAMERA_DISCOVERY_TIMEOUT_MS * 1000,
+        .tv_sec = CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS / 1000,
+        .tv_usec =
+            (CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS % 1000) * 1000,
     };
     if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout,
                    sizeof(receive_timeout)) < 0) {
@@ -372,121 +293,92 @@ static esp_err_t discover_camera(void)
         return ESP_FAIL;
     }
 
-    struct sockaddr_in destination = {
-        .sin_family = AF_INET,
-        .sin_port = htons(CAMERA_PROTOCOL_PORT),
-        .sin_addr = {.s_addr = s_camera_broadcast.addr},
-    };
     char request_hex[sizeof(s_camera_discovery_packet) * 3 + 1];
     format_packet_hex(s_camera_discovery_packet,
                       sizeof(s_camera_discovery_packet), request_hex,
                       sizeof(request_hex));
-    ESP_LOGI(TAG, "Camera discovery target " IPSTR ":%u, source UDP port %u, "
-             "payload %u bytes: %s", IP2STR(&s_camera_broadcast),
-             CAMERA_PROTOCOL_PORT, CAMERA_PROTOCOL_PORT,
+    ESP_LOGI(TAG, "Camera discovery target " IPSTR ", source UDP port %u, "
+             "payload %u bytes: %s", IP2STR(&s_camera_gateway),
+             CAMERA_DISCOVERY_LOCAL_PORT,
              (unsigned)sizeof(s_camera_discovery_packet), request_hex);
 
-    for (unsigned attempt = 0; attempt < CAMERA_DISCOVERY_ATTEMPTS; attempt++) {
-        int64_t attempt_started_us = esp_timer_get_time();
-        ESP_LOGI(TAG, "Camera discovery attempt %u/%u", attempt + 1,
-                 CAMERA_DISCOVERY_ATTEMPTS);
+    for (size_t port_index = 0;
+         port_index < sizeof(s_camera_discovery_ports) /
+                          sizeof(s_camera_discovery_ports[0]);
+         port_index++) {
+        struct sockaddr_in destination = {
+            .sin_family = AF_INET,
+            .sin_port = htons(s_camera_discovery_ports[port_index]),
+            .sin_addr = {.s_addr = s_camera_gateway.addr},
+        };
         ssize_t sent = sendto(socket_fd, s_camera_discovery_packet,
                               sizeof(s_camera_discovery_packet), 0,
                               (struct sockaddr *)&destination,
                               sizeof(destination));
         if (sent < 0 || (size_t)sent != sizeof(s_camera_discovery_packet)) {
-            ESP_LOGE(TAG, "Camera discovery send %u/%u failed: errno %d",
-                     attempt + 1, CAMERA_DISCOVERY_ATTEMPTS, errno);
+            ESP_LOGE(TAG, "Camera discovery send to " IPSTR ":%u failed: "
+                     "errno %d", IP2STR(&s_camera_gateway),
+                     s_camera_discovery_ports[port_index], errno);
             close(socket_fd);
             return ESP_FAIL;
         }
-        int64_t sent_at_us = esp_timer_get_time();
-        ESP_LOGI(TAG, "Camera discovery attempt %u sent %u bytes",
-                 attempt + 1, (unsigned)sent);
+        ESP_LOGI(TAG, "Camera discovery sent %u bytes to " IPSTR ":%u",
+                 (unsigned)sent, IP2STR(&s_camera_gateway),
+                 s_camera_discovery_ports[port_index]);
+    }
 
-        for (unsigned receive_attempt = 0;
-             receive_attempt < CAMERA_DISCOVERY_RECEIVE_ATTEMPTS;
-             receive_attempt++) {
-            uint8_t response[256];
-            struct sockaddr_in source = {0};
-            socklen_t source_len = sizeof(source);
-            ssize_t received = recvfrom(socket_fd, response, sizeof(response),
-                                        0, (struct sockaddr *)&source,
-                                        &source_len);
-            if (received < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    ESP_LOGI(TAG, "Camera discovery attempt %u receive wait "
-                             "%u/%u timed out after %d ms",
-                             attempt + 1, receive_attempt + 1,
-                             CAMERA_DISCOVERY_RECEIVE_ATTEMPTS,
-                             CAMERA_DISCOVERY_TIMEOUT_MS);
-                    break;
-                }
-                ESP_LOGE(TAG, "Camera discovery receive failed: errno %d",
-                         errno);
-                close(socket_fd);
-                return ESP_FAIL;
+    while ((esp_timer_get_time() - discovery_started_us) / 1000 <
+           CAMERA_DISCOVERY_TIMEOUT_MS) {
+        uint8_t response[256];
+        struct sockaddr_in source = {0};
+        socklen_t source_len = sizeof(source);
+        ssize_t received = recvfrom(socket_fd, response, sizeof(response), 0,
+                                    (struct sockaddr *)&source, &source_len);
+        if (received < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
             }
-
-            int64_t received_at_us = esp_timer_get_time();
-            esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
-            char response_hex[CAMERA_DISCOVERY_LOG_BYTES * 3 + 1];
-            size_t logged_bytes =
-                format_packet_hex(response, (size_t)received, response_hex,
-                                  sizeof(response_hex));
-            ESP_LOGI(TAG, "UDP reply during attempt %u, receive %u/%u, from "
-                     IPSTR ":%u, %u bytes, +%lld ms after send / +%lld ms "
-                     "total; %s %u bytes: %s%s",
-                     attempt + 1, receive_attempt + 1,
-                     CAMERA_DISCOVERY_RECEIVE_ATTEMPTS, IP2STR(&source_ip),
-                     ntohs(source.sin_port), (unsigned)received,
-                     (long long)((received_at_us - sent_at_us) / 1000),
-                     (long long)((received_at_us - discovery_started_us) /
-                                 1000),
-                     (size_t)received <= CAMERA_DISCOVERY_LOG_BYTES
-                         ? "full packet"
-                         : "first",
-                     (unsigned)logged_bytes, response_hex,
-                     (size_t)received > CAMERA_DISCOVERY_LOG_BYTES
-                         ? " ..." : "");
-
-            if (received >= 2 && response[0] == 0xf1 &&
-                response[1] == 0x42) {
-                struct sockaddr_in camera_address = source;
-                ESP_LOGI(TAG, "Camera discovery response received from "
-                         IPSTR ":%u (%u bytes) after %lld ms",
-                         IP2STR(&source_ip), ntohs(source.sin_port),
-                         (unsigned)received,
-                         (long long)((esp_timer_get_time() -
-                                      discovery_started_us) /
-                                     1000));
-                drain_discovery_traffic(socket_fd, discovery_started_us);
-                esp_err_t prelogin_error =
-                    send_prelogin(socket_fd, &camera_address,
-                                  discovery_started_us);
-                close(socket_fd);
-                return prelogin_error;
-            }
-
-            ESP_LOGW(TAG, "UDP packet did not match discovery response "
-                     "prefix F1 42");
+            ESP_LOGE(TAG, "Camera discovery receive failed: errno %d", errno);
+            close(socket_fd);
+            return ESP_FAIL;
         }
-        ESP_LOGI(TAG, "Camera discovery attempt %u finished after %lld ms",
-                 attempt + 1,
-                 (long long)((esp_timer_get_time() - attempt_started_us) /
-                             1000));
-        if (attempt + 1 < CAMERA_DISCOVERY_ATTEMPTS) {
-            ESP_LOGI(TAG, "Retrying camera discovery");
+
+        int64_t received_at_us = esp_timer_get_time();
+        esp_ip4_addr_t source_ip = {.addr = source.sin_addr.s_addr};
+        char response_hex[CAMERA_DISCOVERY_LOG_BYTES * 3 + 1];
+        size_t logged_bytes =
+            format_packet_hex(response, (size_t)received, response_hex,
+                              sizeof(response_hex));
+        ESP_LOGI(TAG, "UDP reply from " IPSTR ":%u, %u bytes, +%lld ms; "
+                 "%s %u bytes: %s%s",
+                 IP2STR(&source_ip), ntohs(source.sin_port),
+                 (unsigned)received,
+                 (long long)((received_at_us - discovery_started_us) / 1000),
+                 (size_t)received <= CAMERA_DISCOVERY_LOG_BYTES
+                     ? "full packet"
+                     : "first",
+                 (unsigned)logged_bytes, response_hex,
+                 (size_t)received > CAMERA_DISCOVERY_LOG_BYTES ? " ..." : "");
+
+        if (received > 4 && response[0] == 0xf1 &&
+            source.sin_addr.s_addr == s_camera_gateway.addr) {
+            ESP_LOGI(TAG, "Camera UDP response accepted; using source port "
+                     "%u for PRE_LOGIN", ntohs(source.sin_port));
+            esp_err_t prelogin_error =
+                send_prelogin(socket_fd, &source, discovery_started_us);
+            close(socket_fd);
+            return prelogin_error;
         }
+        ESP_LOGW(TAG, "UDP packet did not match camera response "
+                 "(expected F1 prefix from gateway " IPSTR ")",
+                 IP2STR(&s_camera_gateway));
     }
 
     close(socket_fd);
-    ESP_LOGW(TAG, "No matching camera discovery response after %u attempts "
-             "and %lld ms (target " IPSTR ":%u, source UDP port %u)",
-             CAMERA_DISCOVERY_ATTEMPTS,
+    ESP_LOGW(TAG, "No matching camera discovery response after %lld ms "
+             "(target " IPSTR ", source UDP port %u)",
              (long long)((esp_timer_get_time() - discovery_started_us) / 1000),
-             IP2STR(&s_camera_broadcast), CAMERA_PROTOCOL_PORT,
-             CAMERA_PROTOCOL_PORT);
+             IP2STR(&s_camera_gateway), CAMERA_DISCOVERY_LOCAL_PORT);
     return ESP_ERR_TIMEOUT;
 }
 
@@ -533,15 +425,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                  event->channel, event->authmode);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *event = (const ip_event_got_ip_t *)event_data;
-        s_camera_broadcast.addr =
-            event->ip_info.ip.addr | ~event->ip_info.netmask.addr;
-        s_camera_broadcast_valid = true;
+        s_camera_gateway = event->ip_info.gw;
+        s_camera_gateway_valid = s_camera_gateway.addr != 0;
         ESP_LOGI(TAG,
                  "Connected to camera Wi-Fi; IP address: " IPSTR
                  ", netmask: " IPSTR ", gateway: " IPSTR
-                 ", broadcast: " IPSTR,
+                 ", discovery target: " IPSTR,
                  IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask),
-                 IP2STR(&event->ip_info.gw), IP2STR(&s_camera_broadcast));
+                 IP2STR(&event->ip_info.gw), IP2STR(&s_camera_gateway));
         s_wifi_connect_retries = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_GOT_IP_BIT);
     }
