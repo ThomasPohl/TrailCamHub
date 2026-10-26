@@ -32,6 +32,8 @@
 #define CAMERA_RUDP_DATA_TYPE 0xd0
 #define CAMERA_RUDP_ACK_TYPE 0xd1
 #define CAMERA_RUDP_RECEIVE_TIMEOUT_MS 500
+#define CAMERA_RUDP_HEARTBEAT_INTERVAL_MS 1500
+#define CAMERA_RUDP_RETRANSMIT_INTERVAL_MS 800
 #define WIFI_CONNECT_MAX_RETRIES 5
 #define WIFI_GOT_IP_BIT BIT0
 
@@ -83,6 +85,16 @@ static const uint8_t s_artemis_magic_body_1[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 static const uint8_t s_artemis_magic_body_2[] = {0x00, 0x00};
+static const uint8_t s_artemis_heartbeat_prefix[] = {
+    0x41, 0x52, 0x54, 0x45, 0x4d, 0x49, 0x53, 0x00,
+    0x02, 0x00, 0x00, 0x00,
+};
+static const uint8_t s_artemis_heartbeat_suffix[] = {
+    0x00, 0x01, 0x00, 0x19, 0x00, 0x00, 0x00, 0x4d,
+    0x7a, 0x6c, 0x42, 0x33, 0x36, 0x58, 0x2f, 0x49,
+    0x56, 0x6f, 0x38, 0x5a, 0x7a, 0x49, 0x35, 0x72,
+    0x47, 0x39, 0x6a, 0x31, 0x77, 0x3d, 0x3d, 0x00,
+};
 static EventGroupHandle_t s_wifi_event_group;
 static bool s_wifi_connect_requested;
 static unsigned s_wifi_connect_retries;
@@ -294,17 +306,17 @@ static bool is_camera_data_packet(const uint8_t *packet, size_t packet_len)
     return body_len >= 4 && (size_t)body_len == packet_len - 4;
 }
 
-static esp_err_t send_rudp_packet(int socket_fd,
-                                  const struct sockaddr_in *camera_address,
-                                  uint8_t packet_type,
-                                  const uint8_t *payload, size_t payload_len,
-                                  uint8_t *sent_sequence)
+static esp_err_t build_rudp_packet(uint8_t packet_type, const uint8_t *payload,
+                                   size_t payload_len, uint8_t *packet,
+                                   size_t packet_capacity,
+                                   size_t *packet_len,
+                                   uint8_t *sent_sequence)
 {
-    uint8_t packet[256];
     size_t body_len = payload_len + 4;
-    size_t packet_len = body_len + 4;
-    if (packet_len > sizeof(packet) || body_len > UINT16_MAX ||
-        (payload_len > 0 && payload == NULL)) {
+    size_t total_len = body_len + 4;
+    if (total_len > packet_capacity || body_len > UINT16_MAX ||
+        (payload_len > 0 && payload == NULL) || packet == NULL ||
+        packet_len == NULL) {
         ESP_LOGE(TAG, "RUDP packet exceeds supported size");
         return ESP_ERR_INVALID_SIZE;
     }
@@ -322,6 +334,27 @@ static esp_err_t send_rudp_packet(int socket_fd,
     if (payload_len > 0) {
         memcpy(packet + 8, payload, payload_len);
     }
+    *packet_len = total_len;
+    if (sent_sequence != NULL) {
+        *sent_sequence = sequence;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t send_rudp_packet(int socket_fd,
+                                  const struct sockaddr_in *camera_address,
+                                  uint8_t packet_type,
+                                  const uint8_t *payload, size_t payload_len,
+                                  uint8_t *sent_sequence)
+{
+    uint8_t packet[256];
+    size_t packet_len;
+    esp_err_t error = build_rudp_packet(packet_type, payload, payload_len,
+                                        packet, sizeof(packet), &packet_len,
+                                        sent_sequence);
+    if (error != ESP_OK) {
+        return error;
+    }
 
     ssize_t sent = sendto(socket_fd, packet, packet_len, 0,
                           (const struct sockaddr *)camera_address,
@@ -330,9 +363,6 @@ static esp_err_t send_rudp_packet(int socket_fd,
         ESP_LOGE(TAG, "Could not send RUDP type 0x%02X packet: errno %d",
                  packet_type, errno);
         return ESP_FAIL;
-    }
-    if (sent_sequence != NULL) {
-        *sent_sequence = sequence;
     }
     return ESP_OK;
 }
@@ -388,18 +418,99 @@ static esp_err_t wait_for_artemis_packets(
     int socket_fd, const struct sockaddr_in *camera_address,
     int64_t discovery_started_us)
 {
-    struct timeval receive_timeout = {
-        .tv_sec = CAMERA_RUDP_RECEIVE_TIMEOUT_MS / 1000,
-        .tv_usec = (CAMERA_RUDP_RECEIVE_TIMEOUT_MS % 1000) * 1000,
-    };
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout,
-                   sizeof(receive_timeout)) < 0) {
-        ESP_LOGE(TAG, "Could not set ARTEMIS receive timeout: errno %d", errno);
-        return ESP_FAIL;
-    }
+    uint8_t heartbeat_body[sizeof(s_artemis_heartbeat_prefix) + 1 +
+                           sizeof(s_artemis_heartbeat_suffix)];
+    memcpy(heartbeat_body, s_artemis_heartbeat_prefix,
+           sizeof(s_artemis_heartbeat_prefix));
+    memcpy(heartbeat_body + sizeof(s_artemis_heartbeat_prefix) + 1,
+           s_artemis_heartbeat_suffix, sizeof(s_artemis_heartbeat_suffix));
 
-    ESP_LOGI(TAG, "Waiting for ARTEMIS packets from the camera");
+    uint8_t pending_packet[256];
+    size_t pending_packet_len = 0;
+    uint8_t pending_sequence = 0;
+    uint8_t heartbeat_command_count = 1;
+    bool waiting_for_ack = false;
+    int64_t last_heartbeat_us = 0;
+    int64_t last_retry_us = 0;
+    ESP_LOGI(TAG, "Starting ARTEMIS heartbeat stop-and-wait loop");
+
     while (true) {
+        int64_t now_us = esp_timer_get_time();
+        if (!waiting_for_ack &&
+            (last_heartbeat_us == 0 ||
+             now_us - last_heartbeat_us >=
+                 CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL)) {
+            heartbeat_command_count =
+                (uint8_t)((heartbeat_command_count + 1) % 255);
+            heartbeat_body[sizeof(s_artemis_heartbeat_prefix)] =
+                heartbeat_command_count;
+            esp_err_t error = build_rudp_packet(
+                CAMERA_RUDP_DATA_TYPE, heartbeat_body,
+                sizeof(heartbeat_body), pending_packet,
+                sizeof(pending_packet), &pending_packet_len,
+                &pending_sequence);
+            if (error != ESP_OK) {
+                return error;
+            }
+            ssize_t sent = sendto(
+                socket_fd, pending_packet, pending_packet_len, 0,
+                (const struct sockaddr *)camera_address,
+                sizeof(*camera_address));
+            if (sent < 0 || (size_t)sent != pending_packet_len) {
+                ESP_LOGE(TAG, "Could not send ARTEMIS heartbeat: errno %d",
+                         errno);
+                return ESP_FAIL;
+            }
+            waiting_for_ack = true;
+            last_heartbeat_us = now_us;
+            last_retry_us = now_us;
+            ESP_LOGI(TAG, "Sent ARTEMIS heartbeat, command %u, sequence %u",
+                     heartbeat_command_count, pending_sequence);
+        } else if (waiting_for_ack &&
+                   now_us - last_retry_us >=
+                       CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL) {
+            ssize_t sent = sendto(
+                socket_fd, pending_packet, pending_packet_len, 0,
+                (const struct sockaddr *)camera_address,
+                sizeof(*camera_address));
+            if (sent < 0 || (size_t)sent != pending_packet_len) {
+                ESP_LOGE(TAG, "Could not retransmit ARTEMIS heartbeat "
+                         "sequence %u: errno %d", pending_sequence, errno);
+                return ESP_FAIL;
+            }
+            last_retry_us = now_us;
+            ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat sequence %u",
+                     pending_sequence);
+        }
+
+        struct timeval receive_timeout = {
+            .tv_sec = 0,
+            .tv_usec = CAMERA_RUDP_RECEIVE_TIMEOUT_MS * 1000,
+        };
+        if (waiting_for_ack) {
+            int64_t retry_remaining_us =
+                CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL -
+                (esp_timer_get_time() - last_retry_us);
+            if (retry_remaining_us < receive_timeout.tv_usec) {
+                receive_timeout.tv_usec =
+                    retry_remaining_us > 0 ? retry_remaining_us : 1;
+            }
+        } else if (last_heartbeat_us != 0) {
+            int64_t heartbeat_remaining_us =
+                CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL -
+                (esp_timer_get_time() - last_heartbeat_us);
+            if (heartbeat_remaining_us < receive_timeout.tv_usec) {
+                receive_timeout.tv_usec =
+                    heartbeat_remaining_us > 0 ? heartbeat_remaining_us : 1;
+            }
+        }
+        if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout,
+                       sizeof(receive_timeout)) < 0) {
+            ESP_LOGE(TAG, "Could not set ARTEMIS receive timeout: errno %d",
+                     errno);
+            return ESP_FAIL;
+        }
+
         uint8_t packet[512];
         struct sockaddr_in source = {0};
         socklen_t source_len = sizeof(source);
@@ -441,9 +552,23 @@ static esp_err_t wait_for_artemis_packets(
             if (error != ESP_OK) {
                 return error;
             }
-        } else if (received >= 2 && packet[0] == 0xf1 &&
+        } else if (received >= 12 && packet[0] == 0xf1 &&
                    packet[1] == CAMERA_RUDP_ACK_TYPE) {
-            ESP_LOGI(TAG, "Received ARTEMIS ACK packet");
+            uint16_t body_len = ((uint16_t)packet[2] << 8) | packet[3];
+            bool acknowledges_pending =
+                waiting_for_ack && body_len == (size_t)received - 4 &&
+                body_len >= 8 && packet[8] == 0 &&
+                packet[9] == pending_sequence && packet[10] == 0 &&
+                packet[11] == pending_sequence;
+            if (acknowledges_pending) {
+                ESP_LOGI(TAG, "Heartbeat sequence %u acknowledged",
+                         pending_sequence);
+                waiting_for_ack = false;
+            } else {
+                ESP_LOGI(TAG, "Received ARTEMIS ACK packet not matching "
+                         "pending heartbeat sequence %u",
+                         pending_sequence);
+            }
         } else {
             ESP_LOGW(TAG, "Ignoring unrecognized ARTEMIS packet");
         }
