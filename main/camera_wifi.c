@@ -125,6 +125,26 @@ static size_t format_packet_hex(const uint8_t *packet, size_t packet_len,
     return output_len == 0 ? 0 : (output_len + 1) / 3;
 }
 
+static size_t format_packet_hex_full(const uint8_t *packet, size_t packet_len,
+                                     char *output, size_t output_size)
+{
+    size_t output_len = 0;
+    if (output_size == 0) {
+        return 0;
+    }
+    output[0] = '\0';
+    for (size_t i = 0; i < packet_len && output_len < output_size; i++) {
+        int written = snprintf(output + output_len, output_size - output_len,
+                               "%s%02X", i == 0 ? "" : " ", packet[i]);
+        if (written < 0 || (size_t)written >= output_size - output_len) {
+            output[output_len] = '\0';
+            break;
+        }
+        output_len += (size_t)written;
+    }
+    return output_len == 0 ? 0 : (output_len + 1) / 3;
+}
+
 static const char *wifi_disconnect_reason_name(uint8_t reason)
 {
     switch (reason) {
@@ -343,6 +363,7 @@ static esp_err_t build_rudp_packet(uint8_t packet_type, const uint8_t *payload,
 
 static esp_err_t send_rudp_packet(int socket_fd,
                                   const struct sockaddr_in *camera_address,
+                                  const char *packet_name,
                                   uint8_t packet_type,
                                   const uint8_t *payload, size_t payload_len,
                                   uint8_t *sent_sequence)
@@ -364,6 +385,13 @@ static esp_err_t send_rudp_packet(int socket_fd,
                  packet_type, errno);
         return ESP_FAIL;
     }
+    char packet_hex[sizeof(packet) * 3 + 1];
+    format_packet_hex_full(packet, packet_len, packet_hex,
+                           sizeof(packet_hex));
+    esp_ip4_addr_t camera_ip = {.addr = camera_address->sin_addr.s_addr};
+    ESP_LOGI(TAG, "Sent %s to " IPSTR ":%u (%u bytes): %s",
+             packet_name, IP2STR(&camera_ip),
+             ntohs(camera_address->sin_port), (unsigned)sent, packet_hex);
     return ESP_OK;
 }
 
@@ -376,41 +404,38 @@ static esp_err_t send_data_ack(int socket_fd,
     };
     uint8_t sequence;
     esp_err_t error = send_rudp_packet(
-        socket_fd, camera_address, CAMERA_RUDP_ACK_TYPE, ack_payload,
-        sizeof(ack_payload), &sequence);
+        socket_fd, camera_address, "ARTEMIS DATA ACK",
+        CAMERA_RUDP_ACK_TYPE, ack_payload, sizeof(ack_payload), &sequence);
     if (error != ESP_OK) {
         return error;
     }
 
-    ESP_LOGI(TAG, "Sent DATA ACK for received sequence %u using local "
-             "sequence %u", received_sequence, sequence);
+    ESP_LOGI(TAG, "ARTEMIS DATA ACK acknowledges received sequence %u "
+             "using local sequence %u", received_sequence, sequence);
     return ESP_OK;
 }
 
 static esp_err_t send_artemis_handshake(
     int socket_fd, const struct sockaddr_in *camera_address)
 {
-    ESP_LOGI(TAG, "Sending ARTEMIS Hello");
     esp_err_t error = send_rudp_packet(
-        socket_fd, camera_address, CAMERA_RUDP_DATA_TYPE,
+        socket_fd, camera_address, "ARTEMIS Hello", CAMERA_RUDP_DATA_TYPE,
         s_artemis_hello_body, sizeof(s_artemis_hello_body), NULL);
     if (error != ESP_OK) {
         return error;
     }
     vTaskDelay(pdMS_TO_TICKS(50));
 
-    ESP_LOGI(TAG, "Sending ARTEMIS Magic 1");
     error = send_rudp_packet(
-        socket_fd, camera_address, CAMERA_RUDP_ACK_TYPE,
+        socket_fd, camera_address, "ARTEMIS Magic 1", CAMERA_RUDP_ACK_TYPE,
         s_artemis_magic_body_1, sizeof(s_artemis_magic_body_1), NULL);
     if (error != ESP_OK) {
         return error;
     }
     vTaskDelay(pdMS_TO_TICKS(20));
 
-    ESP_LOGI(TAG, "Sending ARTEMIS Magic 2");
     return send_rudp_packet(
-        socket_fd, camera_address, CAMERA_RUDP_ACK_TYPE,
+        socket_fd, camera_address, "ARTEMIS Magic 2", CAMERA_RUDP_ACK_TYPE,
         s_artemis_magic_body_2, sizeof(s_artemis_magic_body_2), NULL);
 }
 
@@ -464,8 +489,13 @@ static esp_err_t wait_for_artemis_packets(
             waiting_for_ack = true;
             last_heartbeat_us = now_us;
             last_retry_us = now_us;
-            ESP_LOGI(TAG, "Sent ARTEMIS heartbeat, command %u, sequence %u",
-                     heartbeat_command_count, pending_sequence);
+            char packet_hex[sizeof(pending_packet) * 3 + 1];
+            format_packet_hex_full(pending_packet, pending_packet_len,
+                                   packet_hex, sizeof(packet_hex));
+            ESP_LOGI(TAG, "Sent ARTEMIS heartbeat, command %u, sequence %u "
+                     "(%u bytes): %s",
+                     heartbeat_command_count, pending_sequence,
+                     (unsigned)pending_packet_len, packet_hex);
         } else if (waiting_for_ack &&
                    now_us - last_retry_us >=
                        CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL) {
@@ -479,8 +509,13 @@ static esp_err_t wait_for_artemis_packets(
                 return ESP_FAIL;
             }
             last_retry_us = now_us;
-            ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat sequence %u",
-                     pending_sequence);
+            char packet_hex[sizeof(pending_packet) * 3 + 1];
+            format_packet_hex_full(pending_packet, pending_packet_len,
+                                   packet_hex, sizeof(packet_hex));
+            ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat sequence %u "
+                     "(%u bytes): %s",
+                     pending_sequence, (unsigned)pending_packet_len,
+                     packet_hex);
         }
 
         struct timeval receive_timeout = {
@@ -588,17 +623,21 @@ static esp_err_t send_prelogin(int socket_fd,
     }
 
     esp_ip4_addr_t camera_ip = {.addr = camera_address->sin_addr.s_addr};
-    ESP_LOGI(TAG, "Sending AES-encrypted PRE_LOGIN to " IPSTR ":%u "
-             "(%u bytes)", IP2STR(&camera_ip),
-             ntohs(camera_address->sin_port), (unsigned)packet_len);
     ssize_t sent = sendto(socket_fd, packet, packet_len, 0,
                           (const struct sockaddr *)camera_address,
                           sizeof(*camera_address));
-    memset(packet, 0, sizeof(packet));
     if (sent < 0 || (size_t)sent != packet_len) {
+        memset(packet, 0, sizeof(packet));
         ESP_LOGE(TAG, "PRE_LOGIN send failed: errno %d", errno);
         return ESP_FAIL;
     }
+    char packet_hex[sizeof(packet) * 3 + 1];
+    format_packet_hex_full(packet, packet_len, packet_hex,
+                           sizeof(packet_hex));
+    ESP_LOGI(TAG, "Sent AES-encrypted PRE_LOGIN to " IPSTR ":%u "
+             "(%u bytes): %s", IP2STR(&camera_ip),
+             ntohs(camera_address->sin_port), (unsigned)sent, packet_hex);
+    memset(packet, 0, sizeof(packet));
     int64_t sent_at_us = esp_timer_get_time();
 
     struct timeval response_timeout = {
@@ -765,9 +804,9 @@ static esp_err_t discover_camera(void)
             close(socket_fd);
             return ESP_FAIL;
         }
-        ESP_LOGI(TAG, "Camera discovery sent %u bytes to " IPSTR ":%u",
+        ESP_LOGI(TAG, "Camera discovery sent %u bytes to " IPSTR ":%u: %s",
                  (unsigned)sent, IP2STR(&s_camera_gateway),
-                 s_camera_discovery_ports[port_index]);
+                 s_camera_discovery_ports[port_index], request_hex);
     }
 
     while ((esp_timer_get_time() - discovery_started_us) / 1000 <
