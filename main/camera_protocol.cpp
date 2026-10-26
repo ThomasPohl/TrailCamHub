@@ -22,7 +22,6 @@
 #define CAMERA_DISCOVERY_TIMEOUT_MS 1500
 #define CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS 500
 #define CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS 1000
-#define CAMERA_PRELOGIN_MAX_PACKET_LEN 128
 #define CAMERA_RUDP_RECEIVE_TIMEOUT_MS 500
 #define CAMERA_RUDP_HEARTBEAT_INTERVAL_MS 1500
 #define CAMERA_RUDP_RETRANSMIT_INTERVAL_MS 800
@@ -66,18 +65,16 @@ static const uint8_t s_artemis_hello_body[] = {
     0x2b, 0x72, 0x64, 0x31, 0x44, 0x6d, 0x45, 0x3d,
     0x00,
 };
-static const uint8_t s_artemis_magic_body_1[] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-};
-static const uint8_t s_artemis_magic_body_2[] = {0x00, 0x00};
 static esp_ip4_addr_t s_camera_gateway;
 static bool s_camera_gateway_valid;
 static uint8_t s_camera_rudp_sequence;
 
-static esp_err_t build_prelogin_packet(uint8_t *packet, size_t packet_capacity,
-                                       size_t *packet_len)
+static esp_err_t build_prelogin_request(camera::PreLoginRequest *request)
 {
     static const char *TAG_CRYPTO = "trailcamhub_wifi";
+    if (request == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
     char json[96];
     uint8_t plaintext[96];
     uint8_t nonce[8];
@@ -104,8 +101,6 @@ static esp_err_t build_prelogin_packet(uint8_t *packet, size_t packet_capacity,
     size_t padding_len = 16 - ((size_t)json_len % 16);
     ciphertext_len = (size_t)json_len + padding_len;
     if (ciphertext_len > sizeof(ciphertext) ||
-        4 + sizeof(s_prelogin_static_header) + ciphertext_len >
-            packet_capacity ||
         sizeof(s_prelogin_static_header) + ciphertext_len > UINT16_MAX) {
         ESP_LOGE(TAG_CRYPTO, "PRE_LOGIN payload exceeds packet capacity");
         return ESP_ERR_INVALID_SIZE;
@@ -137,16 +132,17 @@ static esp_err_t build_prelogin_packet(uint8_t *packet, size_t packet_capacity,
     }
 
     size_t body_len = sizeof(s_prelogin_static_header) + ciphertext_len;
-    packet[0] = 0xf1;
-    packet[1] = 0xf9;
-    packet[2] = (uint8_t)(body_len >> 8);
-    packet[3] = (uint8_t)body_len;
-    memcpy(packet + 4, s_prelogin_static_header,
-           sizeof(s_prelogin_static_header));
-    memcpy(packet + 4 + sizeof(s_prelogin_static_header), ciphertext,
+    uint8_t body[sizeof(s_prelogin_static_header) + sizeof(ciphertext)];
+    memcpy(body, s_prelogin_static_header, sizeof(s_prelogin_static_header));
+    memcpy(body + sizeof(s_prelogin_static_header), ciphertext,
            ciphertext_len);
-    *packet_len = 4 + body_len;
+    bool built = request->build(body, body_len);
+    memset(body, 0, body_len);
     memset(ciphertext, 0, sizeof(ciphertext));
+    if (!built) {
+        ESP_LOGE(TAG_CRYPTO, "PRE_LOGIN packet exceeds supported size");
+        return ESP_ERR_INVALID_SIZE;
+    }
     ESP_LOGD(TAG_CRYPTO, "Built PRE_LOGIN with %u-byte JSON, %u-byte "
              "ciphertext, UTC timestamp %lld",
              (unsigned)json_len, (unsigned)ciphertext_len,
@@ -154,45 +150,22 @@ static esp_err_t build_prelogin_packet(uint8_t *packet, size_t packet_capacity,
     return ESP_OK;
 }
 
-static esp_err_t build_rudp_packet(uint8_t packet_type, const uint8_t *payload,
-                                   size_t payload_len,
-                                   camera::ArtemisRudpPacket *packet,
-                                   uint8_t *sent_sequence)
+static uint8_t next_rudp_sequence(void)
 {
-    if (packet == NULL || (payload_len > 0 && payload == NULL)) {
-        ESP_LOGE(TAG, "RUDP packet exceeds supported size");
-        return ESP_ERR_INVALID_SIZE;
-    }
-
     uint8_t sequence = (uint8_t)(s_camera_rudp_sequence % 254 + 1);
     s_camera_rudp_sequence = sequence;
-    if (!packet->build(packet_type, sequence, payload, payload_len)) {
-        ESP_LOGE(TAG, "RUDP packet exceeds supported size");
-        return ESP_ERR_INVALID_SIZE;
-    }
-    if (sent_sequence != NULL) {
-        *sent_sequence = sequence;
-    }
-    return ESP_OK;
+    return sequence;
 }
 
-static esp_err_t send_rudp_packet(int socket_fd,
-                                  const struct sockaddr_in *camera_address,
-                                  const char *packet_name,
-                                  uint8_t packet_type,
-                                  const uint8_t *payload, size_t payload_len,
-                                  uint8_t *sent_sequence)
+static esp_err_t send_udp_request(int socket_fd,
+                                  const struct sockaddr_in *destination,
+                                  const char *request_name,
+                                  const camera::UdpRequest &request)
 {
-    camera::ArtemisRudpPacket packet;
-    esp_err_t error = build_rudp_packet(packet_type, payload, payload_len,
-                                        &packet, sent_sequence);
-    if (error != ESP_OK) {
-        return error;
-    }
-
-    ssize_t sent = camera_udp_send_packet(socket_fd, packet.data(), packet.size(),
-                                   camera_address, packet_name);
-    if (sent < 0 || static_cast<size_t>(sent) != packet.size()) {
+    ssize_t sent = camera_udp_send_packet(socket_fd, request.data(),
+                                          request.size(), destination,
+                                          request_name);
+    if (sent < 0 || static_cast<size_t>(sent) != request.size()) {
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -202,14 +175,14 @@ static esp_err_t send_data_ack(int socket_fd,
                                const struct sockaddr_in *camera_address,
                                uint8_t received_sequence)
 {
-    uint8_t ack_payload[] = {
-        0x00, received_sequence, 0x00, received_sequence,
-    };
-    uint8_t sequence;
-    esp_err_t error = send_rudp_packet(
-        socket_fd, camera_address, "ARTEMIS DATA ACK",
-        camera::ArtemisRudpPacket::kAckType, ack_payload,
-        sizeof(ack_payload), &sequence);
+    camera::ArtemisAckRequest request;
+    uint8_t sequence = next_rudp_sequence();
+    if (!request.build(sequence, received_sequence)) {
+        ESP_LOGE(TAG, "Could not build ARTEMIS DATA ACK request");
+        return ESP_ERR_INVALID_SIZE;
+    }
+    esp_err_t error = send_udp_request(
+        socket_fd, camera_address, "ARTEMIS DATA ACK", request);
     if (error != ESP_OK) {
         return error;
     }
@@ -222,28 +195,40 @@ static esp_err_t send_data_ack(int socket_fd,
 static esp_err_t send_artemis_handshake(
     int socket_fd, const struct sockaddr_in *camera_address)
 {
-    esp_err_t error = send_rudp_packet(
-        socket_fd, camera_address, "ARTEMIS Hello",
-        camera::ArtemisRudpPacket::kDataType,
-        s_artemis_hello_body, sizeof(s_artemis_hello_body), NULL);
+    camera::ArtemisDataRequest hello_request;
+    if (!hello_request.build(next_rudp_sequence(), s_artemis_hello_body,
+                             sizeof(s_artemis_hello_body))) {
+        ESP_LOGE(TAG, "Could not build ARTEMIS Hello request");
+        return ESP_ERR_INVALID_SIZE;
+    }
+    esp_err_t error = send_udp_request(
+        socket_fd, camera_address, "ARTEMIS Hello", hello_request);
     if (error != ESP_OK) {
         return error;
     }
     vTaskDelay(pdMS_TO_TICKS(50));
 
-    error = send_rudp_packet(
-        socket_fd, camera_address, "ARTEMIS Magic 1",
-        camera::ArtemisRudpPacket::kAckType,
-        s_artemis_magic_body_1, sizeof(s_artemis_magic_body_1), NULL);
+    camera::ArtemisMagicRequest magic_one;
+    if (!magic_one.build(next_rudp_sequence(),
+                         camera::ArtemisMagicRequest::Stage::first)) {
+        ESP_LOGE(TAG, "Could not build ARTEMIS Magic 1 request");
+        return ESP_ERR_INVALID_SIZE;
+    }
+    error = send_udp_request(socket_fd, camera_address, "ARTEMIS Magic 1",
+                             magic_one);
     if (error != ESP_OK) {
         return error;
     }
     vTaskDelay(pdMS_TO_TICKS(20));
 
-    return send_rudp_packet(
-        socket_fd, camera_address, "ARTEMIS Magic 2",
-        camera::ArtemisRudpPacket::kAckType,
-        s_artemis_magic_body_2, sizeof(s_artemis_magic_body_2), NULL);
+    camera::ArtemisMagicRequest magic_two;
+    if (!magic_two.build(next_rudp_sequence(),
+                         camera::ArtemisMagicRequest::Stage::second)) {
+        ESP_LOGE(TAG, "Could not build ARTEMIS Magic 2 request");
+        return ESP_ERR_INVALID_SIZE;
+    }
+    return send_udp_request(socket_fd, camera_address, "ARTEMIS Magic 2",
+                            magic_two);
 }
 
 static esp_err_t wait_for_artemis_packets(
@@ -251,7 +236,7 @@ static esp_err_t wait_for_artemis_packets(
     int64_t discovery_started_us)
 {
     camera::ArtemisHeartbeatPayload heartbeat;
-    camera::ArtemisRudpPacket pending_packet;
+    camera::ArtemisDataRequest pending_packet;
     uint8_t pending_sequence = 0;
     bool waiting_for_ack = false;
     int64_t last_heartbeat_us = 0;
@@ -265,17 +250,17 @@ static esp_err_t wait_for_artemis_packets(
              now_us - last_heartbeat_us >=
                  CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL)) {
             const uint8_t *heartbeat_body = heartbeat.next_command();
-            esp_err_t error = build_rudp_packet(
-                camera::ArtemisRudpPacket::kDataType, heartbeat_body,
-                heartbeat.size(), &pending_packet, &pending_sequence);
+            pending_sequence = next_rudp_sequence();
+            if (!pending_packet.build(pending_sequence, heartbeat_body,
+                                      heartbeat.size())) {
+                ESP_LOGE(TAG, "Could not build ARTEMIS heartbeat request");
+                return ESP_ERR_INVALID_SIZE;
+            }
+            esp_err_t error = send_udp_request(
+                socket_fd, camera_address, "ARTEMIS heartbeat",
+                pending_packet);
             if (error != ESP_OK) {
                 return error;
-            }
-            ssize_t sent = camera_udp_send_packet(
-                socket_fd, pending_packet.data(), pending_packet.size(),
-                camera_address, "ARTEMIS heartbeat");
-            if (sent < 0 || static_cast<size_t>(sent) != pending_packet.size()) {
-                return ESP_FAIL;
             }
             waiting_for_ack = true;
             last_heartbeat_us = now_us;
@@ -286,11 +271,11 @@ static esp_err_t wait_for_artemis_packets(
         } else if (waiting_for_ack &&
                    now_us - last_retry_us >=
                        CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL) {
-            ssize_t sent = camera_udp_send_packet(
-                socket_fd, pending_packet.data(), pending_packet.size(),
-                camera_address, "ARTEMIS heartbeat retransmission");
-            if (sent < 0 || static_cast<size_t>(sent) != pending_packet.size()) {
-                return ESP_FAIL;
+            esp_err_t error = send_udp_request(
+                socket_fd, camera_address, "ARTEMIS heartbeat retransmission",
+                pending_packet);
+            if (error != ESP_OK) {
+                return error;
             }
             last_retry_us = now_us;
             ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat sequence %u",
@@ -385,21 +370,17 @@ static esp_err_t send_prelogin(int socket_fd,
                                const struct sockaddr_in *camera_address,
                                int64_t discovery_started_us)
 {
-    uint8_t packet[CAMERA_PRELOGIN_MAX_PACKET_LEN];
-    size_t packet_len;
-    esp_err_t error =
-        build_prelogin_packet(packet, sizeof(packet), &packet_len);
+    camera::PreLoginRequest request;
+    esp_err_t error = build_prelogin_request(&request);
     if (error != ESP_OK) {
         return error;
     }
 
-    ssize_t sent = camera_udp_send_packet(socket_fd, packet, packet_len,
-                                   camera_address, "AES-encrypted PRE_LOGIN");
-    if (sent < 0 || (size_t)sent != packet_len) {
-        memset(packet, 0, sizeof(packet));
-        return ESP_FAIL;
+    error = send_udp_request(socket_fd, camera_address,
+                             "AES-encrypted PRE_LOGIN", request);
+    if (error != ESP_OK) {
+        return error;
     }
-    memset(packet, 0, sizeof(packet));
     int64_t sent_at_us = esp_timer_get_time();
 
     struct timeval response_timeout = {
@@ -527,7 +508,7 @@ static esp_err_t discover_camera(void)
         return ESP_FAIL;
     }
 
-    const camera::CameraDiscoveryPacket discovery_packet;
+    const camera::CameraDiscoveryRequest discovery_packet;
     ESP_LOGI(TAG, "Camera discovery target " IPSTR ", source UDP port %u, "
              "payload %u bytes", IP2STR(&s_camera_gateway),
              CAMERA_DISCOVERY_LOCAL_PORT,
@@ -541,12 +522,9 @@ static esp_err_t discover_camera(void)
         destination.sin_family = AF_INET;
         destination.sin_port = htons(s_camera_discovery_ports[port_index]);
         destination.sin_addr.s_addr = s_camera_gateway.addr;
-        ssize_t sent = camera_udp_send_packet(
-            socket_fd, discovery_packet.data(), discovery_packet.size(),
-            &destination,
-            "LBCS discovery");
-        if (sent < 0 ||
-            static_cast<size_t>(sent) != discovery_packet.size()) {
+        esp_err_t error = send_udp_request(
+            socket_fd, &destination, "LBCS discovery", discovery_packet);
+        if (error != ESP_OK) {
             close(socket_fd);
             return ESP_FAIL;
         }

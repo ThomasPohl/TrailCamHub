@@ -6,12 +6,20 @@
 
 namespace camera {
 
-class CameraDiscoveryPacket {
+class UdpRequest {
+public:
+    virtual ~UdpRequest() = default;
+
+    virtual const std::uint8_t *data() const = 0;
+    virtual std::size_t size() const = 0;
+};
+
+class CameraDiscoveryRequest final : public UdpRequest {
 public:
     static constexpr std::size_t kSize = 24;
 
-    const std::uint8_t *data() const;
-    std::size_t size() const;
+    const std::uint8_t *data() const override;
+    std::size_t size() const override;
 
 private:
     static constexpr std::array<std::uint8_t, kSize> kBytes = {
@@ -21,7 +29,36 @@ private:
     };
 };
 
-class ArtemisRudpPacket {
+class PreLoginRequest final : public UdpRequest {
+public:
+    static constexpr std::size_t kMaxPacketSize = 128;
+
+    bool build(const std::uint8_t *body, std::size_t body_size);
+    const std::uint8_t *data() const override;
+    std::size_t size() const override;
+
+private:
+    std::array<std::uint8_t, kMaxPacketSize> bytes_{};
+    std::size_t size_{};
+};
+
+class ArtemisCommandRequest final : public UdpRequest {
+public:
+    static constexpr std::size_t kHeaderSize = 20;
+    static constexpr std::size_t kMaxPacketSize = 512;
+    static constexpr std::uint32_t kCommandRequestType = 2;
+
+    bool build(std::uint32_t app_sequence, const char *base64_payload,
+               std::size_t payload_size);
+    const std::uint8_t *data() const override;
+    std::size_t size() const override;
+
+private:
+    std::array<std::uint8_t, kMaxPacketSize> bytes_{};
+    std::size_t size_{};
+};
+
+class ArtemisRudpPacket : public UdpRequest {
 public:
     static constexpr std::size_t kHeaderSize = 8;
     static constexpr std::size_t kMaxPacketSize = 512;
@@ -36,12 +73,35 @@ public:
     bool is_ack() const;
     bool acknowledges(std::uint8_t sequence) const;
     std::uint8_t sequence() const;
-    const std::uint8_t *data() const;
-    std::size_t size() const;
+    const std::uint8_t *data() const override;
+    std::size_t size() const override;
 
 private:
     std::array<std::uint8_t, kMaxPacketSize> bytes_{};
     std::size_t size_{};
+};
+
+class ArtemisDataRequest final : public ArtemisRudpPacket {
+public:
+    bool build(std::uint8_t sequence, const std::uint8_t *payload,
+               std::size_t payload_size);
+};
+
+class ArtemisAckRequest final : public ArtemisRudpPacket {
+public:
+    static constexpr std::size_t kPayloadSize = 4;
+
+    bool build(std::uint8_t local_sequence, std::uint8_t received_sequence);
+};
+
+class ArtemisMagicRequest final : public ArtemisRudpPacket {
+public:
+    enum class Stage {
+        first,
+        second,
+    };
+
+    bool build(std::uint8_t sequence, Stage stage);
 };
 
 class ArtemisHeartbeatPayload {
