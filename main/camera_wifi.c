@@ -208,7 +208,7 @@ static esp_err_t discover_camera(void)
                          ? " ..." : "");
 
             if (received >= 2 && response[0] == 0xf1 &&
-                response[1] == 0x41) {
+                response[1] == 0x42) {
                 ESP_LOGI(TAG, "Camera discovery response received from "
                          IPSTR ":%u (%u bytes) after %lld ms",
                          IP2STR(&source_ip), ntohs(source.sin_port),
@@ -221,7 +221,7 @@ static esp_err_t discover_camera(void)
             }
 
             ESP_LOGW(TAG, "UDP packet did not match discovery response "
-                     "prefix F1 41");
+                     "prefix F1 42");
         }
         ESP_LOGI(TAG, "Camera discovery attempt %u finished after %lld ms",
                  attempt + 1,
