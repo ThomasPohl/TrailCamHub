@@ -16,25 +16,19 @@
 
 #include "camera_protocol.h"
 #include "camera_udp_transport.h"
+#include "camera_udp_packets.hpp"
 
 #define CAMERA_DISCOVERY_LOCAL_PORT 35281
 #define CAMERA_DISCOVERY_TIMEOUT_MS 1500
 #define CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS 500
 #define CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS 1000
 #define CAMERA_PRELOGIN_MAX_PACKET_LEN 128
-#define CAMERA_RUDP_DATA_TYPE 0xd0
-#define CAMERA_RUDP_ACK_TYPE 0xd1
 #define CAMERA_RUDP_RECEIVE_TIMEOUT_MS 500
 #define CAMERA_RUDP_HEARTBEAT_INTERVAL_MS 1500
 #define CAMERA_RUDP_RETRANSMIT_INTERVAL_MS 800
 
 static const char *TAG = "trailcamhub_protocol";
 static const uint16_t s_camera_discovery_ports[] = {40611, 3333};
-static const uint8_t s_camera_discovery_packet[] = {
-    0xf1, 0x41, 0x00, 0x14, 0x4c, 0x42, 0x43, 0x53,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x43, 0x43, 0x43, 0x4a, 0x4a, 0x00, 0x00, 0x00,
-};
 static const uint8_t s_prelogin_static_header[] = {
     0x0c, 0xcb, 0x9a, 0x2b, 0x5f, 0x95, 0x1e, 0xb6,
     0x69, 0xdf, 0xaa, 0x37, 0x5a, 0x6b, 0xbe, 0x3e,
@@ -76,16 +70,6 @@ static const uint8_t s_artemis_magic_body_1[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 static const uint8_t s_artemis_magic_body_2[] = {0x00, 0x00};
-static const uint8_t s_artemis_heartbeat_prefix[] = {
-    0x41, 0x52, 0x54, 0x45, 0x4d, 0x49, 0x53, 0x00,
-    0x02, 0x00, 0x00, 0x00,
-};
-static const uint8_t s_artemis_heartbeat_suffix[] = {
-    0x00, 0x01, 0x00, 0x19, 0x00, 0x00, 0x00, 0x4d,
-    0x7a, 0x6c, 0x42, 0x33, 0x36, 0x58, 0x2f, 0x49,
-    0x56, 0x6f, 0x38, 0x5a, 0x7a, 0x49, 0x35, 0x72,
-    0x47, 0x39, 0x6a, 0x31, 0x77, 0x3d, 0x3d, 0x00,
-};
 static esp_ip4_addr_t s_camera_gateway;
 static bool s_camera_gateway_valid;
 static uint8_t s_camera_rudp_sequence;
@@ -170,70 +154,22 @@ static esp_err_t build_prelogin_packet(uint8_t *packet, size_t packet_capacity,
     return ESP_OK;
 }
 
-static bool is_camera_data_packet(const uint8_t *packet, size_t packet_len)
-{
-    if (packet_len < 8 || packet[0] != 0xf1 ||
-        packet[1] != CAMERA_RUDP_DATA_TYPE ||
-        packet[4] != CAMERA_RUDP_ACK_TYPE ||
-        packet[5] != 0 || packet[6] != 0) {
-        return false;
-    }
-
-    uint16_t body_len = ((uint16_t)packet[2] << 8) | packet[3];
-    return body_len >= 4 && (size_t)body_len == packet_len - 4;
-}
-
-static bool is_ack_for_sequence(const uint8_t *packet, size_t packet_len,
-                                uint8_t sequence)
-{
-    if (packet_len < 10 || packet[0] != 0xf1 ||
-        packet[1] != CAMERA_RUDP_ACK_TYPE || packet[4] != 0xd1 ||
-        packet[5] != 0 || packet[6] != 0) {
-        return false;
-    }
-
-    uint16_t body_len = ((uint16_t)packet[2] << 8) | packet[3];
-    if ((size_t)body_len != packet_len - 4 || packet[8] != 0 ||
-        packet[9] != sequence) {
-        return false;
-    }
-
-    if (body_len == 6) {
-        return true;
-    }
-
-    return body_len == 8 && packet[10] == 0 && packet[11] == sequence;
-}
-
 static esp_err_t build_rudp_packet(uint8_t packet_type, const uint8_t *payload,
-                                   size_t payload_len, uint8_t *packet,
-                                   size_t packet_capacity,
-                                   size_t *packet_len,
+                                   size_t payload_len,
+                                   camera::ArtemisRudpPacket *packet,
                                    uint8_t *sent_sequence)
 {
-    size_t body_len = payload_len + 4;
-    size_t total_len = body_len + 4;
-    if (total_len > packet_capacity || body_len > UINT16_MAX ||
-        (payload_len > 0 && payload == NULL) || packet == NULL ||
-        packet_len == NULL) {
+    if (packet == NULL || (payload_len > 0 && payload == NULL)) {
         ESP_LOGE(TAG, "RUDP packet exceeds supported size");
         return ESP_ERR_INVALID_SIZE;
     }
 
     uint8_t sequence = (uint8_t)(s_camera_rudp_sequence % 254 + 1);
     s_camera_rudp_sequence = sequence;
-    packet[0] = 0xf1;
-    packet[1] = packet_type;
-    packet[2] = (uint8_t)(body_len >> 8);
-    packet[3] = (uint8_t)body_len;
-    packet[4] = CAMERA_RUDP_ACK_TYPE;
-    packet[5] = 0;
-    packet[6] = 0;
-    packet[7] = sequence;
-    if (payload_len > 0) {
-        memcpy(packet + 8, payload, payload_len);
+    if (!packet->build(packet_type, sequence, payload, payload_len)) {
+        ESP_LOGE(TAG, "RUDP packet exceeds supported size");
+        return ESP_ERR_INVALID_SIZE;
     }
-    *packet_len = total_len;
     if (sent_sequence != NULL) {
         *sent_sequence = sequence;
     }
@@ -247,18 +183,16 @@ static esp_err_t send_rudp_packet(int socket_fd,
                                   const uint8_t *payload, size_t payload_len,
                                   uint8_t *sent_sequence)
 {
-    uint8_t packet[256];
-    size_t packet_len;
+    camera::ArtemisRudpPacket packet;
     esp_err_t error = build_rudp_packet(packet_type, payload, payload_len,
-                                        packet, sizeof(packet), &packet_len,
-                                        sent_sequence);
+                                        &packet, sent_sequence);
     if (error != ESP_OK) {
         return error;
     }
 
-    ssize_t sent = camera_udp_send_packet(socket_fd, packet, packet_len,
+    ssize_t sent = camera_udp_send_packet(socket_fd, packet.data(), packet.size(),
                                    camera_address, packet_name);
-    if (sent < 0 || (size_t)sent != packet_len) {
+    if (sent < 0 || static_cast<size_t>(sent) != packet.size()) {
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -274,7 +208,8 @@ static esp_err_t send_data_ack(int socket_fd,
     uint8_t sequence;
     esp_err_t error = send_rudp_packet(
         socket_fd, camera_address, "ARTEMIS DATA ACK",
-        CAMERA_RUDP_ACK_TYPE, ack_payload, sizeof(ack_payload), &sequence);
+        camera::ArtemisRudpPacket::kAckType, ack_payload,
+        sizeof(ack_payload), &sequence);
     if (error != ESP_OK) {
         return error;
     }
@@ -288,7 +223,8 @@ static esp_err_t send_artemis_handshake(
     int socket_fd, const struct sockaddr_in *camera_address)
 {
     esp_err_t error = send_rudp_packet(
-        socket_fd, camera_address, "ARTEMIS Hello", CAMERA_RUDP_DATA_TYPE,
+        socket_fd, camera_address, "ARTEMIS Hello",
+        camera::ArtemisRudpPacket::kDataType,
         s_artemis_hello_body, sizeof(s_artemis_hello_body), NULL);
     if (error != ESP_OK) {
         return error;
@@ -296,7 +232,8 @@ static esp_err_t send_artemis_handshake(
     vTaskDelay(pdMS_TO_TICKS(50));
 
     error = send_rudp_packet(
-        socket_fd, camera_address, "ARTEMIS Magic 1", CAMERA_RUDP_ACK_TYPE,
+        socket_fd, camera_address, "ARTEMIS Magic 1",
+        camera::ArtemisRudpPacket::kAckType,
         s_artemis_magic_body_1, sizeof(s_artemis_magic_body_1), NULL);
     if (error != ESP_OK) {
         return error;
@@ -304,7 +241,8 @@ static esp_err_t send_artemis_handshake(
     vTaskDelay(pdMS_TO_TICKS(20));
 
     return send_rudp_packet(
-        socket_fd, camera_address, "ARTEMIS Magic 2", CAMERA_RUDP_ACK_TYPE,
+        socket_fd, camera_address, "ARTEMIS Magic 2",
+        camera::ArtemisRudpPacket::kAckType,
         s_artemis_magic_body_2, sizeof(s_artemis_magic_body_2), NULL);
 }
 
@@ -312,17 +250,9 @@ static esp_err_t wait_for_artemis_packets(
     int socket_fd, const struct sockaddr_in *camera_address,
     int64_t discovery_started_us)
 {
-    uint8_t heartbeat_body[sizeof(s_artemis_heartbeat_prefix) + 1 +
-                           sizeof(s_artemis_heartbeat_suffix)];
-    memcpy(heartbeat_body, s_artemis_heartbeat_prefix,
-           sizeof(s_artemis_heartbeat_prefix));
-    memcpy(heartbeat_body + sizeof(s_artemis_heartbeat_prefix) + 1,
-           s_artemis_heartbeat_suffix, sizeof(s_artemis_heartbeat_suffix));
-
-    uint8_t pending_packet[256];
-    size_t pending_packet_len = 0;
+    camera::ArtemisHeartbeatPayload heartbeat;
+    camera::ArtemisRudpPacket pending_packet;
     uint8_t pending_sequence = 0;
-    uint8_t heartbeat_command_count = 1;
     bool waiting_for_ack = false;
     int64_t last_heartbeat_us = 0;
     int64_t last_retry_us = 0;
@@ -334,22 +264,17 @@ static esp_err_t wait_for_artemis_packets(
             (last_heartbeat_us == 0 ||
              now_us - last_heartbeat_us >=
                  CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL)) {
-            heartbeat_command_count =
-                (uint8_t)((heartbeat_command_count + 1) % 255);
-            heartbeat_body[sizeof(s_artemis_heartbeat_prefix)] =
-                heartbeat_command_count;
+            const uint8_t *heartbeat_body = heartbeat.next_command();
             esp_err_t error = build_rudp_packet(
-                CAMERA_RUDP_DATA_TYPE, heartbeat_body,
-                sizeof(heartbeat_body), pending_packet,
-                sizeof(pending_packet), &pending_packet_len,
-                &pending_sequence);
+                camera::ArtemisRudpPacket::kDataType, heartbeat_body,
+                heartbeat.size(), &pending_packet, &pending_sequence);
             if (error != ESP_OK) {
                 return error;
             }
             ssize_t sent = camera_udp_send_packet(
-                socket_fd, pending_packet, pending_packet_len,
+                socket_fd, pending_packet.data(), pending_packet.size(),
                 camera_address, "ARTEMIS heartbeat");
-            if (sent < 0 || (size_t)sent != pending_packet_len) {
+            if (sent < 0 || static_cast<size_t>(sent) != pending_packet.size()) {
                 return ESP_FAIL;
             }
             waiting_for_ack = true;
@@ -357,14 +282,14 @@ static esp_err_t wait_for_artemis_packets(
             last_retry_us = now_us;
             ESP_LOGI(TAG, "ARTEMIS heartbeat command %u, sequence %u "
                      "awaiting ACK",
-                     heartbeat_command_count, pending_sequence);
+                     heartbeat.command_count(), pending_sequence);
         } else if (waiting_for_ack &&
                    now_us - last_retry_us >=
                        CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL) {
             ssize_t sent = camera_udp_send_packet(
-                socket_fd, pending_packet, pending_packet_len,
+                socket_fd, pending_packet.data(), pending_packet.size(),
                 camera_address, "ARTEMIS heartbeat retransmission");
-            if (sent < 0 || (size_t)sent != pending_packet_len) {
+            if (sent < 0 || static_cast<size_t>(sent) != pending_packet.size()) {
                 return ESP_FAIL;
             }
             last_retry_us = now_us;
@@ -422,8 +347,14 @@ static esp_err_t wait_for_artemis_packets(
                  (long long)((esp_timer_get_time() - discovery_started_us) /
                              1000));
 
-        if (is_camera_data_packet(packet, (size_t)received)) {
-            uint8_t received_sequence = packet[7];
+        camera::ArtemisRudpPacket received_packet;
+        if (!received_packet.parse(packet, static_cast<size_t>(received))) {
+            ESP_LOGW(TAG, "Ignoring malformed ARTEMIS packet");
+            continue;
+        }
+
+        if (received_packet.is_data()) {
+            uint8_t received_sequence = received_packet.sequence();
             ESP_LOGI(TAG, "Received ARTEMIS DATA packet, sequence %u",
                      received_sequence);
             esp_err_t error =
@@ -431,12 +362,10 @@ static esp_err_t wait_for_artemis_packets(
             if (error != ESP_OK) {
                 return error;
             }
-        } else if (received >= 10 && packet[0] == 0xf1 &&
-                   packet[1] == CAMERA_RUDP_ACK_TYPE) {
+        } else if (received_packet.is_ack()) {
             bool acknowledges_pending =
                 waiting_for_ack &&
-                is_ack_for_sequence(packet, (size_t)received,
-                                    pending_sequence);
+                received_packet.acknowledges(pending_sequence);
             if (acknowledges_pending) {
                 ESP_LOGI(TAG, "Heartbeat sequence %u acknowledged",
                          pending_sequence);
@@ -532,11 +461,14 @@ static esp_err_t send_prelogin(int socket_fd,
         bool from_camera =
             source.sin_addr.s_addr == camera_address->sin_addr.s_addr &&
             source.sin_port == camera_address->sin_port;
-        if (from_camera && is_camera_data_packet(response, (size_t)received)) {
+        camera::ArtemisRudpPacket response_packet;
+        if (from_camera &&
+            response_packet.parse(response, static_cast<size_t>(received)) &&
+            response_packet.is_data()) {
             ESP_LOGI(TAG, "Received ARTEMIS DATA packet, sequence %u",
-                     response[7]);
+                     response_packet.sequence());
             esp_err_t ack_error =
-                send_data_ack(socket_fd, &source, response[7]);
+                send_data_ack(socket_fd, &source, response_packet.sequence());
             if (ack_error != ESP_OK) {
                 return ack_error;
             }
@@ -595,10 +527,11 @@ static esp_err_t discover_camera(void)
         return ESP_FAIL;
     }
 
+    const camera::CameraDiscoveryPacket discovery_packet;
     ESP_LOGI(TAG, "Camera discovery target " IPSTR ", source UDP port %u, "
              "payload %u bytes", IP2STR(&s_camera_gateway),
              CAMERA_DISCOVERY_LOCAL_PORT,
-             (unsigned)sizeof(s_camera_discovery_packet));
+             static_cast<unsigned>(discovery_packet.size()));
 
     for (size_t port_index = 0;
          port_index < sizeof(s_camera_discovery_ports) /
@@ -609,10 +542,11 @@ static esp_err_t discover_camera(void)
         destination.sin_port = htons(s_camera_discovery_ports[port_index]);
         destination.sin_addr.s_addr = s_camera_gateway.addr;
         ssize_t sent = camera_udp_send_packet(
-            socket_fd, s_camera_discovery_packet,
-            sizeof(s_camera_discovery_packet), &destination,
+            socket_fd, discovery_packet.data(), discovery_packet.size(),
+            &destination,
             "LBCS discovery");
-        if (sent < 0 || (size_t)sent != sizeof(s_camera_discovery_packet)) {
+        if (sent < 0 ||
+            static_cast<size_t>(sent) != discovery_packet.size()) {
             close(socket_fd);
             return ESP_FAIL;
         }
