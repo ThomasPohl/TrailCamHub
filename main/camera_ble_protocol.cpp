@@ -15,8 +15,10 @@
 #include "camera_ble_protocol.h"
 #include "camera_wifi.h"
 
+#include "sdkconfig.h"
+
 #ifndef CONFIG_CAMERA_WIFI_ENABLE_PAYLOAD_HEX
-#define CONFIG_CAMERA_WIFI_ENABLE_PAYLOAD_HEX "42545F4B45595F4F4E"
+#error "main/Kconfig.projbuild was not processed"
 #endif
 
 #define WIFI_RESPONSE_HEADER_LEN 8

@@ -15,6 +15,10 @@
 
 #include "system_diagnostics.h"
 
+#ifndef CONFIG_DIAG_MEMORY_LOG_INTERVAL_S
+#error "main/Kconfig.projbuild was not processed"
+#endif
+
 static const char *TAG = "trailcamhub_diag";
 
 static const char *reset_reason_name(esp_reset_reason_t reason)
