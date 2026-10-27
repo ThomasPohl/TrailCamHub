@@ -1,6 +1,8 @@
 /*
  * This module initializes diagnostics, persistent storage, the SD card and
- * the Bluetooth LE stack, then starts the application's camera BLE workflow.
+ * the Bluetooth LE stack, and wires the camera components together:
+ * BLE returns the camera Wi-Fi credentials, the Wi-Fi station joins the
+ * camera network, and the camera link runs a session once it is connected.
  */
 
 #include "esp_bt.h"
@@ -11,11 +13,18 @@
 #include "sdkconfig.h"
 
 #include "camera_ble.h"
+#include "camera_protocol.h"
 #include "camera_wifi.h"
 #include "sd_card.h"
 #include "system_diagnostics.h"
 
 static const char *TAG = "trailcamhub";
+
+static esp_err_t run_camera_session(const esp_ip4_addr_t *gateway)
+{
+    diagnostics_log_memory("camera Wi-Fi connected");
+    return camera_protocol_run(gateway);
+}
 
 extern "C" void app_main(void)
 {
@@ -41,7 +50,7 @@ extern "C" void app_main(void)
 #endif
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
-    ESP_ERROR_CHECK(camera_wifi_init());
+    ESP_ERROR_CHECK(camera_wifi_init(run_camera_session));
     diagnostics_log_memory("Wi-Fi initialized");
     esp_bt_controller_config_t bt_config = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_bt_controller_init(&bt_config));
@@ -49,7 +58,7 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(esp_bluedroid_init());
     ESP_ERROR_CHECK(esp_bluedroid_enable());
 
-    error = camera_ble_start();
+    error = camera_ble_start(camera_wifi_connect);
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "Could not start camera BLE: %s", esp_err_to_name(error));
     }

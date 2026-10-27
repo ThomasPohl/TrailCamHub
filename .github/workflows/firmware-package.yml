@@ -75,7 +75,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq clang-format-18
           clang-format-18 --version
-          clang-format-18 --dry-run --Werror main/*.cpp main/*.h main/*.hpp
+          git ls-files '*.c' '*.cpp' '*.h' '*.hpp' |
+            xargs clang-format-18 --dry-run --Werror
+
+  host-tests:
+    name: Host unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build and run host tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S test/host -B build-host -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-host --parallel
+          ctest --test-dir build-host --output-on-failure
 
   size-report:
     name: Release size report

@@ -553,9 +553,9 @@ static void gattc_event_handler(esp_gattc_cb_event_t event,
     }
 }
 
-esp_err_t camera_ble_start(void)
+esp_err_t camera_ble_start(camera_ble_credentials_cb_t on_credentials)
 {
-    if (!camera_ble_protocol_init()) {
+    if (!camera_ble_protocol_init(on_credentials)) {
         ESP_LOGE(TAG,
                  "Invalid Wi-Fi enable payload; expected up to %u hex bytes",
                  CAMERA_BLE_MAX_COMMAND_LEN);

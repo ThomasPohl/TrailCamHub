@@ -14,6 +14,7 @@
 #include "mbedtls/aes.h"
 #include "lwip/sockets.h"
 
+#include "camera_prelogin.hpp"
 #include "camera_protocol.h"
 #include "camera_udp_transport.h"
 #include "camera_udp_packets.hpp"
@@ -80,20 +81,16 @@ static esp_err_t build_prelogin_request(camera::PreLoginRequest *request)
     if (request == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    char json[96];
     uint8_t plaintext[96];
-    uint8_t nonce[8];
+    uint8_t nonce[camera::kPreLoginNonceSize];
     uint8_t ciphertext[96];
-    size_t ciphertext_len;
+    size_t json_len = 0;
     time_t utc_time = time(NULL);
 
     esp_fill_random(nonce, sizeof(nonce));
-    int json_len = snprintf(
-        json, sizeof(json),
-        "{\"utcTime\":%lld,\"nonce\":\"%02x%02x%02x%02x%02x%02x%02x%02x\"}",
-        (long long)utc_time, nonce[0], nonce[1], nonce[2], nonce[3], nonce[4],
-        nonce[5], nonce[6], nonce[7]);
-    if (json_len < 0 || (size_t)json_len >= sizeof(json)) {
+    size_t ciphertext_len = camera::build_prelogin_plaintext(
+        utc_time, nonce, plaintext, sizeof(plaintext), &json_len);
+    if (ciphertext_len == 0) {
         ESP_LOGE(TAG_CRYPTO, "Could not format PRE_LOGIN JSON payload");
         return ESP_ERR_INVALID_SIZE;
     }
@@ -103,16 +100,12 @@ static esp_err_t build_prelogin_request(camera::PreLoginRequest *request)
                  "PRE_LOGIN timestamp may be rejected",
                  (long long)utc_time);
     }
-
-    size_t padding_len = 16 - ((size_t)json_len % 16);
-    ciphertext_len = (size_t)json_len + padding_len;
     if (ciphertext_len > sizeof(ciphertext) ||
         sizeof(s_prelogin_static_header) + ciphertext_len > UINT16_MAX) {
         ESP_LOGE(TAG_CRYPTO, "PRE_LOGIN payload exceeds packet capacity");
+        memset(plaintext, 0, sizeof(plaintext));
         return ESP_ERR_INVALID_SIZE;
     }
-    memcpy(plaintext, json, (size_t)json_len);
-    memset(plaintext + json_len, (int)padding_len, padding_len);
 
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
