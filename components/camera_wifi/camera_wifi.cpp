@@ -1,3 +1,8 @@
+/*
+ * This module manages the Wi-Fi station that joins the camera access point
+ * and runs a camera session in a worker task each time an IP is obtained.
+ */
+
 #include <stdbool.h>
 #include <string.h>
 
@@ -10,9 +15,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 
-#include "camera_protocol.h"
 #include "camera_wifi.h"
-#include "system_diagnostics.h"
 
 #define WIFI_CONNECT_MAX_RETRIES 5
 #define WIFI_GOT_IP_BIT BIT0
@@ -22,6 +25,7 @@ static EventGroupHandle_t s_wifi_event_group;
 static bool s_wifi_connect_requested;
 static unsigned s_wifi_connect_retries;
 static esp_ip4_addr_t s_camera_gateway;
+static camera_wifi_session_fn_t s_run_session;
 
 static const char *wifi_disconnect_reason_name(uint8_t reason)
 {
@@ -96,7 +100,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                  IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask),
                  IP2STR(&event->ip_info.gw), IP2STR(&s_camera_gateway));
         s_wifi_connect_retries = 0;
-        diagnostics_log_memory("camera Wi-Fi connected");
         xEventGroupSetBits(s_wifi_event_group, WIFI_GOT_IP_BIT);
     }
 }
@@ -107,7 +110,7 @@ static void camera_wifi_worker(void *arg)
     while (true) {
         xEventGroupWaitBits(s_wifi_event_group, WIFI_GOT_IP_BIT, pdTRUE,
                             pdFALSE, portMAX_DELAY);
-        esp_err_t error = camera_protocol_run(&s_camera_gateway);
+        esp_err_t error = s_run_session(&s_camera_gateway);
         if (error != ESP_OK) {
             ESP_LOGW(TAG, "Camera session ended with %s",
                      esp_err_to_name(error));
@@ -115,8 +118,12 @@ static void camera_wifi_worker(void *arg)
     }
 }
 
-esp_err_t camera_wifi_init(void)
+esp_err_t camera_wifi_init(camera_wifi_session_fn_t run_session)
 {
+    if (run_session == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    s_run_session = run_session;
     ESP_RETURN_ON_ERROR(esp_netif_init(), TAG,
                         "Could not initialize network interface");
     ESP_RETURN_ON_ERROR(esp_event_loop_create_default(), TAG,
