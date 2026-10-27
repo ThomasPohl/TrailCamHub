@@ -11,8 +11,5 @@
 /* Creates the controller's queues and timer and initializes camera Wi-Fi. */
 esp_err_t session_controller_init(void);
 
-/*
- * Starts camera BLE and the controller tasks. The Bluetooth controller and
- * Bluedroid must be enabled before.
- */
+/* Prepares camera BLE and starts the controller tasks. */
 esp_err_t session_controller_start(void);

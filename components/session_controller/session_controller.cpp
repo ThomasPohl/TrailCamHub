@@ -179,6 +179,7 @@ void execute(const session::Result &result)
     }
     if (actions & session::kPauseBle) {
         camera_ble_pause();
+        diagnostics_log_memory("BLE activation paused");
     }
     if (actions & session::kStopSession) {
         camera_protocol_request_stop();
@@ -188,6 +189,7 @@ void execute(const session::Result &result)
     }
     if (actions & session::kResumeBle) {
         camera_ble_resume();
+        diagnostics_log_memory("BLE activation resumed");
     }
     if (actions & session::kConnectWifi) {
         esp_err_t error = camera_wifi_connect(s_ssid, s_password);

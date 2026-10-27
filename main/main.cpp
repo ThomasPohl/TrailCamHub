@@ -1,11 +1,9 @@
 /*
- * This module initializes diagnostics, persistent storage, the SD card and
- * the Bluetooth LE stack, then hands over to the session controller, which
- * runs the camera workflow.
+ * This module initializes diagnostics, persistent storage and the SD card,
+ * then hands over to the session controller, which runs the camera workflow.
+ * The BLE stack is started by the camera BLE module when it is needed.
  */
 
-#include "esp_bt.h"
-#include "esp_bt_main.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -40,18 +38,10 @@ extern "C" void app_main(void)
     }
 #endif
 
-    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
     ESP_ERROR_CHECK(session_controller_init());
-    esp_bt_controller_config_t bt_config = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_bt_controller_init(&bt_config));
-    ESP_ERROR_CHECK(esp_bt_controller_enable(ESP_BT_MODE_BLE));
-    ESP_ERROR_CHECK(esp_bluedroid_init());
-    ESP_ERROR_CHECK(esp_bluedroid_enable());
-
     error = session_controller_start();
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "Could not start the session controller: %s",
                  esp_err_to_name(error));
     }
-    diagnostics_log_memory("BLE started");
 }

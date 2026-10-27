@@ -7,6 +7,16 @@ config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
         Payload to write to characteristic 0x0002, separated by optional spaces,
         colons, or hyphens. The default is ASCII "BT_KEY_ON".
 
+config CAMERA_BLE_RELEASE_AFTER_ACTIVATION
+    bool "Release BLE after the camera Wi-Fi was activated"
+    default y
+    help
+        Disconnect from the camera and shut down the NimBLE stack and the
+        Bluetooth controller once the camera has returned its Wi-Fi
+        credentials. This returns their memory for the camera session; BLE
+        is started again for the next activation. Disable this if the
+        camera turns off its access point when the BLE connection ends.
+
 config CAMERA_UDP_LOG_PACKET_HEX
     bool "Log camera UDP packet contents as hex"
     default y
