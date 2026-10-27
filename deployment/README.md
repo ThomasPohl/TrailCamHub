@@ -1,6 +1,6 @@
 # TrailCamHub ESP32-S3 Deployment Package
 
-This archive contains the firmware images for the ESP32-S3 BLE/Wi-Fi proof of concept.
+This archive contains the firmware images for the ESP32-S3 BLE/Wi-Fi proof of concept, built for the Waveshare ESP32-S3-A7670E-4G board (16 MB flash, 8 MB PSRAM).
 
 ## Browser installer
 
@@ -18,12 +18,14 @@ esptool.py --chip esp32s3 --port PORT --baud 460800 write_flash 0x0 trailcamhub-
 
 Replace `PORT` with the board's serial port. On Linux this is commonly `/dev/ttyACM0` or `/dev/ttyUSB0`; on macOS it is commonly `/dev/cu.usbmodem...`; on Windows it is a `COM` port.
 
-The merged image includes the bootloader, partition table, and application. The separate images and `flasher_args.json` are included for workflows that flash components individually. Verify `SHA256SUMS` before flashing.
+The merged image includes the bootloader, partition table, initial OTA data, and application. The separate images (`bootloader.bin`, `partition-table.bin`, `ota_data_initial.bin`, `app.bin`) and their offsets in `flasher_args.json` are included for workflows that flash components individually. Verify `SHA256SUMS` before flashing.
 
 ## PoC behavior
 
 The default CI build first scans for 30 seconds, then connects to up to 16 observed connectable BLE devices in turn and logs their GATT profiles. Non-connectable advertisements are logged but cannot be inspected over GATT. After the survey, it scans for the advertised name `TC100_ED3B` and connects only to that camera. It sends ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) only if the camera's service `0x8801` has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. The payload can be changed or disabled in `menuconfig`. Use this firmware where connecting to nearby BLE devices for inspection is authorized.
 
-After the camera returns Wi-Fi credentials over BLE, the firmware connects to its access point and requests the storage summary over HTTP from `192.168.1.8`. This address and API flow are based on the Dsoon camera investigation and have not yet been verified with this project's target camera. File enumeration and media downloads are not implemented. The single-app partition is 1.5 MB and does not support OTA updates; the board must have at least 2 MB of flash.
+After the camera returns Wi-Fi credentials over BLE, the firmware joins the camera's access point and runs the experimental UDP discovery, PRE_LOGIN, and ARTEMIS heartbeat exchange described in the project README. Login, file enumeration, and media downloads are not implemented.
+
+At boot the firmware logs the reset reason, the available PSRAM, and memory statistics, and mounts a FAT-formatted microSD card at `/sdcard` if one is inserted. The card is never formatted by the firmware. The partition table provides two 4 MB OTA slots and a core dump partition; OTA updates themselves are not implemented yet. The image requires the board's 16 MB flash and octal PSRAM; on hardware without PSRAM it stops during boot.
 
 The firmware logs status over its serial console. Use an authorized camera and review its status before leaving the device unattended.

@@ -17,4 +17,42 @@ config CAMERA_UDP_LOG_PACKET_HEX
         Packet logs use the INFO level and are removed entirely when the
         maximum log level is below INFO, as in the release profile.
 
+config DIAG_MEMORY_LOG_INTERVAL_S
+    int "Memory log interval (seconds)"
+    range 0 3600
+    default 30
+    help
+        Log free and minimum free heap for internal RAM and PSRAM at this
+        interval. Set to 0 to log memory only at fixed workflow stages.
+
+menu "SD card"
+
+config SD_CARD_ENABLE
+    bool "Mount the SD card at boot"
+    default y
+    help
+        Mount the FAT file system of the microSD card at /sdcard using the
+        SDMMC peripheral in 1-bit mode. The card is never formatted
+        automatically.
+
+config SD_CARD_CLK_GPIO
+    int "CLK GPIO"
+    depends on SD_CARD_ENABLE
+    range 0 48
+    default 5
+
+config SD_CARD_CMD_GPIO
+    int "CMD GPIO"
+    depends on SD_CARD_ENABLE
+    range 0 48
+    default 4
+
+config SD_CARD_D0_GPIO
+    int "D0 GPIO"
+    depends on SD_CARD_ENABLE
+    range 0 48
+    default 6
+
+endmenu
+
 endmenu

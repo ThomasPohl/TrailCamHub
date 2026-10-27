@@ -43,13 +43,20 @@ The firmware platform for the initial BLE proof of concept is ESP-IDF. The cloud
 
 ## Hardware and Open Questions
 
-The planned hardware is a board with an **ESP32-S3 and A7670E 4G modem**, identified as `ESP32-S3-A76703-4G-EN`. Before implementation, verify the exact board revision and, in particular:
+The target board is the **Waveshare ESP32-S3-A7670E-4G** development board. According to the [Waveshare documentation](https://docs.waveshare.com/ESP32-S3-A7670E-4G) it provides:
 
-- Pinout and ESP32-S3-to-modem interface, typically UART
-- Power supply and cellular modem peak current requirements
+- ESP32-S3R8 with 512 KB internal SRAM, 8 MB in-package octal PSRAM, and 16 MB external flash
+- A7670E LTE Cat-1/2G modem connected to the **native USB port of the ESP32-S3** (USB host, PPP), not to a UART. Because the ESP32-S3 has a single USB PHY, the firmware console uses UART0 through the board's USB-to-UART bridge. The bridge and the modem's USB share one USB-C port; DIP switches select which one is connected.
+- microSD (TF) slot, wired to the SDMMC peripheral in 1-bit mode (CLK GPIO5, CMD GPIO4, D0 GPIO6, per the Waveshare Arduino examples)
+- 18650 battery holder, solar charging input, and a MAX17048 battery fuel gauge on I2C
+- DIP switches for camera, USB hub, and modem power; GNSS antenna connector; 24-pin camera connector
+
+The firmware configuration (`sdkconfig.defaults`, `partitions.csv`) targets this board: 16 MB flash, octal PSRAM, two 4 MB OTA application slots, a 64 KB core dump partition, and 64 KB NVS. Camera media is intended to be buffered on the SD card. Board revisions V1 and V2 differ in some GPIO assignments (camera and I2C); the SD card pins can be changed in `menuconfig` if a revision differs. Still to verify:
+
+- Board revision, modem power-control GPIOs, and the USB host/PPP setup for the A7670E
+- Power supply and cellular modem peak current requirements on battery
 - Supported LTE bands, SIM format, and antenna connections for the deployment location
 - ESP32-S3 BLE and Wi-Fi capabilities during simultaneous operation
-- Storage capacity for a robust local upload queue
 
 A camera and a cellular subscription are required for testing. Camera credentials and SIM PINs must not be committed to the repository.
 
@@ -77,7 +84,7 @@ The camera Wi-Fi code is split by responsibility: `camera_wifi.cpp` manages the 
 
 After a successful BLE Wi-Fi response, the firmware uses the returned SSID and password to join the camera access point. Credentials are kept in runtime memory only and are not logged or saved to NVS. Once connected, it binds its UDP socket to local port `35281` and sends the `LBCS` discovery packet to the Wi-Fi gateway on ports `40611` and `3333`. For up to 1.5 seconds it waits for a packet longer than four bytes, prefixed with `F1`, from that gateway; the reply's source port is then used for the AES-128-ECB/PKCS#7 encrypted `F9` PRE_LOGIN request containing the current Unix timestamp and a fresh 8-byte nonce. Queued discovery traffic is drained before PRE_LOGIN. After sending PRE_LOGIN, the firmware waits up to one second for an ARTEMIS `F1 D0` DATA packet from the camera, validates its RUDP header and declared length, and sends a matching `F1 D1` ACK using the received sequence number. It then sends the ARTEMIS Hello and two Magic handshake packets. The RUDP session sends heartbeat DATA packets every 1.5 seconds, waits for a matching ACK before sending the next heartbeat, and retransmits the current heartbeat with the same sequence after 800 ms if no matching ACK arrives. Valid DATA packets from the camera are acknowledged immediately. DATA payloads are not decrypted or processed; application login and file retrieval are not implemented. The 28-byte static header, key, request layout, handshake payloads, heartbeat contents, and RUDP DATA/ACK framing follow the experimental [pi_trailcam reference implementation](https://github.com/philibertschlutzki/pi_trailcam/blob/main/main.py); the behavior is not yet verified against this project's target camera. The device clock must be set for the timestamp to be meaningful; firmware currently warns if it appears unset. Serial diagnostics include discovery target, UDP ports, complete hex data for outgoing and received UDP packets, elapsed time, and DATA ACK sequence numbers; Wi-Fi disconnect reasons, RSSI, and BSSID are logged as well. Credentials are never logged.
 
-The firmware uses ESP-IDF's single-app 1.5 MB partition layout to fit the BLE and Wi-Fi implementation; this layout does not support OTA updates and requires at least 2 MB of flash.
+The firmware uses the custom partition table in `partitions.csv` (16 MB flash, two 4 MB OTA slots, core dump partition). OTA update logic itself is not implemented yet. At boot the firmware logs the reset reason, the available PSRAM, whether a core dump from a previous crash is stored (read it with `idf.py coredump-info`), and mounts the SD card at `/sdcard` without ever formatting it; a missing card is not fatal. Free and minimum-ever free heap for internal RAM and PSRAM are logged at boot, after Wi-Fi and BLE start, when the camera Wi-Fi connects, and every 30 seconds (**Memory log interval** in `menuconfig`; 0 disables the periodic log).
 
 Build and flash with ESP-IDF:
 

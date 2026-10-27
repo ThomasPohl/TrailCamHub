@@ -12,6 +12,7 @@
 
 #include "camera_protocol.h"
 #include "camera_wifi.h"
+#include "system_diagnostics.h"
 
 #define WIFI_CONNECT_MAX_RETRIES 5
 #define WIFI_GOT_IP_BIT BIT0
@@ -95,6 +96,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                  IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask),
                  IP2STR(&event->ip_info.gw), IP2STR(&s_camera_gateway));
         s_wifi_connect_retries = 0;
+        diagnostics_log_memory("camera Wi-Fi connected");
         xEventGroupSetBits(s_wifi_event_group, WIFI_GOT_IP_BIT);
     }
 }
