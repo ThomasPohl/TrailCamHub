@@ -29,6 +29,7 @@ add_executable(host_tests
     test_ble_advertising.cpp
     test_ble_wifi_response.cpp
     test_hex_payload.cpp
+    test_pppp_session.cpp
     test_prelogin.cpp
     test_session_fsm.cpp
     test_udp_packets.cpp
@@ -37,6 +38,7 @@ add_executable(host_tests
     ${ble_dir}/hex_payload.cpp
     ${link_dir}/camera_prelogin.cpp
     ${link_dir}/camera_udp_packets.cpp
+    ${link_dir}/pppp_session.cpp
     ${session_dir}/session_fsm.cpp)
 target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir}
                                               ${session_dir})

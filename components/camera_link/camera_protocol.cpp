@@ -19,6 +19,7 @@
 #include "camera_protocol.h"
 #include "camera_udp_transport.h"
 #include "camera_udp_packets.hpp"
+#include "pppp_session.hpp"
 
 #define CAMERA_DISCOVERY_LOCAL_PORT 35281
 #define CAMERA_DISCOVERY_TIMEOUT_MS 1500
@@ -26,7 +27,6 @@
 #define CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS 1000
 #define CAMERA_RUDP_RECEIVE_TIMEOUT_MS 500
 #define CAMERA_RUDP_HEARTBEAT_INTERVAL_MS 1500
-#define CAMERA_RUDP_RETRANSMIT_INTERVAL_MS 800
 
 static const char *TAG = "trailcamhub_protocol";
 static const uint16_t s_camera_discovery_ports[] = {40611, 3333};
@@ -73,8 +73,6 @@ static const uint8_t s_artemis_hello_body[] = {
 // clang-format on
 static esp_ip4_addr_t s_camera_gateway;
 static bool s_camera_gateway_valid;
-// Index of the next DATA packet on channel 0; restarts with each session.
-static uint16_t s_next_data_index;
 // Set by camera_protocol_request_stop(); checked at least every receive
 // timeout (at most CAMERA_RUDP_RECEIVE_TIMEOUT_MS) by the session loops.
 static std::atomic<bool> s_stop_requested;
@@ -160,13 +158,6 @@ static esp_err_t build_prelogin_request(camera::PreLoginRequest *request)
     return ESP_OK;
 }
 
-// DATA packets are numbered consecutively per channel. ACKs and handshake
-// packets do not use an index.
-static uint16_t next_data_index(void)
-{
-    return s_next_data_index++;
-}
-
 // Sets the socket receive timeout. lwIP converts SO_RCVTIMEO to whole
 // milliseconds and treats 0 as "wait forever", so the timeout is rounded up
 // and never shorter than 1 ms.
@@ -216,84 +207,105 @@ static esp_err_t send_udp_request(int socket_fd,
     return ESP_OK;
 }
 
-typedef enum {
-    SESSION_PACKET_UNHANDLED,
-    SESSION_PACKET_HANDLED,
-    SESSION_PACKET_CLOSED,
-} session_packet_result_t;
-
-// Handles packets that keep the P2P session alive independently of the
-// ARTEMIS application data: ALIVE is answered with ALIVE_ACK, CLOSE ends the
-// session, and repeated discovery replies are ignored.
-static session_packet_result_t
-handle_session_packet(int socket_fd, const struct sockaddr_in *camera_address,
-                      const uint8_t *packet, size_t packet_len,
-                      esp_err_t *error)
+// Sends session packets to the camera over the bound UDP socket.
+class UdpTransport final : public camera::pppp::Transport
 {
-    *error = ESP_OK;
-    if (packet_len >= 2 && packet[0] == 0xf1 &&
-        packet[1] ==
-            static_cast<uint8_t>(camera::PacketType::discovery_reply)) {
-        ESP_LOGD(TAG, "Ignoring repeated camera discovery reply");
-        return SESSION_PACKET_HANDLED;
+  public:
+    void set_destination(int socket_fd, const struct sockaddr_in &destination)
+    {
+        socket_fd_ = socket_fd;
+        destination_ = destination;
     }
 
-    camera::PacketType type;
-    if (!camera::parse_control_packet(packet, packet_len, &type)) {
-        return SESSION_PACKET_UNHANDLED;
+    bool send(const uint8_t *data, size_t size, const char *context) override
+    {
+        ssize_t sent = camera_udp_send_packet(socket_fd_, data, size,
+                                              &destination_, context);
+        return sent >= 0 && static_cast<size_t>(sent) == size;
     }
-    switch (type) {
-    case camera::PacketType::alive: {
-        const camera::ControlRequest alive_ack(camera::PacketType::alive_ack);
-        *error =
-            send_udp_request(socket_fd, camera_address, "ALIVE ACK", alive_ack);
-        if (*error == ESP_OK) {
-            ESP_LOGI(TAG, "Answered camera ALIVE");
-        }
-        return SESSION_PACKET_HANDLED;
-    }
-    case camera::PacketType::close:
-        ESP_LOGW(TAG, "Camera closed the session (CLOSE)");
-        return SESSION_PACKET_CLOSED;
-    default:
-        return SESSION_PACKET_UNHANDLED;
+
+  private:
+    int socket_fd_ = -1;
+    struct sockaddr_in destination_ = {};
+};
+
+using SessionEvent = camera::pppp::Session::Event;
+
+static UdpTransport s_transport;
+// Static because it holds the DATA packets awaiting acknowledgement.
+static camera::pppp::Session s_session(s_transport);
+
+static bool from_camera(const struct sockaddr_in *source,
+                        const struct sockaddr_in *camera_address)
+{
+    return source->sin_addr.s_addr == camera_address->sin_addr.s_addr &&
+           source->sin_port == camera_address->sin_port;
+}
+
+static uint32_t read_le32(const uint8_t *bytes)
+{
+    return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
+           ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+}
+
+static void log_received_data(const SessionEvent &event)
+{
+    static const uint8_t kArtemisSignature[] = {'A', 'R', 'T', 'E',
+                                                'M', 'I', 'S', 0};
+    if (event.payload_size >= 20 && memcmp(event.payload, kArtemisSignature,
+                                           sizeof(kArtemisSignature)) == 0) {
+        ESP_LOGI(TAG,
+                 "Received ARTEMIS DATA index %u: message type %lu, "
+                 "sequence %lu, %lu payload bytes",
+                 event.index, (unsigned long)read_le32(event.payload + 8),
+                 (unsigned long)read_le32(event.payload + 12),
+                 (unsigned long)read_le32(event.payload + 16));
+    } else {
+        ESP_LOGI(TAG, "Received DATA index %u (%u bytes)", event.index,
+                 (unsigned)event.payload_size);
     }
 }
 
-static esp_err_t send_data_ack(int socket_fd,
-                               const struct sockaddr_in *camera_address,
-                               uint16_t received_index)
+// Logs session events shared by all phases. Returns true if the camera
+// closed the session.
+static bool log_session_event(const SessionEvent &event, const uint8_t *packet,
+                              size_t packet_len, const char *state)
 {
-    camera::ArtemisAckRequest request;
-    if (!request.build(received_index)) {
-        ESP_LOGE(TAG, "Could not build ARTEMIS DATA ACK request");
-        return ESP_ERR_INVALID_SIZE;
+    switch (event.type) {
+    case SessionEvent::Type::data:
+        log_received_data(event);
+        break;
+    case SessionEvent::Type::duplicate_data:
+        ESP_LOGD(TAG, "Acknowledged repeated DATA index %u", event.index);
+        break;
+    case SessionEvent::Type::ack:
+        ESP_LOGD(TAG, "Camera acknowledged index %u", event.index);
+        break;
+    case SessionEvent::Type::alive:
+        ESP_LOGI(TAG, "Answered camera ALIVE");
+        break;
+    case SessionEvent::Type::close:
+        ESP_LOGW(TAG, "Camera closed the session (CLOSE)");
+        return true;
+    case SessionEvent::Type::discovery_reply:
+        ESP_LOGD(TAG, "Ignoring repeated camera discovery reply");
+        break;
+    case SessionEvent::Type::unhandled:
+        log_ignored_packet(state, packet, packet_len);
+        break;
     }
-    esp_err_t error = send_udp_request(socket_fd, camera_address,
-                                       "ARTEMIS DATA ACK", request);
-    if (error != ESP_OK) {
-        return error;
-    }
-
-    ESP_LOGI(TAG, "ARTEMIS DATA ACK acknowledges received index %u",
-             received_index);
-    return ESP_OK;
+    return false;
 }
 
 static esp_err_t
 send_artemis_handshake(int socket_fd, const struct sockaddr_in *camera_address)
 {
-    camera::ArtemisDataRequest hello_request;
-    uint16_t hello_index = next_data_index();
-    if (!hello_request.build(hello_index, s_artemis_hello_body,
-                             sizeof(s_artemis_hello_body))) {
-        ESP_LOGE(TAG, "Could not build ARTEMIS Hello request");
-        return ESP_ERR_INVALID_SIZE;
-    }
-    esp_err_t error = send_udp_request(socket_fd, camera_address,
-                                       "ARTEMIS Hello", hello_request);
-    if (error != ESP_OK) {
-        return error;
+    uint16_t hello_index = 0;
+    if (!s_session.send_data(s_artemis_hello_body, sizeof(s_artemis_hello_body),
+                             esp_timer_get_time(), "ARTEMIS Hello",
+                             &hello_index)) {
+        ESP_LOGE(TAG, "Could not send ARTEMIS Hello");
+        return ESP_FAIL;
     }
     ESP_LOGI(TAG, "ARTEMIS Hello sent with index %u", hello_index);
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -303,8 +315,8 @@ send_artemis_handshake(int socket_fd, const struct sockaddr_in *camera_address)
         ESP_LOGE(TAG, "Could not build ARTEMIS Magic 1 request");
         return ESP_ERR_INVALID_SIZE;
     }
-    error = send_udp_request(socket_fd, camera_address, "ARTEMIS Magic 1",
-                             magic_one);
+    esp_err_t error = send_udp_request(socket_fd, camera_address,
+                                       "ARTEMIS Magic 1", magic_one);
     if (error != ESP_OK) {
         return error;
     }
@@ -319,69 +331,57 @@ send_artemis_handshake(int socket_fd, const struct sockaddr_in *camera_address)
                             magic_two);
 }
 
+// Keeps the ARTEMIS session alive with heartbeats (one at a time, sent
+// after the previous one was acknowledged) and logs everything received
+// until the camera closes the session or a stop is requested.
 static esp_err_t
 wait_for_artemis_packets(int socket_fd,
                          const struct sockaddr_in *camera_address,
                          int64_t discovery_started_us)
 {
     camera::ArtemisHeartbeatPayload heartbeat;
-    camera::ArtemisDataRequest pending_packet;
-    uint16_t pending_index = 0;
-    bool waiting_for_ack = false;
+    uint16_t heartbeat_index = 0;
+    bool heartbeat_pending = false;
     int64_t last_heartbeat_us = 0;
-    int64_t last_retry_us = 0;
-    ESP_LOGI(TAG, "Starting ARTEMIS heartbeat stop-and-wait loop");
+    const int64_t heartbeat_interval_us =
+        CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL;
+    ESP_LOGI(TAG, "Starting ARTEMIS heartbeat loop");
 
     while (!stop_requested()) {
         int64_t now_us = esp_timer_get_time();
-        if (!waiting_for_ack &&
+        if (!heartbeat_pending &&
             (last_heartbeat_us == 0 ||
-             now_us - last_heartbeat_us >=
-                 CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL)) {
-            const uint8_t *heartbeat_body = heartbeat.next_command();
-            pending_index = next_data_index();
-            if (!pending_packet.build(pending_index, heartbeat_body,
-                                      heartbeat.size())) {
-                ESP_LOGE(TAG, "Could not build ARTEMIS heartbeat request");
-                return ESP_ERR_INVALID_SIZE;
+             now_us - last_heartbeat_us >= heartbeat_interval_us)) {
+            const uint8_t *body = heartbeat.next_command();
+            if (s_session.send_data(body, heartbeat.size(), now_us,
+                                    "ARTEMIS heartbeat", &heartbeat_index)) {
+                heartbeat_pending = true;
+                last_heartbeat_us = now_us;
+                ESP_LOGI(TAG,
+                         "ARTEMIS heartbeat command %u, index %u awaiting ACK",
+                         heartbeat.command_count(), heartbeat_index);
+            } else if (!s_session.transport_failed()) {
+                ESP_LOGW(TAG, "No free DATA slot for the heartbeat");
             }
-            esp_err_t error = send_udp_request(
-                socket_fd, camera_address, "ARTEMIS heartbeat", pending_packet);
-            if (error != ESP_OK) {
-                return error;
-            }
-            waiting_for_ack = true;
-            last_heartbeat_us = now_us;
-            last_retry_us = now_us;
-            ESP_LOGI(TAG,
-                     "ARTEMIS heartbeat command %u, index %u "
-                     "awaiting ACK",
-                     heartbeat.command_count(), pending_index);
-        } else if (waiting_for_ack &&
-                   now_us - last_retry_us >=
-                       CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL) {
-            esp_err_t error = send_udp_request(
-                socket_fd, camera_address, "ARTEMIS heartbeat retransmission",
-                pending_packet);
-            if (error != ESP_OK) {
-                return error;
-            }
-            last_retry_us = now_us;
-            ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat index %u",
-                     pending_index);
+        }
+        size_t retransmitted = s_session.poll(now_us);
+        if (retransmitted > 0) {
+            ESP_LOGW(TAG, "Retransmitted %u unacknowledged DATA packet(s)",
+                     (unsigned)retransmitted);
+        }
+        if (s_session.transport_failed()) {
+            return ESP_FAIL;
         }
 
         // Wake up in time for the next retransmission or heartbeat.
-        int64_t timeout_us = CAMERA_RUDP_RECEIVE_TIMEOUT_MS * 1000LL;
-        int64_t elapsed_us =
-            esp_timer_get_time() -
-            (waiting_for_ack ? last_retry_us : last_heartbeat_us);
-        int64_t interval_us =
-            (waiting_for_ack ? CAMERA_RUDP_RETRANSMIT_INTERVAL_MS
-                             : CAMERA_RUDP_HEARTBEAT_INTERVAL_MS) *
-            1000LL;
-        if (interval_us - elapsed_us < timeout_us) {
-            timeout_us = interval_us - elapsed_us;
+        int64_t timeout_us = s_session.time_until_retransmit_us(
+            now_us, CAMERA_RUDP_RECEIVE_TIMEOUT_MS * 1000LL);
+        if (!heartbeat_pending) {
+            int64_t heartbeat_due_us =
+                heartbeat_interval_us - (now_us - last_heartbeat_us);
+            if (heartbeat_due_us < timeout_us) {
+                timeout_us = heartbeat_due_us;
+            }
         }
         esp_err_t timeout_error =
             set_receive_timeout(socket_fd, timeout_us, "ARTEMIS");
@@ -400,61 +400,27 @@ wait_for_artemis_packets(int socket_fd,
             ESP_LOGE(TAG, "ARTEMIS packet receive failed: errno %d", errno);
             return ESP_FAIL;
         }
-
-        if (source.sin_addr.s_addr != camera_address->sin_addr.s_addr ||
-            source.sin_port != camera_address->sin_port) {
+        if (!from_camera(&source, camera_address)) {
             ESP_LOGW(TAG, "Ignoring UDP packet from unexpected endpoint");
             continue;
         }
-
-        ESP_LOGI(
+        ESP_LOGD(
             TAG, "ARTEMIS packet received +%lld ms since discovery",
             (long long)((esp_timer_get_time() - discovery_started_us) / 1000));
 
-        esp_err_t session_error;
-        session_packet_result_t session_result = handle_session_packet(
-            socket_fd, &source, packet, static_cast<size_t>(received),
-            &session_error);
-        if (session_error != ESP_OK) {
-            return session_error;
+        const SessionEvent event =
+            s_session.handle_packet(packet, static_cast<size_t>(received));
+        if (s_session.transport_failed()) {
+            return ESP_FAIL;
         }
-        if (session_result == SESSION_PACKET_CLOSED) {
+        if (event.type == SessionEvent::Type::ack && heartbeat_pending &&
+            !s_session.is_outstanding(heartbeat_index)) {
+            ESP_LOGI(TAG, "Heartbeat index %u acknowledged", heartbeat_index);
+            heartbeat_pending = false;
+        } else if (log_session_event(event, packet,
+                                     static_cast<size_t>(received),
+                                     "in the ARTEMIS session")) {
             return ESP_ERR_INVALID_STATE;
-        }
-        if (session_result == SESSION_PACKET_HANDLED) {
-            continue;
-        }
-
-        camera::ArtemisRudpPacket received_packet;
-        if (!received_packet.parse(packet, static_cast<size_t>(received))) {
-            log_ignored_packet("in the ARTEMIS session", packet,
-                               static_cast<size_t>(received));
-            continue;
-        }
-
-        if (received_packet.is_data()) {
-            uint16_t received_index = received_packet.index();
-            ESP_LOGI(TAG, "Received ARTEMIS DATA packet, index %u",
-                     received_index);
-            esp_err_t error = send_data_ack(socket_fd, &source, received_index);
-            if (error != ESP_OK) {
-                return error;
-            }
-        } else if (received_packet.is_ack()) {
-            bool acknowledges_pending =
-                waiting_for_ack && received_packet.acknowledges(pending_index);
-            if (acknowledges_pending) {
-                ESP_LOGI(TAG, "Heartbeat index %u acknowledged", pending_index);
-                waiting_for_ack = false;
-            } else {
-                ESP_LOGI(TAG,
-                         "Received ARTEMIS ACK packet not matching "
-                         "pending heartbeat index %u",
-                         pending_index);
-            }
-        } else {
-            log_ignored_packet("in the ARTEMIS session", packet,
-                               static_cast<size_t>(received));
         }
     }
     return ESP_OK;
@@ -470,6 +436,8 @@ static esp_err_t send_prelogin(int socket_fd,
         return error;
     }
 
+    s_transport.set_destination(socket_fd, *camera_address);
+    s_session.reset();
     error = send_udp_request(socket_fd, camera_address,
                              "AES-encrypted PRE_LOGIN", request);
     if (error != ESP_OK) {
@@ -477,6 +445,7 @@ static esp_err_t send_prelogin(int socket_fd,
     }
     int64_t sent_at_us = esp_timer_get_time();
 
+    // Wait for the camera's first DATA packet, which confirms PRE_LOGIN.
     int64_t response_deadline_us =
         sent_at_us + CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS * 1000;
     while (!stop_requested()) {
@@ -500,11 +469,7 @@ static esp_err_t send_prelogin(int socket_fd,
             socket_fd, response, sizeof(response), &source, "PRE_LOGIN");
         if (received < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                ESP_LOGW(TAG,
-                         "No DATA packet received within %u ms after "
-                         "PRE_LOGIN; handshake is not verified",
-                         CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS);
-                return ESP_ERR_TIMEOUT;
+                continue;
             }
             ESP_LOGE(TAG, "PRE_LOGIN response receive failed: errno %d", errno);
             return ESP_FAIL;
@@ -516,49 +481,27 @@ static esp_err_t send_prelogin(int socket_fd,
                  "+%lld ms since discovery",
                  (long long)((received_at_us - sent_at_us) / 1000),
                  (long long)((received_at_us - discovery_started_us) / 1000));
-
-        bool from_camera =
-            source.sin_addr.s_addr == camera_address->sin_addr.s_addr &&
-            source.sin_port == camera_address->sin_port;
-        if (from_camera) {
-            esp_err_t session_error;
-            session_packet_result_t session_result = handle_session_packet(
-                socket_fd, &source, response, static_cast<size_t>(received),
-                &session_error);
-            if (session_error != ESP_OK) {
-                return session_error;
-            }
-            if (session_result == SESSION_PACKET_CLOSED) {
-                return ESP_ERR_INVALID_STATE;
-            }
-            if (session_result == SESSION_PACKET_HANDLED) {
-                continue;
-            }
+        if (!from_camera(&source, camera_address)) {
+            ESP_LOGW(TAG, "Ignoring UDP packet from unexpected endpoint");
+            continue;
         }
-        camera::ArtemisRudpPacket response_packet;
-        if (from_camera &&
-            response_packet.parse(response, static_cast<size_t>(received)) &&
-            response_packet.is_data()) {
-            ESP_LOGI(TAG, "Received ARTEMIS DATA packet, index %u",
-                     response_packet.index());
-            esp_err_t ack_error =
-                send_data_ack(socket_fd, &source, response_packet.index());
-            if (ack_error != ESP_OK) {
-                return ack_error;
-            }
+
+        const SessionEvent event =
+            s_session.handle_packet(response, static_cast<size_t>(received));
+        if (s_session.transport_failed()) {
+            return ESP_FAIL;
+        }
+        if (log_session_event(event, response, static_cast<size_t>(received),
+                              "waiting for the PRE_LOGIN response")) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        if (event.type == SessionEvent::Type::data) {
             error = send_artemis_handshake(socket_fd, &source);
             if (error != ESP_OK) {
                 return error;
             }
             return wait_for_artemis_packets(socket_fd, &source,
                                             discovery_started_us);
-        }
-
-        if (from_camera) {
-            log_ignored_packet("waiting for the PRE_LOGIN response", response,
-                               static_cast<size_t>(received));
-        } else {
-            ESP_LOGW(TAG, "Ignoring UDP packet from unexpected endpoint");
         }
     }
     return ESP_OK;
@@ -682,7 +625,6 @@ esp_err_t camera_protocol_run(const esp_ip4_addr_t *gateway)
     }
     s_camera_gateway = *gateway;
     s_camera_gateway_valid = true;
-    s_next_data_index = 0;
     s_stop_requested = false;
     return discover_camera();
 }
