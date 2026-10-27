@@ -47,18 +47,21 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         const wifi_event_sta_disconnected_t *event =
             (const wifi_event_sta_disconnected_t *)event_data;
-        ESP_LOGW(TAG, "Camera Wi-Fi disconnected: reason %u (%s), RSSI %d dBm, "
+        ESP_LOGW(TAG,
+                 "Camera Wi-Fi disconnected: reason %u (%s), RSSI %d dBm, "
                  "BSSID %02x:%02x:%02x:%02x:%02x:%02x, retry enabled %s",
                  event->reason, wifi_disconnect_reason_name(event->reason),
-                 event->rssi, event->bssid[0], event->bssid[1],
-                 event->bssid[2], event->bssid[3], event->bssid[4],
-                 event->bssid[5], s_wifi_connect_requested ? "yes" : "no");
+                 event->rssi, event->bssid[0], event->bssid[1], event->bssid[2],
+                 event->bssid[3], event->bssid[4], event->bssid[5],
+                 s_wifi_connect_requested ? "yes" : "no");
         if (!s_wifi_connect_requested) {
             return;
         }
         if (s_wifi_connect_retries >= WIFI_CONNECT_MAX_RETRIES) {
-            ESP_LOGE(TAG, "Camera Wi-Fi connection failed after %u retries "
-                     "(reason %d)", WIFI_CONNECT_MAX_RETRIES, event->reason);
+            ESP_LOGE(TAG,
+                     "Camera Wi-Fi connection failed after %u retries "
+                     "(reason %d)",
+                     WIFI_CONNECT_MAX_RETRIES, event->reason);
             s_wifi_connect_requested = false;
             return;
         }
@@ -76,7 +79,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                event_id == WIFI_EVENT_STA_CONNECTED) {
         const wifi_event_sta_connected_t *event =
             (const wifi_event_sta_connected_t *)event_data;
-        ESP_LOGI(TAG, "Associated with camera AP: BSSID "
+        ESP_LOGI(TAG,
+                 "Associated with camera AP: BSSID "
                  "%02x:%02x:%02x:%02x:%02x:%02x, channel %u, auth mode %d",
                  event->bssid[0], event->bssid[1], event->bssid[2],
                  event->bssid[3], event->bssid[4], event->bssid[5],
@@ -135,14 +139,15 @@ esp_err_t camera_wifi_init(void)
     ESP_RETURN_ON_ERROR(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                                    wifi_event_handler, NULL),
                         TAG, "Could not register Wi-Fi event handler");
-    ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT,
+                                                   IP_EVENT_STA_GOT_IP,
                                                    wifi_event_handler, NULL),
                         TAG, "Could not register IP event handler");
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG,
                         "Could not select station mode");
 
-    BaseType_t task_created = xTaskCreate(camera_wifi_worker, "camera_wifi",
-                                          6144, NULL, 5, NULL);
+    BaseType_t task_created =
+        xTaskCreate(camera_wifi_worker, "camera_wifi", 6144, NULL, 5, NULL);
     if (task_created != pdPASS) {
         ESP_LOGE(TAG, "Could not create camera Wi-Fi worker task");
         return ESP_ERR_NO_MEM;
@@ -164,7 +169,8 @@ esp_err_t camera_wifi_connect(const char *ssid, const char *password)
     wifi_config_t wifi_config = {};
     if (ssid_len == 0 || ssid_len > sizeof(wifi_config.sta.ssid) ||
         password_len > sizeof(wifi_config.sta.password)) {
-        ESP_LOGE(TAG, "Camera Wi-Fi credentials exceed supported field lengths");
+        ESP_LOGE(TAG,
+                 "Camera Wi-Fi credentials exceed supported field lengths");
         return ESP_ERR_INVALID_SIZE;
     }
 

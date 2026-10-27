@@ -2,9 +2,11 @@
 
 #include <cstring>
 
-namespace camera {
+namespace camera
+{
 
-namespace {
+namespace
+{
 
 void write_little_endian_u32(std::uint8_t *destination, std::uint32_t value)
 {
@@ -29,8 +31,8 @@ std::size_t CameraDiscoveryRequest::size() const
 bool PreLoginRequest::build(const std::uint8_t *body, std::size_t body_size)
 {
     size_ = 0;
-    if (body == nullptr || body_size == 0 ||
-        body_size > bytes_.size() - 4 || body_size > UINT16_MAX) {
+    if (body == nullptr || body_size == 0 || body_size > bytes_.size() - 4 ||
+        body_size > UINT16_MAX) {
         return false;
     }
     const std::size_t packet_size = body_size + 4;
@@ -96,8 +98,7 @@ bool ArtemisRudpPacket::build(std::uint8_t type, std::uint8_t sequence,
     size_ = 0;
     const std::size_t body_size = payload_size + 4;
     if ((payload_size > 0 && payload == nullptr) ||
-        payload_size > bytes_.size() - kHeaderSize ||
-        body_size > UINT16_MAX) {
+        payload_size > bytes_.size() - kHeaderSize || body_size > UINT16_MAX) {
         return false;
     }
     const std::size_t packet_size = payload_size + kHeaderSize;
@@ -120,15 +121,15 @@ bool ArtemisRudpPacket::build(std::uint8_t type, std::uint8_t sequence,
 bool ArtemisRudpPacket::parse(const std::uint8_t *bytes, std::size_t size)
 {
     size_ = 0;
-    if (bytes == nullptr || size < kHeaderSize ||
-        size > bytes_.size() || bytes[0] != 0xf1) {
+    if (bytes == nullptr || size < kHeaderSize || size > bytes_.size() ||
+        bytes[0] != 0xf1) {
         return false;
     }
 
     const std::size_t body_size =
         (static_cast<std::size_t>(bytes[2]) << 8) | bytes[3];
-    if (body_size < 4 || body_size != size - 4 ||
-        bytes[4] != kAckType || bytes[5] != 0 || bytes[6] != 0) {
+    if (body_size < 4 || body_size != size - 4 || bytes[4] != kAckType ||
+        bytes[5] != 0 || bytes[6] != 0) {
         return false;
     }
 
@@ -152,8 +153,7 @@ bool ArtemisRudpPacket::is_ack() const
     if (payload_size != 2 && payload_size != 4) {
         return false;
     }
-    return bytes_[8] == 0 &&
-           (payload_size == 2 || bytes_[10] == 0);
+    return bytes_[8] == 0 && (payload_size == 2 || bytes_[10] == 0);
 }
 
 bool ArtemisRudpPacket::acknowledges(std::uint8_t sequence) const
@@ -165,8 +165,7 @@ bool ArtemisRudpPacket::acknowledges(std::uint8_t sequence) const
     if (bytes_[8] != 0 || bytes_[9] != sequence) {
         return false;
     }
-    return payload_size == 2 ||
-           (bytes_[10] == 0 && bytes_[11] == sequence);
+    return payload_size == 2 || (bytes_[10] == 0 && bytes_[11] == sequence);
 }
 
 std::uint8_t ArtemisRudpPacket::sequence() const
@@ -195,7 +194,10 @@ bool ArtemisAckRequest::build(std::uint8_t local_sequence,
                               std::uint8_t received_sequence)
 {
     const std::uint8_t payload[kPayloadSize] = {
-        0x00, received_sequence, 0x00, received_sequence,
+        0x00,
+        received_sequence,
+        0x00,
+        received_sequence,
     };
     return ArtemisRudpPacket::build(kAckType, local_sequence, payload,
                                     sizeof(payload));

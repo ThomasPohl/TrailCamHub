@@ -21,7 +21,7 @@
 
 #define WIFI_RESPONSE_HEADER_LEN 8
 #define MAX_WIFI_RESPONSE_JSON_LEN 512
-#define MAX_WIFI_RESPONSE_FRAME_LEN \
+#define MAX_WIFI_RESPONSE_FRAME_LEN                                            \
     (WIFI_RESPONSE_HEADER_LEN + MAX_WIFI_RESPONSE_JSON_LEN)
 #define WIFI_RESPONSE_MAGIC_0 0x13
 #define WIFI_RESPONSE_MAGIC_1 0x57
@@ -53,11 +53,10 @@ static void log_wifi_response_json(const uint8_t *json, size_t json_len,
     cJSON *ssid = cJSON_GetObjectItemCaseSensitive(root, "ssid");
     cJSON *bssid = cJSON_GetObjectItemCaseSensitive(root, "bssid");
     cJSON *password = cJSON_GetObjectItemCaseSensitive(root, "pwd");
-    bool credentials_valid = cJSON_IsNumber(ret) && ret->valuedouble == 0.0 &&
-                             cJSON_IsString(ssid) &&
-                             ssid->valuestring != NULL &&
-                             cJSON_IsString(password) &&
-                             password->valuestring != NULL;
+    bool credentials_valid =
+        cJSON_IsNumber(ret) && ret->valuedouble == 0.0 &&
+        cJSON_IsString(ssid) && ssid->valuestring != NULL &&
+        cJSON_IsString(password) && password->valuestring != NULL;
 
     ESP_LOGI(TAG, "Parsed Wi-Fi response (message_type=0x%04x, %u JSON bytes)",
              message_type, (unsigned)json_len);
@@ -83,15 +82,15 @@ static void log_wifi_response_json(const uint8_t *json, size_t json_len,
     }
 
     if (credentials_valid) {
-        esp_err_t error = camera_wifi_connect(ssid->valuestring,
-                                              password->valuestring);
+        esp_err_t error =
+            camera_wifi_connect(ssid->valuestring, password->valuestring);
         if (error != ESP_OK) {
             ESP_LOGE(TAG, "Could not connect to camera Wi-Fi: %s",
                      esp_err_to_name(error));
         }
     } else {
         ESP_LOGW(TAG, "Camera Wi-Fi credentials are missing or response "
-                 "status is not successful");
+                      "status is not successful");
     }
 
     cJSON_Delete(root);
@@ -125,7 +124,8 @@ static void process_wifi_response_byte(uint8_t byte)
     }
 
     if (s_wifi_response_frame_len >= sizeof(s_wifi_response_frame)) {
-        ESP_LOGE(TAG, "Wi-Fi response frame exceeded its buffer; discarding it");
+        ESP_LOGE(TAG,
+                 "Wi-Fi response frame exceeded its buffer; discarding it");
         reset_wifi_response_frame();
         return;
     }
@@ -143,7 +143,8 @@ static void process_wifi_response_byte(uint8_t byte)
             return;
         }
         s_wifi_response_expected_len = WIFI_RESPONSE_HEADER_LEN + json_len;
-        ESP_LOGI(TAG, "Wi-Fi response frame received; JSON payload is %lu bytes",
+        ESP_LOGI(TAG,
+                 "Wi-Fi response frame received; JSON payload is %lu bytes",
                  (unsigned long)json_len);
     }
 

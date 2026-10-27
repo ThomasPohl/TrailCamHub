@@ -52,10 +52,9 @@ static void log_gatt_uuid(const char *kind, const esp_bt_uuid_t *uuid)
         char formatted[3 * ESP_UUID_LEN_128 + 1];
         size_t formatted_len = 0;
         for (size_t i = 0; i < ESP_UUID_LEN_128; i++) {
-            int written = snprintf(formatted + formatted_len,
-                                   sizeof(formatted) - formatted_len,
-                                   i == 0 ? "%02X" : " %02X",
-                                   uuid->uuid.uuid128[i]);
+            int written = snprintf(
+                formatted + formatted_len, sizeof(formatted) - formatted_len,
+                i == 0 ? "%02X" : " %02X", uuid->uuid.uuid128[i]);
             if (written < 0 ||
                 (size_t)written >= sizeof(formatted) - formatted_len) {
                 ESP_LOGE(TAG, "Could not format GATT UUID");
@@ -79,8 +78,8 @@ static bool is_camera_service(const esp_bt_uuid_t *uuid)
            uuid->uuid.uuid16 == CAMERA_BLE_SERVICE_UUID;
 }
 
-static void queue_characteristic_updates(
-    const esp_gattc_char_elem_t *characteristic)
+static void
+queue_characteristic_updates(const esp_gattc_char_elem_t *characteristic)
 {
     uint16_t config = 0;
 
@@ -118,14 +117,12 @@ void camera_ble_profile_reset(void)
 void camera_ble_profile_set_device_name(const char *device_name)
 {
     snprintf(s_device_name, sizeof(s_device_name), "%s",
-             device_name != NULL && device_name[0] != '\0'
-                 ? device_name
-                 : "unknown");
+             device_name != NULL && device_name[0] != '\0' ? device_name
+                                                           : "unknown");
 }
 
 void camera_ble_profile_add_service(const esp_bt_uuid_t *uuid,
-                                    uint16_t start_handle,
-                                    uint16_t end_handle)
+                                    uint16_t start_handle, uint16_t end_handle)
 {
     log_gatt_uuid("service", uuid);
 
@@ -147,7 +144,8 @@ void camera_ble_profile_add_service(const esp_bt_uuid_t *uuid,
             service->uuid = *uuid;
         } else {
             s_discovered_service_overflow = true;
-            ESP_LOGW(TAG, "More than %u GATT services found; "
+            ESP_LOGW(TAG,
+                     "More than %u GATT services found; "
                      "remaining services cannot be inspected",
                      MAX_DISCOVERED_SERVICES);
         }
@@ -159,8 +157,8 @@ void camera_ble_profile_add_service(const esp_bt_uuid_t *uuid,
         ESP_LOGI(TAG,
                  "Device=\"%s\": found camera service 0x%04x "
                  "(handles %u-%u)",
-                 s_device_name, CAMERA_BLE_SERVICE_UUID,
-                 s_service_start_handle, s_service_end_handle);
+                 s_device_name, CAMERA_BLE_SERVICE_UUID, s_service_start_handle,
+                 s_service_end_handle);
     }
 }
 
@@ -176,17 +174,16 @@ bool camera_ble_profile_discover_characteristics(esp_gatt_if_t gatt_if,
         return false;
     }
 
-    for (size_t service_index = 0;
-         service_index < s_discovered_service_count; service_index++) {
+    for (size_t service_index = 0; service_index < s_discovered_service_count;
+         service_index++) {
         const discovered_service_t *service =
             &s_discovered_services[service_index];
         bool camera_service = is_camera_service(&service->uuid);
         esp_gattc_char_elem_t *characteristics;
         uint16_t count = 0;
         esp_err_t status = esp_ble_gattc_get_attr_count(
-            gatt_if, conn_id, ESP_GATT_DB_CHARACTERISTIC,
-            service->start_handle, service->end_handle,
-            ESP_GATT_INVALID_HANDLE, &count);
+            gatt_if, conn_id, ESP_GATT_DB_CHARACTERISTIC, service->start_handle,
+            service->end_handle, ESP_GATT_INVALID_HANDLE, &count);
 
         if (status != ESP_GATT_OK) {
             ESP_LOGE(TAG,
@@ -251,8 +248,7 @@ bool camera_ble_profile_discover_characteristics(esp_gatt_if_t gatt_if,
                 characteristics[i].uuid.len != ESP_UUID_LEN_16) {
                 continue;
             }
-            if (characteristics[i].uuid.uuid.uuid16 ==
-                    WIFI_CONTROL_CHAR_UUID &&
+            if (characteristics[i].uuid.uuid.uuid16 == WIFI_CONTROL_CHAR_UUID &&
                 (characteristics[i].properties &
                  (ESP_GATT_CHAR_PROP_BIT_WRITE |
                   ESP_GATT_CHAR_PROP_BIT_WRITE_NR)) != 0) {
