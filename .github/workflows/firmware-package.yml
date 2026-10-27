@@ -17,7 +17,7 @@ jobs:
   build:
     name: Build ESP32-S3 deployment package
     runs-on: ubuntu-latest
-    container: espressif/idf:release-v5.3
+    container: espressif/idf:v5.3.6
     env:
       IDF_PATH: /opt/esp/idf
     steps:
@@ -44,7 +44,7 @@ jobs:
           cp build/trailcamhub-esp32s3-merged.bin "$package_dir/trailcamhub-esp32s3.bin"
           cp build/flasher_args.json "$package_dir/flasher_args.json"
           cp deployment/README.md "$package_dir/README.md"
-          printf 'Git commit: %s\nESP-IDF: release-v5.3\nTarget: esp32s3\n' \
+          printf 'Git commit: %s\nESP-IDF: v5.3.6\nTarget: esp32s3\n' \
             "$GITHUB_SHA" > "$package_dir/BUILD_INFO.txt"
           (
             cd dist
@@ -59,6 +59,51 @@ jobs:
           path: dist/trailcamhub-esp32s3.tar.gz
           if-no-files-found: error
           retention-days: 30
+
+  format:
+    name: Check C/C++ formatting
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run clang-format 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-format-18
+          clang-format-18 --version
+          clang-format-18 --dry-run --Werror main/*.cpp main/*.h main/*.hpp
+
+  size-report:
+    name: Release size report
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.3.6
+    env:
+      IDF_PATH: /opt/esp/idf
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          path: head
+
+      - name: Check out pull request base
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Build release profile and report size
+        shell: bash
+        run: |
+          source "$IDF_PATH/export.sh"
+          if [[ -d base ]]; then
+            head/.github/scripts/size-report.sh head base
+          else
+            head/.github/scripts/size-report.sh head
+          fi
 
   deploy-installer:
     name: Deploy web installer
