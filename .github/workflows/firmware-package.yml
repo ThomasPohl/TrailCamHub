@@ -41,6 +41,7 @@ jobs:
           cp build/trailcamhub_ble_poc.bin "$package_dir/app.bin"
           cp build/bootloader/bootloader.bin "$package_dir/bootloader.bin"
           cp build/partition_table/partition-table.bin "$package_dir/partition-table.bin"
+          cp build/ota_data_initial.bin "$package_dir/ota_data_initial.bin"
           cp build/trailcamhub-esp32s3-merged.bin "$package_dir/trailcamhub-esp32s3.bin"
           cp build/flasher_args.json "$package_dir/flasher_args.json"
           cp deployment/README.md "$package_dir/README.md"
