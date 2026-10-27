@@ -28,6 +28,7 @@ add_executable(host_tests
     test_main.cpp
     test_ble_advertising.cpp
     test_ble_wifi_response.cpp
+    test_gatt_profile.cpp
     test_hex_payload.cpp
     test_pppp_session.cpp
     test_prelogin.cpp
@@ -35,6 +36,7 @@ add_executable(host_tests
     test_udp_packets.cpp
     ${ble_dir}/ble_advertising.cpp
     ${ble_dir}/ble_wifi_response.cpp
+    ${ble_dir}/gatt_profile.cpp
     ${ble_dir}/hex_payload.cpp
     ${link_dir}/camera_prelogin.cpp
     ${link_dir}/camera_udp_packets.cpp
