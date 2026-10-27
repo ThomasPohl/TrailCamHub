@@ -1,0 +1,21 @@
+# C/C++ formatting rules for the firmware sources. Checked in CI with
+# clang-format 18; run `clang-format -i main/*.cpp main/*.h main/*.hpp`.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 80
+BreakBeforeBraces: Linux
+PointerAlignment: Right
+IndentCaseLabels: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AlignAfterOpenBracket: Align
+AlignConsecutiveMacros: false
+AlignTrailingComments: true
+SpacesBeforeTrailingComments: 2
+FixNamespaceComments: true
+NamespaceIndentation: None
+SortIncludes: Never
+IncludeBlocks: Preserve
+Cpp11BracedListStyle: true

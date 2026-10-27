@@ -9,8 +9,7 @@
 void camera_ble_profile_reset(void);
 void camera_ble_profile_set_device_name(const char *device_name);
 void camera_ble_profile_add_service(const esp_bt_uuid_t *uuid,
-                                    uint16_t start_handle,
-                                    uint16_t end_handle);
+                                    uint16_t start_handle, uint16_t end_handle);
 bool camera_ble_profile_discover_characteristics(esp_gatt_if_t gatt_if,
                                                  uint16_t conn_id);
 uint16_t camera_ble_profile_service_start_handle(void);

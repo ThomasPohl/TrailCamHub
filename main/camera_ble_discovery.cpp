@@ -25,8 +25,8 @@ static bool name_matches_camera_allowlist(const uint8_t *name, size_t name_len)
         return false;
     }
 
-    for (size_t i = 0;
-         i < sizeof(s_camera_name_allowlist) / sizeof(s_camera_name_allowlist[0]);
+    for (size_t i = 0; i < sizeof(s_camera_name_allowlist) /
+                               sizeof(s_camera_name_allowlist[0]);
          i++) {
         const char *allowed_name = s_camera_name_allowlist[i];
         size_t allowed_name_len = strlen(allowed_name);
@@ -40,8 +40,7 @@ static bool name_matches_camera_allowlist(const uint8_t *name, size_t name_len)
 }
 
 static bool advertisement_contains_uuid16(const uint8_t *adv_data,
-                                          size_t adv_len,
-                                          uint16_t target_uuid)
+                                          size_t adv_len, uint16_t target_uuid)
 {
     for (size_t offset = 0; offset < adv_len;) {
         uint8_t field_len = adv_data[offset];
@@ -76,8 +75,7 @@ bool camera_ble_is_connectable_advertisement(esp_ble_evt_type_t event_type)
            event_type == ESP_BLE_EVT_CONN_DIR_ADV;
 }
 
-bool camera_ble_is_candidate_advertisement(
-    esp_ble_gap_cb_param_t *param)
+bool camera_ble_is_candidate_advertisement(esp_ble_gap_cb_param_t *param)
 {
     uint8_t name_len = 0;
     const uint8_t *name = esp_ble_resolve_adv_data(
