@@ -1,3 +1,4 @@
+#include <atomic>
 #include <stdbool.h>
 #include <errno.h>
 #include <stdio.h>
@@ -74,6 +75,18 @@ static esp_ip4_addr_t s_camera_gateway;
 static bool s_camera_gateway_valid;
 // Index of the next DATA packet on channel 0; restarts with each session.
 static uint16_t s_next_data_index;
+// Set by camera_protocol_request_stop(); checked at least every receive
+// timeout (at most CAMERA_RUDP_RECEIVE_TIMEOUT_MS) by the session loops.
+static std::atomic<bool> s_stop_requested;
+
+static bool stop_requested(void)
+{
+    if (!s_stop_requested.load()) {
+        return false;
+    }
+    ESP_LOGI(TAG, "Camera session stop requested");
+    return true;
+}
 
 static esp_err_t build_prelogin_request(camera::PreLoginRequest *request)
 {
@@ -319,7 +332,7 @@ wait_for_artemis_packets(int socket_fd,
     int64_t last_retry_us = 0;
     ESP_LOGI(TAG, "Starting ARTEMIS heartbeat stop-and-wait loop");
 
-    while (true) {
+    while (!stop_requested()) {
         int64_t now_us = esp_timer_get_time();
         if (!waiting_for_ack &&
             (last_heartbeat_us == 0 ||
@@ -444,6 +457,7 @@ wait_for_artemis_packets(int socket_fd,
                                static_cast<size_t>(received));
         }
     }
+    return ESP_OK;
 }
 
 static esp_err_t send_prelogin(int socket_fd,
@@ -465,7 +479,7 @@ static esp_err_t send_prelogin(int socket_fd,
 
     int64_t response_deadline_us =
         sent_at_us + CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS * 1000;
-    while (true) {
+    while (!stop_requested()) {
         int64_t remaining_us = response_deadline_us - esp_timer_get_time();
         if (remaining_us <= 0) {
             ESP_LOGW(TAG,
@@ -547,6 +561,7 @@ static esp_err_t send_prelogin(int socket_fd,
             ESP_LOGW(TAG, "Ignoring UDP packet from unexpected endpoint");
         }
     }
+    return ESP_OK;
 }
 
 static esp_err_t discover_camera(void)
@@ -610,8 +625,9 @@ static esp_err_t discover_camera(void)
         }
     }
 
-    while ((esp_timer_get_time() - discovery_started_us) / 1000 <
-           CAMERA_DISCOVERY_TIMEOUT_MS) {
+    while (!stop_requested() &&
+           (esp_timer_get_time() - discovery_started_us) / 1000 <
+               CAMERA_DISCOVERY_TIMEOUT_MS) {
         uint8_t response[256];
         struct sockaddr_in source = {};
         ssize_t received = camera_udp_receive_packet(
@@ -647,6 +663,9 @@ static esp_err_t discover_camera(void)
     }
 
     close(socket_fd);
+    if (s_stop_requested.load()) {
+        return ESP_OK;
+    }
     ESP_LOGW(TAG,
              "No matching camera discovery response after %lld ms "
              "(target " IPSTR ", source UDP port %u)",
@@ -664,5 +683,11 @@ esp_err_t camera_protocol_run(const esp_ip4_addr_t *gateway)
     s_camera_gateway = *gateway;
     s_camera_gateway_valid = true;
     s_next_data_index = 0;
+    s_stop_requested = false;
     return discover_camera();
+}
+
+void camera_protocol_request_stop(void)
+{
+    s_stop_requested = true;
 }

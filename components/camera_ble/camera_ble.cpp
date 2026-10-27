@@ -15,6 +15,9 @@
 #include "esp_gatt_common_api.h"
 #include "esp_gattc_api.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
 #include "camera_ble.h"
 #include "camera_ble_discovery.h"
 #include "camera_ble_profile.h"
@@ -54,6 +57,28 @@ static esp_ble_addr_type_t s_camera_address_type;
 static bool s_device_selected;
 static bool s_write_with_response;
 static size_t s_notification_index;
+// Protects the state above: GAP/GATT callbacks run in the Bluetooth task,
+// pause/resume are called from the session controller.
+static SemaphoreHandle_t s_lock;
+// While false, no scan is started and no camera is connected.
+static bool s_activation_enabled;
+// Scan parameters have been accepted by the stack.
+static bool s_scan_ready;
+
+class BleLock
+{
+  public:
+    BleLock()
+    {
+        xSemaphoreTakeRecursive(s_lock, portMAX_DELAY);
+    }
+    ~BleLock()
+    {
+        xSemaphoreGiveRecursive(s_lock);
+    }
+    BleLock(const BleLock &) = delete;
+    BleLock &operator=(const BleLock &) = delete;
+};
 
 static void log_hex_data(const char *label, const uint8_t *data, size_t length)
 {
@@ -142,6 +167,12 @@ static void get_ble_device_name(esp_ble_gap_cb_param_t *param, char *name,
 
 static void start_scan(void)
 {
+    if (!s_activation_enabled || !s_scan_ready) {
+        ESP_LOGD(TAG, "Not scanning: activation %s, scan %s",
+                 s_activation_enabled ? "enabled" : "paused",
+                 s_scan_ready ? "ready" : "not configured");
+        return;
+    }
     if (s_scan_state != BLE_SCAN_STOPPED) {
         ESP_LOGD(TAG, "Ignoring scan request while scan state is %d",
                  s_scan_state);
@@ -261,6 +292,9 @@ static void start_next_characteristic_subscription(void)
 
 static void select_target_camera(esp_ble_gap_cb_param_t *param)
 {
+    if (!s_activation_enabled) {
+        return;
+    }
     if (!camera_ble_is_connectable_advertisement(
             param->scan_rst.ble_evt_type)) {
         ESP_LOGD(TAG, "Ignoring non-connectable camera advertisement");
@@ -358,8 +392,10 @@ static void find_control_characteristic(void)
 static void gap_event_handler(esp_gap_ble_cb_event_t event,
                               esp_ble_gap_cb_param_t *param)
 {
+    BleLock lock;
     switch (event) {
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT:
+        s_scan_ready = true;
         start_scan();
         break;
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
@@ -383,8 +419,10 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event,
             }
         } else if (param->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_CMPL_EVT) {
             s_scan_state = BLE_SCAN_STOPPED;
-            ESP_LOGI(TAG, "%s not found; restarting scan",
-                     CAMERA_BLE_TARGET_NAME);
+            if (s_activation_enabled) {
+                ESP_LOGI(TAG, "%s not found; restarting scan",
+                         CAMERA_BLE_TARGET_NAME);
+            }
             start_scan();
         }
         break;
@@ -424,6 +462,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event,
                                 esp_gatt_if_t gattc_if,
                                 esp_ble_gattc_cb_param_t *param)
 {
+    BleLock lock;
     switch (event) {
     case ESP_GATTC_REG_EVT:
         if (param->reg.status != ESP_GATT_OK) {
@@ -454,6 +493,10 @@ static void gattc_event_handler(esp_gattc_cb_event_t event,
             s_connection_active = false;
             s_device_selected = false;
             start_scan();
+            break;
+        }
+        if (!s_activation_enabled) {
+            disconnect_current_device("BLE activation was paused");
             break;
         }
         esp_err_t search_error =
@@ -545,7 +588,9 @@ static void gattc_event_handler(esp_gattc_cb_event_t event,
         s_connection_active = false;
         s_device_selected = false;
         clear_device_profile();
-        ESP_LOGI(TAG, "Restarting scan for %s", CAMERA_BLE_TARGET_NAME);
+        if (s_activation_enabled) {
+            ESP_LOGI(TAG, "Restarting scan for %s", CAMERA_BLE_TARGET_NAME);
+        }
         start_scan();
         break;
     default:
@@ -555,6 +600,11 @@ static void gattc_event_handler(esp_gattc_cb_event_t event,
 
 esp_err_t camera_ble_start(camera_ble_credentials_cb_t on_credentials)
 {
+    s_lock = xSemaphoreCreateRecursiveMutex();
+    if (s_lock == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    s_activation_enabled = false;
     if (!camera_ble_protocol_init(on_credentials)) {
         ESP_LOGE(TAG,
                  "Invalid Wi-Fi enable payload; expected up to %u hex bytes",
@@ -562,7 +612,7 @@ esp_err_t camera_ble_start(camera_ble_credentials_cb_t on_credentials)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(TAG, "Starting BLE camera scan; target camera is %s",
+    ESP_LOGI(TAG, "BLE camera activation ready; target camera is %s",
              CAMERA_BLE_TARGET_NAME);
     size_t command_len;
     camera_ble_protocol_command(&command_len);
@@ -576,4 +626,43 @@ esp_err_t camera_ble_start(camera_ble_credentials_cb_t on_credentials)
     ESP_RETURN_ON_ERROR(esp_ble_gattc_register_callback(gattc_event_handler),
                         TAG, "Could not register BLE GATT client callback");
     return esp_ble_gattc_app_register(0);
+}
+
+void camera_ble_resume(void)
+{
+    BleLock lock;
+    if (s_activation_enabled) {
+        return;
+    }
+    s_activation_enabled = true;
+    ESP_LOGI(TAG, "BLE camera activation resumed");
+    if (s_connection_active) {
+        // Reconnect so the Wi-Fi-enable command is sent again.
+        disconnect_current_device("Restarting camera activation");
+    } else if (!s_connection_open_pending) {
+        start_scan();
+    }
+}
+
+void camera_ble_pause(void)
+{
+    BleLock lock;
+    if (!s_activation_enabled) {
+        return;
+    }
+    s_activation_enabled = false;
+    ESP_LOGI(TAG, "BLE camera activation paused; an existing camera "
+                  "connection is kept");
+    if (s_scan_state == BLE_SCAN_STOPPING) {
+        s_device_selected = false;
+    } else if (s_scan_state == BLE_SCAN_ACTIVE) {
+        s_device_selected = false;
+        s_scan_state = BLE_SCAN_STOPPING;
+        esp_err_t error = esp_ble_gap_stop_scanning();
+        if (error != ESP_OK) {
+            ESP_LOGW(TAG, "Could not stop BLE scan: %s",
+                     esp_err_to_name(error));
+            s_scan_state = BLE_SCAN_ACTIVE;
+        }
+    }
 }

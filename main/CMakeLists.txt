@@ -1,3 +1,3 @@
 idf_component_register(SRCS "main.cpp"
-                       PRIV_REQUIRES bt nvs_flash camera_ble camera_link
-                                     camera_wifi diagnostics sd_storage)
+                       PRIV_REQUIRES bt diagnostics nvs_flash sd_storage
+                                     session_controller)

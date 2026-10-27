@@ -25,6 +25,33 @@ config DIAG_MEMORY_LOG_INTERVAL_S
         Log free and minimum free heap for internal RAM and PSRAM at this
         interval. Set to 0 to log memory only at fixed workflow stages.
 
+menu "Session"
+
+config SESSION_WIFI_JOIN_TIMEOUT_S
+    int "Camera Wi-Fi join timeout (seconds)"
+    range 5 300
+    default 30
+    help
+        Time allowed for joining the camera access point after the camera
+        returned its Wi-Fi credentials. On timeout the controller backs off
+        and activates the camera over BLE again.
+
+config SESSION_RETRY_DELAY_MIN_S
+    int "Minimum retry delay (seconds)"
+    range 1 3600
+    default 5
+    help
+        Delay before the first retry after a failed Wi-Fi join or an ended
+        camera session. The delay doubles with each further failure up to
+        the maximum and is reset when a camera session is reached.
+
+config SESSION_RETRY_DELAY_MAX_S
+    int "Maximum retry delay (seconds)"
+    range 1 3600
+    default 60
+
+endmenu
+
 menu "SD card"
 
 config SD_CARD_ENABLE
