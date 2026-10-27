@@ -25,11 +25,23 @@ build_release() {
     if [[ ! -f $defaults ]]; then
         defaults="$head_dir/sdkconfig.defaults.release"
     fi
-    idf.py -C "$project" -B "$project/build-release" \
+    if ! idf.py -C "$project" -B "$project/build-release" \
         -D IDF_TARGET=esp32s3 \
         -D SDKCONFIG="$project/build-release/sdkconfig" \
         -D SDKCONFIG_DEFAULTS="$project/sdkconfig.defaults;$defaults" \
-        build 2>&1 | tee "$project/build-release.log"
+        build 2>&1 | tee "$project/build-release.log"; then
+        report_build_errors "$project/build-release.log"
+        return 1
+    fi
+}
+
+# Turns the first compiler and linker errors into workflow annotations so
+# they are visible without opening the job log.
+report_build_errors() {
+    grep -E "error:|undefined reference|FAILED:" "$1" | head -n 15 |
+        while IFS= read -r line; do
+            echo "::error::${line//$'\n'/ }"
+        done || true
 }
 
 # Prints the free space of the smallest app partition in percent, as reported
