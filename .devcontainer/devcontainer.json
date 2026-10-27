@@ -1,6 +1,6 @@
 {
   "name": "TrailCamHub ESP-IDF",
-  "image": "espressif/idf:release-v5.3",
+  "image": "espressif/idf:v5.3.6",
   "workspaceMount": "source=${localWorkspaceFolder},target=/project,type=bind,consistency=cached",
   "workspaceFolder": "/project",
   "remoteUser": "root",
