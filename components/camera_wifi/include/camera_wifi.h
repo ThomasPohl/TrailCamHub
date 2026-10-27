@@ -1,20 +1,31 @@
 #pragma once
 
+#include <stdint.h>
+
 #include "esp_err.h"
 #include "esp_netif.h"
 
 /*
- * Runs one camera session after the station obtained an IP address. Called
- * from the camera Wi-Fi worker task; `gateway` is the camera's address.
+ * Notifications from the Wi-Fi station. They are called from the default
+ * event loop task and must return quickly.
  */
-typedef esp_err_t (*camera_wifi_session_fn_t)(const esp_ip4_addr_t *gateway);
+typedef struct {
+    /* The camera network was joined; `gateway` is the camera's address. */
+    void (*on_connected)(const esp_ip4_addr_t *gateway);
+    /* An established connection was lost unexpectedly. */
+    void (*on_disconnected)(uint8_t reason);
+    /* Joining failed after all retries. */
+    void (*on_failed)(uint8_t reason);
+} camera_wifi_callbacks_t;
+
+/* Initializes the Wi-Fi station; credentials are kept in RAM only. */
+esp_err_t camera_wifi_init(const camera_wifi_callbacks_t *callbacks);
 
 /*
- * Initializes the Wi-Fi station (credentials kept in RAM only) and starts the
- * worker task that calls `run_session` each time the camera network is
- * joined.
+ * Joins the camera access point. Failed attempts are retried a few times
+ * before on_failed is reported.
  */
-esp_err_t camera_wifi_init(camera_wifi_session_fn_t run_session);
-
-/* Joins the camera access point with the credentials returned over BLE. */
 esp_err_t camera_wifi_connect(const char *ssid, const char *password);
+
+/* Leaves the camera network without retrying. */
+esp_err_t camera_wifi_disconnect(void);
