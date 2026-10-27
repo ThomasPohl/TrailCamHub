@@ -209,6 +209,50 @@ static esp_err_t send_udp_request(int socket_fd,
     return ESP_OK;
 }
 
+typedef enum {
+    SESSION_PACKET_UNHANDLED,
+    SESSION_PACKET_HANDLED,
+    SESSION_PACKET_CLOSED,
+} session_packet_result_t;
+
+// Handles packets that keep the P2P session alive independently of the
+// ARTEMIS application data: ALIVE is answered with ALIVE_ACK, CLOSE ends the
+// session, and repeated discovery replies are ignored.
+static session_packet_result_t
+handle_session_packet(int socket_fd, const struct sockaddr_in *camera_address,
+                      const uint8_t *packet, size_t packet_len,
+                      esp_err_t *error)
+{
+    *error = ESP_OK;
+    if (packet_len >= 2 && packet[0] == 0xf1 &&
+        packet[1] ==
+            static_cast<uint8_t>(camera::PacketType::discovery_reply)) {
+        ESP_LOGD(TAG, "Ignoring repeated camera discovery reply");
+        return SESSION_PACKET_HANDLED;
+    }
+
+    camera::PacketType type;
+    if (!camera::parse_control_packet(packet, packet_len, &type)) {
+        return SESSION_PACKET_UNHANDLED;
+    }
+    switch (type) {
+    case camera::PacketType::alive: {
+        const camera::ControlRequest alive_ack(camera::PacketType::alive_ack);
+        *error =
+            send_udp_request(socket_fd, camera_address, "ALIVE ACK", alive_ack);
+        if (*error == ESP_OK) {
+            ESP_LOGI(TAG, "Answered camera ALIVE");
+        }
+        return SESSION_PACKET_HANDLED;
+    }
+    case camera::PacketType::close:
+        ESP_LOGW(TAG, "Camera closed the session (CLOSE)");
+        return SESSION_PACKET_CLOSED;
+    default:
+        return SESSION_PACKET_UNHANDLED;
+    }
+}
+
 static esp_err_t send_data_ack(int socket_fd,
                                const struct sockaddr_in *camera_address,
                                uint8_t received_sequence)
@@ -363,6 +407,20 @@ wait_for_artemis_packets(int socket_fd,
             TAG, "ARTEMIS packet received +%lld ms since discovery",
             (long long)((esp_timer_get_time() - discovery_started_us) / 1000));
 
+        esp_err_t session_error;
+        session_packet_result_t session_result = handle_session_packet(
+            socket_fd, &source, packet, static_cast<size_t>(received),
+            &session_error);
+        if (session_error != ESP_OK) {
+            return session_error;
+        }
+        if (session_result == SESSION_PACKET_CLOSED) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        if (session_result == SESSION_PACKET_HANDLED) {
+            continue;
+        }
+
         camera::ArtemisRudpPacket received_packet;
         if (!received_packet.parse(packet, static_cast<size_t>(received))) {
             log_ignored_packet("in the ARTEMIS session", packet,
@@ -460,6 +518,21 @@ static esp_err_t send_prelogin(int socket_fd,
         bool from_camera =
             source.sin_addr.s_addr == camera_address->sin_addr.s_addr &&
             source.sin_port == camera_address->sin_port;
+        if (from_camera) {
+            esp_err_t session_error;
+            session_packet_result_t session_result = handle_session_packet(
+                socket_fd, &source, response, static_cast<size_t>(received),
+                &session_error);
+            if (session_error != ESP_OK) {
+                return session_error;
+            }
+            if (session_result == SESSION_PACKET_CLOSED) {
+                return ESP_ERR_INVALID_STATE;
+            }
+            if (session_result == SESSION_PACKET_HANDLED) {
+                continue;
+            }
+        }
         camera::ArtemisRudpPacket response_packet;
         if (from_camera &&
             response_packet.parse(response, static_cast<size_t>(received)) &&

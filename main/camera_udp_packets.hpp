@@ -16,6 +16,37 @@ class UdpRequest
     virtual std::size_t size() const = 0;
 };
 
+// Packet types in the second byte of camera UDP packets (first byte 0xF1).
+// The framing follows the PPPP/CS2 P2P protocol.
+enum class PacketType : std::uint8_t {
+    discovery_request = 0x41,
+    discovery_reply = 0x42,
+    data = 0xd0,
+    data_ack = 0xd1,
+    alive = 0xe0,
+    alive_ack = 0xe1,
+    close = 0xf0,
+    pre_login = 0xf9,
+};
+
+// Returns true and sets `type` if `bytes` is a 4-byte control packet
+// (F1 <type> 00 00) without payload, such as ALIVE or CLOSE.
+bool parse_control_packet(const std::uint8_t *bytes, std::size_t size,
+                          PacketType *type);
+
+// Control packet without payload: F1 <type> 00 00.
+class ControlRequest final : public UdpRequest
+{
+  public:
+    explicit ControlRequest(PacketType type);
+
+    const std::uint8_t *data() const override;
+    std::size_t size() const override;
+
+  private:
+    std::array<std::uint8_t, 4> bytes_{};
+};
+
 class CameraDiscoveryRequest final : public UdpRequest
 {
   public:
