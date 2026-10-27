@@ -109,7 +109,7 @@ static void camera_wifi_worker(void *arg)
                             pdFALSE, portMAX_DELAY);
         esp_err_t error = camera_protocol_run(&s_camera_gateway);
         if (error != ESP_OK) {
-            ESP_LOGW(TAG, "Camera discovery/PRE_LOGIN stage ended with %s",
+            ESP_LOGW(TAG, "Camera session ended with %s",
                      esp_err_to_name(error));
         }
     }

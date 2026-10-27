@@ -18,6 +18,32 @@ void write_little_endian_u32(std::uint8_t *destination, std::uint32_t value)
 
 }  // namespace
 
+bool parse_control_packet(const std::uint8_t *bytes, std::size_t size,
+                          PacketType *type)
+{
+    if (bytes == nullptr || type == nullptr || size != 4 || bytes[0] != 0xf1 ||
+        bytes[2] != 0 || bytes[3] != 0) {
+        return false;
+    }
+    *type = static_cast<PacketType>(bytes[1]);
+    return true;
+}
+
+ControlRequest::ControlRequest(PacketType type)
+    : bytes_{0xf1, static_cast<std::uint8_t>(type), 0x00, 0x00}
+{
+}
+
+const std::uint8_t *ControlRequest::data() const
+{
+    return bytes_.data();
+}
+
+std::size_t ControlRequest::size() const
+{
+    return bytes_.size();
+}
+
 const std::uint8_t *CameraDiscoveryRequest::data() const
 {
     return kBytes.data();
