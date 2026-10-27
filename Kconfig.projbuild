@@ -7,4 +7,14 @@ config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
         Payload to write to characteristic 0x0002, separated by optional spaces,
         colons, or hyphens. The default is ASCII "BT_KEY_ON".
 
+config CAMERA_UDP_LOG_PACKET_HEX
+    bool "Log camera UDP packet contents as hex"
+    default y
+    help
+        Log the complete contents of every camera UDP packet that is sent or
+        received, in addition to the one-line packet summary. Useful while
+        investigating the camera protocol; disable it to reduce serial output.
+        Packet logs use the INFO level and are removed entirely when the
+        maximum log level is below INFO, as in the release profile.
+
 endmenu

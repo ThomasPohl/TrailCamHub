@@ -1,0 +1,22 @@
+# Release profile, applied on top of sdkconfig.defaults:
+#
+#   idf.py -B build-release \
+#       -D IDF_TARGET=esp32s3 \
+#       -D SDKCONFIG=build-release/sdkconfig \
+#       -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.release" \
+#       build
+#
+# Optimizes for binary size. Informational and debug log statements are
+# removed at compile time, so the release image only reports warnings and
+# errors on the serial console.
+
+# Compiler
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+
+# Logging
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=y
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+CONFIG_BT_STACK_NO_LOG=y
+# CONFIG_CAMERA_UDP_LOG_PACKET_HEX is not set

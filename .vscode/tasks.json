@@ -17,6 +17,20 @@
         "kind": "build",
         "isDefault": true
       }
+    },
+    {
+      "label": "ESP-IDF: Build release firmware and show size",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source \"$IDF_PATH/export.sh\" >/dev/null && idf.py -B build-release -D IDF_TARGET=esp32s3 -D SDKCONFIG=build-release/sdkconfig -D SDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.defaults.release' build size"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "group": "build"
     }
   ]
 }
