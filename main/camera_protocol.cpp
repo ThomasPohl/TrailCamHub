@@ -160,6 +160,42 @@ static uint8_t next_rudp_sequence(void)
     return sequence;
 }
 
+// Sets the socket receive timeout. lwIP converts SO_RCVTIMEO to whole
+// milliseconds and treats 0 as "wait forever", so the timeout is rounded up
+// and never shorter than 1 ms.
+static esp_err_t set_receive_timeout(int socket_fd, int64_t timeout_us,
+                                     const char *context)
+{
+    int64_t timeout_ms = (timeout_us + 999) / 1000;
+    if (timeout_ms < 1) {
+        timeout_ms = 1;
+    }
+    struct timeval timeout = {};
+    timeout.tv_sec = static_cast<decltype(timeout.tv_sec)>(timeout_ms / 1000);
+    timeout.tv_usec =
+        static_cast<decltype(timeout.tv_usec)>((timeout_ms % 1000) * 1000);
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                   sizeof(timeout)) < 0) {
+        ESP_LOGE(TAG, "Could not set %s receive timeout: errno %d", context,
+                 errno);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+// Logs a packet that is not handled in the current state, naming its type.
+static void log_ignored_packet(const char *state, const uint8_t *packet,
+                               size_t packet_len)
+{
+    if (packet_len >= 2 && packet[0] == 0xf1) {
+        ESP_LOGW(TAG, "Ignoring %u-byte packet type 0x%02X while %s",
+                 (unsigned)packet_len, packet[1], state);
+    } else {
+        ESP_LOGW(TAG, "Ignoring %u-byte packet without F1 prefix while %s",
+                 (unsigned)packet_len, state);
+    }
+}
+
 static esp_err_t send_udp_request(int socket_fd,
                                   const struct sockaddr_in *destination,
                                   const char *request_name,
@@ -287,32 +323,22 @@ wait_for_artemis_packets(int socket_fd,
                      pending_sequence);
         }
 
-        struct timeval receive_timeout = {
-            .tv_sec = 0,
-            .tv_usec = CAMERA_RUDP_RECEIVE_TIMEOUT_MS * 1000,
-        };
-        if (waiting_for_ack) {
-            int64_t retry_remaining_us =
-                CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL -
-                (esp_timer_get_time() - last_retry_us);
-            if (retry_remaining_us < receive_timeout.tv_usec) {
-                receive_timeout.tv_usec =
-                    retry_remaining_us > 0 ? retry_remaining_us : 1;
-            }
-        } else if (last_heartbeat_us != 0) {
-            int64_t heartbeat_remaining_us =
-                CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL -
-                (esp_timer_get_time() - last_heartbeat_us);
-            if (heartbeat_remaining_us < receive_timeout.tv_usec) {
-                receive_timeout.tv_usec =
-                    heartbeat_remaining_us > 0 ? heartbeat_remaining_us : 1;
-            }
+        // Wake up in time for the next retransmission or heartbeat.
+        int64_t timeout_us = CAMERA_RUDP_RECEIVE_TIMEOUT_MS * 1000LL;
+        int64_t elapsed_us =
+            esp_timer_get_time() -
+            (waiting_for_ack ? last_retry_us : last_heartbeat_us);
+        int64_t interval_us =
+            (waiting_for_ack ? CAMERA_RUDP_RETRANSMIT_INTERVAL_MS
+                             : CAMERA_RUDP_HEARTBEAT_INTERVAL_MS) *
+            1000LL;
+        if (interval_us - elapsed_us < timeout_us) {
+            timeout_us = interval_us - elapsed_us;
         }
-        if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout,
-                       sizeof(receive_timeout)) < 0) {
-            ESP_LOGE(TAG, "Could not set ARTEMIS receive timeout: errno %d",
-                     errno);
-            return ESP_FAIL;
+        esp_err_t timeout_error =
+            set_receive_timeout(socket_fd, timeout_us, "ARTEMIS");
+        if (timeout_error != ESP_OK) {
+            return timeout_error;
         }
 
         uint8_t packet[512];
@@ -339,7 +365,8 @@ wait_for_artemis_packets(int socket_fd,
 
         camera::ArtemisRudpPacket received_packet;
         if (!received_packet.parse(packet, static_cast<size_t>(received))) {
-            ESP_LOGW(TAG, "Ignoring malformed ARTEMIS packet");
+            log_ignored_packet("in the ARTEMIS session", packet,
+                               static_cast<size_t>(received));
             continue;
         }
 
@@ -367,7 +394,8 @@ wait_for_artemis_packets(int socket_fd,
                          pending_sequence);
             }
         } else {
-            ESP_LOGW(TAG, "Ignoring unrecognized ARTEMIS packet");
+            log_ignored_packet("in the ARTEMIS session", packet,
+                               static_cast<size_t>(received));
         }
     }
 }
@@ -389,17 +417,6 @@ static esp_err_t send_prelogin(int socket_fd,
     }
     int64_t sent_at_us = esp_timer_get_time();
 
-    struct timeval response_timeout = {
-        .tv_sec = CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS / 1000,
-        .tv_usec = (CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS % 1000) * 1000,
-    };
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &response_timeout,
-                   sizeof(response_timeout)) < 0) {
-        ESP_LOGE(TAG, "Could not set PRE_LOGIN response timeout: errno %d",
-                 errno);
-        return ESP_FAIL;
-    }
-
     int64_t response_deadline_us =
         sent_at_us + CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS * 1000;
     while (true) {
@@ -412,18 +429,9 @@ static esp_err_t send_prelogin(int socket_fd,
             return ESP_ERR_TIMEOUT;
         }
 
-        struct timeval response_timeout = {};
-        response_timeout.tv_sec =
-            static_cast<decltype(response_timeout.tv_sec)>(remaining_us /
-                                                           1000000);
-        response_timeout.tv_usec =
-            static_cast<decltype(response_timeout.tv_usec)>(remaining_us %
-                                                            1000000);
-        if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &response_timeout,
-                       sizeof(response_timeout)) < 0) {
-            ESP_LOGE(TAG, "Could not set PRE_LOGIN response timeout: errno %d",
-                     errno);
-            return ESP_FAIL;
+        error = set_receive_timeout(socket_fd, remaining_us, "PRE_LOGIN");
+        if (error != ESP_OK) {
+            return error;
         }
 
         uint8_t response[256];
@@ -471,8 +479,12 @@ static esp_err_t send_prelogin(int socket_fd,
                                             discovery_started_us);
         }
 
-        ESP_LOGW(TAG, "Ignoring non-DATA UDP packet while waiting for "
-                      "PRE_LOGIN response");
+        if (from_camera) {
+            log_ignored_packet("waiting for the PRE_LOGIN response", response,
+                               static_cast<size_t>(received));
+        } else {
+            ESP_LOGW(TAG, "Ignoring UDP packet from unexpected endpoint");
+        }
     }
 }
 
@@ -507,14 +519,9 @@ static esp_err_t discover_camera(void)
         return ESP_FAIL;
     }
 
-    struct timeval receive_timeout = {
-        .tv_sec = CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS / 1000,
-        .tv_usec = (CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS % 1000) * 1000,
-    };
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout,
-                   sizeof(receive_timeout)) < 0) {
-        ESP_LOGE(TAG, "Could not set camera discovery timeout: errno %d",
-                 errno);
+    if (set_receive_timeout(socket_fd,
+                            CAMERA_DISCOVERY_RECEIVE_TIMEOUT_MS * 1000LL,
+                            "camera discovery") != ESP_OK) {
         close(socket_fd);
         return ESP_FAIL;
     }
