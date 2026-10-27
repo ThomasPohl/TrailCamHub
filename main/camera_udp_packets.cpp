@@ -117,7 +117,7 @@ std::size_t ArtemisCommandRequest::size() const
     return size_;
 }
 
-bool ArtemisRudpPacket::build(std::uint8_t type, std::uint8_t sequence,
+bool ArtemisRudpPacket::build(std::uint8_t type, std::uint16_t header_word,
                               const std::uint8_t *payload,
                               std::size_t payload_size)
 {
@@ -134,9 +134,9 @@ bool ArtemisRudpPacket::build(std::uint8_t type, std::uint8_t sequence,
     bytes_[2] = static_cast<std::uint8_t>(body_size >> 8);
     bytes_[3] = static_cast<std::uint8_t>(body_size);
     bytes_[4] = kAckType;
-    bytes_[5] = 0;
-    bytes_[6] = 0;
-    bytes_[7] = sequence;
+    bytes_[5] = kChannel;
+    bytes_[6] = static_cast<std::uint8_t>(header_word >> 8);
+    bytes_[7] = static_cast<std::uint8_t>(header_word);
     if (payload_size > 0) {
         std::memcpy(bytes_.data() + kHeaderSize, payload, payload_size);
     }
@@ -155,13 +155,18 @@ bool ArtemisRudpPacket::parse(const std::uint8_t *bytes, std::size_t size)
     const std::size_t body_size =
         (static_cast<std::size_t>(bytes[2]) << 8) | bytes[3];
     if (body_size < 4 || body_size != size - 4 || bytes[4] != kAckType ||
-        bytes[5] != 0 || bytes[6] != 0) {
+        bytes[5] != kChannel) {
         return false;
     }
 
     std::memcpy(bytes_.data(), bytes, size);
     size_ = size;
     return true;
+}
+
+std::uint16_t ArtemisRudpPacket::header_word() const
+{
+    return static_cast<std::uint16_t>((bytes_[6] << 8) | bytes_[7]);
 }
 
 bool ArtemisRudpPacket::is_data() const
@@ -171,32 +176,33 @@ bool ArtemisRudpPacket::is_data() const
 
 bool ArtemisRudpPacket::is_ack() const
 {
-    if (size_ < 10 || bytes_[1] != kAckType) {
+    if (size_ < kHeaderSize + 2 || bytes_[1] != kAckType) {
         return false;
     }
-
-    const std::size_t payload_size = size_ - kHeaderSize;
-    if (payload_size != 2 && payload_size != 4) {
-        return false;
-    }
-    return bytes_[8] == 0 && (payload_size == 2 || bytes_[10] == 0);
+    const std::size_t count = header_word();
+    return count > 0 && size_ - kHeaderSize == count * 2;
 }
 
-bool ArtemisRudpPacket::acknowledges(std::uint8_t sequence) const
+std::uint16_t ArtemisRudpPacket::index() const
 {
-    if (!is_ack()) {
-        return false;
-    }
-    const std::size_t payload_size = size_ - kHeaderSize;
-    if (bytes_[8] != 0 || bytes_[9] != sequence) {
-        return false;
-    }
-    return payload_size == 2 || (bytes_[10] == 0 && bytes_[11] == sequence);
+    return header_word();
 }
 
-std::uint8_t ArtemisRudpPacket::sequence() const
+std::uint16_t ArtemisRudpPacket::ack_count() const
 {
-    return bytes_[7];
+    return is_ack() ? header_word() : 0;
+}
+
+bool ArtemisRudpPacket::acknowledges(std::uint16_t index) const
+{
+    const std::size_t count = ack_count();
+    for (std::size_t i = 0; i < count; i++) {
+        const std::uint8_t *entry = bytes_.data() + kHeaderSize + i * 2;
+        if (static_cast<std::uint16_t>((entry[0] << 8) | entry[1]) == index) {
+            return true;
+        }
+    }
+    return false;
 }
 
 const std::uint8_t *ArtemisRudpPacket::data() const
@@ -209,27 +215,22 @@ std::size_t ArtemisRudpPacket::size() const
     return size_;
 }
 
-bool ArtemisDataRequest::build(std::uint8_t sequence,
-                               const std::uint8_t *payload,
+bool ArtemisDataRequest::build(std::uint16_t index, const std::uint8_t *payload,
                                std::size_t payload_size)
 {
-    return ArtemisRudpPacket::build(kDataType, sequence, payload, payload_size);
+    return ArtemisRudpPacket::build(kDataType, index, payload, payload_size);
 }
 
-bool ArtemisAckRequest::build(std::uint8_t local_sequence,
-                              std::uint8_t received_sequence)
+bool ArtemisAckRequest::build(std::uint16_t received_index)
 {
-    const std::uint8_t payload[kPayloadSize] = {
-        0x00,
-        received_sequence,
-        0x00,
-        received_sequence,
+    const std::uint8_t payload[] = {
+        static_cast<std::uint8_t>(received_index >> 8),
+        static_cast<std::uint8_t>(received_index),
     };
-    return ArtemisRudpPacket::build(kAckType, local_sequence, payload,
-                                    sizeof(payload));
+    return ArtemisRudpPacket::build(kAckType, 1, payload, sizeof(payload));
 }
 
-bool ArtemisMagicRequest::build(std::uint8_t sequence, Stage stage)
+bool ArtemisMagicRequest::build(Stage stage)
 {
     static constexpr std::uint8_t kFirstPayload[] = {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -237,10 +238,10 @@ bool ArtemisMagicRequest::build(std::uint8_t sequence, Stage stage)
     static constexpr std::uint8_t kSecondPayload[] = {0x00, 0x00};
     switch (stage) {
     case Stage::first:
-        return ArtemisRudpPacket::build(kAckType, sequence, kFirstPayload,
+        return ArtemisRudpPacket::build(kAckType, 3, kFirstPayload,
                                         sizeof(kFirstPayload));
     case Stage::second:
-        return ArtemisRudpPacket::build(kAckType, sequence, kSecondPayload,
+        return ArtemisRudpPacket::build(kAckType, 4, kSecondPayload,
                                         sizeof(kSecondPayload));
     }
     return false;
