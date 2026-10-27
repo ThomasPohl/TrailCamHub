@@ -106,8 +106,21 @@ The firmware is split into ESP-IDF components with explicit dependencies:
 | `components/camera_link` | Camera session over UDP: discovery, PRE_LOGIN, PPPP/ARTEMIS packets, ALIVE, heartbeats |
 | `components/sd_storage` | microSD card mount |
 | `components/diagnostics` | Reset reason, core dump status, and heap statistics |
+| `components/session_controller` | Session state machine and the task that drives the camera workflow |
 
-Components do not call each other directly; `main` connects them through callbacks (BLE credentials → Wi-Fi connect, Wi-Fi connected → camera session). Project options are defined in `main/Kconfig.projbuild` and appear in `menuconfig` under **TrailCamHub PoC**.
+Components do not call each other directly. They report events through callbacks to the session controller, which runs them in one task:
+
+```mermaid
+stateDiagram-v2
+    [*] --> BLE_ACTIVATION: start
+    BLE_ACTIVATION --> WIFI_JOIN: credentials received
+    WIFI_JOIN --> SESSION: Wi-Fi connected
+    WIFI_JOIN --> BACKOFF: join timeout / Wi-Fi failed
+    SESSION --> BACKOFF: session ended (camera CLOSE, error, Wi-Fi lost)
+    BACKOFF --> BLE_ACTIVATION: retry delay elapsed
+```
+
+BLE activation is paused while joining the camera Wi-Fi and during the session; the BLE connection to the camera stays open, and credentials that arrive later are ignored. After a failure the controller leaves the camera network, waits, and activates the camera over BLE again. The retry delay starts at 5 seconds and doubles up to 60 seconds; it is reset once a session is reached. The Wi-Fi join timeout (30 seconds) and the retry delays are configurable in `menuconfig` under **TrailCamHub PoC → Session**. The pure state machine (`session_fsm.cpp`) is covered by host tests. Project options are defined in `main/Kconfig.projbuild` and appear in `menuconfig` under **TrailCamHub PoC**.
 
 #### Host tests
 

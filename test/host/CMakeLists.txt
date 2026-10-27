@@ -22,6 +22,7 @@ FetchContent_MakeAvailable(doctest)
 set(repo_root ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 set(ble_dir ${repo_root}/components/camera_ble)
 set(link_dir ${repo_root}/components/camera_link)
+set(session_dir ${repo_root}/components/session_controller)
 
 add_executable(host_tests
     test_main.cpp
@@ -29,13 +30,16 @@ add_executable(host_tests
     test_ble_wifi_response.cpp
     test_hex_payload.cpp
     test_prelogin.cpp
+    test_session_fsm.cpp
     test_udp_packets.cpp
     ${ble_dir}/ble_advertising.cpp
     ${ble_dir}/ble_wifi_response.cpp
     ${ble_dir}/hex_payload.cpp
     ${link_dir}/camera_prelogin.cpp
-    ${link_dir}/camera_udp_packets.cpp)
-target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir})
+    ${link_dir}/camera_udp_packets.cpp
+    ${session_dir}/session_fsm.cpp)
+target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir}
+                                              ${session_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
 target_compile_options(host_tests PRIVATE -Wall -Wextra -Werror)
 
