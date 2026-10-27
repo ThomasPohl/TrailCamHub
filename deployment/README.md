@@ -22,7 +22,7 @@ The merged image includes the bootloader, partition table, initial OTA data, and
 
 ## PoC behavior
 
-The default CI build first scans for 30 seconds, then connects to up to 16 observed connectable BLE devices in turn and logs their GATT profiles. Non-connectable advertisements are logged but cannot be inspected over GATT. After the survey, it scans for the advertised name `TC100_ED3B` and connects only to that camera. It sends ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) only if the camera's service `0x8801` has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. The payload can be changed or disabled in `menuconfig`. Use this firmware where connecting to nearby BLE devices for inspection is authorized.
+The default CI build scans for a camera advertising the name `TC100_ED3B` or service UUID `0x8801` and connects only to that camera. It sends ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) only if the camera's service `0x8801` has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. The payload can be changed or disabled in `menuconfig`. Use this firmware only with a camera you are authorized to access.
 
 After the camera returns Wi-Fi credentials over BLE, the firmware joins the camera's access point and runs the experimental UDP discovery, PRE_LOGIN, and ARTEMIS heartbeat exchange described in the project README. Login, file enumeration, and media downloads are not implemented.
 
