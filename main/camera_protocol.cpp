@@ -71,7 +71,8 @@ static const uint8_t s_artemis_hello_body[] = {
 // clang-format on
 static esp_ip4_addr_t s_camera_gateway;
 static bool s_camera_gateway_valid;
-static uint8_t s_camera_rudp_sequence;
+// Index of the next DATA packet on channel 0; restarts with each session.
+static uint16_t s_next_data_index;
 
 static esp_err_t build_prelogin_request(camera::PreLoginRequest *request)
 {
@@ -153,11 +154,11 @@ static esp_err_t build_prelogin_request(camera::PreLoginRequest *request)
     return ESP_OK;
 }
 
-static uint8_t next_rudp_sequence(void)
+// DATA packets are numbered consecutively per channel. ACKs and handshake
+// packets do not use an index.
+static uint16_t next_data_index(void)
 {
-    uint8_t sequence = (uint8_t)(s_camera_rudp_sequence % 254 + 1);
-    s_camera_rudp_sequence = sequence;
-    return sequence;
+    return s_next_data_index++;
 }
 
 // Sets the socket receive timeout. lwIP converts SO_RCVTIMEO to whole
@@ -255,11 +256,10 @@ handle_session_packet(int socket_fd, const struct sockaddr_in *camera_address,
 
 static esp_err_t send_data_ack(int socket_fd,
                                const struct sockaddr_in *camera_address,
-                               uint8_t received_sequence)
+                               uint16_t received_index)
 {
     camera::ArtemisAckRequest request;
-    uint8_t sequence = next_rudp_sequence();
-    if (!request.build(sequence, received_sequence)) {
+    if (!request.build(received_index)) {
         ESP_LOGE(TAG, "Could not build ARTEMIS DATA ACK request");
         return ESP_ERR_INVALID_SIZE;
     }
@@ -269,10 +269,8 @@ static esp_err_t send_data_ack(int socket_fd,
         return error;
     }
 
-    ESP_LOGI(TAG,
-             "ARTEMIS DATA ACK acknowledges received sequence %u "
-             "using local sequence %u",
-             received_sequence, sequence);
+    ESP_LOGI(TAG, "ARTEMIS DATA ACK acknowledges received index %u",
+             received_index);
     return ESP_OK;
 }
 
@@ -280,7 +278,8 @@ static esp_err_t
 send_artemis_handshake(int socket_fd, const struct sockaddr_in *camera_address)
 {
     camera::ArtemisDataRequest hello_request;
-    if (!hello_request.build(next_rudp_sequence(), s_artemis_hello_body,
+    uint16_t hello_index = next_data_index();
+    if (!hello_request.build(hello_index, s_artemis_hello_body,
                              sizeof(s_artemis_hello_body))) {
         ESP_LOGE(TAG, "Could not build ARTEMIS Hello request");
         return ESP_ERR_INVALID_SIZE;
@@ -290,11 +289,11 @@ send_artemis_handshake(int socket_fd, const struct sockaddr_in *camera_address)
     if (error != ESP_OK) {
         return error;
     }
+    ESP_LOGI(TAG, "ARTEMIS Hello sent with index %u", hello_index);
     vTaskDelay(pdMS_TO_TICKS(50));
 
     camera::ArtemisMagicRequest magic_one;
-    if (!magic_one.build(next_rudp_sequence(),
-                         camera::ArtemisMagicRequest::Stage::first)) {
+    if (!magic_one.build(camera::ArtemisMagicRequest::Stage::first)) {
         ESP_LOGE(TAG, "Could not build ARTEMIS Magic 1 request");
         return ESP_ERR_INVALID_SIZE;
     }
@@ -306,8 +305,7 @@ send_artemis_handshake(int socket_fd, const struct sockaddr_in *camera_address)
     vTaskDelay(pdMS_TO_TICKS(20));
 
     camera::ArtemisMagicRequest magic_two;
-    if (!magic_two.build(next_rudp_sequence(),
-                         camera::ArtemisMagicRequest::Stage::second)) {
+    if (!magic_two.build(camera::ArtemisMagicRequest::Stage::second)) {
         ESP_LOGE(TAG, "Could not build ARTEMIS Magic 2 request");
         return ESP_ERR_INVALID_SIZE;
     }
@@ -322,7 +320,7 @@ wait_for_artemis_packets(int socket_fd,
 {
     camera::ArtemisHeartbeatPayload heartbeat;
     camera::ArtemisDataRequest pending_packet;
-    uint8_t pending_sequence = 0;
+    uint16_t pending_index = 0;
     bool waiting_for_ack = false;
     int64_t last_heartbeat_us = 0;
     int64_t last_retry_us = 0;
@@ -335,8 +333,8 @@ wait_for_artemis_packets(int socket_fd,
              now_us - last_heartbeat_us >=
                  CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL)) {
             const uint8_t *heartbeat_body = heartbeat.next_command();
-            pending_sequence = next_rudp_sequence();
-            if (!pending_packet.build(pending_sequence, heartbeat_body,
+            pending_index = next_data_index();
+            if (!pending_packet.build(pending_index, heartbeat_body,
                                       heartbeat.size())) {
                 ESP_LOGE(TAG, "Could not build ARTEMIS heartbeat request");
                 return ESP_ERR_INVALID_SIZE;
@@ -350,9 +348,9 @@ wait_for_artemis_packets(int socket_fd,
             last_heartbeat_us = now_us;
             last_retry_us = now_us;
             ESP_LOGI(TAG,
-                     "ARTEMIS heartbeat command %u, sequence %u "
+                     "ARTEMIS heartbeat command %u, index %u "
                      "awaiting ACK",
-                     heartbeat.command_count(), pending_sequence);
+                     heartbeat.command_count(), pending_index);
         } else if (waiting_for_ack &&
                    now_us - last_retry_us >=
                        CAMERA_RUDP_RETRANSMIT_INTERVAL_MS * 1000LL) {
@@ -363,8 +361,8 @@ wait_for_artemis_packets(int socket_fd,
                 return error;
             }
             last_retry_us = now_us;
-            ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat sequence %u",
-                     pending_sequence);
+            ESP_LOGW(TAG, "Retransmitted ARTEMIS heartbeat index %u",
+                     pending_index);
         }
 
         // Wake up in time for the next retransmission or heartbeat.
@@ -429,27 +427,24 @@ wait_for_artemis_packets(int socket_fd,
         }
 
         if (received_packet.is_data()) {
-            uint8_t received_sequence = received_packet.sequence();
-            ESP_LOGI(TAG, "Received ARTEMIS DATA packet, sequence %u",
-                     received_sequence);
-            esp_err_t error =
-                send_data_ack(socket_fd, &source, received_sequence);
+            uint16_t received_index = received_packet.index();
+            ESP_LOGI(TAG, "Received ARTEMIS DATA packet, index %u",
+                     received_index);
+            esp_err_t error = send_data_ack(socket_fd, &source, received_index);
             if (error != ESP_OK) {
                 return error;
             }
         } else if (received_packet.is_ack()) {
             bool acknowledges_pending =
-                waiting_for_ack &&
-                received_packet.acknowledges(pending_sequence);
+                waiting_for_ack && received_packet.acknowledges(pending_index);
             if (acknowledges_pending) {
-                ESP_LOGI(TAG, "Heartbeat sequence %u acknowledged",
-                         pending_sequence);
+                ESP_LOGI(TAG, "Heartbeat index %u acknowledged", pending_index);
                 waiting_for_ack = false;
             } else {
                 ESP_LOGI(TAG,
                          "Received ARTEMIS ACK packet not matching "
-                         "pending heartbeat sequence %u",
-                         pending_sequence);
+                         "pending heartbeat index %u",
+                         pending_index);
             }
         } else {
             log_ignored_packet("in the ARTEMIS session", packet,
@@ -537,10 +532,10 @@ static esp_err_t send_prelogin(int socket_fd,
         if (from_camera &&
             response_packet.parse(response, static_cast<size_t>(received)) &&
             response_packet.is_data()) {
-            ESP_LOGI(TAG, "Received ARTEMIS DATA packet, sequence %u",
-                     response_packet.sequence());
+            ESP_LOGI(TAG, "Received ARTEMIS DATA packet, index %u",
+                     response_packet.index());
             esp_err_t ack_error =
-                send_data_ack(socket_fd, &source, response_packet.sequence());
+                send_data_ack(socket_fd, &source, response_packet.index());
             if (ack_error != ESP_OK) {
                 return ack_error;
             }
@@ -675,5 +670,6 @@ esp_err_t camera_protocol_run(const esp_ip4_addr_t *gateway)
     }
     s_camera_gateway = *gateway;
     s_camera_gateway_valid = true;
+    s_next_data_index = 0;
     return discover_camera();
 }
