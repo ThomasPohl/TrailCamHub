@@ -250,6 +250,7 @@ static bool s_logged_in;
 static int64_t s_token;
 static bool s_devinfo_requested;
 static bool s_media_requested;
+static bool s_thumbnail_requested;
 static uint32_t s_next_command_seq;
 
 static bool from_camera(const struct sockaddr_in *source,
@@ -447,6 +448,20 @@ static void process_artemis_response(const SessionEvent &event)
                          "  first item: dir %lld num %lld id %lld time %lld",
                          (long long)first.dir_num, (long long)first.num,
                          (long long)first.id, (long long)first.time);
+                // Recon: ask for the first item's thumbnail (cmdId 772) so we
+                // can observe the bulk data channel (D0/D1 subtype 0x04) on
+                // hardware. The reply streams back as binary records that the
+                // bulk transport (not yet implemented) will reassemble.
+                if (!s_thumbnail_requested) {
+                    s_thumbnail_requested = true;
+                    const std::string extra =
+                        ",\"thumbnailReqs\":[{\"fileType\":" +
+                        std::to_string(first.file_type) +
+                        ",\"dirNum\":" + std::to_string(first.dir_num) +
+                        ",\"mediaNum\":" + std::to_string(first.num) + "}]";
+                    send_artemis_command(772, extra.c_str(),
+                                         "ARTEMIS GetThumbnail");
+                }
             }
         } else {
             ESP_LOGW(TAG, "Media-list response had no mediaFiles array");
@@ -481,6 +496,7 @@ wait_for_artemis_packets(int socket_fd,
     s_token = 0;
     s_devinfo_requested = false;
     s_media_requested = false;
+    s_thumbnail_requested = false;
     s_next_command_seq = 2;
     ESP_LOGI(TAG, "Starting ARTEMIS heartbeat loop");
 
@@ -546,6 +562,26 @@ wait_for_artemis_packets(int socket_fd,
         ESP_LOGD(
             TAG, "ARTEMIS packet received +%lld ms since discovery",
             (long long)((esp_timer_get_time() - discovery_started_us) / 1000));
+
+        // Recon: the bulk data channel uses D0/D1 frames on a non-zero
+        // subtype (0x03 photo, 0x04 thumbnail). The session's parser rejects
+        // those (it only accepts subtype 0), so log them here before they are
+        // dropped: subtype, 16-bit sequence, lengths, and a hex dump of the
+        // first payload bytes (ARTEMIS header + 72-byte media header + start
+        // of the JPEG). This confirms the framing against the reference.
+        if (received >= 8 && packet[0] == 0xf1 && packet[1] == 0xd0 &&
+            packet[4] == 0xd1 && packet[5] != 0x00) {
+            const unsigned subtype = packet[5];
+            const unsigned seq16 = (packet[6] << 8) | packet[7];
+            const unsigned body_len = (packet[2] << 8) | packet[3];
+            const size_t payload_len = static_cast<size_t>(received) - 8;
+            ESP_LOGI(TAG,
+                     "BULK frame: subtype 0x%02x seq %u body_len %u "
+                     "payload %u bytes",
+                     subtype, seq16, body_len, (unsigned)payload_len);
+            const size_t dump = payload_len < 128 ? payload_len : 128;
+            ESP_LOG_BUFFER_HEX(TAG, packet + 8, dump);
+        }
 
         const SessionEvent event =
             s_session.handle_packet(packet, static_cast<size_t>(received));
