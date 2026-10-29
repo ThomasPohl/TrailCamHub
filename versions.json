@@ -1,0 +1,15 @@
+{
+  "builds": [
+    {
+      "id": "20261029-062803-a22f976",
+      "date": "2026-10-29T06:28:03Z",
+      "commit": "a22f976",
+      "branch": "feature/thumbnails-to-sd",
+      "message": "camera_protocol: close the camera session cleanly when work is done",
+      "dev": "builds/20261029-062803-a22f976/manifest-dev.json",
+      "release": "builds/20261029-062803-a22f976/manifest-release.json",
+      "devBin": "builds/20261029-062803-a22f976/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261029-062803-a22f976/trailcamhub-esp32s3-release.bin"
+    }
+  ]
+}
