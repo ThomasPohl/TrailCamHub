@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261029-100102-688ac4e",
+      "date": "2026-10-29T10:01:02Z",
+      "commit": "688ac4e",
+      "branch": "feature/thumbnails-to-sd",
+      "message": "bulk_reassembler: diagnose why a record is rejected",
+      "dev": "builds/20261029-100102-688ac4e/manifest-dev.json",
+      "release": "builds/20261029-100102-688ac4e/manifest-release.json",
+      "devBin": "builds/20261029-100102-688ac4e/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261029-100102-688ac4e/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261029-081518-5f796a0",
       "date": "2026-10-29T08:15:18Z",
       "commit": "5f796a0",
