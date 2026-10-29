@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <utime.h>
 
 #include "esp_log.h"
 #include "sd_card.h"
@@ -103,7 +105,7 @@ bool save_catalog(const std::string &camera_id,
 
 bool write_thumbnail(const std::string &camera_id, std::int64_t dir,
                      std::int64_t num, const std::uint8_t *jpeg,
-                     std::size_t size)
+                     std::size_t size, std::int64_t media_time)
 {
     if (jpeg == nullptr || size == 0)
         return false;
@@ -116,7 +118,21 @@ bool write_thumbnail(const std::string &camera_id, std::int64_t dir,
     char name[48];
     snprintf(name, sizeof(name), "/%lld_%lld.jpg", (long long)dir,
              (long long)num);
-    return write_file(thumbs + name, jpeg, size);
+    const std::string path = thumbs + name;
+    if (!write_file(path, jpeg, size))
+        return false;
+    // Set the file's timestamps to the recording time so the thumbnail dates
+    // match the capture rather than the sync. media_time is Unix seconds; <= 0
+    // means the camera clock was unset, so leave the default (sync) time.
+    if (media_time > 0) {
+        struct utimbuf times;
+        times.actime = static_cast<time_t>(media_time);
+        times.modtime = static_cast<time_t>(media_time);
+        if (utime(path.c_str(), &times) != 0) {
+            ESP_LOGW(TAG, "utime %s failed: errno %d", path.c_str(), errno);
+        }
+    }
+    return true;
 }
 
 }  // namespace camera::store

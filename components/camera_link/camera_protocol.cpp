@@ -565,10 +565,14 @@ static void handle_bulk_frame(int socket_fd,
 
         if (parsed && subtype == 0x04) {
             // Thumbnail: store it on the SD card and record it in the catalog.
+            // Date the file by the capture time from the media list.
             const uint8_t *jpeg = s_bulk.payload() + jpeg_offset;
+            const CatalogEntry *entry =
+                s_catalog.find(header.dir_num, header.media_num);
+            const int64_t media_time = entry != nullptr ? entry->media_time : 0;
             if (camera::store::write_thumbnail(s_camera_id, header.dir_num,
                                                header.media_num, jpeg,
-                                               jpeg_size)) {
+                                               jpeg_size, media_time)) {
                 s_catalog.set_flag(header.dir_num, header.media_num,
                                    MediaCatalog::kThumbPresent);
                 camera::store::save_catalog(s_camera_id, s_catalog);

@@ -47,9 +47,12 @@ bool load_catalog(const std::string &camera_id,
 bool save_catalog(const std::string &camera_id,
                   const camera::artemis::MediaCatalog &catalog);
 
-// Writes a thumbnail JPEG for (dir, num), creating directories as needed.
+// Writes a thumbnail JPEG for (dir, num), creating directories as needed, and
+// sets the file's access/modification times to `media_time` (Unix seconds) so
+// the thumbnail's date reflects the capture. A media_time <= 0 leaves the
+// default timestamp.
 bool write_thumbnail(const std::string &camera_id, std::int64_t dir,
                      std::int64_t num, const std::uint8_t *jpeg,
-                     std::size_t size);
+                     std::size_t size, std::int64_t media_time);
 
 }  // namespace camera::store
