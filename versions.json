@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-072011-1f325ab",
+      "date": "2026-10-31T07:20:11Z",
+      "commit": "1f325ab",
+      "branch": "feature/session-control-interface",
+      "message": "Session: neutral request and status interface for front ends",
+      "dev": "builds/20261031-072011-1f325ab/manifest-dev.json",
+      "release": "builds/20261031-072011-1f325ab/manifest-release.json",
+      "devBin": "builds/20261031-072011-1f325ab/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-072011-1f325ab/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-063750-89e5b8f",
       "date": "2026-10-31T06:37:50Z",
       "commit": "89e5b8f",
