@@ -1,0 +1,68 @@
+# Board: LilyGO T-Dongle-C5 (ESP32-C5HR8 with 8 MB PSRAM in package, 16 MB
+# flash, 0.96" ST7735 display, button on GPIO28, microSD slot on the
+# display's SPI bus). Build with the esp32c5 target and
+#   SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tdongle-c5"
+# so that these settings override the common defaults.
+
+CONFIG_BOARD_TDONGLE_C5=y
+
+# Searching starts with a press of the button (CONFIG_SESSION_SCAN_ON_BOOT and
+# the automatic scan interval are off by default).
+
+# Console: the native USB port (USB-Serial-JTAG) is the only serial link.
+# CONFIG_ESP_CONSOLE_UART_DEFAULT is not set
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# microSD card in SPI mode (the ESP32-C5 has no SDMMC host), sharing SPI2
+# with the display: SCK GPIO6, MOSI GPIO2, MISO GPIO7, CS GPIO23.
+CONFIG_SD_CARD_CLK_GPIO=6
+CONFIG_SD_CARD_CMD_GPIO=2
+CONFIG_SD_CARD_D0_GPIO=7
+CONFIG_SD_CARD_CS_GPIO=23
+
+# Download photos, then videos (as raw H.264 and AAC streams), to the SD
+# card after the thumbnails.
+CONFIG_CAMERA_DOWNLOAD_PHOTOS=y
+CONFIG_CAMERA_DOWNLOAD_VIDEOS=y
+
+# Room for camera frames while the session task is busy: the camera sends up
+# to about 120 frames of 1 KB ahead of the first one it has no ACK for, and
+# frames that do not fit in a queue are lost and sent again only after about
+# 400 ms. Every frame passes the Wi-Fi RX buffers, the TCP/IP task's queue and
+# the socket's queue (defaults 32, 32 and 6; lwIP allows at most 64 for the
+# queues). 128 RX buffers did not reduce the losses but left too little
+# internal RAM for sending (ACKs failed with ENOMEM).
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+CONFIG_ESP_WIFI_RX_BA_WIN=32
+
+# Pool of internal RAM kept for allocations that need DMA-capable or internal
+# memory (default 32 KB). The BLE controller takes its memory from there once
+# the main heap is used up; after a camera session a few small blocks left in
+# the pool split its largest free block from 15 KB to 8.7 KB, and the next BLE
+# scan failed with "Memory Capacity Exceeded".
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=49152
+
+# Static data in PSRAM, to leave internal RAM to the BLE controller and the
+# Wi-Fi buffers: the .bss of lwIP, net80211, pp and bt (about 18 KB) moves
+# there automatically, and variables marked EXT_RAM_BSS_ATTR (the camera
+# session state, about 8 KB). FreeRTOS functions run from flash (about
+# 8 KB less IRAM).
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH=y
+
+# A hang (the idle task starved for 5 s) ends in a panic with a core dump in
+# flash, instead of a dongle that silently stops working.
+CONFIG_ESP_TASK_WDT_PANIC=y
+
+# Web UI over the dongle's own access point (http://10.42.0.1); the password
+# is generated at the first boot and shown on the display.
+CONFIG_WEB_UI_ENABLE=y
+
+# The thumbnails are on the SD card; no Base64 copy in the log.
+# CONFIG_CAMERA_THUMBNAIL_SERIAL_PREVIEW is not set
+
+# NimBLE's own INFO lines (GAP procedures, empty lines) add little to the
+# camera_ble log and, at a connection setup, overflowed the console buffer.
+CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y

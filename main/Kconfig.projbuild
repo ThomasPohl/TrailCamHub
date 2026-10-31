@@ -1,5 +1,30 @@
 menu "TrailCamHub PoC"
 
+config BOARD_TDONGLE_C5
+    bool "LilyGO T-Dongle-C5 display and button"
+    depends on IDF_TARGET_ESP32C5
+    default n
+    help
+        Show the camera workflow status on the 0.96" display and use the
+        button (GPIO28) to search for the camera. The display shares its
+        SPI bus with the microSD card. Selected by
+        sdkconfig.defaults.tdongle-c5.
+
+config BOARD_TDONGLE
+    bool
+    default y if BOARD_TDONGLE_C5
+
+config DONGLE_LED_BRIGHTNESS
+    int "RGB LED brightness (0: off)"
+    depends on BOARD_TDONGLE
+    range 0 31
+    default 0
+    help
+        The APA102 LED on the back of the dongle shows the phase in the
+        colour of the display title (white idle, yellow searching and
+        connecting, green connected, orange waiting for a retry) at this
+        global brightness (1 is very dim, 31 the maximum). 0 keeps it off.
+
 config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
     string "Wi-Fi enable payload (hex)"
     default "42545F4B45595F4F4E"
@@ -273,6 +298,31 @@ config CAMERA_DOWNLOAD_STALL_TIMEOUT_S
     help
         The partial file is removed and the next item is requested. The
         item is tried again in the next session.
+
+endmenu
+
+menu "Web UI"
+    depends on !IDF_TARGET_ESP32P4
+
+config WEB_UI_ENABLE
+    bool "Open an access point with a web UI"
+    default n
+    help
+        Open a WPA2 access point "TrailCamHub-XXXX" next to the camera
+        station and serve a web UI at http://10.42.0.1: start and stop the
+        camera search, follow the status and the live log, and browse, view
+        and download the files on the SD card. While the camera Wi-Fi is
+        joined, the access point uses the camera's channel, so clients are
+        disconnected briefly when it changes. Needs about 40 KB of internal
+        RAM.
+
+config WEB_UI_AP_PASSWORD
+    string "Access point password (empty: generate one)"
+    depends on WEB_UI_ENABLE
+    default ""
+    help
+        At least 8 characters. When empty, a random password is generated
+        at the first boot, stored in NVS and shown on the dongle display.
 
 endmenu
 
