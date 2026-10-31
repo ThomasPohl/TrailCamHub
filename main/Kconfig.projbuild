@@ -1,5 +1,39 @@
 menu "TrailCamHub PoC"
 
+config BOARD_TDONGLE_S3
+    bool "LilyGO T-Dongle-S3 display and button"
+    depends on IDF_TARGET_ESP32S3
+    default n
+    help
+        Show the camera workflow status on the 0.96" display and use the
+        button on the back (GPIO0) to search for the camera. Selected by
+        sdkconfig.defaults.tdongle-s3.
+
+config BOARD_TDONGLE_C5
+    bool "LilyGO T-Dongle-C5 display and button"
+    depends on IDF_TARGET_ESP32C5
+    default n
+    help
+        Show the camera workflow status on the 0.96" display and use the
+        button (GPIO28) to search for the camera. The display shares its
+        SPI bus with the microSD card. Selected by
+        sdkconfig.defaults.tdongle-c5.
+
+config BOARD_TDONGLE
+    bool
+    default y if BOARD_TDONGLE_S3 || BOARD_TDONGLE_C5
+
+config DONGLE_LED_BRIGHTNESS
+    int "RGB LED brightness (0: off)"
+    depends on BOARD_TDONGLE
+    range 0 31
+    default 0
+    help
+        The APA102 LED on the back of the dongle shows the phase in the
+        colour of the display title (white idle, yellow searching and
+        connecting, green connected, orange waiting for a retry) at this
+        global brightness (1 is very dim, 31 the maximum). 0 keeps it off.
+
 config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
     string "Wi-Fi enable payload (hex)"
     default "42545F4B45595F4F4E"
