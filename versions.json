@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-061615-99594a6",
+      "date": "2026-10-31T06:16:15Z",
+      "commit": "99594a6",
+      "branch": "main",
+      "message": "Merge pull request #24 from HeikoGr/chore/dependency-updates",
+      "dev": "builds/20261031-061615-99594a6/manifest-dev.json",
+      "release": "builds/20261031-061615-99594a6/manifest-release.json",
+      "devBin": "builds/20261031-061615-99594a6/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-061615-99594a6/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261029-114559-9a66015",
       "date": "2026-10-29T11:45:59Z",
       "commit": "9a66015",
