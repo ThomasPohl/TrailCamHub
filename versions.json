@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-153538-c0e6841",
+      "date": "2026-10-31T15:35:38Z",
+      "commit": "c0e6841",
+      "branch": "main",
+      "message": "Merge pull request #40 from ThomasPohl/feature/bootstrap-transform-permission",
+      "dev": "builds/20261031-153538-c0e6841/manifest-dev.json",
+      "release": "builds/20261031-153538-c0e6841/manifest-release.json",
+      "devBin": "builds/20261031-153538-c0e6841/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-153538-c0e6841/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-153405-8c13509",
       "date": "2026-10-31T15:34:06Z",
       "commit": "8c13509",
