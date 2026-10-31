@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-162832-8d03094",
+      "date": "2026-10-31T16:28:32Z",
+      "commit": "8d03094",
+      "branch": "main",
+      "message": "Merge pull request #41 from ThomasPohl/merge/camera-link-download",
+      "dev": "builds/20261031-162832-8d03094/manifest-dev.json",
+      "release": "builds/20261031-162832-8d03094/manifest-release.json",
+      "devBin": "builds/20261031-162832-8d03094/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-162832-8d03094/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-162144-6de0db1",
       "date": "2026-10-31T16:21:44Z",
       "commit": "6de0db1",
