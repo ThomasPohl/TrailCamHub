@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-182244-feac1c1",
+      "date": "2026-10-31T18:22:44Z",
+      "commit": "feac1c1",
+      "branch": "main",
+      "message": "Merge pull request #35 from HeikoGr/split/04-t-dongle-s3",
+      "dev": "builds/20261031-182244-feac1c1/manifest-dev.json",
+      "release": "builds/20261031-182244-feac1c1/manifest-release.json",
+      "devBin": "builds/20261031-182244-feac1c1/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-182244-feac1c1/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-175508-84aaca7",
       "date": "2026-10-31T17:55:08Z",
       "commit": "84aaca7",
