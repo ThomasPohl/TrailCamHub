@@ -28,6 +28,11 @@ class Transport
 struct Config {
     // Retransmission interval for unacknowledged DATA packets.
     std::int64_t retransmit_interval_us = 800000;
+    // Failed sends in a row before the transport counts as failed. A single
+    // failure is often transient (ENOMEM while the Wi-Fi transmit buffers are
+    // full on a weak link); a lost packet is sent again by the retransmission
+    // or repeated by the camera.
+    std::uint32_t max_consecutive_send_failures = 20;
 };
 
 class Session
@@ -69,7 +74,7 @@ class Session
 
     // Sends a DATA packet and keeps it for retransmission until it is
     // acknowledged. Fails if all slots are in use, the payload is too large
-    // or sending fails.
+    // or sending fails (the packet is then not kept).
     bool send_data(const std::uint8_t *payload, std::size_t payload_size,
                    std::int64_t now_us, const char *context,
                    std::uint16_t *index = nullptr);
@@ -87,7 +92,7 @@ class Session
     // ALIVE is answered through the transport.
     Event handle_packet(const std::uint8_t *bytes, std::size_t size);
 
-    // True once a send through the transport has failed.
+    // True once max_consecutive_send_failures sends in a row have failed.
     bool transport_failed() const;
 
   private:
@@ -107,6 +112,7 @@ class Session
     std::uint16_t next_tx_index_ = 0;
     std::uint16_t next_rx_index_ = 0;
     ArtemisRudpPacket received_;
+    std::uint32_t send_failures_ = 0;
     bool transport_failed_ = false;
 };
 

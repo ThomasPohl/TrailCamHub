@@ -35,6 +35,8 @@ enum class Event : std::uint8_t {
     session_ended,
     uplink_done,
     timeout,
+    // The user stops the cycle (for example a long button press).
+    user_stop,
 };
 
 // Actions as bit flags. The controller executes them in the order of the
@@ -60,6 +62,7 @@ enum class Outcome : std::uint8_t {
     uplink_done,         // camera session (if any) and uplink done
     camera_unreachable,  // all camera attempts failed
     uplink_unreachable,  // the home Wi-Fi could not be joined
+    stopped,             // the user stopped the cycle
 };
 
 struct Config {
@@ -112,6 +115,8 @@ class Fsm
     State state_{State::idle};
     bool uplink_enabled_{false};
     std::uint32_t attempt_{0};
+    // Set by user_stop during a session; the session ends in idle.
+    bool stop_requested_{false};
 };
 
 const char *to_string(State state);

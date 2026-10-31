@@ -166,6 +166,63 @@ TEST_CASE("Wi-Fi loss during a session stops it before moving on")
     CHECK(result.next == State::idle);
 }
 
+TEST_CASE("user_stop ends the cycle in every camera state")
+{
+    {
+        Fsm fsm(kConfig);
+        fsm.handle(Event::scan_requested);
+        const Result result = fsm.handle(Event::user_stop);
+        CHECK(result.next == State::idle);
+        CHECK(has(result, kPauseBle));
+        CHECK(has(result, kCancelTimer));
+        CHECK(result.outcome == Outcome::stopped);
+    }
+    {
+        Fsm fsm(kConfig);
+        fsm.handle(Event::scan_requested);
+        fsm.handle(Event::credentials_received);
+        const Result result = fsm.handle(Event::user_stop);
+        CHECK(result.next == State::idle);
+        CHECK(has(result, kDisconnectWifi));
+        CHECK(result.outcome == Outcome::stopped);
+    }
+    {
+        Fsm fsm(kConfig);
+        fsm.handle(Event::scan_requested);
+        fsm.handle(Event::timeout);
+        REQUIRE(fsm.state() == State::backoff);
+        const Result result = fsm.handle(Event::user_stop);
+        CHECK(result.next == State::idle);
+        CHECK(has(result, kCancelTimer));
+        CHECK(fsm.attempt() == 0);
+    }
+    {
+        Fsm fsm(kConfig);
+        CHECK_FALSE(fsm.handle(Event::user_stop).handled);
+    }
+}
+
+TEST_CASE("user_stop during a session ends in idle without the uplink")
+{
+    Fsm fsm(kConfig);
+    fsm.set_uplink_enabled(true);
+    reach_session(fsm);
+
+    Result result = fsm.handle(Event::user_stop);
+    CHECK(result.next == State::session);
+    CHECK(has(result, kStopSession));
+    CHECK(has(result, kDisconnectWifi));
+
+    result = fsm.handle(Event::session_ended);
+    CHECK(result.next == State::idle);
+    CHECK_FALSE(has(result, kConnectHomeWifi));
+    CHECK(result.outcome == Outcome::stopped);
+
+    // The next cycle runs normally again.
+    reach_session(fsm);
+    CHECK(fsm.handle(Event::session_ended).next == State::uplink_join);
+}
+
 TEST_CASE("requests while busy are ignored")
 {
     Fsm fsm(kConfig);

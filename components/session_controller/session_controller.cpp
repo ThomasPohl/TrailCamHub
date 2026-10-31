@@ -85,6 +85,52 @@ esp_ip4_addr_t s_gateway;
 // Settings read when the current cycle started (home Wi-Fi, backend).
 hub_config::Settings s_settings;
 
+session_status_cb_t s_status_callback;
+// Camera Wi-Fi name for the status callback; unlike the password it is kept.
+char s_status_ssid[MAX_SSID_LEN + 1];
+
+session_status_t to_status(const session::Result &result)
+{
+    switch (result.next) {
+    case session::State::idle:
+        return result.outcome == session::Outcome::camera_scanned ||
+                       result.outcome == session::Outcome::uplink_done
+                   ? SESSION_STATUS_FINISHED
+                   : SESSION_STATUS_IDLE;
+    case session::State::ble_activation:
+        return SESSION_STATUS_SEARCHING;
+    case session::State::wifi_join:
+        return SESSION_STATUS_CONNECTING;
+    case session::State::session:
+        return SESSION_STATUS_CONNECTED;
+    case session::State::backoff:
+        return SESSION_STATUS_RETRY_WAIT;
+    case session::State::uplink_join:
+    case session::State::uplink:
+        return SESSION_STATUS_UPLOADING;
+    }
+    return SESSION_STATUS_IDLE;
+}
+
+// Reports a state change to the display, the web UI or a console.
+void notify_status(const session::Result &result)
+{
+    if (s_status_callback == NULL) {
+        return;
+    }
+    session_status_info_t info = {};
+    info.status = to_status(result);
+    if (result.next == session::State::wifi_join ||
+        result.next == session::State::session ||
+        info.status == SESSION_STATUS_FINISHED) {
+        strcpy(info.ssid, s_status_ssid);
+    }
+    if (result.next == session::State::backoff) {
+        info.retry_delay_ms = result.timer_ms;
+    }
+    s_status_callback(&info);
+}
+
 // One "TCH EVENT" line for the web installer and other console clients.
 void console_event(const char *format, ...)
     __attribute__((format(printf, 1, 2)));
@@ -314,6 +360,10 @@ void controller_task(void *arg)
             s_fsm.state() == session::State::ble_activation) {
             strcpy(s_ssid, event.ssid);
             strcpy(s_password, event.password);
+            strcpy(s_status_ssid, event.ssid);
+        }
+        if (event.type == session::Event::scan_requested && !s_fsm.busy()) {
+            s_status_ssid[0] = '\0';
         }
         wipe(event.password, sizeof(event.password));
         if (event.type == session::Event::wifi_connected) {
@@ -352,6 +402,7 @@ void controller_task(void *arg)
             console_event("state %s", session::to_string(result.next));
         }
         execute(result);
+        notify_status(result);
         if (result.actions & session::kConnectCameraWifi) {
             wipe(s_password, sizeof(s_password));
         }
@@ -434,6 +485,23 @@ esp_err_t session_controller_start(void)
              (unsigned)CONFIG_SESSION_MAX_ATTEMPTS,
              (unsigned)CONFIG_SESSION_AUTO_SCAN_INTERVAL_MIN);
     return ESP_OK;
+}
+
+void session_controller_set_status_callback(session_status_cb_t callback)
+{
+    s_status_callback = callback;
+}
+
+void session_controller_request_search(void)
+{
+    session_controller_request_scan();
+}
+
+void session_controller_request_stop(void)
+{
+    if (s_events != NULL) {
+        post_event(make_event(session::Event::user_stop));
+    }
 }
 
 esp_err_t session_controller_request_scan(void)

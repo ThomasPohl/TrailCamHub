@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 #include "esp_err.h"
 
 /*
@@ -16,6 +18,21 @@ typedef esp_err_t (*camera_ble_credentials_cb_t)(const char *ssid,
  * Wi-Fi and receive the credentials through `on_credentials`.
  */
 esp_err_t camera_ble_start(camera_ble_credentials_cb_t on_credentials);
+
+/*
+ * Called with true when a connection to the camera is being set up, and with
+ * false once the BLE stack has been released (or, without
+ * CONFIG_CAMERA_BLE_RELEASE_AFTER_ACTIVATION, once the connection attempt or
+ * connection has ended). Further attempts in between are not reported. For
+ * example, the Wi-Fi access point is closed in between, because on the
+ * ESP32-C5 it left the BLE connection setup no air time. Called from the
+ * Bluetooth task or from the task that calls camera_ble_pause(); must return
+ * quickly.
+ */
+typedef void (*camera_ble_link_cb_t)(bool active);
+
+/* Registers the link callback; call before camera_ble_resume(). */
+void camera_ble_set_link_callback(camera_ble_link_cb_t callback);
 
 /*
  * Starts (or restarts) the camera activation: start the BLE stack if needed,

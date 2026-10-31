@@ -23,3 +23,6 @@ CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
 
 # Diagnostics: memory logs are INFO messages, which this profile removes.
 CONFIG_DIAG_MEMORY_LOG_INTERVAL_S=0
+
+# No diagnostic console commands (files, memory) in release images.
+# CONFIG_HUB_CONSOLE_DIAGNOSTICS is not set

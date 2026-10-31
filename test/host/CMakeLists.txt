@@ -23,6 +23,8 @@ set(repo_root ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 set(ble_dir ${repo_root}/components/camera_ble)
 set(link_dir ${repo_root}/components/camera_link)
 set(session_dir ${repo_root}/components/session_controller)
+set(ui_dir ${repo_root}/components/dongle_ui)
+set(web_dir ${repo_root}/components/web_ui)
 set(config_dir ${repo_root}/components/hub_config)
 set(console_dir ${repo_root}/components/hub_console)
 set(uplink_dir ${repo_root}/components/uplink)
@@ -31,6 +33,7 @@ add_executable(host_tests
     test_main.cpp
     test_ble_advertising.cpp
     test_ble_wifi_response.cpp
+    test_button_detector.cpp
     test_gatt_profile.cpp
     test_hex_payload.cpp
     test_artemis_crypto.cpp
@@ -40,13 +43,19 @@ add_executable(host_tests
     test_media_list.cpp
     test_media_transfer.cpp
     test_bulk_reassembler.cpp
+    test_bulk_stream.cpp
     test_device_info.cpp
     test_media_catalog.cpp
     test_media_store.cpp
     test_pppp_session.cpp
+    test_playback.cpp
+    test_playback_decoder.cpp
     test_prelogin.cpp
     test_session_fsm.cpp
+    test_status_screen.cpp
+    test_screen_renderer.cpp
     test_udp_packets.cpp
+    test_web_paths.cpp
     test_hub_console.cpp
     test_uplink_protocol.cpp
     ${ble_dir}/ble_advertising.cpp
@@ -62,17 +71,28 @@ add_executable(host_tests
     ${link_dir}/media_list.cpp
     ${link_dir}/media_transfer.cpp
     ${link_dir}/bulk_reassembler.cpp
+    ${link_dir}/bulk_stream.cpp
+    ${link_dir}/frame_reorder.cpp
+    ${link_dir}/playback_decoder.cpp
+    ${link_dir}/playback_record.cpp
+    ${link_dir}/playback_stream.cpp
     ${link_dir}/device_info.cpp
     ${link_dir}/media_catalog.cpp
     ${link_dir}/camera_prelogin.cpp
     ${link_dir}/camera_udp_packets.cpp
     ${link_dir}/pppp_session.cpp
     ${session_dir}/session_fsm.cpp
+    ${ui_dir}/button_detector.cpp
+    ${ui_dir}/status_screen.cpp
+    ${ui_dir}/screen_renderer.cpp
+    ${ui_dir}/font5x7.cpp
+    ${web_dir}/web_paths.cpp
     ${config_dir}/hub_config_rules.cpp
     ${console_dir}/command_parser.cpp
     ${uplink_dir}/uplink_protocol.cpp)
 target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir}
-                                              ${session_dir}
+                                              ${session_dir} ${ui_dir}
+                                              ${web_dir}
                                               ${config_dir}/include
                                               ${console_dir} ${uplink_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})

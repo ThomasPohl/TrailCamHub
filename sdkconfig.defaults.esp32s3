@@ -1,0 +1,8 @@
+# Board: Waveshare ESP32-S3-A7670E-4G (ESP32-S3R8, 16 MB flash,
+# 8 MB octal PSRAM in package). Applied on top of sdkconfig.defaults.
+
+CONFIG_SPIRAM_MODE_OCT=y
+
+# Console: UART0 only. The native USB of the ESP32-S3 is wired to the A7670E
+# modem, so the USB-Serial-JTAG console is not reachable on this board.
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y

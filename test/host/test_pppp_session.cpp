@@ -158,8 +158,57 @@ TEST_CASE("send limits and transport failures")
 
     transport.succeed = false;
     CHECK_FALSE(session.send_data(kPayload, sizeof(kPayload), 0, "DATA"));
-    CHECK(session.transport_failed());
     CHECK(session.outstanding_count() == 0);
+}
+
+TEST_CASE("a few failed sends do not fail the transport")
+{
+    FakeTransport transport;
+    Config config;
+    config.max_consecutive_send_failures = 3;
+    Session session(transport, config);
+
+    transport.succeed = false;
+    CHECK_FALSE(session.send_data(kPayload, sizeof(kPayload), 0, "DATA"));
+    CHECK_FALSE(session.send_data(kPayload, sizeof(kPayload), 0, "DATA"));
+    CHECK_FALSE(session.transport_failed());
+
+    // A success in between starts the count again.
+    transport.succeed = true;
+    REQUIRE(session.send_data(kPayload, sizeof(kPayload), 0, "DATA"));
+    transport.succeed = false;
+    CHECK_FALSE(session.send_data(kPayload, sizeof(kPayload), 0, "DATA"));
+    CHECK_FALSE(session.send_data(kPayload, sizeof(kPayload), 0, "DATA"));
+    CHECK_FALSE(session.transport_failed());
+
+    // Failures in a row end it.
+    CHECK_FALSE(session.send_data(kPayload, sizeof(kPayload), 0, "DATA"));
+    CHECK(session.transport_failed());
+
+    session.reset();
+    CHECK_FALSE(session.transport_failed());
+}
+
+TEST_CASE("a failed retransmission is repeated after the interval")
+{
+    FakeTransport transport;
+    Config config;
+    config.retransmit_interval_us = 1000;
+    Session session(transport, config);
+    REQUIRE(session.send_data(kPayload, sizeof(kPayload), 0, "DATA"));
+    const std::size_t first = transport.sent.size();
+
+    transport.succeed = false;
+    CHECK(session.poll(1000) == 0);
+    CHECK(transport.sent.size() == first + 1);
+    // Not due again right away: no tight retry loop.
+    CHECK(session.poll(1500) == 0);
+    CHECK(transport.sent.size() == first + 1);
+    CHECK_FALSE(session.transport_failed());
+
+    transport.succeed = true;
+    CHECK(session.poll(2000) == 1);
+    CHECK(session.outstanding_count() == 1);
 }
 
 TEST_CASE("reset restarts the indices")

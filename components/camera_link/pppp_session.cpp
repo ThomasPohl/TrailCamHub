@@ -15,15 +15,19 @@ void Session::reset()
     }
     next_tx_index_ = 0;
     next_rx_index_ = 0;
+    send_failures_ = 0;
     transport_failed_ = false;
 }
 
 bool Session::send(const UdpRequest &request, const char *context)
 {
     if (!transport_.send(request.data(), request.size(), context)) {
-        transport_failed_ = true;
+        if (++send_failures_ >= config_.max_consecutive_send_failures) {
+            transport_failed_ = true;
+        }
         return false;
     }
+    send_failures_ = 0;
     return true;
 }
 
@@ -83,10 +87,12 @@ std::size_t Session::poll(std::int64_t now_us)
             now_us - slot.last_sent_us < config_.retransmit_interval_us) {
             continue;
         }
+        // A failed attempt counts as an attempt: it is repeated after the
+        // retransmission interval, not in a tight loop.
+        slot.last_sent_us = now_us;
         if (!send(slot.packet, "DATA retransmission")) {
             break;
         }
-        slot.last_sent_us = now_us;
         retransmitted++;
     }
     return retransmitted;

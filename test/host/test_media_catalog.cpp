@@ -65,9 +65,28 @@ TEST_CASE("queries return the right work items")
     REQUIRE(cat.pending_video_requests().size() == 1);
     CHECK(cat.pending_video_requests().front().media_num == 2);
 
-    cat.set_flag(100, 2, MediaCatalog::kVideoDownloaded);
+    cat.set_flag(100, 2, MediaCatalog::kFileDownloaded);
     CHECK(cat.pending_video_requests().empty());
     CHECK(cat.count_with_flag(MediaCatalog::kThumbPresent) == 1);
+}
+
+TEST_CASE("missing_downloads lists photos before videos")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 2), item(100, 2, 0), item(100, 3, 2),
+                  item(100, 4, 0)};
+    cat.merge(list);
+    cat.set_flag(100, 4, MediaCatalog::kFileDownloaded);
+
+    const auto both = cat.missing_downloads(true, true);
+    REQUIRE(both.size() == 3);
+    CHECK(both[0].media_num == 2);
+    CHECK(both[1].media_num == 1);
+    CHECK(both[2].media_num == 3);
+    CHECK(cat.missing_downloads(true, false).size() == 1);
+    CHECK(cat.missing_downloads(false, true).size() == 2);
+    CHECK(cat.missing_downloads(false, false).empty());
 }
 
 TEST_CASE("serialize/parse round-trips the catalog")

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrailCamHub</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>TrailCamHub</h1>
+    <span class="sub" id="ap"></span>
+  </header>
+
+  <section>
+    <h2>Camera</h2>
+    <div class="phase">
+      <span class="pill idle" id="phase">…</span>
+      <span class="detail" id="detail"></span>
+    </div>
+    <div class="facts">
+      <div><span>Camera Wi-Fi</span><b id="camera">–</b></div>
+      <div><span>Media</span><b id="media">–</b></div>
+      <div><span>SD card free</span><b id="sd">–</b></div>
+      <div><span>Uptime</span><b id="uptime">–</b></div>
+    </div>
+    <progress id="progress" value="0" max="1" hidden></progress>
+    <p class="actions">
+      <button class="primary" id="search">Search camera</button>
+      <button id="stop">Stop</button>
+    </p>
+    <p class="error" id="offline" hidden>No connection to the dongle.</p>
+  </section>
+
+  <section>
+    <h2>Files</h2>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="list" id="files"></div>
+  </section>
+
+  <section>
+    <div class="loghead">
+      <h2>Log</h2>
+      <span class="sub" id="logname"></span>
+      <label><input type="checkbox" id="follow" checked> follow</label>
+    </div>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<div id="viewer" hidden>
+  <div class="top">
+    <b id="vname"></b>
+    <a class="button" id="vdownload">Download</a>
+    <span id="vdelete"></span>
+    <button id="vclose">Close</button>
+  </div>
+  <div class="body" id="vbody"></div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

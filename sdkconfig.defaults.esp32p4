@@ -1,0 +1,33 @@
+# Board: Waveshare ESP32-P4-NANO (ESP32-P4 with 32 MB PSRAM in package,
+# 16 MB flash, ESP32-C6 co-processor for Wi-Fi and BLE on SDIO, IP101
+# Ethernet PHY). Applied on top of sdkconfig.defaults.
+
+# Chip revision: ESP-IDF 5.5 builds for ESP32-P4 v3.x by default, and v3.x
+# images do not run on v0.x/v1.x chips. The ESP32-P4-NANO boards in use
+# carry a v1.x chip (see "chip revision" in the boot log).
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y
+
+# PSRAM: 16-line mode at the ESP-IDF default clock (200 MHz).
+CONFIG_SPIRAM_MODE_HEX=y
+
+# Wi-Fi and BLE run on the on-board ESP32-C6 through ESP-Hosted over SDIO
+# (SDMMC slot 1, GPIO14-19, C6 reset on GPIO54, same wiring as the
+# ESP32-P4-Function-EV-Board). The C6 must run the ESP-Hosted firmware of
+# the same release; the coprocessor_update component installs it.
+CONFIG_ESP_HOSTED_CP_TARGET_ESP32C6=y
+CONFIG_ESP_HOSTED_P4_DEV_BOARD_FUNC_BOARD=y
+CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE=y
+CONFIG_ESP_WIFI_REMOTE_LIBRARY_HOSTED=y
+
+# BLE: NimBLE host on the ESP32-P4, controller on the C6. HCI is carried
+# over the ESP-Hosted transport (VHCI) instead of a local controller.
+CONFIG_BT_CONTROLLER_DISABLED=y
+# CONFIG_BT_NIMBLE_TRANSPORT_UART is not set
+CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE=y
+CONFIG_ESP_HOSTED_NIMBLE_HCI_VHCI=y
+
+# Ethernet is the uplink; the camera Wi-Fi is only a local link. Use the
+# DNS servers of the default interface so the camera's DHCP server cannot
+# replace the Ethernet DNS servers.
+CONFIG_ESP_NETIF_SET_DNS_PER_DEFAULT_NETIF=y

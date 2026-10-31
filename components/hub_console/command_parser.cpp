@@ -1,6 +1,7 @@
 #include "command_parser.hpp"
 
 #include <cctype>
+#include <cstdlib>
 
 namespace hub_console
 {
@@ -66,6 +67,76 @@ Command simple(CommandType type)
 {
     Command command;
     command.type = type;
+    return command;
+}
+
+// Parses a non-negative decimal number that is the whole word.
+bool parse_number(const std::string &word, long long &out)
+{
+    if (word.empty() || word.size() > 15) {
+        return false;
+    }
+    for (char c : word) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    out = std::strtoll(word.c_str(), nullptr, 10);
+    return true;
+}
+
+Command parse_cat(const std::string &args)
+{
+    std::string rest;
+    Command command;
+    command.type = CommandType::cat;
+    command.path = next_word(args, rest);
+    if (command.path.empty()) {
+        return invalid("usage: cat <path> [offset [length]]");
+    }
+    std::string more;
+    const std::string offset = next_word(rest, more);
+    std::string end;
+    const std::string length = next_word(more, end);
+    if ((!offset.empty() && !parse_number(offset, command.offset)) ||
+        (!length.empty() && !parse_number(length, command.length)) ||
+        !end.empty()) {
+        return invalid("usage: cat <path> [offset [length]]");
+    }
+    return command;
+}
+
+Command parse_rm(const std::string &args)
+{
+    Command command;
+    command.type = CommandType::rm;
+    std::string rest;
+    if (next_word(args, rest) == "-r") {
+        command.recursive = true;
+        command.path = rest;
+    } else {
+        command.path = args;
+    }
+    if (command.path.empty()) {
+        return invalid("usage: rm [-r] <path>");
+    }
+    return command;
+}
+
+Command parse_sdbench(const std::string &args)
+{
+    Command command;
+    command.type = CommandType::sdbench;
+    std::string rest;
+    const std::string total = next_word(args, rest);
+    std::string end;
+    const std::string chunk = next_word(rest, end);
+    if ((!total.empty() && !parse_number(total, command.total_kb)) ||
+        (!chunk.empty() && !parse_number(chunk, command.chunk_kb)) ||
+        !end.empty() || command.total_kb == 0 || command.chunk_kb == 0 ||
+        command.chunk_kb > 64) {
+        return invalid("usage: sdbench [total_kb [chunk_kb (1-64)]]");
+    }
     return command;
 }
 
@@ -140,6 +211,25 @@ Command parse_command(const std::string &line)
     if (word == "config") {
         return parse_config(rest);
     }
+    if (word == "ls") {
+        Command command = simple(CommandType::ls);
+        command.path = rest;
+        return command;
+    }
+    if (word == "cat") {
+        return parse_cat(rest);
+    }
+    if (word == "rm") {
+        return parse_rm(rest);
+    }
+    if (word == "sdbench") {
+        return parse_sdbench(rest);
+    }
+    if (word == "heap" && (rest.empty() || rest == "blocks")) {
+        Command command = simple(CommandType::heap);
+        command.blocks = !rest.empty();
+        return command;
+    }
     if (!rest.empty()) {
         return invalid("unexpected arguments for '" + word + "'");
     }
@@ -155,6 +245,9 @@ Command parse_command(const std::string &line)
     if (word == "upload") {
         return simple(CommandType::upload);
     }
+    if (word == "stop") {
+        return simple(CommandType::stop);
+    }
     return invalid("unknown command '" + word + "' (try 'help')");
 }
 
@@ -165,6 +258,13 @@ const char *help_text()
            "backend\n"
            "upload                     sync stored data with the backend "
            "only\n"
+           "stop                       end the running scan\n"
+           "heap [blocks]              internal RAM by capability and "
+           "region\n"
+           "ls [path]                  list a directory of the SD card\n"
+           "cat <path> [offset [len]]  send a file as Base64 lines\n"
+           "rm [-r] <path>             delete a file or a directory tree\n"
+           "sdbench [total_kb [chunk]] SD card write throughput\n"
            "config show                list settings (secrets hidden)\n"
            "config set <key> <value>   store a setting\n"
            "config set-hex <key> <hex> store a hex-encoded setting\n"

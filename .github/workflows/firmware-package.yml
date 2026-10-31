@@ -15,11 +15,36 @@ permissions:
 
 jobs:
   build:
-    name: Build ESP32-S3 deployment package
+    name: Build ${{ matrix.board }} deployment package
     runs-on: ubuntu-latest
     container: espressif/idf:v5.5.6
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Waveshare ESP32-S3-A7670E-4G (published by the installer).
+          # board_defaults: an optional sdkconfig file applied on top of
+          # sdkconfig.defaults for boards that share a target.
+          - board: esp32s3
+            target: esp32s3
+            board_defaults: ""
+          # Waveshare ESP32-P4-NANO (artifact only)
+          - board: esp32p4
+            target: esp32p4
+            board_defaults: ""
+          # LilyGO T-Dongle-S3 with display and button (artifact only)
+          - board: tdongle-s3
+            target: esp32s3
+            board_defaults: sdkconfig.defaults.tdongle-s3
+          # LilyGO T-Dongle-C5 with display and button (artifact only)
+          - board: tdongle-c5
+            target: esp32c5
+            board_defaults: sdkconfig.defaults.tdongle-c5
     env:
       IDF_PATH: /opt/esp/idf
+      BOARD: ${{ matrix.board }}
+      TARGET: ${{ matrix.target }}
+      BOARD_DEFAULTS: ${{ matrix.board_defaults }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -28,45 +53,46 @@ jobs:
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
-          idf.py set-target esp32s3
+          defaults="sdkconfig.defaults${BOARD_DEFAULTS:+;$BOARD_DEFAULTS}"
           # Dev image: default profile, verbose (INFO) logging.
-          .github/scripts/run-annotated.sh "Firmware build" idf.py build
-          idf.py merge-bin -o trailcamhub-esp32s3-dev.bin
+          .github/scripts/run-annotated.sh "Firmware build" \
+            idf.py -D IDF_TARGET="$TARGET" -D SDKCONFIG_DEFAULTS="$defaults" build
+          idf.py merge-bin -o "trailcamhub-$BOARD-dev.bin"
           # Release image: size-optimized, warnings-only logging.
           idf.py -B build-release \
-            -D IDF_TARGET=esp32s3 \
+            -D IDF_TARGET="$TARGET" \
             -D SDKCONFIG=build-release/sdkconfig \
-            -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.release" \
+            -D SDKCONFIG_DEFAULTS="$defaults;sdkconfig.defaults.release" \
             build
-          idf.py -B build-release merge-bin -o trailcamhub-esp32s3-release.bin
+          idf.py -B build-release merge-bin -o "trailcamhub-$BOARD-release.bin"
 
       - name: Assemble deployment package
         shell: bash
         run: |
           set -euo pipefail
-          package_dir="dist/trailcamhub-esp32s3"
+          package_dir="dist/trailcamhub-$BOARD"
           mkdir -p "$package_dir"
           cp build/trailcamhub_ble_poc.bin "$package_dir/app.bin"
           cp build/bootloader/bootloader.bin "$package_dir/bootloader.bin"
           cp build/partition_table/partition-table.bin "$package_dir/partition-table.bin"
           cp build/ota_data_initial.bin "$package_dir/ota_data_initial.bin"
-          cp build/trailcamhub-esp32s3-dev.bin "$package_dir/trailcamhub-esp32s3-dev.bin"
-          cp build-release/trailcamhub-esp32s3-release.bin "$package_dir/trailcamhub-esp32s3-release.bin"
+          cp "build/trailcamhub-$BOARD-dev.bin" "$package_dir/trailcamhub-$BOARD-dev.bin"
+          cp "build-release/trailcamhub-$BOARD-release.bin" "$package_dir/trailcamhub-$BOARD-release.bin"
           cp build/flasher_args.json "$package_dir/flasher_args.json"
           cp deployment/README.md "$package_dir/README.md"
-          printf 'Git commit: %s\nESP-IDF: v5.5.6\nTarget: esp32s3\n' \
-            "$GITHUB_SHA" > "$package_dir/BUILD_INFO.txt"
+          printf 'Git commit: %s\nESP-IDF: v5.5.6\nBoard: %s\nTarget: %s\n' \
+            "$GITHUB_SHA" "$BOARD" "$TARGET" > "$package_dir/BUILD_INFO.txt"
           (
             cd dist
-            sha256sum trailcamhub-esp32s3/* > trailcamhub-esp32s3/SHA256SUMS
-            tar -czf trailcamhub-esp32s3.tar.gz trailcamhub-esp32s3
+            sha256sum "trailcamhub-$BOARD"/* > "trailcamhub-$BOARD/SHA256SUMS"
+            tar -czf "trailcamhub-$BOARD.tar.gz" "trailcamhub-$BOARD"
           )
 
       - name: Upload deployment package
         uses: actions/upload-artifact@v7
         with:
-          name: trailcamhub-esp32s3
-          path: dist/trailcamhub-esp32s3.tar.gz
+          name: trailcamhub-${{ matrix.board }}
+          path: dist/trailcamhub-${{ matrix.board }}.tar.gz
           if-no-files-found: error
           retention-days: 30
 
@@ -101,6 +127,17 @@ jobs:
           cmake -S test/host -B build-host -DCMAKE_BUILD_TYPE=Debug
           .github/scripts/run-annotated.sh "Host test build" cmake --build build-host --parallel
           .github/scripts/run-annotated.sh "Host tests" ctest --test-dir build-host --output-on-failure
+
+      - name: Check the dongle screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The images in docs/ must match what the display code draws.
+          cmake -S tools/dongle_screens -B build-screens
+          cmake --build build-screens --parallel
+          build-screens/dongle_screens docs/images/dongle
+          git diff --exit-code -- docs/images/dongle ||
+            { echo "::error::Run tools/dongle_screens and commit the images"; exit 1; }
 
   size-report:
     name: Release size report

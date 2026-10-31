@@ -1,5 +1,39 @@
 menu "TrailCamHub PoC"
 
+config BOARD_TDONGLE_S3
+    bool "LilyGO T-Dongle-S3 display and button"
+    depends on IDF_TARGET_ESP32S3
+    default n
+    help
+        Show the camera workflow status on the 0.96" display and use the
+        button on the back (GPIO0) to search for the camera. Selected by
+        sdkconfig.defaults.tdongle-s3.
+
+config BOARD_TDONGLE_C5
+    bool "LilyGO T-Dongle-C5 display and button"
+    depends on IDF_TARGET_ESP32C5
+    default n
+    help
+        Show the camera workflow status on the 0.96" display and use the
+        button (GPIO28) to search for the camera. The display shares its
+        SPI bus with the microSD card. Selected by
+        sdkconfig.defaults.tdongle-c5.
+
+config BOARD_TDONGLE
+    bool
+    default y if BOARD_TDONGLE_S3 || BOARD_TDONGLE_C5
+
+config DONGLE_LED_BRIGHTNESS
+    int "RGB LED brightness (0: off)"
+    depends on BOARD_TDONGLE
+    range 0 31
+    default 0
+    help
+        The APA102 LED on the back of the dongle shows the phase in the
+        colour of the display title (white idle, yellow searching and
+        connecting, green connected, orange waiting for a retry) at this
+        global brightness (1 is very dim, 31 the maximum). 0 keeps it off.
+
 config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
     string "Wi-Fi enable payload (hex)"
     default "42545F4B45595F4F4E"
@@ -28,6 +62,15 @@ config CAMERA_UDP_LOG_PACKET_HEX
         INFO build (and out of the bulk-transfer hot path); raise the
         "trailcamhub_udp" tag to DEBUG to see them. Disable this option to
         drop the hex dump from the build entirely.
+
+config CAMERA_THUMBNAIL_SERIAL_PREVIEW
+    bool "Print the first thumbnail of a session as Base64"
+    default y
+    help
+        Log the first thumbnail of each session as Base64 lines between
+        "THUMB" markers, which the browser installer's live view shows.
+        About 33 KB of log per session; boards with a web UI can show the
+        thumbnails from the SD card instead.
 
 config DIAG_MEMORY_LOG_INTERVAL_S
     int "Memory log interval (seconds)"
@@ -95,26 +138,278 @@ config SD_CARD_ENABLE
     default y
     help
         Mount the FAT file system of the microSD card at /sdcard using the
-        SDMMC peripheral in 1-bit mode. The card is never formatted
-        automatically.
+        SDMMC peripheral or, in SPI mode, an SPI bus. The card is never
+        formatted automatically. On the ESP32-S3 boards the card is used in
+        1-bit SDMMC mode on the GPIOs below; on the ESP32-P4-NANO it uses
+        SDMMC slot 0 in 4-bit mode on its fixed IO MUX pins (CLK GPIO43, CMD
+        GPIO44, D0-D3 GPIO39-42), powered by on-chip LDO channel 4. In SPI
+        mode CLK is the SPI clock, CMD the MOSI and D0 the MISO line.
+
+config SD_CARD_SPI_MODE
+    bool "Use the card in SPI mode" if SOC_SDMMC_HOST_SUPPORTED
+    depends on SD_CARD_ENABLE && !IDF_TARGET_ESP32P4
+    default y if !SOC_SDMMC_HOST_SUPPORTED
+    help
+        Talk to the card over SPI2 instead of SDMMC. Required on chips
+        without an SDMMC host (ESP32-C5). The bus may be shared with other
+        devices such as a display.
 
 config SD_CARD_CLK_GPIO
     int "CLK GPIO"
-    depends on SD_CARD_ENABLE
+    depends on SD_CARD_ENABLE && !IDF_TARGET_ESP32P4
     range 0 48
     default 5
 
 config SD_CARD_CMD_GPIO
     int "CMD GPIO"
-    depends on SD_CARD_ENABLE
+    depends on SD_CARD_ENABLE && !IDF_TARGET_ESP32P4
     range 0 48
     default 4
 
 config SD_CARD_D0_GPIO
     int "D0 GPIO"
-    depends on SD_CARD_ENABLE
+    depends on SD_CARD_ENABLE && !IDF_TARGET_ESP32P4
     range 0 48
     default 6
+
+config SD_CARD_CS_GPIO
+    int "CS GPIO"
+    depends on SD_CARD_SPI_MODE
+    range 0 48
+    default 23
+
+config SD_CARD_LDO_CHANNEL
+    int "On-chip LDO channel powering the card"
+    depends on SD_CARD_ENABLE && IDF_TARGET_ESP32P4
+    range 1 4
+    default 4
+
+endmenu
+
+menu "Log on the SD card"
+    depends on SD_CARD_ENABLE
+
+config SD_LOG_ENABLE
+    bool "Write the log to the SD card"
+    default y
+    help
+        Copy every log line to /sdcard/logs/log-NNNNN.txt, so that a test
+        run can be read afterwards (or live in the web UI) without a serial
+        console. The lines are written about once per second and synced to
+        the card. A new file is started at every boot and when a file
+        reaches the size limit; the oldest files are removed.
+
+config SD_LOG_MAX_FILE_KB
+    int "Maximum size of one log file (KB)"
+    depends on SD_LOG_ENABLE
+    range 64 65536
+    default 4096
+
+config SD_LOG_MAX_FILES
+    int "Log files to keep"
+    depends on SD_LOG_ENABLE
+    range 2 1000
+    default 50
+
+config SD_LOG_BUFFER_KB
+    int "Log buffer in PSRAM (KB)"
+    depends on SD_LOG_ENABLE
+    range 8 1024
+    default 64
+    help
+        Holds the lines until they are written, including the boot messages
+        before the card is mounted. Without PSRAM an 8 KB buffer in internal
+        RAM is used.
+
+endmenu
+
+menu "Web UI"
+    depends on !IDF_TARGET_ESP32P4
+
+config WEB_UI_ENABLE
+    bool "Open an access point with a web UI"
+    default n
+    help
+        Open a WPA2 access point "TrailCamHub-XXXX" next to the camera
+        station and serve a web UI at http://10.42.0.1: start and stop the
+        camera search, follow the status and the live log, and browse, view
+        and download the files on the SD card. While the camera Wi-Fi is
+        joined, the access point uses the camera's channel, so clients are
+        disconnected briefly when it changes. Needs about 40 KB of internal
+        RAM.
+
+config WEB_UI_AP_PASSWORD
+    string "Access point password (empty: generate one)"
+    depends on WEB_UI_ENABLE
+    default ""
+    help
+        At least 8 characters. When empty, a random password is generated
+        at the first boot, stored in NVS and shown on the dongle display.
+
+endmenu
+
+menu "Media download"
+    depends on SD_CARD_ENABLE
+
+config CAMERA_DOWNLOAD_PHOTOS
+    bool "Download photos to the SD card"
+    default n
+    help
+        After the thumbnails, download every photo of the camera's media
+        list that is not on the SD card yet to /sdcard/<camera>/media/.
+        The file is streamed to the card while it arrives, so it is never
+        held in RAM. Videos are a separate option: the camera sends them
+        only as a playback stream (cmdId 769), not as a file.
+
+config CAMERA_DOWNLOAD_VIDEOS
+    bool "Download videos (raw H.264 and AAC streams)"
+    depends on SPIRAM
+    default n
+    help
+        After the photos, play back every video of the media list that is
+        not on the SD card yet (cmdId 769) and store its streams as
+        /sdcard/<camera>/media/<dir>_<num>.h264 (H.264 Annex-B, playable
+        with VLC) and .aac (AAC with ADTS headers). One MP4 can be made
+        without re-encoding:
+          ffmpeg -i 100_2.h264 -i 100_2.aac -c copy 100_2.mp4
+        The camera streams the frames one by one; they are put in order in
+        PSRAM and written through a 4 MB buffer in PSRAM. Verified on the
+        T-Dongle-C5: a 15-second 1080p video takes about 31 s.
+
+config CAMERA_VIDEO_HEARTBEAT_INTERVAL_MS
+    int "Heartbeat interval during a video download (ms)"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    range 100 3000
+    default 1500
+    help
+        The camera does not pace the stream by the heartbeat: with 500 ms
+        instead of 1.5 s a video downloaded at the same speed (see
+        docs/video-download.md). Outside a video download the heartbeat is
+        sent every 1.5 s.
+
+config CAMERA_VIDEO_DISCARD_DATA
+    bool "Throughput test: do not write videos to the SD card"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    default n
+    help
+        Receive, reorder, decrypt and parse every video as usual, but drop
+        the data instead of writing it, and log the throughput per video
+        ("Throughput test: ... KB/s"). Shows how fast the camera and the
+        Wi-Fi link deliver without the SD card. Nothing is stored and no
+        video is marked as downloaded, so the next normal session fetches
+        them all. For measurements only.
+
+config CAMERA_VIDEO_TRACE
+    bool "Diagnostics: write a trace of every video's frames and ACKs"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    default n
+    help
+        Record every received playback frame (time, sequence, distance to
+        the expected one, whether it starts an ARTEMIS record, whether a gap
+        was open) and every sequence sent in an ACK, in PSRAM (up to 65536
+        events, 768 KB), and write them after each video to
+        /sdcard/<camera>/trace_<dir>_<num>.csv. Shows which frames the camera
+        sends again and when they had been acknowledged. Writing the file
+        takes about a second after each video.
+
+config CAMERA_BULK_ACK_FRAMES
+    int "Frames acknowledged in one ACK"
+    range 1 64
+    default 17
+    help
+        Received bulk frames (thumbnails, photos, videos) are acknowledged
+        once each, this many in one ACK packet, as the TrailCam Go app does
+        (17); an ACK is also sent when no frame arrived for 1 ms. Fewer
+        frames per ACK tell the camera sooner what arrived, at the cost of
+        more packets.
+
+config CAMERA_DOWNLOAD_STALL_TIMEOUT_S
+    int "Abort a download after this many seconds without data"
+    depends on CAMERA_DOWNLOAD_PHOTOS || CAMERA_DOWNLOAD_VIDEOS
+    range 5 300
+    default 20
+    help
+        The partial file is removed and the next item is requested. The
+        item is tried again in the next session.
+
+endmenu
+
+menu "Serial console"
+
+config HUB_CONSOLE_DIAGNOSTICS
+    bool "Diagnostic commands (heap, ls, cat, rm, sdbench)"
+    default y
+    help
+        Add commands to the serial console that show the internal RAM by
+        capability and region, and list, read (as Base64 lines) and delete
+        the files on the SD card and measure its write rate, so that a test
+        run can be driven from a computer without taking out the card.
+        tools/dongle_console.py runs commands and copies files. Files are
+        not deleted while a scan uses the card.
+
+endmenu
+
+menu "Ethernet uplink"
+    depends on SOC_EMAC_SUPPORTED
+
+config ETH_UPLINK_ENABLE
+    bool "Use wired Ethernet as the uplink"
+    default y
+    help
+        Start the on-chip Ethernet MAC with the IP101 PHY at boot and obtain
+        an address over DHCP. The Ethernet interface stays the default
+        route while the camera Wi-Fi is joined. The GPIO defaults match the
+        Waveshare ESP32-P4-NANO (RMII reference clock input on GPIO50).
+
+config ETH_UPLINK_MDC_GPIO
+    int "SMI MDC GPIO"
+    depends on ETH_UPLINK_ENABLE
+    range 0 54
+    default 31
+
+config ETH_UPLINK_MDIO_GPIO
+    int "SMI MDIO GPIO"
+    depends on ETH_UPLINK_ENABLE
+    range 0 54
+    default 52
+
+config ETH_UPLINK_PHY_RST_GPIO
+    int "PHY reset GPIO (-1: none)"
+    depends on ETH_UPLINK_ENABLE
+    range -1 54
+    default 51
+
+config ETH_UPLINK_PHY_ADDR
+    int "PHY address"
+    depends on ETH_UPLINK_ENABLE
+    range 0 31
+    default 1
+
+endmenu
+
+menu "Co-processor firmware"
+    depends on IDF_TARGET_ESP32P4
+
+config COPROCESSOR_UPDATE_ENABLE
+    bool "Update the ESP32-C6 firmware at boot"
+    default y
+    help
+        Build the ESP-Hosted firmware for the ESP32-C6 co-processor from the
+        sources of the esp_hosted component and embed it in the application.
+        At boot, the image is flashed to the C6 over the ESP-Hosted link if
+        the C6 reports a different version, and the application restarts.
+        The build then takes longer and the application grows by the size
+        of the C6 image.
+
+config COPROCESSOR_UPDATE_MAX_ATTEMPTS
+    int "Update attempts per firmware version"
+    depends on COPROCESSOR_UPDATE_ENABLE
+    range 1 10
+    default 3
+    help
+        Number of boots on which the same image is sent to the C6 before the
+        firmware gives up and continues with the C6 firmware it has. The
+        count is reset once the C6 runs the embedded version.
 
 endmenu
 

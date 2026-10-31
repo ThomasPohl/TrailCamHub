@@ -54,6 +54,9 @@ static void handle_disconnected(const wifi_event_sta_disconnected_t *event)
              event->rssi, event->bssid[0], event->bssid[1], event->bssid[2],
              event->bssid[3], event->bssid[4], event->bssid[5],
              requested && s_joining.load() ? "yes" : "no");
+    // Back to modem sleep, which BLE coexistence requires, before the BLE
+    // stack may start again.
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     if (!requested) {
         return;
     }
@@ -120,6 +123,15 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                  IP2STR(&event->ip_info.gw), IP2STR(&event->ip_info.gw));
         s_wifi_connect_retries = 0;
         s_joining = false;
+        // No power save while the camera streams: in modem sleep, outgoing
+        // ACKs queue up until the radio wakes, and at a few hundred frames
+        // per second the TX buffers run out (sends fail with ENOMEM). BLE is
+        // released during the session, so coexistence does not need it.
+        const esp_err_t ps_error = esp_wifi_set_ps(WIFI_PS_NONE);
+        if (ps_error != ESP_OK) {
+            ESP_LOGW(TAG, "Could not switch Wi-Fi power save off: %s",
+                     esp_err_to_name(ps_error));
+        }
         if (s_wifi_connect_requested.load() &&
             s_callbacks.on_connected != NULL) {
             s_callbacks.on_connected(&event->ip_info.gw);
@@ -133,10 +145,6 @@ esp_err_t camera_wifi_init(const camera_wifi_callbacks_t *callbacks)
         return ESP_ERR_INVALID_ARG;
     }
     s_callbacks = *callbacks;
-    ESP_RETURN_ON_ERROR(esp_netif_init(), TAG,
-                        "Could not initialize network interface");
-    ESP_RETURN_ON_ERROR(esp_event_loop_create_default(), TAG,
-                        "Could not create default event loop");
     if (esp_netif_create_default_wifi_sta() == NULL) {
         ESP_LOGE(TAG, "Could not create Wi-Fi station interface");
         return ESP_FAIL;

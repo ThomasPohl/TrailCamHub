@@ -1,9 +1,9 @@
 #pragma once
 
 // A tiny per-camera "database" of the media a camera holds and what we have
-// done with each item: whether its thumbnail is already stored, and (later)
-// whether the user requested its video and whether that video was downloaded
-// and uploaded. It is kept in memory, merged with each fresh media list, and
+// done with each item: whether its thumbnail and its full file are stored,
+// and (later) whether the user requested its video and whether that video was
+// uploaded. It is kept in memory, merged with each fresh media list, and
 // persisted as a small CSV file on the SD card. Pure logic, host-testable; the
 // SD read/write lives in a separate runtime layer.
 
@@ -32,8 +32,8 @@ class MediaCatalog
     enum Flag : std::uint32_t {
         kThumbPresent = 1u << 0,  // the thumbnail JPEG is stored on the SD card
         kVideoRequested = 1u << 1,  // the user asked for this item's full video
-        kVideoDownloaded = 1u << 2,  // the full video is stored on the SD card
-        kVideoUploaded = 1u << 3,    // the full video was uploaded to the cloud
+        kFileDownloaded = 1u << 2,  // the full photo/video is on the SD card
+        kVideoUploaded = 1u << 3,   // the full video was uploaded to the cloud
         kReported = 1u << 4,  // the backend knows this item (check-in accepted)
     };
 
@@ -53,6 +53,9 @@ class MediaCatalog
     std::vector<CatalogEntry> missing_thumbnails() const;
     // Video items the user requested that are not downloaded yet.
     std::vector<CatalogEntry> pending_video_requests() const;
+    // Items whose full file is not stored yet, photos before videos; each
+    // kind is included only if selected.
+    std::vector<CatalogEntry> missing_downloads(bool photos, bool videos) const;
     // Up to `limit` items without `flag`, in catalog order.
     std::vector<CatalogEntry> without_flag(Flag flag, std::size_t limit) const;
     // Clears `flag` on every item (e.g. to report everything again).

@@ -51,7 +51,7 @@ The target board is the **Waveshare ESP32-S3-A7670E-4G** development board. Acco
 - 18650 battery holder, solar charging input, and a MAX17048 battery fuel gauge on I2C
 - DIP switches for camera, USB hub, and modem power; GNSS antenna connector; 24-pin camera connector
 
-The firmware configuration (`sdkconfig.defaults`, `partitions.csv`) targets this board: 16 MB flash, octal PSRAM, two 4 MB OTA application slots, a 64 KB core dump partition, and 64 KB NVS. Camera media is intended to be buffered on the SD card. Board revisions V1 and V2 differ in some GPIO assignments (camera and I2C); the SD card pins can be changed in `menuconfig` if a revision differs. Still to verify:
+The firmware configuration (`sdkconfig.defaults`, `sdkconfig.defaults.esp32s3`, `partitions.csv`) targets this board: 16 MB flash, octal PSRAM, two 4 MB OTA application slots, a 64 KB core dump partition, and 64 KB NVS. Camera media is intended to be buffered on the SD card. Board revisions V1 and V2 differ in some GPIO assignments (camera and I2C); the SD card pins can be changed in `menuconfig` if a revision differs. Still to verify:
 
 - Board revision, modem power-control GPIOs, and the USB host/PPP setup for the A7670E
 - Power supply and cellular modem peak current requirements on battery
@@ -59,6 +59,101 @@ The firmware configuration (`sdkconfig.defaults`, `partitions.csv`) targets this
 - ESP32-S3 BLE and Wi-Fi capabilities during simultaneous operation
 
 A camera and a cellular subscription are required for testing. Camera credentials and SIM PINs must not be committed to the repository.
+
+### Alternative board: Waveshare ESP32-P4-NANO (Ethernet uplink)
+
+For installations with a wired network, the firmware can also be built for the **Waveshare ESP32-P4-NANO** (target `esp32p4`). Media is then meant to be transferred over Ethernet instead of the cellular modem. According to the [Waveshare documentation](https://www.waveshare.com/wiki/ESP32-P4-NANO) the board provides:
+
+- ESP32-P4 with 32 MB in-package PSRAM and 16 MB external flash
+- An on-board **ESP32-C6** co-processor for Wi-Fi 6 and BLE 5, connected over SDIO (SDMMC slot 1: CLK GPIO18, CMD GPIO19, D0-D3 GPIO14-17, C6 reset GPIO54). The ESP32-P4 itself has no radio.
+- 10/100 Mbit/s Ethernet with an IP101 PHY on the on-chip EMAC (RMII, reference clock input GPIO50, MDC GPIO31, MDIO GPIO52, PHY reset GPIO51, PHY address 1); optional PoE module
+- microSD slot on SDMMC slot 0 (4-bit, fixed pins CLK GPIO43, CMD GPIO44, D0-D3 GPIO39-42), powered by on-chip LDO channel 4
+- Serial console on UART0 through the USB-to-UART port
+
+`sdkconfig.defaults.esp32p4` adapts the common configuration to this board; the partition table is the same. Differences from the ESP32-S3 build:
+
+- **Wi-Fi and BLE through ESP-Hosted.** The [`esp_wifi_remote`](https://components.espressif.com/components/espressif/esp_wifi_remote) and [`esp_hosted`](https://components.espressif.com/components/espressif/esp_hosted) components are added by the component manager for this target only (see `components/camera_wifi/idf_component.yml` and `components/camera_ble/idf_component.yml`). The `esp_wifi` API used by `camera_wifi` is forwarded to the ESP32-C6. NimBLE runs on the ESP32-P4 without a local controller and exchanges HCI packets with the C6 controller over the SDIO link (VHCI); `camera_ble` switches the C6 controller on before starting NimBLE and off again when it releases BLE. C6 firmware older than ESP-Hosted 2.5.2 does not support this request and keeps its controller enabled; the first request then times out after about 5 seconds, and the firmware stops switching the controller for the rest of the run. The ESP32-C6 must run the ESP-Hosted co-processor firmware of the same release as the host component.
+- **C6 firmware update.** The `coprocessor_update` component builds the ESP-Hosted co-processor firmware for the ESP32-C6 from the `slave/` sources of the `esp_hosted` component (a nested `idf.py` build of a copy in the build directory, rebuilt only when the `esp_hosted` version changes) and embeds the image in the application. At boot the firmware asks the C6 for its version; if it differs from the embedded image, or the C6 does not answer, the image is sent over the ESP-Hosted link with the ESP-Hosted OTA API and the application restarts. A C6 that already runs ESP-Hosted 2.6 or newer is told to activate the image; older firmware switches on its own. Each image version is tried at most three times (**TrailCamHub PoC → Co-processor firmware** in `menuconfig`), so a C6 that cannot be updated this way does not cause a restart loop; it then has to be flashed over its UART (see the [ESP-Hosted documentation](https://github.com/espressif/esp-hosted-mcu)). The update can be disabled in the same menu, which also skips the C6 build.
+- **Ethernet uplink.** The `ethernet_uplink` component starts the EMAC with the IP101 PHY at boot and requests an address over DHCP; link and address changes are logged. Its route priority is higher than that of the Wi-Fi station, so the Ethernet interface stays the default route while the camera access point is joined; the camera remains reachable through the directly connected camera subnet. `CONFIG_ESP_NETIF_SET_DNS_PER_DEFAULT_NETIF` keeps the DNS servers of the default interface, so the camera's DHCP server cannot replace them. The GPIOs and PHY address can be changed in `menuconfig` under **TrailCamHub PoC → Ethernet uplink**. Uploads themselves are not implemented yet, so a missing cable or failed Ethernet start is not fatal.
+- **SD card** in 4-bit mode on SDMMC slot 0. The SDMMC host is shared with the ESP-Hosted transport on slot 1 and must not be deinitialized while ESP-Hosted is running.
+- **PSRAM** in 16-line mode at the ESP-IDF default clock of 200 MHz.
+- **Chip revision v1.x.** ESP32-P4 chips of revision v3.x need different firmware images than v0.x/v1.x chips, and ESP-IDF 5.5 builds for v3.x by default. `sdkconfig.defaults.esp32p4` selects revisions v1.0 to v1.99 instead, matching the boards in use; the boot log shows the chip revision. A board with a v3.x chip needs a separate build without `CONFIG_ESP32P4_SELECTS_REV_LESS_V3`.
+
+Still to verify on hardware: ESP-Hosted transport and BLE scanning through the C6, camera Wi-Fi join and UDP session over `esp_wifi_remote`, simultaneous Wi-Fi and Ethernet operation, and the SD card in 4-bit mode next to the SDIO link.
+
+### Alternative boards: LilyGO T-Dongle-S3 and T-Dongle-C5 (display and button)
+
+The **LilyGO T-Dongle-S3** is a USB stick with an ESP32-S3 (16 MB flash, no PSRAM), a 0.96" ST7735 display (160x80), a button on the back (GPIO0, the BOOT button) and a microSD slot. It has no uplink of its own; it is meant for testing the camera workflow on the bench. The firmware is built for the `esp32s3` target with `sdkconfig.defaults.tdongle-s3` on top of the common defaults, which enables `CONFIG_BOARD_TDONGLE_S3` and adapts the configuration:
+
+- **No automatic search.** `CONFIG_SESSION_SCAN_ON_BOOT` and the automatic scan interval are off: after boot the dongle waits until the button is pressed. A scan tries the camera up to `CONFIG_SESSION_MAX_ATTEMPTS` times and then returns to idle; after a cycle that did its work the dongle shows *FINISHED*.
+- **Button.** A short press starts a scan (BLE scan, Wi-Fi enable, Wi-Fi join, camera session, then the backend sync if configured); while a cycle runs it is ignored. Holding the button for 1.5 s stops the cycle (except a running backend sync) and returns to idle.
+- **Display.** The `dongle_ui` component shows only the current phase: a coloured title (*READY*, *SEARCHING*, *CONNECTING*, *CONNECTED*, *NO LINK*, *FINISHED*), the camera Wi-Fi name once the camera has reported it, the download progress (*Saving media n/m*, *Saved n of m files*), the countdown to the next attempt, and a hint for the button; with the [web UI](#web-ui), the idle and finished screens also show its network name, password and address. Content is redrawn only when it changes. The screen content (`status_screen.cpp`) and its drawing (`screen_renderer.cpp`, `font5x7.cpp`) have no ESP-IDF dependencies and are host-tested.
+- **No PSRAM.** PSRAM is disabled and the NimBLE host allocates from internal RAM.
+- **Console** on the native USB port (USB-Serial-JTAG).
+- **SD card** in 1-bit mode on CLK GPIO12, CMD GPIO16, D0 GPIO14, with the [log](#log-on-the-sd-card) on it.
+- **Photo download** on (**Media download → Download photos to the SD card**, described with the other `menuconfig` options below); the UDP receive mailbox is raised to 16 packets so frames are not lost while the card is busy. The Base64 thumbnail is left out of the log (`CONFIG_CAMERA_THUMBNAIL_SERIAL_PREVIEW` off).
+
+The display pins (MOSI GPIO3, SCLK GPIO5, CS GPIO4, DC GPIO2, RST GPIO1, backlight GPIO38, active low) are fixed in `components/dongle_ui/st7735_display.cpp`. The APA102 RGB LED (clock GPIO39, data GPIO40) shows a random colour at full brightness until it receives data, so `dongle_ui` switches it off when it starts (about a second after power-up). With `CONFIG_DONGLE_LED_BRIGHTNESS` (1-31, default 0 = off) it shows the phase in the colour of the display title instead, at that global brightness. Still to verify on hardware: display orientation and colours, and BLE plus Wi-Fi operation without PSRAM.
+
+| | | |
+|---|---|---|
+| ![READY: press the button to search; network, key and address of the web UI](docs/images/dongle/ready.png) | ![SEARCHING: looking for the camera via Bluetooth](docs/images/dongle/searching.png) | ![CONNECTING: joining the camera Wi-Fi](docs/images/dongle/connecting.png) |
+| ![CONNECTED: saving media 2 of 3](docs/images/dongle/connected.png) | ![NO LINK: next try in 12 s](docs/images/dongle/retry.png) | ![FINISHED: saved 3 of 3 files, with the web UI access](docs/images/dongle/finished.png) |
+
+The screenshots are drawn by `tools/dongle_screens` with the same rendering code as the firmware (`status_screen.cpp`, `screen_renderer.cpp`, `font5x7.cpp`); the network name and key are example values. After changing a screen, regenerate them with `cmake -S tools/dongle_screens -B build-screens && cmake --build build-screens && build-screens/dongle_screens docs/images/dongle`; CI fails if they are out of date.
+
+The **T-Dongle-C5** ([LilyGO repository](https://github.com/Xinyuan-LilyGO/T-Dongle-C5), schematic `hardware/T-Dongle-C5 V1.1.pdf`) is built for the `esp32c5` target with `sdkconfig.defaults.tdongle-c5`, which enables `CONFIG_BOARD_TDONGLE_C5`. It behaves like the T-Dongle-S3, with these differences:
+
+- **ESP32-C5HR8** (RISC-V, dual-band Wi-Fi 6, BLE 5) with 8 MB quad PSRAM in the package and 16 MB flash, so the common PSRAM settings stay on. The image requires chip revision v1.0 or later.
+- **Button** on GPIO28.
+- **Display** on MOSI GPIO2, SCLK GPIO6, CS GPIO10, DC GPIO3, RST GPIO1, backlight GPIO0 (active low); same panel, orientation and offsets as on the T-Dongle-S3.
+- **Internal RAM.** The static data of lwIP, net80211, pp and bt and the camera session state (`EXT_RAM_BSS_ATTR`) are in PSRAM (`CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY`), FreeRTOS runs from flash, and the pool reserved for DMA-capable and internal allocations is 48 KB (`CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL`). This doubled the free internal RAM, from about 38 to 77 KB after boot and from about 12 to 49 KB during the BLE activation. Before, a few small blocks left in the reserved pool after a camera session split its largest free block from 15 to 8.7 KB, and every later BLE scan failed with "Memory Capacity Exceeded" until the next reboot; now three searches in a row each reach the camera session. The `heap` console command shows the internal RAM by capability and region, `heap blocks` the blocks of the small DMA-capable heaps.
+- **SD card in SPI mode** (`CONFIG_SD_CARD_SPI_MODE`, forced because the ESP32-C5 has no SDMMC host). The card shares SPI2 with the display: SCK GPIO6, MOSI GPIO2, MISO GPIO7, CS GPIO23. The SD driver initializes the bus with a maximum transfer size large enough for a display frame and leaves it initialized when no card is found; the display driver then uses that bus (`sd_card_spi_bus_ready()`). The SPI driver serializes the transfers of both devices.
+- **RGB LED** on clock GPIO4, data GPIO5.
+- **Web UI** on (`CONFIG_WEB_UI_ENABLE`, see [Web UI](#web-ui)); its network name, password and address are on the idle and finished screens.
+- **Video download** on (`CONFIG_CAMERA_DOWNLOAD_VIDEOS`, which needs PSRAM), in addition to the photos. The heartbeat interval during a video is 500 ms (`CONFIG_CAMERA_VIDEO_HEARTBEAT_INTERVAL_MS`), an experiment explained in [docs/video-download.md](docs/video-download.md).
+
+Still to verify on hardware: the display next to the SD card on the shared bus, the web UI, and the photo download. The first boots (chip revision v1.0, 8 MB PSRAM, SD card mounted over SPI, BLE activation, camera Wi-Fi and thumbnails) and the video download (45 thumbnails and three videos in a row in one session, each 15-second video in about 37 s) have been checked.
+
+### Web UI
+
+With `CONFIG_WEB_UI_ENABLE` (**TrailCamHub PoC → Web UI** in `menuconfig`, off by default; not on the ESP32-P4) the `web_ui` component opens a WPA2 access point `TrailCamHub-XXXX` next to the camera station (AP+STA) and serves a page at `http://10.42.0.1`. Its password (10 characters from an alphabet without characters that look alike on a small display, such as `g`, `q` and `9`) is generated at the first boot and stored in NVS, and `web_ui_password()` returns it for a display; a stored password from an earlier firmware that contains such characters is replaced once; a fixed password can be set in `menuconfig`. The page shows the workflow status and the download progress, has buttons to search for the camera and to stop, browses the SD card (photos and videos with their thumbnails), shows images, videos, audio and text files, offers every file for download and deletion (two taps: *Delete*, then *Delete?* within three seconds) and follows the current log file of `sd_log` live. Directories, the log file being written and unfinished files (`.part`, `.tmp`) cannot be deleted, because removing a file that is open for writing corrupts the FAT volume. A deleted photo or video stays marked as downloaded in the catalog, so it is not downloaded again.
+
+- The DHCP server offers no router, so phones keep their mobile data for the internet and reach the device on the local subnet.
+- While the camera Wi-Fi is joined, the access point has to use the camera's channel. If it was on another channel, clients are disconnected when the station joins and usually reconnect within a few seconds. The component therefore stores the channel of the last camera in NVS and opens the access point there at the next boot, so with the same camera the switch happens only once. The channel scan while joining interrupts the access point for a moment but does not disconnect clients; a continuous BLE scan, however, leaves the access point little air time while the camera is searched.
+- The access point is closed while the BLE connection to the camera is set up, from the connection request until the camera has returned its Wi-Fi credentials and the BLE stack is released (about 3 to 10 s), and opened again before the camera Wi-Fi is joined. It is opened only after the release: opening it while the BLE stack still held its memory failed to allocate the beacon (`alloc eb ... fail`) and crashed the Wi-Fi driver (`ieee80211_hostap_attach`). On the T-Dongle-C5 a running access point otherwise left the BLE connection setup no air time once it had run for about a minute: the connection timed out (reason 0x222, connect status 13) or GATT discovery failed with `BLE_HS_ENOMEM`, in 5 of 5 searches started 60 s after boot, while searches 3.5 s after boot and searches without the web UI always succeeded. No client was connected. The BLE scan runs with the access point open. `camera_ble_set_link_callback()` reports the connection setup and `web_ui_suspend_access_point()` closes the access point; `main.cpp` connects the two.
+- The HTTP server runs in one task, so the page does not update while a large file is being downloaded.
+- The page consists of `index.html`, `style.css` (all layout) and `app.js` in `components/web_ui/www/`, embedded in the firmware. The path parameters are decoded and checked by `web_paths.cpp` (host-tested), which rejects `..` segments.
+- It needs about 40 KB of internal RAM; boards without PSRAM may run short of memory for BLE and Wi-Fi.
+
+### Log on the SD card
+
+`sd_log` (enabled by default wherever the SD card is enabled, **TrailCamHub PoC → Log on the SD card**) copies every log line to `/sdcard/logs/log-NNNNN.txt`, so that a field test can be read afterwards without a serial console. The lines are collected from the first statement of `app_main` (the boot messages are kept in a 64 KB PSRAM buffer until the card is mounted; 8 KB of internal RAM without PSRAM) and written by a low-priority task about once per second; each write is synced to the card, so pulling the device loses at most the last second. A new file is started at every boot and when a file reaches 4 MB; the 50 newest files are kept. Lines that do not fit into the buffer, for example while the card is busy, are counted and noted in the file. Lines longer than 255 characters are cut.
+
+### Serial console diagnostics
+
+The serial console (`hub_console`, see [Serial commands](#serial-commands)) runs on the console UART or, on the T-Dongles, on the native USB port (USB-Serial-JTAG). With `CONFIG_HUB_CONSOLE_DIAGNOSTICS` (**TrailCamHub PoC → Serial console**, on by default, off in the release profile) it also has commands that let a test run be driven and read from a computer without taking out the card:
+
+| Command | Effect |
+| --- | --- |
+| `heap [blocks]` | Internal RAM by capability (DMA, RTC RAM, ...) and by region, and PSRAM: free, largest free block, minimum; `blocks` lists the blocks of the small DMA-capable heaps with the first bytes of each used one |
+| `ls [path]` | Directory listing, one `TCH INFO <d\|f> <size> <mtime> <name>` line per entry |
+| `cat <path> [offset [length]]` | File contents as Base64 lines `TCH DATA <offset> <data>` between `TCH FILE <size>` and `TCH CRC <offset> <length> <crc32>` |
+| `rm [-r] <path>` | Deletes a file, or a directory tree with `-r` |
+| `sdbench [total_kb [chunk_kb]]` | Writes a test file (default 4096 KB) in chunks (default 8 KB) from internal DMA-capable RAM, unbuffered like the video download, and reports KB/s and the slowest chunk |
+
+Paths are below `/sdcard` (`/sdcard/logs`, `/logs` and `logs` are the same); `..` is rejected. A deleted photo or video stays marked as downloaded in `<camera-id>/catalog.csv`; to download a camera's thumbnails and media again, delete that file or the camera's directory (`rm -r <camera-id>`). `rm` and `sdbench` refuse while a scan uses the card (connecting, connected, uploading), and `rm` keeps the log file being written and unfinished files (`.part`, `.tmp`).
+
+`tools/dongle_console.py` (needs pyserial, part of the ESP-IDF Python environment) runs commands and copies files; lines that the USB-Serial-JTAG driver dropped are found by their offsets and requested again, and the CRC-32 is checked:
+
+```sh
+python tools/dongle_console.py run status
+python tools/dongle_console.py run scan --follow 600 --until "TCH EVENT done"
+python tools/dongle_console.py get logs/log-00003.txt ./log-00003.txt
+python tools/dongle_console.py get-tree <camera-id> ./card-copy
+```
+
+The script opens the port without changing DTR and RTS. pyserial's usual sequence clears DTR while RTS is still set, which resets a chip on its USB-Serial-JTAG port. In the Dev Container it uses `ESPPORT` (`/hostdev/ttyACM0`): the container's own `/dev/ttyACM0` is not updated when the board is plugged in again. esptool, however, finds the USB details of the port only under `/dev` and otherwise uses the wrong reset sequence (write timeout); with `/hostdev/ttyACM0` select the USB-Serial-JTAG reset explicitly, for example from the build directory: `python -m esptool --chip esp32c5 -b 460800 --before usb_reset --after hard_reset -p /hostdev/ttyACM0 write_flash "@flash_args"`. The first time the port is opened after the board was plugged in, the host's terminal echo can send boot output back as a command line; the console answers with an error. On the USB-Serial-JTAG port the console installs the driver, so log output that no computer reads is dropped after 50 ms instead of blocking; its buffers take about 2.5 KB of internal RAM, and the console's task stack is in PSRAM where there is some.
 
 ## Compatibility and Protocol Investigation
 
@@ -94,21 +189,51 @@ idf.py menuconfig
 idf.py build flash monitor
 ```
 
+For the ESP32-P4-NANO, build in a separate directory so the ESP32-S3 build stays intact (the component manager downloads `esp_hosted` and `esp_wifi_remote` into `managed_components/` on the first build):
+
+```sh
+idf.py -B build-esp32p4 -D IDF_TARGET=esp32p4 \
+    -D SDKCONFIG=build-esp32p4/sdkconfig build flash monitor
+```
+
+The VS Code task **ESP-IDF: Build ESP32-P4-NANO firmware** runs the same build.
+
+For the T-Dongles, add the board defaults (the VS Code tasks **ESP-IDF: Build T-Dongle-S3 firmware** and **ESP-IDF: Build T-Dongle-C5 firmware** run the same builds):
+
+```sh
+idf.py -B build-tdongle-s3 -D IDF_TARGET=esp32s3 \
+    -D SDKCONFIG=build-tdongle-s3/sdkconfig \
+    -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tdongle-s3" \
+    build flash monitor
+
+idf.py -B build-tdongle-c5 -D IDF_TARGET=esp32c5 \
+    -D SDKCONFIG=build-tdongle-c5/sdkconfig \
+    -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tdongle-c5" \
+    build flash monitor
+```
+
+If flashing fails, hold the button while plugging the dongle in to enter the download mode.
+
 #### Project structure
 
 The firmware is split into ESP-IDF components with explicit dependencies:
 
 | Component | Responsibility |
 |---|---|
-| `main` | `app_main`: initializes storage and radios and wires the components together |
+| `main` | `app_main`: initializes storage, the network stack and the Ethernet uplink, and wires the components together |
 | `components/camera_ble` | BLE scan and connection, GATT profile check, Wi-Fi-enable command, credential response |
 | `components/camera_wifi` | Wi-Fi station for the camera access point; runs a session callback after each connection |
-| `components/camera_link` | Camera session over UDP: discovery, PRE_LOGIN, PPPP/ARTEMIS packets, ALIVE, heartbeats |
+| `components/camera_link` | Camera session over UDP: discovery, PRE_LOGIN, PPPP/ARTEMIS packets, ALIVE, heartbeats; media list, thumbnails, photo and video download |
 | `components/sd_storage` | microSD card mount |
+| `components/ethernet_uplink` | Ethernet uplink with DHCP (ESP32-P4-NANO only) |
+| `components/coprocessor_update` | Builds, embeds and installs the ESP32-C6 co-processor firmware (ESP32-P4-NANO only) |
+| `components/dongle_ui` | Status display and search button (T-Dongle-S3 and T-Dongle-C5 only) |
+| `components/web_ui` | Access point and web UI: status, search/stop, file browser and download, live log |
+| `components/sd_log` | Copy of the log output in text files on the SD card |
 | `components/diagnostics` | Reset reason, core dump status, and heap statistics |
 | `components/session_controller` | Session state machine and the tasks that drive a scan: camera session, then backend uplink |
 | `components/hub_config` | Hub settings in NVS (home Wi-Fi, backend URL, device key) with validation |
-| `components/hub_console` | Line-based serial commands (`scan`, `upload`, `config …`) used by the web installer |
+| `components/hub_console` | Line-based serial commands on the console UART or USB-Serial-JTAG (`scan`, `upload`, `stop`, `config …`, diagnostics) used by the web installer and `tools/dongle_console.py` |
 | `components/uplink` | HTTPS sync with the backend: check-in, thumbnail upload, acknowledgement |
 
 Components do not call each other directly. They report events through callbacks to the session controller, which runs them in one task:
@@ -133,22 +258,25 @@ stateDiagram-v2
 
 The hub no longer retries forever. It stays **idle** until a scan is requested — over the serial console (for example with **Scan camera now** in the web installer), by the optional automatic scan interval, or once after boot if enabled. A scan wakes the camera over BLE, joins its Wi-Fi and runs the camera session (device info, media list, thumbnails to the SD card). If the camera is not reached, the scan is retried a few times (3 attempts, 10 seconds apart by default) and then given up. After the camera session, and if the uplink settings are complete, the hub joins the home Wi-Fi and syncs with the backend (see [`backend/README.md`](backend/README.md)): one check-in covers every camera stored on the SD card (battery and SD state, and only the recordings the backend does not know yet), then the hub uploads the thumbnails the backend asks for and acknowledges them in one request; the backend's time also sets the hub's clock. Each camera keeps its data in `/sdcard/<camera-id>/` (`camera.json`, `catalog.csv`, `thumb/`), and cameras appear in the backend automatically the first time a hub reports them. **Upload stored data only** runs just that sync.
 
+At the end of a session `camera_protocol_run()` frees the buffers of its containers (catalog, queues, reassemblers): their allocations are below `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` (16 KB) and so in internal RAM, and after a stopped session they held about 14 KB of it. The next BLE activation then found about 4 KB instead of 12 KB free, its scan failed, and stopping the half-started controller crashed (`esp_bt_controller_deinit`).
+
 BLE activation is paused while joining the camera Wi-Fi and during the session, and credentials that arrive later are ignored; by default the BLE stack is released at that point (see the BLE section). Timeouts, attempts, the retry delay, the automatic scan interval and scan-on-boot are configurable in `menuconfig` under **TrailCamHub PoC → Session**. The pure state machine (`session_fsm.cpp`), the command parser and the uplink wire format are covered by host tests. Project options are defined in `main/Kconfig.projbuild` and appear in `menuconfig` under **TrailCamHub PoC**.
 
 #### Serial commands
 
-The console UART accepts one command per line; replies and progress are lines starting with `TCH`:
+The console port (the console UART, or USB-Serial-JTAG on the T-Dongles) accepts one command per line; replies and progress are lines starting with `TCH`, and every command's reply ends with `TCH DONE`:
 
 | Command | Effect |
 |---|---|
-| `status` | Current state and settings (secrets hidden) |
+| `status` | Current state and settings (secrets hidden), the cycle's phase, the download progress, uptime, free RAM and SD card space |
 | `scan` | Read the camera, then sync with the backend if configured |
 | `upload` | Sync the data already on the SD card with the backend |
+| `stop` | End the running scan (a running backend sync completes) |
 | `config show` | List settings |
 | `config set <key> <value>` / `config set-hex <key> <hex>` | Store a setting (`wifi_ssid`, `wifi_password`, `api_url`, `device_key`) |
 | `config unset <key>` / `config clear` | Erase one or all settings |
 
-The settings live in NVS on the hub. The web installer's **Device setup** panel uses exactly these commands.
+The settings live in NVS on the hub. The web installer's **Device setup** panel uses exactly these commands. The diagnostic commands are described under [Serial console diagnostics](#serial-console-diagnostics).
 
 #### Host tests
 
@@ -191,6 +319,19 @@ printf 'IDF_PATH=%s\n' "$IDF_PATH"
 idf.py --version
 ```
 
+In a local Dev Container on a Linux host, boards plugged into the host appear in the container as `/dev/ttyACM*` (native USB) or `/dev/ttyUSB*` (USB-UART chips): the container runs privileged and mounts the host's `/dev`, so a board that re-enumerates on reset or in download mode stays reachable. With rootless Docker the container cannot use the host user's groups (such as `dialout`), so the host user has to own the serial devices. A udev rule on the host does that (replace `USER` with the host user name):
+
+```sh
+sudo tee /etc/udev/rules.d/99-esp-serial.rules <<'EOF'
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", OWNER="USER", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", OWNER="USER", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", OWNER="USER", MODE="0660"
+EOF
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+`303a` is Espressif's native USB, `1a86` and `10c4` are the common CH34x and CP210x USB-UART chips.
+
 `IDF_PATH` should be `/opt/esp/idf`, and the ESP-IDF version should be 5.5.6. Build the firmware with the default VS Code build task **ESP-IDF: Build firmware** (`Ctrl+Shift+B`) or run this command from the repository root:
 
 ```sh
@@ -205,9 +346,11 @@ idf.py set-target esp32s3
 
 The `build/` directory is intentionally ignored by Git and should be kept between builds for incremental compilation. The generated `sdkconfig` is also local and ignored; project defaults belong in the tracked `sdkconfig.defaults`. Do not routinely delete `build/` or run `idf.py fullclean`. The stable `/project` mount avoids cache path mismatches across Codespace restarts/rebuilds. If the ESP-IDF image/version or target changes, follow ESP-IDF's documented reconfiguration process for that change rather than clearing the build directory as a routine step.
 
-In `menuconfig`, open **TrailCamHub PoC**. **Wi-Fi enable payload (hex)** defaults to the bytes for ASCII `BT_KEY_ON`; spaces, colons, and hyphens may separate hex bytes. Set the option to an empty string to inspect GATT profiles without writing. The PoC uses a GATT write with response when supported by the characteristic. **Log camera UDP packet contents as hex** (enabled by default) logs every sent and received camera UDP packet in 16-byte hex lines below its one-line summary; disable it to reduce serial output.
+In `menuconfig`, open **TrailCamHub PoC**. **Wi-Fi enable payload (hex)** defaults to the bytes for ASCII `BT_KEY_ON`; spaces, colons, and hyphens may separate hex bytes. Set the option to an empty string to inspect GATT profiles without writing. The PoC uses a GATT write with response when supported by the characteristic. **Log camera UDP packet contents as hex** (enabled by default) logs every sent and received camera UDP packet in 16-byte hex lines below its one-line summary; disable it to reduce serial output. **Print the first thumbnail of a session as Base64** (enabled by default) logs the first thumbnail of each session between `THUMB` markers for the browser installer's live view; boards that keep the log on the SD card or show the thumbnails otherwise can disable it to save about 33 KB of log per session.
 
-The **Firmware Package** GitHub Actions workflow builds the ESP32-S3 firmware and publishes a `trailcamhub-esp32s3` artifact containing a merged flash image, the individual firmware images, checksums, and deployment instructions. The default CI build uses the development profile, includes the `BT_KEY_ON` Wi-Fi-enable payload, and sends it after GATT discovery. The workflow also builds the release profile and writes a size report to the run summary: total image size, free space in the application partition, and memory use per component. On pull requests it adds a size comparison against the target branch and warns when less than 10 % of the application partition remains free. Separate jobs run the host unit tests and check C/C++ formatting with `clang-format` 23 against the repository's `.clang-format`; run `git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format -i` before committing.
+**Media download → Download photos to the SD card** (off by default) downloads, after the thumbnails, every photo of the media list that the catalog does not mark as downloaded yet: cmdId 1285 requests the file, which streams back on bulk subtype 0x03 and is written to `/sdcard/<camera-id>/media/<dir>_<num>.<ext>` while it arrives (`BulkStream` on top of `FrameReorder`, with a reorder window of 32 frames in PSRAM or 8 without, so a photo is never held in RAM). The data goes to a `.part` file that is renamed when complete; the extension is taken from the content (JPEG, MP4/MOV, AVI, otherwise `bin`). A file without data for 20 seconds is dropped and tried again in the next session; a failed SD write stops the downloads. `camera_protocol_set_progress_callback()` reports the progress, for example to a display. Videos are not offered by cmdId 1285: the camera acknowledges the request but sends no data. **Download videos** (off by default, needs PSRAM) fetches them like the TrailCam Go app does, by playback (cmdId 769), and stores the streams as `<dir>_<num>.h264` (plays in VLC) and `<dir>_<num>.aac`; `ffmpeg -framerate 25 -i 100_2.h264 -i 100_2.aac -c copy 100_2.mp4` makes an MP4 without re-encoding (25 frames per second on the camera tried so far). Protocol, implementation and what to look for in the log are described in [docs/video-download.md](docs/video-download.md); several videos have been received completely in a row on one camera, a 15-second video in about 37 s (see the notes there).
+
+The **Firmware Package** GitHub Actions workflow builds the firmware for every board and publishes a `trailcamhub-<board>` artifact (`esp32s3`, `esp32p4`, `tdongle-s3`, `tdongle-c5`) containing a merged flash image, the individual firmware images, checksums, and deployment instructions. The default CI build uses the development profile, includes the `BT_KEY_ON` Wi-Fi-enable payload, and sends it after GATT discovery. The workflow also builds the release profile and writes a size report to the run summary: total image size, free space in the application partition, and memory use per component. On pull requests it adds a size comparison against the target branch and warns when less than 10 % of the application partition remains free. Separate jobs run the host unit tests and check C/C++ formatting with `clang-format` 23 against the repository's `.clang-format`; run `git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format -i` before committing.
 
 ### Browser Installer and Serial Console
 

@@ -18,7 +18,10 @@ typedef struct {
     void (*on_failed)(uint8_t reason);
 } camera_wifi_callbacks_t;
 
-/* Initializes the Wi-Fi station; credentials are kept in RAM only. */
+/*
+ * Initializes the Wi-Fi station; credentials are kept in RAM only. Requires
+ * esp_netif_init() and the default event loop.
+ */
 esp_err_t camera_wifi_init(const camera_wifi_callbacks_t *callbacks);
 
 /*

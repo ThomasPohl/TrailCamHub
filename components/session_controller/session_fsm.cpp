@@ -42,6 +42,7 @@ Result Fsm::transition(State next, std::uint32_t actions,
     state_ = next;
     if (next == State::idle) {
         attempt_ = 0;
+        stop_requested_ = false;
     }
     return result;
 }
@@ -94,6 +95,10 @@ Result Fsm::handle(Event event)
         if (event == Event::timeout) {
             return camera_failed(kPauseBle);
         }
+        if (event == Event::user_stop) {
+            return transition(State::idle, kCancelTimer | kPauseBle, 0,
+                              Outcome::stopped);
+        }
         break;
 
     case State::wifi_join:
@@ -102,6 +107,10 @@ Result Fsm::handle(Event event)
         }
         if (event == Event::wifi_failed || event == Event::timeout) {
             return camera_failed(kCancelTimer | kDisconnectWifi);
+        }
+        if (event == Event::user_stop) {
+            return transition(State::idle, kCancelTimer | kDisconnectWifi, 0,
+                              Outcome::stopped);
         }
         // Disconnects while joining are retried by the Wi-Fi module.
         break;
@@ -112,7 +121,17 @@ Result Fsm::handle(Event event)
             return {state_, state_, kStopSession | kDisconnectWifi,
                     0,      true,   Outcome::none};
         }
+        if (event == Event::user_stop) {
+            // Stay in this state until the session has ended.
+            stop_requested_ = true;
+            return {state_, state_, kStopSession | kDisconnectWifi,
+                    0,      true,   Outcome::none};
+        }
         if (event == Event::session_ended) {
+            if (stop_requested_) {
+                return transition(State::idle, kDisconnectWifi, 0,
+                                  Outcome::stopped);
+            }
             // Whatever the session fetched is on the SD card; sync it.
             return camera_done(kDisconnectWifi);
         }
@@ -124,6 +143,9 @@ Result Fsm::handle(Event event)
             return transition(State::ble_activation, kResumeBle | kStartTimer,
                               config_.ble_activation_timeout_ms);
         }
+        if (event == Event::user_stop) {
+            return transition(State::idle, kCancelTimer, 0, Outcome::stopped);
+        }
         break;
 
     case State::uplink_join:
@@ -133,6 +155,10 @@ Result Fsm::handle(Event event)
         if (event == Event::wifi_failed || event == Event::timeout) {
             return transition(State::idle, kCancelTimer | kDisconnectWifi, 0,
                               Outcome::uplink_unreachable);
+        }
+        if (event == Event::user_stop) {
+            return transition(State::idle, kCancelTimer | kDisconnectWifi, 0,
+                              Outcome::stopped);
         }
         break;
 
@@ -189,6 +215,8 @@ const char *to_string(Event event)
         return "uplink done";
     case Event::timeout:
         return "timeout";
+    case Event::user_stop:
+        return "user stop";
     }
     return "unknown";
 }
@@ -206,6 +234,8 @@ const char *to_string(Outcome outcome)
         return "camera-unreachable";
     case Outcome::uplink_unreachable:
         return "uplink-unreachable";
+    case Outcome::stopped:
+        return "stopped";
     }
     return "unknown";
 }

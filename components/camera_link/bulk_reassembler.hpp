@@ -75,6 +75,11 @@ class BulkReassembler
     {
         return total_frames_;
     }
+    // Sequence of the header-bearing frame.
+    std::uint16_t base_seq() const
+    {
+        return base_seq_;
+    }
     std::size_t received_frames() const
     {
         return received_frames_;

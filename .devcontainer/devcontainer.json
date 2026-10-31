@@ -3,9 +3,23 @@
   "image": "espressif/idf:v5.5.6",
   "workspaceMount": "source=${localWorkspaceFolder},target=/project,type=bind,consistency=cached",
   "workspaceFolder": "/project",
+  // Serial access to boards plugged into the (Linux) host. The whole /dev is
+  // mounted, because boards with native USB (USB-Serial-JTAG) re-enumerate on
+  // every reset and in download mode. With rootless Docker the host user must
+  // own the device (udev rule on the host, see README "Dev Container").
+  "runArgs": [
+    "--privileged"
+  ],
+  "mounts": [
+    "source=/dev,target=/hostdev,type=bind",
+    // Claude Code chat history and settings survive container rebuilds.
+    "source=claude-code-config-${devcontainerId},target=/root/.claude,type=volume"
+  ],
   "remoteUser": "root",
   "containerEnv": {
-    "IDF_PATH": "/opt/esp/idf"
+    "IDF_PATH": "/opt/esp/idf",
+    "ESPPORT": "/hostdev/ttyACM0",
+    "CLAUDE_CONFIG_DIR": "/root/.claude"
   },
   "postCreateCommand": "bash -lc 'source \"$IDF_PATH/export.sh\" >/dev/null && idf.py --version'"
 }

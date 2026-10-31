@@ -91,8 +91,24 @@ std::vector<CatalogEntry> MediaCatalog::pending_video_requests() const
     std::vector<CatalogEntry> out;
     for (const CatalogEntry &e : entries_) {
         if ((e.flags & kVideoRequested) != 0 &&
-            (e.flags & kVideoDownloaded) == 0)
+            (e.flags & kFileDownloaded) == 0)
             out.push_back(e);
+    }
+    return out;
+}
+
+std::vector<CatalogEntry> MediaCatalog::missing_downloads(bool photos,
+                                                          bool videos) const
+{
+    std::vector<CatalogEntry> out;
+    for (bool want_photos : {true, false}) {
+        if (want_photos ? !photos : !videos)
+            continue;
+        for (const CatalogEntry &e : entries_) {
+            const bool is_photo = e.file_type == 0;
+            if (is_photo == want_photos && (e.flags & kFileDownloaded) == 0)
+                out.push_back(e);
+        }
     }
     return out;
 }
