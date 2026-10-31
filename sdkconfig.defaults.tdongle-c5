@@ -56,6 +56,10 @@ CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH=y
 # flash, instead of a dongle that silently stops working.
 CONFIG_ESP_TASK_WDT_PANIC=y
 
+# Web UI over the dongle's own access point (http://10.42.0.1); the password
+# is generated at the first boot and shown on the display.
+CONFIG_WEB_UI_ENABLE=y
+
 # The thumbnails are on the SD card; no Base64 copy in the log.
 # CONFIG_CAMERA_THUMBNAIL_SERIAL_PREVIEW is not set
 

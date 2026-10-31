@@ -24,6 +24,7 @@ set(ble_dir ${repo_root}/components/camera_ble)
 set(link_dir ${repo_root}/components/camera_link)
 set(session_dir ${repo_root}/components/session_controller)
 set(ui_dir ${repo_root}/components/dongle_ui)
+set(web_dir ${repo_root}/components/web_ui)
 set(config_dir ${repo_root}/components/hub_config)
 set(console_dir ${repo_root}/components/hub_console)
 set(uplink_dir ${repo_root}/components/uplink)
@@ -54,6 +55,7 @@ add_executable(host_tests
     test_status_screen.cpp
     test_screen_renderer.cpp
     test_udp_packets.cpp
+    test_web_paths.cpp
     test_hub_console.cpp
     test_uplink_protocol.cpp
     ${ble_dir}/ble_advertising.cpp
@@ -84,11 +86,13 @@ add_executable(host_tests
     ${ui_dir}/status_screen.cpp
     ${ui_dir}/screen_renderer.cpp
     ${ui_dir}/font5x7.cpp
+    ${web_dir}/web_paths.cpp
     ${config_dir}/hub_config_rules.cpp
     ${console_dir}/command_parser.cpp
     ${uplink_dir}/uplink_protocol.cpp)
 target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir}
                                               ${session_dir} ${ui_dir}
+                                              ${web_dir}
                                               ${config_dir}/include
                                               ${console_dir} ${uplink_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})

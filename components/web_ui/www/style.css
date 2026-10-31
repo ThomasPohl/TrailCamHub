@@ -1,0 +1,384 @@
+:root {
+  --bg: #f4f5f2;
+  --card: #ffffff;
+  --text: #1d2420;
+  --muted: #66706a;
+  --line: #dde1dc;
+  --accent: #2f6b4f;
+  --accent-text: #ffffff;
+  --busy: #a86b00;
+  --ok: #2f7d4f;
+  --warn: #b4442c;
+  --danger: #b4442c;
+  --danger-text: #ffffff;
+  --code: #f0f2ee;
+  --overlay: rgba(0, 0, 0, 0.82);
+  --overlay-text: #ffffff;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141816;
+    --card: #1d2320;
+    --text: #e4e8e5;
+    --muted: #98a29c;
+    --line: #2f3833;
+    --accent: #5fae86;
+    --accent-text: #0f1512;
+    --busy: #e0a840;
+    --ok: #6cc690;
+    --warn: #ec7a5f;
+    --danger: #ec7a5f;
+    --danger-text: #1a0f0c;
+    --code: #121614;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* Header */
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.01em;
+}
+
+h2 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+section {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+/* Camera status */
+
+.phase {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pill {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.pill.idle { color: var(--text); }
+.pill.busy { color: var(--busy); }
+.pill.ok { color: var(--ok); }
+.pill.warn { color: var(--warn); }
+
+.detail {
+  color: var(--muted);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 16px;
+  margin: 12px 0;
+}
+
+.facts span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.facts b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--line);
+  accent-color: var(--accent);
+  appearance: none;
+  overflow: hidden;
+}
+
+progress::-webkit-progress-bar {
+  background: var(--line);
+}
+
+progress::-webkit-progress-value {
+  background: var(--accent);
+}
+
+progress::-moz-progress-bar {
+  background: var(--accent);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.error {
+  color: var(--warn);
+}
+
+/* Buttons */
+
+button,
+.button {
+  display: inline-block;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Second step of a delete: the button asks for confirmation. */
+button.danger.armed {
+  background: var(--danger);
+  color: var(--danger-text);
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.small {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+/* File browser */
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.crumbs a {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.list {
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--code);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 10px 2px;
+  color: var(--muted);
+}
+
+/* On phones the date is left out so that the name stays readable. */
+@media (max-width: 520px) {
+  .meta .date {
+    display: none;
+  }
+}
+
+/* Log */
+
+.loghead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.loghead h2 {
+  margin: 0;
+}
+
+label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+pre {
+  height: 340px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--code);
+  font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Viewer overlay */
+
+#viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--overlay);
+}
+
+#viewer .top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--overlay-text);
+}
+
+#viewer .top b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#viewer .body {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 0;
+}
+
+#viewer img,
+#viewer video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#viewer pre {
+  width: 100%;
+  height: 100%;
+}
+
+#viewer audio {
+  width: min(480px, 100%);
+}
+
+#viewer .note {
+  color: var(--overlay-text);
+}
