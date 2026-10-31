@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-184308-d60b598",
+      "date": "2026-10-31T18:43:08Z",
+      "commit": "d60b598",
+      "branch": "main",
+      "message": "Merge pull request #37 from HeikoGr/split/06-web-ui",
+      "dev": "builds/20261031-184308-d60b598/manifest-dev.json",
+      "release": "builds/20261031-184308-d60b598/manifest-release.json",
+      "devBin": "builds/20261031-184308-d60b598/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-184308-d60b598/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-182244-feac1c1",
       "date": "2026-10-31T18:22:44Z",
       "commit": "feac1c1",
@@ -208,17 +219,6 @@
       "release": "builds/20261029-081518-5f796a0/manifest-release.json",
       "devBin": "builds/20261029-081518-5f796a0/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261029-081518-5f796a0/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261029-062803-a22f976",
-      "date": "2026-10-29T06:28:03Z",
-      "commit": "a22f976",
-      "branch": "feature/thumbnails-to-sd",
-      "message": "camera_protocol: close the camera session cleanly when work is done",
-      "dev": "builds/20261029-062803-a22f976/manifest-dev.json",
-      "release": "builds/20261029-062803-a22f976/manifest-release.json",
-      "devBin": "builds/20261029-062803-a22f976/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261029-062803-a22f976/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
