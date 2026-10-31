@@ -256,6 +256,45 @@ footer {
   background: #1d2834;
 }
 
+.pv-table td {
+  vertical-align: middle;
+}
+
+.pv-table tr.pv-pair td:nth-child(3) {
+  color: #cfe0f0;
+}
+
+.pv-thumb-cell {
+  width: 1%;
+}
+
+.pv-thumb {
+  display: block;
+  width: 96px;
+  height: auto;
+  border: 1px solid #2b3a4a;
+  border-radius: 4px;
+  background: #0f1821;
+  cursor: zoom-in;
+}
+
+.pv-thumb.enlarged {
+  width: min(320px, 70vw);
+  cursor: zoom-out;
+}
+
+.pv-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 72px;
+  border: 1px dashed #2b3a4a;
+  border-radius: 4px;
+  color: #5d6f82;
+  font-size: 0.75rem;
+}
+
 .pv-frame {
   margin-top: 0.75rem;
   border: 1px solid #2b3a4a;
