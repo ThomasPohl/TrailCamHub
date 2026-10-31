@@ -301,4 +301,19 @@ config CAMERA_DOWNLOAD_STALL_TIMEOUT_S
 
 endmenu
 
+menu "Serial console"
+
+config HUB_CONSOLE_DIAGNOSTICS
+    bool "Diagnostic commands (heap, ls, cat, rm, sdbench)"
+    default y
+    help
+        Add commands to the serial console that show the internal RAM by
+        capability and region, and list, read (as Base64 lines) and delete
+        the files on the SD card and measure its write rate, so that a test
+        run can be driven from a computer without taking out the card.
+        tools/dongle_console.py runs commands and copies files. Files are
+        not deleted while a scan uses the card.
+
+endmenu
+
 endmenu

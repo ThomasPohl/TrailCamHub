@@ -65,11 +65,15 @@ static void on_button_stop(void)
     session_controller_request_stop();
 }
 
+#endif
+
 static void on_media_progress(uint32_t done, uint32_t stored, uint32_t total)
 {
+#if CONFIG_BOARD_TDONGLE
     dongle_ui_set_media_progress(done, stored, total);
-}
 #endif
+    hub_console_set_media_progress(done, stored, total);
+}
 
 extern "C" void app_main(void)
 {
@@ -124,7 +128,6 @@ extern "C" void app_main(void)
             ESP_OK) {
             ESP_LOGW(TAG, "The display does not follow the session status");
         }
-        camera_protocol_set_progress_callback(on_media_progress);
     } else {
         ESP_LOGW(TAG, "Continuing without display and button");
     }
@@ -135,6 +138,7 @@ extern "C" void app_main(void)
                  esp_err_to_name(error));
     }
 
+    camera_protocol_set_progress_callback(on_media_progress);
     error = hub_console_start();
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "Could not start the serial console: %s",

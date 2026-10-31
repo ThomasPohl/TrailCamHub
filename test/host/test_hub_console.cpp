@@ -13,7 +13,6 @@ TEST_CASE("simple commands")
     CHECK(parse_command("  upload \r\n").type == CommandType::upload);
     CHECK(parse_command("status").type == CommandType::status);
     CHECK(parse_command("help").type == CommandType::help);
-    CHECK(parse_command("stop\r\n").type == CommandType::stop);
     CHECK(parse_command("tch scan").type == CommandType::scan);
     CHECK(parse_command("").type == CommandType::empty);
     CHECK(parse_command("   \r\n").type == CommandType::empty);
@@ -133,4 +132,74 @@ TEST_CASE("uplink needs all settings")
     settings.device_key = "CAM1.abcdefghijklmnopqr";
     CHECK(hub_config::uplink_configured(settings));
     CHECK(hub_config::api_base(settings.api_url) == "https://api.example.com");
+}
+
+TEST_CASE("stop and the diagnostic commands")
+{
+    CHECK(parse_command("stop").type == CommandType::stop);
+    CHECK(parse_command("stop now").type == CommandType::invalid);
+
+    Command command = parse_command("heap");
+    CHECK(command.type == CommandType::heap);
+    CHECK_FALSE(command.blocks);
+    CHECK(parse_command("heap blocks").blocks);
+    CHECK(parse_command("heap all").type == CommandType::invalid);
+
+    command = parse_command("ls");
+    CHECK(command.type == CommandType::ls);
+    CHECK(command.path.empty());
+    command = parse_command("ls System Volume Information");
+    CHECK(command.path == "System Volume Information");
+}
+
+TEST_CASE("cat takes a path and an optional range")
+{
+    Command command = parse_command("cat logs/log-00003.txt");
+    CHECK(command.type == CommandType::cat);
+    CHECK(command.path == "logs/log-00003.txt");
+    CHECK(command.offset == 0);
+    CHECK(command.length == -1);
+
+    command = parse_command("cat a.h264 4096 192");
+    CHECK(command.offset == 4096);
+    CHECK(command.length == 192);
+
+    CHECK(parse_command("cat").type == CommandType::invalid);
+    CHECK(parse_command("cat a -5").type == CommandType::invalid);
+    CHECK(parse_command("cat a 1 2 3").type == CommandType::invalid);
+    CHECK(parse_command("cat a 0x10").type == CommandType::invalid);
+}
+
+TEST_CASE("rm takes -r and a path with spaces")
+{
+    Command command = parse_command("rm logs/log-00001.txt");
+    CHECK(command.type == CommandType::rm);
+    CHECK_FALSE(command.recursive);
+    CHECK(command.path == "logs/log-00001.txt");
+
+    command = parse_command("rm -r F4_C1_56_03_8A_31");
+    CHECK(command.recursive);
+    CHECK(command.path == "F4_C1_56_03_8A_31");
+
+    command = parse_command("rm -r My Camera");
+    CHECK(command.path == "My Camera");
+
+    CHECK(parse_command("rm").type == CommandType::invalid);
+    CHECK(parse_command("rm -r").type == CommandType::invalid);
+}
+
+TEST_CASE("sdbench sizes")
+{
+    Command command = parse_command("sdbench");
+    CHECK(command.type == CommandType::sdbench);
+    CHECK(command.total_kb == 4096);
+    CHECK(command.chunk_kb == 8);
+
+    command = parse_command("sdbench 1024 16");
+    CHECK(command.total_kb == 1024);
+    CHECK(command.chunk_kb == 16);
+
+    CHECK(parse_command("sdbench 0").type == CommandType::invalid);
+    CHECK(parse_command("sdbench 1024 65").type == CommandType::invalid);
+    CHECK(parse_command("sdbench 1024 16 1").type == CommandType::invalid);
 }
