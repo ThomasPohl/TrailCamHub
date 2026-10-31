@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-063750-89e5b8f",
+      "date": "2026-10-31T06:37:50Z",
+      "commit": "89e5b8f",
+      "branch": "main",
+      "message": "Merge pull request #28 from ThomasPohl/feature/hub-uplink",
+      "dev": "builds/20261031-063750-89e5b8f/manifest-dev.json",
+      "release": "builds/20261031-063750-89e5b8f/manifest-release.json",
+      "devBin": "builds/20261031-063750-89e5b8f/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-063750-89e5b8f/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-063002-f327dee",
       "date": "2026-10-31T06:30:02Z",
       "commit": "f327dee",
