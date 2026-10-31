@@ -276,4 +276,68 @@ config CAMERA_DOWNLOAD_STALL_TIMEOUT_S
 
 endmenu
 
+menu "Ethernet uplink"
+    depends on SOC_EMAC_SUPPORTED
+
+config ETH_UPLINK_ENABLE
+    bool "Use wired Ethernet as the uplink"
+    default y
+    help
+        Start the on-chip Ethernet MAC with the IP101 PHY at boot and obtain
+        an address over DHCP. The Ethernet interface stays the default
+        route while the camera Wi-Fi is joined. The GPIO defaults match the
+        Waveshare ESP32-P4-NANO (RMII reference clock input on GPIO50).
+
+config ETH_UPLINK_MDC_GPIO
+    int "SMI MDC GPIO"
+    depends on ETH_UPLINK_ENABLE
+    range 0 54
+    default 31
+
+config ETH_UPLINK_MDIO_GPIO
+    int "SMI MDIO GPIO"
+    depends on ETH_UPLINK_ENABLE
+    range 0 54
+    default 52
+
+config ETH_UPLINK_PHY_RST_GPIO
+    int "PHY reset GPIO (-1: none)"
+    depends on ETH_UPLINK_ENABLE
+    range -1 54
+    default 51
+
+config ETH_UPLINK_PHY_ADDR
+    int "PHY address"
+    depends on ETH_UPLINK_ENABLE
+    range 0 31
+    default 1
+
+endmenu
+
+menu "Co-processor firmware"
+    depends on IDF_TARGET_ESP32P4
+
+config COPROCESSOR_UPDATE_ENABLE
+    bool "Update the ESP32-C6 firmware at boot"
+    default y
+    help
+        Build the ESP-Hosted firmware for the ESP32-C6 co-processor from the
+        sources of the esp_hosted component and embed it in the application.
+        At boot, the image is flashed to the C6 over the ESP-Hosted link if
+        the C6 reports a different version, and the application restarts.
+        The build then takes longer and the application grows by the size
+        of the C6 image.
+
+config COPROCESSOR_UPDATE_MAX_ATTEMPTS
+    int "Update attempts per firmware version"
+    depends on COPROCESSOR_UPDATE_ENABLE
+    range 1 10
+    default 3
+    help
+        Number of boots on which the same image is sent to the C6 before the
+        firmware gives up and continues with the C6 firmware it has. The
+        count is reset once the C6 runs the embedded version.
+
+endmenu
+
 endmenu
