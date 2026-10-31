@@ -1,8 +1,9 @@
 /*
- * Reads commands from the console UART and executes them: settings are
- * stored through hub_config, scans, uploads and stops are handed to the
- * session controller. The controller's status changes are printed as
- * "TCH EVENT" lines for the web installer and other console clients.
+ * Reads commands from the console (UART or USB-Serial-JTAG) and executes
+ * them: settings are stored through hub_config, scans, uploads and stops are
+ * handed to the session controller. The controller's status changes are
+ * printed as "TCH EVENT" lines for the web installer and other console
+ * clients.
  */
 
 #include "hub_console.h"
@@ -11,8 +12,13 @@
 #include <string.h>
 #include <string>
 
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#include "driver/usb_serial_jtag.h"
+#include "driver/usb_serial_jtag_vfs.h"
+#else
 #include "driver/uart.h"
 #include "driver/uart_vfs.h"
+#endif
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -213,19 +219,39 @@ void console_task(void *arg)
 
 }  // namespace
 
-esp_err_t hub_console_start(void)
+// Blocking reads on stdin need the driver behind the console VFS.
+static esp_err_t install_console_driver(void)
 {
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+    usb_serial_jtag_driver_config_t config =
+        USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
+    config.rx_buffer_size = CONSOLE_RX_BUFFER;
+    esp_err_t error = usb_serial_jtag_driver_install(&config);
+    if (error == ESP_OK) {
+        usb_serial_jtag_vfs_set_rx_line_endings(ESP_LINE_ENDINGS_CRLF);
+        usb_serial_jtag_vfs_use_driver();
+    }
+    return error;
+#else
     const uart_port_t port = (uart_port_t)CONFIG_ESP_CONSOLE_UART_NUM;
-    // Blocking reads on stdin need the UART driver behind the console VFS.
     esp_err_t error =
         uart_driver_install(port, CONSOLE_RX_BUFFER, 0, 0, NULL, 0);
+    if (error == ESP_OK) {
+        uart_vfs_dev_port_set_rx_line_endings(port, ESP_LINE_ENDINGS_CRLF);
+        uart_vfs_dev_use_driver(port);
+    }
+    return error;
+#endif
+}
+
+esp_err_t hub_console_start(void)
+{
+    esp_err_t error = install_console_driver();
     if (error != ESP_OK) {
-        ESP_LOGE(TAG, "Could not install the console UART driver: %s",
+        ESP_LOGE(TAG, "Could not install the console driver: %s",
                  esp_err_to_name(error));
         return error;
     }
-    uart_vfs_dev_port_set_rx_line_endings(port, ESP_LINE_ENDINGS_CRLF);
-    uart_vfs_dev_use_driver(port);
 
     session_status_t status;
     session_controller_get_status(&status);
