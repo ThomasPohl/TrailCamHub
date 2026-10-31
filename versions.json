@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-175508-84aaca7",
+      "date": "2026-10-31T17:55:08Z",
+      "commit": "84aaca7",
+      "branch": "main",
+      "message": "Merge pull request #42 from ThomasPohl/merge/esp32p4-nano",
+      "dev": "builds/20261031-175508-84aaca7/manifest-dev.json",
+      "release": "builds/20261031-175508-84aaca7/manifest-release.json",
+      "devBin": "builds/20261031-175508-84aaca7/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-175508-84aaca7/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-174120-ffb5eea",
       "date": "2026-10-31T17:41:20Z",
       "commit": "ffb5eea",
