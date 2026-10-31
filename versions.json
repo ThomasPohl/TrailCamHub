@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261031-151757-c5ffcfb",
+      "date": "2026-10-31T15:17:57Z",
+      "commit": "c5ffcfb",
+      "branch": "main",
+      "message": "Merge pull request #31 from ThomasPohl/feature/aws-project-deploy",
+      "dev": "builds/20261031-151757-c5ffcfb/manifest-dev.json",
+      "release": "builds/20261031-151757-c5ffcfb/manifest-release.json",
+      "devBin": "builds/20261031-151757-c5ffcfb/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261031-151757-c5ffcfb/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-112248-114f2e5",
       "date": "2026-10-31T11:22:48Z",
       "commit": "114f2e5",
