@@ -189,15 +189,22 @@ parameter empty.
    [@userinfobot](https://t.me/userinfobot)):
 
    ```bash
-   TABLE=$(aws cloudformation describe-stacks --stack-name trailcamhub \
-     --query "Stacks[0].Outputs[?OutputKey=='TableName'].OutputValue" --output text)
-   npm run register-hub -- --table "$TABLE" --hub garden-hub --name Garden --user <id>
+   npm run register-hub -- --hub garden-hub --name Garden --user <id>
    ```
+
+   The script runs the registration inside the backend's Lambda function
+   (`aws lambda invoke`), because AWS projects deny people direct access to
+   DynamoDB data while the function may still use its table. It needs the AWS
+   CLI with credentials for the account; `--stack` (default `trailcamhub`) or
+   `--function` selects the function.
 
    The printed hub key goes onto the hub (web installer → Device setup → Device
    key). Cameras need no registration: they appear when the hub first reports
    them. Add family members with `--user <id>` (repeatable); `--rotate-key`
    issues a new key.
+
+   Admin tasks are only reachable by invoking the function directly; requests
+   through the Function URL never trigger them.
 
 ## Costs
 
