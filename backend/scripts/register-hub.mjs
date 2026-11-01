@@ -3,7 +3,7 @@
 //
 //   npm run register-hub -- --hub garden-hub [--name "Garden"] \
 //     [--user <telegramUserId>]... [--rotate-key] \
-//     [--stack trailcamhub | --function <name>] [--region eu-central-1]
+//     [--stack trailcamhub | --function <name>] [--region <region>]
 //
 // - A new hub gets a key, printed once.
 // - For an existing hub, --user links more people (family members) without
@@ -15,7 +15,9 @@
 // the function writes to the table. AWS projects deny people direct access to
 // DynamoDB data, but the function may still use its table. Needs the AWS CLI
 // with credentials allowed lambda:InvokeFunction (and, to find the function,
-// cloudformation:DescribeStackResources).
+// cloudformation:DescribeStackResources). Without --region, the AWS CLI's
+// own region applies (AWS_REGION, AWS_DEFAULT_REGION or the profile), so the
+// script works in an AWS project's home Region without extra flags.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -32,7 +34,7 @@ const { values } = parseArgs({
     stack: { type: 'string', default: 'trailcamhub' },
     function: { type: 'string' },
     table: { type: 'string' }, // no longer needed; accepted for old command lines
-    region: { type: 'string', default: process.env.AWS_REGION ?? 'eu-central-1' },
+    region: { type: 'string' },
   },
 });
 
@@ -51,7 +53,7 @@ if (values.table) console.warn('note: --table is no longer needed and is ignored
 
 function aws(args) {
   try {
-    return execFileSync('aws', [...args, '--region', values.region], {
+    return execFileSync('aws', values.region ? [...args, '--region', values.region] : args, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'inherit'],
     }).trim();

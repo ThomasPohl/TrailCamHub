@@ -137,8 +137,9 @@ an IAM user that may only deploy this stack, and the Telegram bot token is a
 GitHub secret instead of an SSM parameter.
 
 Prerequisites: AWS CLI with credentials for your project or account, in the
-project's home Region (`eu-central-1` for Germany; check AWS Settings →
-Projects). Set `AWS_REGION` accordingly if it differs.
+project's home Region (AWS assigns it, e.g. `eu-central-1` or `eu-north-1`;
+check AWS Settings → Projects). Calls to other Regions are denied there. Set
+the GitHub variable `AWS_REGION` if it is not `eu-central-1`.
 
 1. **Bootstrap** the deployment resources: artifact bucket, CloudFormation
    execution role limited to `trailcamhub-*` resources, and the deploy user:
