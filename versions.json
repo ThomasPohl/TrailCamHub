@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-172254-d3a3396",
+      "date": "2026-11-01T17:22:54Z",
+      "commit": "d3a3396",
+      "branch": "main",
+      "message": "Merge pull request #78 from ThomasPohl/fix/app-show-backend-error",
+      "dev": "builds/20261101-172254-d3a3396/manifest-dev.json",
+      "release": "builds/20261101-172254-d3a3396/manifest-release.json",
+      "devBin": "builds/20261101-172254-d3a3396/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-172254-d3a3396/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-164513-86b5d74",
       "date": "2026-11-01T16:45:13Z",
       "commit": "86b5d74",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-153538-c0e6841/manifest-release.json",
       "devBin": "builds/20261031-153538-c0e6841/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-153538-c0e6841/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-153405-8c13509",
-      "date": "2026-10-31T15:34:06Z",
-      "commit": "8c13509",
-      "branch": "main",
-      "message": "Merge pull request #39 from ThomasPohl/feature/deploy-annotations",
-      "dev": "builds/20261031-153405-8c13509/manifest-dev.json",
-      "release": "builds/20261031-153405-8c13509/manifest-release.json",
-      "devBin": "builds/20261031-153405-8c13509/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-153405-8c13509/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
