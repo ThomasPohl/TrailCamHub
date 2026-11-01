@@ -9,6 +9,9 @@
  * The BLE stack is started by the camera BLE module when it is needed.
  */
 
+#include <stdlib.h>
+#include <time.h>
+
 #include "esp_err.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -125,6 +128,10 @@ static void on_stop_request(void)
 
 extern "C" void app_main(void)
 {
+    // Local time follows this zone (TZ as in the C library, set once).
+    setenv("TZ", CONFIG_TIME_ZONE, 1);
+    tzset();
+
 #if CONFIG_SD_LOG_ENABLE
     // First, so that the boot messages are kept until the card is mounted.
     const bool sd_log_ready = sd_log_init() == ESP_OK;

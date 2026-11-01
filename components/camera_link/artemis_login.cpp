@@ -24,14 +24,22 @@ bool LoginSession::send_json(std::uint32_t app_sequence,
     return session_.send_data(msg.data(), msg.size(), now_us, context);
 }
 
+std::string build_login_json(std::int64_t camera_time)
+{
+    std::string json =
+        "{\"cmdId\":0,\"usrName\":\"admin\",\"password\":\"admin\","
+        "\"needVideo\":0,\"needAudio\":0,";
+    if (camera_time > 0) {
+        json += "\"utcTime\":" + std::to_string(camera_time) + ",";
+    }
+    return json + "\"supportHeartBeat\":true}";
+}
+
 bool LoginSession::start(std::uint32_t utc_time, std::int64_t now_us)
 {
     if (state_ != State::idle)
         return false;
-    const std::string json =
-        "{\"cmdId\":0,\"usrName\":\"admin\",\"password\":\"admin\","
-        "\"needVideo\":0,\"needAudio\":0,\"utcTime\":" +
-        std::to_string(utc_time) + ",\"supportHeartBeat\":true}";
+    const std::string json = build_login_json(utc_time);
     if (!send_json(next_app_seq_, json, now_us, "ARTEMIS login"))
         return false;
     ++next_app_seq_;

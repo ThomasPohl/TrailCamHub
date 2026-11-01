@@ -38,6 +38,7 @@ add_executable(host_tests
     test_hex_payload.cpp
     test_artemis_crypto.cpp
     test_artemis_login.cpp
+    test_camera_clock.cpp
     test_artemis_message.cpp
     test_artemis_reassembler.cpp
     test_media_list.cpp
@@ -65,6 +66,7 @@ add_executable(host_tests
     ${link_dir}/artemis_aes128.cpp
     ${link_dir}/artemis_crypto.cpp
     ${link_dir}/artemis_json.cpp
+    ${link_dir}/camera_clock.cpp
     ${link_dir}/artemis_login.cpp
     ${link_dir}/artemis_message.cpp
     ${link_dir}/artemis_reassembler.cpp

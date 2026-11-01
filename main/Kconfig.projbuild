@@ -224,6 +224,25 @@ config SD_LOG_BUFFER_KB
 endmenu
 
 
+menu "Clock"
+
+config TIME_ZONE
+    string "Time zone (POSIX TZ rule)"
+    default "CET-1CEST,M3.5.0,M10.5.0/3"
+    help
+        The time zone of the device, as the TZ rule of the C library: the name
+        of the standard time and its offset from UTC (west of Greenwich
+        positive, so "CET-1" is one hour east), then the summer time with the
+        dates on which it starts and ends. The default is Central European
+        Time and Summer Time. Rules for other zones: the TZ column of
+        https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+        The camera sets its clock at login. The TrailCam Go app gives it the
+        local time of the phone, and the camera shows that time on its photos
+        and videos as it is, so the device sends its local time too. Without
+        a valid clock the login carries no time and the camera keeps its own.
+
+endmenu
+
 menu "Media download"
     depends on SD_CARD_ENABLE
 
