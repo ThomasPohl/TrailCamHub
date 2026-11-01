@@ -376,6 +376,18 @@ footer {
   font: inherit;
 }
 
+.ds-form label.ds-remember {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-weight: 400;
+}
+
+.ds-form .ds-remember input {
+  margin: 0.2rem 0 0;
+  padding: 0;
+}
+
 .ds-form small {
   color: #bac8d5;
   font-weight: 400;

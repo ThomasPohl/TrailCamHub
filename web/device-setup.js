@@ -45,6 +45,76 @@
 
   const serial = () => window.trailcamSerial;
 
+  // Remembered form values, so the settings need not be typed again on every
+  // visit. Opt-out via the checkbox, which also deletes what is stored.
+  const FIELDS = ["wifi_ssid", "wifi_password", "api_url", "device_key"];
+  const STORAGE_KEY = "trailcamhub.deviceSetup";
+  const PREFERENCE_KEY = "trailcamhub.deviceSetup.remember";
+  const rememberBox = panel.querySelector("#ds-remember");
+
+  function readRemembered() {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeRemembered() {
+    if (!rememberBox.checked) {
+      return;
+    }
+    const values = Object.fromEntries(FIELDS.map((key) => [key, form.elements[key].value]));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(values));
+    } catch {
+      // Storage blocked or full: remembering is only a convenience.
+    }
+  }
+
+  function forgetRemembered() {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Nothing stored that we could reach.
+    }
+  }
+
+  function restoreRemembered() {
+    // On by default; unticking stores an "off" marker and deletes the values.
+    rememberBox.checked = readRememberPreference();
+    const stored = rememberBox.checked ? readRemembered() : null;
+    if (!stored) {
+      return;
+    }
+    for (const key of FIELDS) {
+      if (typeof stored[key] === "string") {
+        form.elements[key].value = stored[key];
+      }
+    }
+  }
+
+  function readRememberPreference() {
+    try {
+      return window.localStorage.getItem(PREFERENCE_KEY) !== "off";
+    } catch {
+      return false;
+    }
+  }
+
+  function writeRememberPreference(on) {
+    try {
+      if (on) {
+        window.localStorage.removeItem(PREFERENCE_KEY);
+      } else {
+        window.localStorage.setItem(PREFERENCE_KEY, "off");
+      }
+    } catch {
+      // Ignore: the checkbox simply starts unticked next time.
+    }
+  }
+
   function setConnected(connected) {
     connection.textContent = connected ? "Connected" : "Not connected";
     connectButton.hidden = connected;
@@ -133,8 +203,10 @@
         await send(`config set-hex ${key} ${toHex(value)}`, `config set ${key} ${secret ? "••••" : value}`);
       }
       await send("config show");
-      form.elements.wifi_password.value = "";
-      form.elements.device_key.value = "";
+      if (!rememberBox.checked) {
+        form.elements.wifi_password.value = "";
+        form.elements.device_key.value = "";
+      }
       formStatus.textContent = "Saved. Empty fields keep their stored value.";
     } catch {
       formStatus.textContent = "Saving failed; check the connection.";
@@ -192,6 +264,19 @@
 
   connectButton.addEventListener("click", () => serial()?.connect());
   form.addEventListener("submit", saveSettings);
+  form.addEventListener("input", (event) => {
+    if (event.target !== rememberBox) {
+      writeRemembered();
+    }
+  });
+  rememberBox.addEventListener("change", () => {
+    writeRememberPreference(rememberBox.checked);
+    if (rememberBox.checked) {
+      writeRemembered();
+    } else {
+      forgetRemembered();
+    }
+  });
   for (const button of actionButtons) {
     button.addEventListener("click", () => {
       void send(button.dataset.command).catch(() => {});
@@ -213,6 +298,7 @@
   });
   window.addEventListener("serial-disconnected", () => setConnected(false));
 
+  restoreRemembered();
   setConnected(false);
   if (!("serial" in navigator)) {
     connectButton.disabled = true;
