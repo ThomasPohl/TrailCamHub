@@ -18,7 +18,6 @@
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/idf_additions.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
@@ -458,17 +457,13 @@ esp_err_t hub_console_start(void)
         ESP_LOGW(TAG, "Could not follow the session status: %s",
                  esp_err_to_name(listener_error));
     }
-    // The stack goes to PSRAM where there is some, to spare internal RAM.
-    BaseType_t created = pdFAIL;
-#if CONFIG_SPIRAM
-    created = xTaskCreateWithCaps(
-        console_task, "hub_console", CONSOLE_TASK_STACK, NULL,
-        CONSOLE_TASK_PRIORITY, NULL, MALLOC_CAP_SPIRAM);
-#endif
-    if (created != pdPASS) {
-        created = xTaskCreate(console_task, "hub_console", CONSOLE_TASK_STACK,
-                              NULL, CONSOLE_TASK_PRIORITY, NULL);
-    }
+    // The stack must stay in internal RAM: commands such as "config set"
+    // write NVS, and flash writes disable the cache and with it PSRAM.
+    // ESP-IDF asserts in spi_flash_disable_interrupts_caches_and_other_cpu()
+    // if the calling task's stack lives in PSRAM.
+    const BaseType_t created =
+        xTaskCreate(console_task, "hub_console", CONSOLE_TASK_STACK, NULL,
+                    CONSOLE_TASK_PRIORITY, NULL);
     if (created != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
