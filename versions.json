@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-055204-add087a",
+      "date": "2026-11-01T05:52:04Z",
+      "commit": "add087a",
+      "branch": "main",
+      "message": "Merge pull request #46 from HeikoGr/fix/camera-login-time",
+      "dev": "builds/20261101-055204-add087a/manifest-dev.json",
+      "release": "builds/20261101-055204-add087a/manifest-release.json",
+      "devBin": "builds/20261101-055204-add087a/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-055204-add087a/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261031-193500-042ae0a",
       "date": "2026-10-31T19:35:00Z",
       "commit": "042ae0a",
@@ -208,17 +219,6 @@
       "release": "builds/20261029-105933-932cf5c/manifest-release.json",
       "devBin": "builds/20261029-105933-932cf5c/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261029-105933-932cf5c/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261029-102104-72bf58a",
-      "date": "2026-10-29T10:21:04Z",
-      "commit": "72bf58a",
-      "branch": "feature/thumbnails-to-sd",
-      "message": "camera_protocol: only start a bulk record on its ARTEMIS header frame",
-      "dev": "builds/20261029-102104-72bf58a/manifest-dev.json",
-      "release": "builds/20261029-102104-72bf58a/manifest-release.json",
-      "devBin": "builds/20261029-102104-72bf58a/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261029-102104-72bf58a/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
