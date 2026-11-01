@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-074300-cae8dd9",
+      "date": "2026-11-01T07:43:00Z",
+      "commit": "cae8dd9",
+      "branch": "main",
+      "message": "Merge pull request #73 from ThomasPohl/fix/console-stack-internal-ram",
+      "dev": "builds/20261101-074300-cae8dd9/manifest-dev.json",
+      "release": "builds/20261101-074300-cae8dd9/manifest-release.json",
+      "devBin": "builds/20261101-074300-cae8dd9/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-074300-cae8dd9/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-071132-87d98bc",
       "date": "2026-11-01T07:11:32Z",
       "commit": "87d98bc",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-112248-114f2e5/manifest-release.json",
       "devBin": "builds/20261031-112248-114f2e5/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-112248-114f2e5/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-072011-1f325ab",
-      "date": "2026-10-31T07:20:11Z",
-      "commit": "1f325ab",
-      "branch": "feature/session-control-interface",
-      "message": "Session: neutral request and status interface for front ends",
-      "dev": "builds/20261031-072011-1f325ab/manifest-dev.json",
-      "release": "builds/20261031-072011-1f325ab/manifest-release.json",
-      "devBin": "builds/20261031-072011-1f325ab/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-072011-1f325ab/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
