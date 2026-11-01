@@ -1,5 +1,7 @@
 const connectButton = document.querySelector("#connect-serial");
 const disconnectButton = document.querySelector("#disconnect-serial");
+const clearButton = document.querySelector("#clear-serial");
+const copyButton = document.querySelector("#copy-serial");
 const output = document.querySelector("#serial-output");
 const status = document.querySelector("#serial-status");
 
@@ -15,6 +17,47 @@ function appendOutput(text) {
     output.textContent = output.textContent.slice(-80_000);
   }
   output.scrollTop = output.scrollHeight;
+  updateOutputButtons();
+}
+
+// Clear and Copy only make sense while there is output to act on.
+function updateOutputButtons() {
+  const empty = output.textContent.length === 0;
+  clearButton.disabled = empty;
+  copyButton.disabled = empty;
+}
+
+// Empties only the console view: the connection, the partial-line buffer and
+// everything fed from "serial-line" events (device setup, protocol view) are
+// left untouched.
+function clearOutput() {
+  output.textContent = "";
+  updateOutputButtons();
+}
+
+let copyFeedbackTimer;
+
+// Shows the copy result on the button itself, so the connection status next to
+// it keeps its meaning.
+function showCopyFeedback(label) {
+  clearTimeout(copyFeedbackTimer);
+  copyButton.textContent = label;
+  copyFeedbackTimer = setTimeout(() => {
+    copyButton.textContent = "Copy";
+  }, 2000);
+}
+
+async function copyOutput() {
+  try {
+    if (!navigator.clipboard) {
+      throw new Error("Clipboard is not available");
+    }
+    await navigator.clipboard.writeText(output.textContent);
+    showCopyFeedback("Copied");
+  } catch (error) {
+    showCopyFeedback("Copy failed");
+    status.textContent = `Could not copy the output: ${error.message}`;
+  }
 }
 
 // Splits the incoming stream into complete lines and dispatches each as a
@@ -129,3 +172,5 @@ window.trailcamSerial = {
 
 connectButton.addEventListener("click", connect);
 disconnectButton.addEventListener("click", handleDisconnect);
+clearButton.addEventListener("click", clearOutput);
+copyButton.addEventListener("click", copyOutput);
