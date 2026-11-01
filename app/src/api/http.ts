@@ -63,8 +63,41 @@ export class HttpApiClient implements ApiClient {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!response.ok) {
-      throw new ApiError(response.status, `${method} ${path} failed with HTTP ${response.status}`);
+      const detail = await errorDetail(response);
+      throw new ApiError(
+        response.status,
+        `${method} ${path} failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`,
+      );
     }
     return (await response.json()) as T;
   }
+}
+
+/** Longest backend error text shown to the user. */
+const MAX_DETAIL_LENGTH = 200;
+
+/**
+ * Reads the backend's `{ "error": "…" }` body so the user sees why a request
+ * failed (e.g. a bad init data signature), not just the status code.
+ */
+async function errorDetail(response: Response): Promise<string | undefined> {
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    return undefined;
+  }
+  let detail = text;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed === 'object' && parsed !== null && 'error' in parsed) {
+      const { error } = parsed as { error: unknown };
+      if (typeof error === 'string') detail = error;
+    }
+  } catch {
+    // Not JSON: show the plain text.
+  }
+  detail = detail.trim();
+  if (!detail) return undefined;
+  return detail.length > MAX_DETAIL_LENGTH ? `${detail.slice(0, MAX_DETAIL_LENGTH)}…` : detail;
 }
