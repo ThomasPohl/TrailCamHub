@@ -10,6 +10,7 @@
 #include <utime.h>
 
 #include "artemis_json.hpp"
+#include "camera_clock.hpp"
 #include "esp_log.h"
 #include "sd_card.h"
 
@@ -24,6 +25,23 @@ std::string camera_dir(const std::string &camera_id)
 {
     return std::string(SD_CARD_MOUNT_POINT) + "/" +
            sanitize_camera_id(camera_id);
+}
+
+// Sets a file's times to the recording time `media_time` (the camera's wall
+// clock from the media list). It is converted to the real UTC instant first,
+// because the FAT driver stores file times as local time (see
+// camera::media_file_time()). An unset camera clock keeps the default time.
+void set_file_time(const std::string &path, std::int64_t media_time)
+{
+    const std::int64_t file_time = camera::media_file_time(media_time);
+    if (file_time <= 0)
+        return;
+    struct utimbuf times;
+    times.actime = static_cast<time_t>(file_time);
+    times.modtime = static_cast<time_t>(file_time);
+    if (utime(path.c_str(), &times) != 0) {
+        ESP_LOGW(TAG, "utime %s failed: errno %d", path.c_str(), errno);
+    }
 }
 
 // Creates a directory, tolerating "already exists".
@@ -120,17 +138,8 @@ bool write_thumbnail(const std::string &camera_id, std::int64_t dir,
     const std::string path = thumbnail_path(camera_id, dir, num);
     if (!write_file(path, jpeg, size))
         return false;
-    // Set the file's timestamps to the recording time so the thumbnail dates
-    // match the capture rather than the sync. media_time is Unix seconds; <= 0
-    // means the camera clock was unset, so leave the default (sync) time.
-    if (media_time > 0) {
-        struct utimbuf times;
-        times.actime = static_cast<time_t>(media_time);
-        times.modtime = static_cast<time_t>(media_time);
-        if (utime(path.c_str(), &times) != 0) {
-            ESP_LOGW(TAG, "utime %s failed: errno %d", path.c_str(), errno);
-        }
-    }
+    // Date the thumbnail with the capture rather than the sync.
+    set_file_time(path, media_time);
     return true;
 }
 
@@ -243,14 +252,7 @@ bool MediaFileWriter::finish(std::int64_t media_time)
         return false;
     }
     path_ = path;
-    if (media_time > 0) {
-        struct utimbuf times;
-        times.actime = static_cast<time_t>(media_time);
-        times.modtime = static_cast<time_t>(media_time);
-        if (utime(path.c_str(), &times) != 0) {
-            ESP_LOGW(TAG, "utime %s failed: errno %d", path.c_str(), errno);
-        }
-    }
+    set_file_time(path, media_time);
     return true;
 }
 

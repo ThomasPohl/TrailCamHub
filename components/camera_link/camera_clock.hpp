@@ -24,4 +24,12 @@ std::int64_t camera_wall_clock(std::int64_t utc);
 // twice when summer time ends, either of the two instants may come back.
 std::int64_t camera_wall_clock_to_utc(std::int64_t wall);
 
+// The file time (UTC, for utime()) of a thumbnail or media file recorded at
+// `media_time`, the camera's wall clock from the media list. The FAT driver
+// stores a file time as local time (localtime_r() with the TZ rule), so the
+// wall clock has to be turned into the real UTC instant first; otherwise the
+// file shows the recording time shifted by the zone offset. Returns 0 when
+// `media_time` <= 0 (the camera clock was unset): keep the default time.
+std::int64_t media_file_time(std::int64_t media_time);
+
 }  // namespace camera

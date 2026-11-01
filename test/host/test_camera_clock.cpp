@@ -81,6 +81,41 @@ TEST_CASE("camera_wall_clock_to_utc: the inverse of camera_wall_clock")
     use_time_zone("CET-1CEST,M3.5.0,M10.5.0/3");
 }
 
+TEST_CASE("media_file_time: the FAT file shows the camera's wall clock")
+{
+    use_time_zone("CET-1CEST,M3.5.0,M10.5.0/3");
+    using camera::media_file_time;
+    // An unset camera clock keeps the default file time.
+    CHECK(media_file_time(0) == 0);
+    CHECK(media_file_time(-5) == 0);
+    // A photo taken at 14:00 on the camera (wall clock read as UTC): the file
+    // time is the real instant, 13:00 UTC in winter and 12:00 UTC in summer.
+    CHECK(media_file_time(1768485600) == 1768485600 - 3600);  // 15.01.2026
+    CHECK(media_file_time(1784124000) == 1784124000 - 7200);  // 15.07.2026
+    // The FAT driver stores localtime_r() of the file time: that local
+    // calendar time must be the wall clock again.
+    for (std::int64_t wall : {1768485600LL, 1784124000LL, 1793484891LL,
+                              1766505692LL, 1774753200LL}) {
+        const std::int64_t file_time = media_file_time(wall);
+        const time_t instant = static_cast<time_t>(file_time);
+        struct tm local = {};
+        REQUIRE(localtime_r(&instant, &local) != nullptr);
+        struct tm wall_tm = {};
+        const time_t wall_instant = static_cast<time_t>(wall);
+        REQUIRE(gmtime_r(&wall_instant, &wall_tm) != nullptr);
+        CHECK(local.tm_year == wall_tm.tm_year);
+        CHECK(local.tm_mon == wall_tm.tm_mon);
+        CHECK(local.tm_mday == wall_tm.tm_mday);
+        CHECK(local.tm_hour == wall_tm.tm_hour);
+        CHECK(local.tm_min == wall_tm.tm_min);
+        CHECK(local.tm_sec == wall_tm.tm_sec);
+    }
+    // In UTC the wall clock is the file time.
+    use_time_zone("UTC0");
+    CHECK(media_file_time(1784124000) == 1784124000);
+    use_time_zone("CET-1CEST,M3.5.0,M10.5.0/3");
+}
+
 TEST_CASE("login JSON: with the camera time, and without one")
 {
     CHECK(camera::artemis::build_login_json(1766505566) ==

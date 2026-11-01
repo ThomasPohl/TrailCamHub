@@ -19,3 +19,17 @@ A time is accepted only if it lies between the build date and ten years after
 it. The camera time is not trusted: while the source is the camera, the login
 carries no time, and a browser, SNTP or backend time replaces it. `/api/status`
 shows `clock_set` and `clock_source`.
+
+## Media times
+
+Times that come from the camera (`time` in the media list, stored as
+`media_time` in the catalog, and `timeUTC` in the device info) are its wall
+clock read as if it were UTC, not real UTC instants. `camera_wall_clock_to_utc()`
+turns them into UTC by `CONFIG_TIME_ZONE`.
+
+Thumbnails and media files on the SD card are dated with the recording time.
+The FAT driver stores file times as local time, so `media_store` converts the
+wall clock to UTC before `utime()` (`media_file_time()`). The file then shows
+the camera's wall clock, and `stat()` returns the real instant. Files stored
+before this conversion are shifted by the zone offset (1 h in winter, 2 h in
+summer).
