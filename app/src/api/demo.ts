@@ -1,4 +1,5 @@
 import type { ApiClient, Camera, CommandResult, MediaItem } from './types';
+import { toCameraWallClock } from '../format';
 
 const DEMO_HUB = { hubId: 'garden-hub', hubName: 'Garden hub', hubBatPercent: 91 };
 
@@ -48,7 +49,8 @@ export function buildDemoMedia(now: number, count = 12, firstNum = 36): MediaIte
   const items: MediaItem[] = [];
   for (let i = 0; i < count; i++) {
     const num = firstNum - i;
-    const mediaTime = now - i * 5_400 - 600;
+    // Like the camera: the wall clock, not the UTC instant.
+    const mediaTime = toCameraWallClock(now - i * 5_400 - 600);
     const isVideo = i % 2 === 1;
     items.push({
       dir: 100,
