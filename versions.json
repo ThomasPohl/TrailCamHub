@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-070940-4ad05e3",
+      "date": "2026-11-01T07:09:40Z",
+      "commit": "4ad05e3",
+      "branch": "main",
+      "message": "Merge pull request #71 from ThomasPohl/fix/register-hub-region",
+      "dev": "builds/20261101-070940-4ad05e3/manifest-dev.json",
+      "release": "builds/20261101-070940-4ad05e3/manifest-release.json",
+      "devBin": "builds/20261101-070940-4ad05e3/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-070940-4ad05e3/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-064352-cab208f",
       "date": "2026-11-01T06:43:52Z",
       "commit": "cab208f",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-063750-89e5b8f/manifest-release.json",
       "devBin": "builds/20261031-063750-89e5b8f/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-063750-89e5b8f/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-063002-f327dee",
-      "date": "2026-10-31T06:30:02Z",
-      "commit": "f327dee",
-      "branch": "main",
-      "message": "Merge pull request #27 from ThomasPohl/feature/aws-backend",
-      "dev": "builds/20261031-063002-f327dee/manifest-dev.json",
-      "release": "builds/20261031-063002-f327dee/manifest-release.json",
-      "devBin": "builds/20261031-063002-f327dee/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-063002-f327dee/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
