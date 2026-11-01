@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-184612-91c4fe4",
+      "date": "2026-11-01T18:46:12Z",
+      "commit": "91c4fe4",
+      "branch": "main",
+      "message": "Merge pull request #80 from ThomasPohl/feat/web-console-clear-copy",
+      "dev": "builds/20261101-184612-91c4fe4/manifest-dev.json",
+      "release": "builds/20261101-184612-91c4fe4/manifest-release.json",
+      "devBin": "builds/20261101-184612-91c4fe4/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-184612-91c4fe4/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-172254-d3a3396",
       "date": "2026-11-01T17:22:54Z",
       "commit": "d3a3396",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-161242-a8439a0/manifest-release.json",
       "devBin": "builds/20261031-161242-a8439a0/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-161242-a8439a0/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-153538-c0e6841",
-      "date": "2026-10-31T15:35:38Z",
-      "commit": "c0e6841",
-      "branch": "main",
-      "message": "Merge pull request #40 from ThomasPohl/feature/bootstrap-transform-permission",
-      "dev": "builds/20261031-153538-c0e6841/manifest-dev.json",
-      "release": "builds/20261031-153538-c0e6841/manifest-release.json",
-      "devBin": "builds/20261031-153538-c0e6841/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-153538-c0e6841/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
