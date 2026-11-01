@@ -58,6 +58,37 @@ describe('HttpApiClient', () => {
       status: 401,
     } satisfies Partial<ApiError>);
   });
+
+  it('includes the backend error message', async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ error: 'Invalid Telegram init data (bad signature)' }, 401));
+    const client = new HttpApiClient('https://api.example.com', 'x', fetchFn);
+
+    await expect(client.listCameras()).rejects.toThrow(
+      'GET /v1/cameras failed with HTTP 401: Invalid Telegram init data (bad signature)',
+    );
+  });
+
+  it('shows a non-JSON error body as text and keeps it short', async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response('x'.repeat(500), { status: 502 }));
+    const client = new HttpApiClient('https://api.example.com', 'x', fetchFn);
+
+    const error = await client.listCameras().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).message).toBe(
+      `GET /v1/cameras failed with HTTP 502: ${'x'.repeat(200)}…`,
+    );
+  });
+
+  it('keeps the plain message without an error body', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 500 }));
+    const client = new HttpApiClient('https://api.example.com', 'x', fetchFn);
+
+    await expect(client.listCameras()).rejects.toThrow(/^GET \/v1\/cameras failed with HTTP 500$/);
+  });
 });
 
 describe('createApiClient', () => {
