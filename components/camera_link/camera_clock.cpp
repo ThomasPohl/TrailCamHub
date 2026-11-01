@@ -48,4 +48,12 @@ std::int64_t camera_wall_clock_to_utc(std::int64_t wall)
     return utc;
 }
 
+std::int64_t media_file_time(std::int64_t media_time)
+{
+    if (media_time <= 0) {
+        return 0;
+    }
+    return camera_wall_clock_to_utc(media_time);
+}
+
 }  // namespace camera
