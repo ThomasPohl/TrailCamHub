@@ -28,6 +28,8 @@ set(web_dir ${repo_root}/components/web_ui)
 set(config_dir ${repo_root}/components/hub_config)
 set(console_dir ${repo_root}/components/hub_console)
 set(uplink_dir ${repo_root}/components/uplink)
+set(mp4_dir ${repo_root}/components/mp4_mux)
+set(time_dir ${repo_root}/components/time_sync)
 
 add_executable(host_tests
     test_main.cpp
@@ -48,6 +50,8 @@ add_executable(host_tests
     test_device_info.cpp
     test_media_catalog.cpp
     test_media_store.cpp
+    test_mp4_mux.cpp
+    test_time_policy.cpp
     test_pppp_session.cpp
     test_playback.cpp
     test_playback_decoder.cpp
@@ -91,14 +95,22 @@ add_executable(host_tests
     ${web_dir}/web_paths.cpp
     ${config_dir}/hub_config_rules.cpp
     ${console_dir}/command_parser.cpp
-    ${uplink_dir}/uplink_protocol.cpp)
-target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir}
+    ${uplink_dir}/uplink_protocol.cpp
+    ${mp4_dir}/mp4_mux.cpp
+    ${time_dir}/time_policy.cpp)
+target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} ${time_dir}
                                               ${session_dir} ${ui_dir}
                                               ${web_dir}
                                               ${config_dir}/include
                                               ${console_dir} ${uplink_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
 target_compile_options(host_tests PRIVATE -Wall -Wextra -Werror)
+
+# Builds an MP4 from files of a video download, for checking it with ffmpeg
+# or a player (not part of the tests): mp4_tool video.h264 audio.aac out.mp4
+add_executable(mp4_tool mp4_tool.cpp ${mp4_dir}/mp4_mux.cpp)
+target_include_directories(mp4_tool PRIVATE ${mp4_dir})
+target_compile_options(mp4_tool PRIVATE -Wall -Wextra -Werror)
 
 enable_testing()
 add_test(NAME host_tests COMMAND host_tests)

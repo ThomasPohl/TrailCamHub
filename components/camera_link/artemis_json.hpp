@@ -23,4 +23,10 @@ bool json_find_int(const std::string &json, const std::string &key,
 bool json_find_string(const std::string &json, const std::string &key,
                       std::string &out, std::size_t from = 0);
 
+// Returns `json` (a flat object, as written by serialize_device_info) with the
+// integer field `key` set to `value`: an existing field of that name is
+// replaced, otherwise it is added at the end. Other fields are kept.
+std::string json_set_int(const std::string &json, const std::string &key,
+                         std::int64_t value);
+
 }  // namespace camera::artemis

@@ -22,9 +22,14 @@
     <div class="facts">
       <div><span>Camera Wi-Fi</span><b id="camera">–</b></div>
       <div><span>Media</span><b id="media">–</b></div>
+      <div><span>Last sync</span><b id="lastsync">–</b></div>
+      <div><span>Clock</span><b id="clock">–</b></div>
       <div><span>SD card free</span><b id="sd">–</b></div>
       <div><span>Uptime</span><b id="uptime">–</b></div>
     </div>
+    <p class="note" id="clocknote" hidden>The clock of the dongle is not set, so
+      the time of a sync cannot be recorded. Keep this page open: it gives the
+      dongle the time of this device.</p>
     <progress id="progress" value="0" max="1" hidden></progress>
     <p class="actions">
       <button class="primary" id="search">Search camera</button>
@@ -36,6 +41,16 @@
   <section>
     <h2>Files</h2>
     <div class="crumbs" id="crumbs"></div>
+    <div class="listhead" id="listhead">
+      <input type="search" id="filter" placeholder="Filter by name…"
+        autocomplete="off" aria-label="Filter files">
+      <span class="sorts" role="group" aria-label="Sort by">
+        <button class="small" data-sort="name">Name</button>
+        <button class="small" data-sort="size">Size</button>
+        <button class="small" data-sort="mtime">Date</button>
+      </span>
+      <span class="count" id="count"></span>
+    </div>
     <div class="list" id="files"></div>
   </section>
 

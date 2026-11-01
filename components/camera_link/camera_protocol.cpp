@@ -34,6 +34,7 @@
 #include "artemis_message.hpp"
 #include "artemis_reassembler.hpp"
 #include "camera_prelogin.hpp"
+#include "time_sync.h"
 #include "camera_protocol.h"
 #include "camera_udp_transport.h"
 #include "bulk_reassembler.hpp"
@@ -544,16 +545,19 @@ static esp_err_t
 send_artemis_handshake(int socket_fd, const struct sockaddr_in *camera_address)
 {
     // The hello is the login (cmdId 0). The camera sets its clock from the
-    // time in it, so it carries the current wall clock if the device has one.
-    // Without a valid clock the time is left out and the camera keeps its own;
-    // a fixed time would set the camera's clock back at every session.
+    // time in it, so it carries the current wall clock when the device has a
+    // time that it can vouch for (SNTP, the backend or a browser). Without
+    // one the time is left out and the camera keeps its own: a fixed time
+    // would set its clock back at every session, and a time that came from
+    // the camera itself must not be given back to it.
     const time_t now = time(NULL);
-    const bool clock_valid = now >= camera::kClockValidFrom;
-    const int64_t camera_time =
-        clock_valid ? camera::camera_wall_clock(now) : 0;
-    if (clock_valid) {
+    const bool send_time = time_sync_trusted();
+    const int64_t camera_time = send_time ? camera::camera_wall_clock(now) : 0;
+    if (send_time) {
         ESP_LOGI(TAG, "Login sets the camera clock to %lld (UTC %lld)",
                  (long long)camera_time, (long long)now);
+    } else if (time_sync_clock_valid()) {
+        ESP_LOGW(TAG, "The clock comes from the camera; login without a time");
     } else {
         ESP_LOGW(TAG, "The clock is not set; login without a time, the camera "
                       "keeps its own clock");
@@ -1951,6 +1955,16 @@ static void process_artemis_response(const SessionEvent &event)
                      s_camera_id.c_str(), info.model_name.c_str(),
                      info.fw_version.c_str(), (long long)info.bat_percent,
                      (long long)info.sd_free_mb);
+            // A device without a clock takes the time of the camera: the
+            // best it has, replaced by any better source later.
+            int64_t camera_wall_clock = 0;
+            if (!time_sync_clock_valid() &&
+                json_find_int(message.json, "timeUTC", camera_wall_clock) &&
+                camera_wall_clock > 0) {
+                time_sync_set(
+                    camera::camera_wall_clock_to_utc(camera_wall_clock),
+                    timepolicy::Source::camera);
+            }
             if (!camera::store::save_camera_info(info, (int64_t)time(NULL))) {
                 ESP_LOGW(TAG, "Could not store the camera info on the SD card");
             }
@@ -2418,6 +2432,12 @@ esp_err_t camera_protocol_run(const esp_ip4_addr_t *gateway)
     camera::store::sd_writer_begin_session();
     const esp_err_t error = discover_camera();
     camera::store::sd_writer_end_session();
+    // All requested work is done: record the sync with the camera.
+    if (s_work_done && !s_camera_id.empty() &&
+        !camera::store::mark_camera_synced(s_camera_id, (int64_t)time(NULL))) {
+        ESP_LOGW(TAG, "Could not record the sync time for '%s'",
+                 s_camera_id.c_str());
+    }
     release_session_memory();
     return error;
 }

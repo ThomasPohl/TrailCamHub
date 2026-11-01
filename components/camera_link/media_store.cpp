@@ -292,6 +292,14 @@ bool save_camera_info(const camera::artemis::DeviceInfo &info,
     text.insert(text.size() - 1,
                 ",\"readAt\":" +
                     std::to_string(read_at >= kClockValidFrom ? read_at : 0));
+    // The file is rewritten at the start of every session: keep the time of
+    // the last completed sync.
+    std::string previous;
+    std::int64_t last_sync = 0;
+    if (read_file(dir + "/camera.json", previous) &&
+        camera::artemis::json_find_int(previous, "lastSyncAt", last_sync)) {
+        text = camera::artemis::json_set_int(text, "lastSyncAt", last_sync);
+    }
     return write_file(dir + "/camera.json", text.data(), text.size());
 }
 
@@ -306,6 +314,19 @@ bool load_camera_info(const std::string &camera_id,
     }
     camera::artemis::json_find_int(text, "readAt", read_at);
     return true;
+}
+
+bool mark_camera_synced(const std::string &camera_id, std::int64_t at)
+{
+    const std::string path = camera_dir(camera_id) + "/camera.json";
+    std::string text;
+    if (!read_file(path, text)) {
+        return false;
+    }
+    constexpr std::int64_t kClockValidFrom = 1704067200;
+    text = camera::artemis::json_set_int(text, "lastSyncAt",
+                                         at >= kClockValidFrom ? at : -1);
+    return write_file(path, text.data(), text.size());
 }
 
 std::vector<std::string> list_cameras()

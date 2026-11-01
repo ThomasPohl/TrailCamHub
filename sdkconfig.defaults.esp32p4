@@ -31,3 +31,10 @@ CONFIG_ESP_HOSTED_NIMBLE_HCI_VHCI=y
 # DNS servers of the default interface so the camera's DHCP server cannot
 # replace the Ethernet DNS servers.
 CONFIG_ESP_NETIF_SET_DNS_PER_DEFAULT_NETIF=y
+
+# Web UI on the Ethernet port (DHCP address, see the boot log).
+CONFIG_WEB_UI_ENABLE=y
+
+# Download videos (raw H.264 and AAC streams) after the thumbnails; the web UI
+# serves them as MP4 on request.
+CONFIG_CAMERA_DOWNLOAD_VIDEOS=y

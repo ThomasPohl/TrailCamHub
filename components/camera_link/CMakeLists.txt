@@ -17,4 +17,4 @@ idf_component_register(SRCS "camera_protocol.cpp" "camera_prelogin.cpp"
                        INCLUDE_DIRS "include" "."
                        REQUIRES esp_netif
                        PRIV_REQUIRES esp_app_format esp_ringbuf esp_timer esp_wifi lwip mbedtls
-                                     sd_storage)
+                                     sd_storage time_sync)

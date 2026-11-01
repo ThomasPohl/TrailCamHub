@@ -94,4 +94,31 @@ bool json_find_string(const std::string &json, const std::string &key,
     return false;  // unterminated string
 }
 
+std::string json_set_int(const std::string &json, const std::string &key,
+                         std::int64_t value)
+{
+    const std::string field = "\"" + key + "\":" + std::to_string(value);
+    const std::string needle = "\"" + key + "\"";
+    const size_t at = json.find(needle);
+    if (at != std::string::npos) {
+        size_t colon = json.find(':', at + needle.size());
+        if (colon != std::string::npos) {
+            size_t end = colon + 1;
+            while (end < json.size() &&
+                   (json[end] == ' ' || json[end] == '-' ||
+                    (json[end] >= '0' && json[end] <= '9'))) {
+                end++;
+            }
+            return json.substr(0, at) + field + json.substr(end);
+        }
+    }
+    const size_t close = json.rfind('}');
+    if (close == std::string::npos) {
+        return json;
+    }
+    const bool empty = json.find_first_not_of(" \t\r\n{") == close;
+    return json.substr(0, close) + (empty ? "" : ",") + field +
+           json.substr(close);
+}
+
 }  // namespace camera::artemis

@@ -19,4 +19,9 @@ constexpr std::int64_t kClockValidFrom = 1704067200;
 // boot), so offset and summer time follow the rules of that zone.
 std::int64_t camera_wall_clock(std::int64_t utc);
 
+// The UTC time for a wall clock that the camera shows: the inverse of
+// camera_wall_clock(), by the same time zone. During the hour that is shown
+// twice when summer time ends, either of the two instants may come back.
+std::int64_t camera_wall_clock_to_utc(std::int64_t wall);
+
 }  // namespace camera

@@ -29,6 +29,7 @@
 #include "sd_log.h"
 #include "session_controller.h"
 #include "system_diagnostics.h"
+#include "time_sync.h"
 #include "web_ui.h"
 
 static const char *TAG = "trailcamhub";
@@ -171,6 +172,10 @@ extern "C" void app_main(void)
     // access point or a wired uplink), so they are set up once here.
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // The clock is needed for the times that are recorded and for the camera
+    // login; it is set as soon as a network reaches an NTP server.
+    time_sync_start();
 
 #if CONFIG_COPROCESSOR_UPDATE_ENABLE
     // Restarts the application after an update; Wi-Fi and BLE may not work

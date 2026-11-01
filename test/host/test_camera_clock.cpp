@@ -54,6 +54,33 @@ TEST_CASE("camera_wall_clock: follows the rule of any zone")
     use_time_zone("CET-1CEST,M3.5.0,M10.5.0/3");
 }
 
+TEST_CASE("camera_wall_clock_to_utc: the inverse of camera_wall_clock")
+{
+    use_time_zone("CET-1CEST,M3.5.0,M10.5.0/3");
+    using camera::camera_wall_clock_to_utc;
+    // What the camera shows is local time: 1 h or 2 h ahead of UTC.
+    CHECK(camera_wall_clock_to_utc(1793484891) == 1793484891 - 3600);
+    CHECK(camera_wall_clock_to_utc(1784116800 + 7200) == 1784116800);
+    // Round trips, in winter, in summer, and either side of the changes.
+    for (std::int64_t utc :
+         {1768478400LL, 1784116800LL, 1793481710LL, 1774745000LL, 1774747000LL,
+          1792880000LL, 1792893000LL, 1743296000LL, 1761441000LL}) {
+        CHECK(camera_wall_clock_to_utc(camera_wall_clock(utc)) == utc);
+    }
+    // The hour that is shown twice when summer time ends (02:00 to 03:00 on
+    // 25 October 2026): either of the two instants comes back.
+    const std::int64_t first = 1792889000;   // 02:43 CEST
+    const std::int64_t second = 1792892600;  // 02:43 CET
+    CHECK(camera_wall_clock(first) == camera_wall_clock(second));
+    const std::int64_t back =
+        camera_wall_clock_to_utc(camera_wall_clock(first));
+    CHECK((back == first || back == second));
+    use_time_zone("EST5EDT,M3.2.0,M11.1.0");
+    CHECK(camera_wall_clock_to_utc(camera_wall_clock(1784116800)) ==
+          1784116800);
+    use_time_zone("CET-1CEST,M3.5.0,M10.5.0/3");
+}
+
 TEST_CASE("login JSON: with the camera time, and without one")
 {
     CHECK(camera::artemis::build_login_json(1766505566) ==

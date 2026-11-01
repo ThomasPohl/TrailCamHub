@@ -2,3 +2,9 @@ build/
 build-*/
 sdkconfig
 sdkconfig.old
+
+# Downloaded by the IDF Component Manager for the ESP32-P4 (esp_hosted,
+# esp_wifi_remote). The lock file records one target and is rewritten by a
+# build for another board, so it is not kept in the repository.
+managed_components/
+dependencies.lock

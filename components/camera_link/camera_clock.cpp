@@ -36,4 +36,16 @@ std::int64_t camera_wall_clock(std::int64_t utc)
            local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec;
 }
 
+std::int64_t camera_wall_clock_to_utc(std::int64_t wall)
+{
+    // The offset in effect if `wall` were UTC, then the one at the result.
+    const std::int64_t first = camera_wall_clock(wall) - wall;
+    std::int64_t utc = wall - first;
+    const std::int64_t second = camera_wall_clock(utc) - utc;
+    if (second != first) {
+        utc = wall - second;
+    }
+    return utc;
+}
+
 }  // namespace camera
