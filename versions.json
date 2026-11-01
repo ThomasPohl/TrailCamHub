@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-190337-5dba57f",
+      "date": "2026-11-01T19:03:37Z",
+      "commit": "5dba57f",
+      "branch": "main",
+      "message": "Add CLAUDE.md with git setup and project conventions (#84)",
+      "dev": "builds/20261101-190337-5dba57f/manifest-dev.json",
+      "release": "builds/20261101-190337-5dba57f/manifest-release.json",
+      "devBin": "builds/20261101-190337-5dba57f/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-190337-5dba57f/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-190120-c488def",
       "date": "2026-11-01T19:01:20Z",
       "commit": "c488def",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-174120-ffb5eea/manifest-release.json",
       "devBin": "builds/20261031-174120-ffb5eea/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-174120-ffb5eea/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-162832-8d03094",
-      "date": "2026-10-31T16:28:32Z",
-      "commit": "8d03094",
-      "branch": "main",
-      "message": "Merge pull request #41 from ThomasPohl/merge/camera-link-download",
-      "dev": "builds/20261031-162832-8d03094/manifest-dev.json",
-      "release": "builds/20261031-162832-8d03094/manifest-release.json",
-      "devBin": "builds/20261031-162832-8d03094/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-162832-8d03094/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
