@@ -13,6 +13,7 @@
 #include "esp_wifi.h"
 
 #include "camera_wifi.h"
+#include "disconnect_policy.hpp"
 
 #define WIFI_CONNECT_MAX_RETRIES 5
 
@@ -23,6 +24,11 @@ static std::atomic<bool> s_wifi_connect_requested;
 // Set between camera_wifi_connect() and obtaining an IP address.
 static std::atomic<bool> s_joining;
 static unsigned s_wifi_connect_retries;
+// The network being joined or connected, to tell its events from late events
+// of the network left before. Written before the flags above are set.
+static char s_target_ssid[33];
+static size_t s_target_ssid_len;
+static const char *s_target_label = "camera";
 
 static const char *wifi_disconnect_reason_name(uint8_t reason)
 {
@@ -46,47 +52,70 @@ static const char *wifi_disconnect_reason_name(uint8_t reason)
 
 static void handle_disconnected(const wifi_event_sta_disconnected_t *event)
 {
-    bool requested = s_wifi_connect_requested.load();
+    using wifipolicy::DisconnectAction;
+    const bool requested = s_wifi_connect_requested.load();
+    const bool joining = s_joining.load();
+    // ssid_len is set by the driver; clamp it in case it is not.
+    const size_t event_ssid_len = event->ssid_len <= sizeof(event->ssid)
+                                      ? event->ssid_len
+                                      : sizeof(event->ssid);
+    const bool for_target = wifipolicy::is_for_target(
+        event->ssid, event_ssid_len, s_target_ssid, s_target_ssid_len);
+    const DisconnectAction action = wifipolicy::on_disconnected(
+        requested, joining, for_target, s_wifi_connect_retries,
+        WIFI_CONNECT_MAX_RETRIES);
     ESP_LOGW(TAG,
-             "Camera Wi-Fi disconnected: reason %u (%s), RSSI %d dBm, "
-             "BSSID %02x:%02x:%02x:%02x:%02x:%02x, retry enabled %s",
-             event->reason, wifi_disconnect_reason_name(event->reason),
-             event->rssi, event->bssid[0], event->bssid[1], event->bssid[2],
-             event->bssid[3], event->bssid[4], event->bssid[5],
-             requested && s_joining.load() ? "yes" : "no");
+             "Wi-Fi disconnected from \"%.*s\": reason %u (%s), RSSI %d dBm, "
+             "BSSID %02x:%02x:%02x:%02x:%02x:%02x, %s",
+             (int)event_ssid_len, (const char *)event->ssid, event->reason,
+             wifi_disconnect_reason_name(event->reason), event->rssi,
+             event->bssid[0], event->bssid[1], event->bssid[2], event->bssid[3],
+             event->bssid[4], event->bssid[5],
+             action == DisconnectAction::retry    ? "retrying"
+             : action == DisconnectAction::ignore ? "ignored"
+                                                  : "not retrying");
     // Back to modem sleep, which BLE coexistence requires, before the BLE
-    // stack may start again.
-    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-    if (!requested) {
-        return;
+    // stack may start again. Not for an ignored event: the station may be
+    // joining or connected to another network by now.
+    if (action != DisconnectAction::ignore) {
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     }
-    if (!s_joining.load()) {
+
+    switch (action) {
+    case DisconnectAction::ignore:
+        return;
+    case DisconnectAction::report_lost:
         // An established connection was lost; the caller decides what next.
         s_wifi_connect_requested = false;
         if (s_callbacks.on_disconnected != NULL) {
             s_callbacks.on_disconnected(event->reason);
         }
         return;
-    }
-    if (s_wifi_connect_retries >= WIFI_CONNECT_MAX_RETRIES) {
-        ESP_LOGE(TAG,
-                 "Camera Wi-Fi connection failed after %u retries "
-                 "(reason %d)",
-                 WIFI_CONNECT_MAX_RETRIES, event->reason);
+    case DisconnectAction::give_up:
+        ESP_LOGE(TAG, "%s Wi-Fi connection failed after %u retries (reason %d)",
+                 s_target_label, WIFI_CONNECT_MAX_RETRIES, event->reason);
         s_wifi_connect_requested = false;
         s_joining = false;
         if (s_callbacks.on_failed != NULL) {
             s_callbacks.on_failed(event->reason);
         }
         return;
+    case DisconnectAction::retry:
+        break;
     }
 
     s_wifi_connect_retries++;
-    ESP_LOGW(TAG, "Retrying camera Wi-Fi connection: attempt %u/%u",
+    ESP_LOGW(TAG, "Retrying %s Wi-Fi connection: attempt %u/%u", s_target_label,
              s_wifi_connect_retries, WIFI_CONNECT_MAX_RETRIES);
     esp_err_t error = esp_wifi_connect();
+    if (error == ESP_ERR_WIFI_CONN) {
+        // The driver is already connecting; its outcome arrives as an event.
+        ESP_LOGW(TAG, "%s Wi-Fi is already connecting; waiting",
+                 s_target_label);
+        return;
+    }
     if (error != ESP_OK) {
-        ESP_LOGE(TAG, "Camera Wi-Fi reconnect failed: %s",
+        ESP_LOGE(TAG, "%s Wi-Fi reconnect failed: %s", s_target_label,
                  esp_err_to_name(error));
         s_wifi_connect_requested = false;
         s_joining = false;
@@ -108,19 +137,19 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         const wifi_event_sta_connected_t *event =
             (const wifi_event_sta_connected_t *)event_data;
         ESP_LOGI(TAG,
-                 "Associated with camera AP: BSSID "
+                 "Associated with %s AP: BSSID "
                  "%02x:%02x:%02x:%02x:%02x:%02x, channel %u, auth mode %d",
-                 event->bssid[0], event->bssid[1], event->bssid[2],
-                 event->bssid[3], event->bssid[4], event->bssid[5],
-                 event->channel, event->authmode);
+                 s_target_label, event->bssid[0], event->bssid[1],
+                 event->bssid[2], event->bssid[3], event->bssid[4],
+                 event->bssid[5], event->channel, event->authmode);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *event = (const ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG,
-                 "Connected to camera Wi-Fi; IP address: " IPSTR
-                 ", netmask: " IPSTR ", gateway: " IPSTR
-                 ", discovery target: " IPSTR,
-                 IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask),
-                 IP2STR(&event->ip_info.gw), IP2STR(&event->ip_info.gw));
+                 "Connected to %s Wi-Fi; IP address: " IPSTR ", netmask: " IPSTR
+                 ", gateway: " IPSTR ", discovery target: " IPSTR,
+                 s_target_label, IP2STR(&event->ip_info.ip),
+                 IP2STR(&event->ip_info.netmask), IP2STR(&event->ip_info.gw),
+                 IP2STR(&event->ip_info.gw));
         s_wifi_connect_retries = 0;
         s_joining = false;
         // No power save while the camera streams: in modem sleep, outgoing
@@ -200,6 +229,10 @@ static esp_err_t connect_network(const char *ssid, const char *password,
     s_wifi_connect_retries = 0;
     s_wifi_connect_requested = false;
     s_joining = false;
+    memcpy(s_target_ssid, ssid, ssid_len);
+    s_target_ssid[ssid_len] = '\0';
+    s_target_ssid_len = ssid_len;
+    s_target_label = label;
     esp_err_t error = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
     memset(&wifi_config, 0, sizeof(wifi_config));
     ESP_RETURN_ON_ERROR(error, TAG, "Could not set %s Wi-Fi credentials",

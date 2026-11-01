@@ -30,6 +30,7 @@ set(console_dir ${repo_root}/components/hub_console)
 set(uplink_dir ${repo_root}/components/uplink)
 set(mp4_dir ${repo_root}/components/mp4_mux)
 set(time_dir ${repo_root}/components/time_sync)
+set(wifi_dir ${repo_root}/components/camera_wifi)
 
 add_executable(host_tests
     test_main.cpp
@@ -63,6 +64,7 @@ add_executable(host_tests
     test_web_paths.cpp
     test_hub_console.cpp
     test_uplink_protocol.cpp
+    test_wifi_disconnect_policy.cpp
     ${ble_dir}/ble_advertising.cpp
     ${ble_dir}/ble_wifi_response.cpp
     ${ble_dir}/gatt_profile.cpp
@@ -97,12 +99,14 @@ add_executable(host_tests
     ${console_dir}/command_parser.cpp
     ${uplink_dir}/uplink_protocol.cpp
     ${mp4_dir}/mp4_mux.cpp
-    ${time_dir}/time_policy.cpp)
+    ${time_dir}/time_policy.cpp
+    ${wifi_dir}/disconnect_policy.cpp)
 target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} ${time_dir}
                                               ${session_dir} ${ui_dir}
                                               ${web_dir}
                                               ${config_dir}/include
-                                              ${console_dir} ${uplink_dir})
+                                              ${console_dir} ${uplink_dir}
+                                              ${wifi_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
 target_compile_options(host_tests PRIVATE -Wall -Wextra -Werror)
 
