@@ -151,6 +151,12 @@ bool save_camera_info(const camera::artemis::DeviceInfo &info,
 bool load_camera_info(const std::string &camera_id,
                       camera::artemis::DeviceInfo &out, std::int64_t &read_at);
 
+// Records in camera.json that a sync with the camera has completed:
+// "lastSyncAt" is the time in Unix seconds, or -1 if the clock has not been set
+// yet (the sync happened, its time is unknown). Without the field the camera
+// has never been synced. False if there is no camera.json to update.
+bool mark_camera_synced(const std::string &camera_id, std::int64_t at);
+
 // Ids (sanitized directory names) of all cameras with a camera.json.
 std::vector<std::string> list_cameras();
 

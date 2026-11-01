@@ -111,7 +111,7 @@
           <h2 id="protocol-heading">Live protocol view</h2>
           <button id="pv-replay" class="secondary-button" type="button">Replay demo log</button>
         </div>
-        <p>Decodes the serial log as it streams in: the camera session's progress, the parsed media list, and the raw thumbnail/photo bulk frames. Connect the serial console below to drive it live, or replay a bundled sample.</p>
+        <p>Decodes the serial log as it streams in: the camera session's progress, the parsed media list (a video and its photo grouped as one capture, with the thumbnail the firmware prints over serial), and the raw thumbnail/photo bulk frames. Connect the serial console below to drive it live, or replay a bundled sample.</p>
 
         <ol id="pv-timeline" class="pv-timeline" aria-label="Session progress"></ol>
 
@@ -121,7 +121,7 @@
           <div class="pv-table-scroll">
             <table class="pv-table">
               <thead>
-                <tr><th>#</th><th>Type</th><th>Dir</th><th>Num</th><th>mediaId</th><th>Time</th></tr>
+                <tr><th>Preview</th><th>#</th><th>Capture</th><th>Dir</th><th>Num</th><th>mediaId</th><th>Time</th></tr>
               </thead>
               <tbody id="pv-media-body"></tbody>
             </table>

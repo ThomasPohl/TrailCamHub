@@ -200,3 +200,17 @@ TEST_CASE("a CLOSE from the camera is reported")
     login.on_packet(close, sizeof(close), 2000);
     CHECK(login.closed());
 }
+
+TEST_CASE("json_set_int replaces or adds an integer field")
+{
+    const std::string json = "{\"devId\":\"X\",\"readAt\":5}";
+    CHECK(json_set_int(json, "readAt", 9) == "{\"devId\":\"X\",\"readAt\":9}");
+    CHECK(json_set_int(json, "lastSyncAt", -1) ==
+          "{\"devId\":\"X\",\"readAt\":5,\"lastSyncAt\":-1}");
+    CHECK(json_set_int("{\"a\":-3,\"b\":1}", "a", 12) == "{\"a\":12,\"b\":1}");
+    CHECK(json_set_int("{}", "k", 1) == "{\"k\":1}");
+    std::int64_t value = 0;
+    REQUIRE(json_find_int(json_set_int(json, "lastSyncAt", 1730400000),
+                          "lastSyncAt", value));
+    CHECK(value == 1730400000);
+}

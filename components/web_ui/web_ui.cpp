@@ -1,14 +1,23 @@
 /*
- * This module opens the dongle's own access point and serves the web UI and
- * its JSON API (see web_ui.h):
- *   GET  /               the page (index.html, style.css, app.js)
- *   GET  /api/status     workflow status, SD card and memory as JSON
+ * This module serves the web UI and its JSON API (see web_ui.h) over the
+ * dongle's own access point, or, with CONFIG_WEB_UI_OVER_ETHERNET, on the
+ * Ethernet interface at the address that DHCP assigned:
+ *   GET  /               the page (index.html, style.css, app.js); also at
+ *                        /browse/<path>, the address of a directory or file
+ *                        on the SD card, so that the page can be bookmarked
+ *   GET  /api/status     workflow status, SD card, memory and, for each camera
+ *                        on the card, the time of its last sync as JSON
  *   POST /api/search     search for the camera now
  *   POST /api/stop       stop searching or end the session
  *   GET  /api/files      directory listing (?path=a/b) as JSON
  *   GET  /api/log        bytes of the current log file from ?offset=N
- *   GET  /files/<path>   a file from the SD card (?download=1: as attachment)
+ *   GET  /files/<path>   a file from the SD card (?download=1: as attachment);
+ *                        <name>.mp4 is built from <name>.h264 and <name>.aac
+ *                        when there is no such file (CONFIG_CAMERA_VIDEO_MP4_
+ *                        ON_REQUEST); Range requests are served for it
  *   POST /api/delete     delete a file (?path=a/b)
+ *   POST /api/time       set the clock from the browser (?unix=<UTC seconds>);
+ *                        only if no better source has set it
  */
 
 #include <dirent.h>
@@ -16,28 +25,42 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
+#include <memory>
 #include <string>
+#include <vector>
 
+#if !CONFIG_WEB_UI_OVER_ETHERNET
 #include "dhcpserver/dhcpserver.h"
+#endif
 #include "esp_check.h"
 #include "esp_event.h"
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#if !CONFIG_WEB_UI_OVER_ETHERNET
 #include "esp_mac.h"
+#endif
 #include "esp_netif.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
+#if !CONFIG_WEB_UI_OVER_ETHERNET
 #include "esp_wifi.h"
+#endif
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "nvs.h"
 #include "sdkconfig.h"
 
+#if CONFIG_CAMERA_VIDEO_MP4_ON_REQUEST
+#include "lwip/sockets.h"
+#include "mp4_mux.hpp"
+#endif
 #include "sd_card.h"
 #include "sd_log.h"
+#include "time_sync.h"
 #include "web_paths.hpp"
 #include "web_ui.h"
 
@@ -74,6 +97,7 @@ httpd_handle_t s_server;
 char s_ssid[33];
 char s_password[65];
 char s_url[32];
+#if !CONFIG_WEB_UI_OVER_ETHERNET
 // Kept to open the access point again after web_ui_suspend_access_point().
 wifi_config_t s_ap_config;
 bool s_ap_started;
@@ -81,6 +105,7 @@ bool s_ap_started;
 // attempt to open it found too little memory. Shared under s_lock.
 bool s_ap_suspended;
 bool s_ap_reopen_wanted;
+#endif
 
 SemaphoreHandle_t s_lock;
 // Shared with the setters under s_lock.
@@ -96,6 +121,59 @@ int64_t s_sd_info_us;
 uint64_t s_sd_total;
 uint64_t s_sd_free;
 
+#if CONFIG_WEB_UI_OVER_ETHERNET
+// The page is reachable as soon as the Ethernet interface has an address from
+// DHCP; the address is kept for web_ui_url() and logged.
+void set_url(const char *url)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    snprintf(s_url, sizeof(s_url), "%s", url);
+    xSemaphoreGive(s_lock);
+}
+
+void on_ethernet_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg;
+    (void)base;
+    char url[sizeof(s_url)];
+    if (id == IP_EVENT_ETH_GOT_IP) {
+        const ip_event_got_ip_t *event =
+            static_cast<const ip_event_got_ip_t *>(data);
+        snprintf(url, sizeof(url), "http://" IPSTR, IP2STR(&event->ip_info.ip));
+        set_url(url);
+        ESP_LOGI(TAG, "Web UI at %s", url);
+    } else {
+        set_url("");
+        ESP_LOGI(TAG, "Web UI: Ethernet address lost");
+    }
+}
+
+esp_err_t start_network()
+{
+    snprintf(s_ssid, sizeof(s_ssid), "Ethernet");
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT,
+                                                   IP_EVENT_ETH_GOT_IP,
+                                                   on_ethernet_ip, NULL),
+                        TAG, "IP event handler");
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT,
+                                                   IP_EVENT_ETH_LOST_IP,
+                                                   on_ethernet_ip, NULL),
+                        TAG, "IP event handler");
+    // The address may have been assigned before this module started.
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
+    esp_netif_ip_info_t ip = {};
+    if (netif != NULL && esp_netif_get_ip_info(netif, &ip) == ESP_OK &&
+        ip.ip.addr != 0) {
+        char url[sizeof(s_url)];
+        snprintf(url, sizeof(url), "http://" IPSTR, IP2STR(&ip.ip));
+        set_url(url);
+        ESP_LOGI(TAG, "Web UI at %s", url);
+    } else {
+        ESP_LOGI(TAG, "Web UI waits for an Ethernet address");
+    }
+    return ESP_OK;
+}
+#else
 // Characters of generated passwords. Left out are those that look alike in
 // the display's 5x7 font or elsewhere: g, q and 9, i, l and 1, o and 0.
 const char kPasswordAlphabet[] = "abcdefhjkmnprstuvwxyz2345678";
@@ -235,6 +313,12 @@ esp_err_t start_access_point()
     return ESP_OK;
 }
 
+esp_err_t start_network()
+{
+    return start_access_point();
+}
+#endif
+
 // Path below the SD card root from a request parameter; false if unsafe.
 bool query_path(httpd_req_t *req, const char *key, std::string &relative)
 {
@@ -256,7 +340,9 @@ bool query_path(httpd_req_t *req, const char *key, std::string &relative)
            web::sanitize_path(decoded, relative);
 }
 
-long query_long(httpd_req_t *req, const char *key, long fallback)
+// A number from the query string. 64 bits: a long has 32 on the ESP32, and a
+// Unix time beyond 2038 is cut off at its largest value.
+long long query_int64(httpd_req_t *req, const char *key, long long fallback)
 {
     const size_t length = httpd_req_get_url_query_len(req);
     if (length == 0) {
@@ -269,7 +355,12 @@ long query_long(httpd_req_t *req, const char *key, long fallback)
             ESP_OK) {
         return fallback;
     }
-    return strtol(value, NULL, 10);
+    return strtoll(value, NULL, 10);
+}
+
+long query_long(httpd_req_t *req, const char *key, long fallback)
+{
+    return static_cast<long>(query_int64(req, key, fallback));
 }
 
 std::string absolute(const std::string &relative)
@@ -306,6 +397,56 @@ esp_err_t handle_asset(httpd_req_t *req)
     // Revalidate, so a new firmware is picked up at once.
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     return httpd_resp_send(req, asset->start, asset->end - asset->start - 1);
+}
+
+// The cameras on the SD card (a camera.json in a directory of the root) and
+// when each was last synced; read every few seconds, as the page asks often.
+struct CameraEntry {
+    std::string dir;
+    std::string id;
+    long long last_sync =
+        0;  // Unix seconds; -1: synced, time unknown; 0: never
+    long long read_at = 0;
+};
+std::vector<CameraEntry> s_cameras;
+int64_t s_cameras_us;
+
+void refresh_cameras(int64_t now_us)
+{
+    if (s_cameras_us != 0 && now_us - s_cameras_us < WEB_SD_INFO_INTERVAL_US) {
+        return;
+    }
+    s_cameras_us = now_us;
+    s_cameras.clear();
+    DIR *root = opendir(SD_CARD_MOUNT_POINT);
+    if (root == NULL) {
+        return;
+    }
+    while (struct dirent *entry = readdir(root)) {
+        if (entry->d_name[0] == '.') {
+            continue;
+        }
+        const std::string path = std::string(SD_CARD_MOUNT_POINT) + "/" +
+                                 entry->d_name + "/camera.json";
+        FILE *file = fopen(path.c_str(), "rb");
+        if (file == NULL) {
+            continue;
+        }
+        char text[512];
+        const size_t length = fread(text, 1, sizeof(text) - 1, file);
+        fclose(file);
+        const std::string json(text, length);
+        CameraEntry camera;
+        camera.dir = entry->d_name;
+        web::json_string(json, "devId", camera.id);
+        web::json_int(json, "lastSyncAt", camera.last_sync);
+        web::json_int(json, "readAt", camera.read_at);
+        s_cameras.push_back(camera);
+        if (s_cameras.size() >= 8) {
+            break;
+        }
+    }
+    closedir(root);
 }
 
 esp_err_t handle_status(httpd_req_t *req)
@@ -365,6 +506,51 @@ esp_err_t handle_status(httpd_req_t *req)
     web::append_json_string(json, log_relative);
     json += ",\"ap\":";
     web::append_json_string(json, s_ssid);
+    // A clock before 2024 has not been set: times cannot be recorded.
+    const bool clock_valid = time_sync_clock_valid();
+    json += clock_valid ? ",\"clock_set\":true" : ",\"clock_set\":false";
+    json += ",\"clock_source\":";
+    web::append_json_string(
+        json,
+        clock_valid ? timepolicy::source_name(time_sync_source()) : "none");
+    char now_text[40];
+    snprintf(now_text, sizeof(now_text), ",\"time\":%lld",
+             clock_valid ? (long long)time(NULL) : 0LL);
+    json += now_text;
+    refresh_cameras(now_us);
+    json += ",\"cameras\":[";
+    for (size_t i = 0; i < s_cameras.size(); i++) {
+        if (i > 0) {
+            json += ",";
+        }
+        json += "{\"dir\":";
+        web::append_json_string(json, s_cameras[i].dir);
+        json += ",\"id\":";
+        web::append_json_string(json, s_cameras[i].id);
+        char times[72];
+        snprintf(times, sizeof(times), ",\"last_sync\":%lld,\"read_at\":%lld}",
+                 s_cameras[i].last_sync, s_cameras[i].read_at);
+        json += times;
+    }
+    json += "]}";
+    return send_json(req, json);
+}
+
+// The browser tells the time of its computer. It is taken only if no better
+// source (SNTP, the backend) has set the clock, and it replaces the camera's.
+esp_err_t handle_time(httpd_req_t *req)
+{
+    const long long seconds = query_int64(req, "unix", 0);
+    if (seconds <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no time");
+    }
+    const bool set = time_sync_set(seconds, timepolicy::Source::browser);
+    std::string json = std::string("{\"ok\":true,\"set\":") +
+                       (set ? "true" : "false") + ",\"source\":";
+    web::append_json_string(json,
+                            time_sync_clock_valid()
+                                ? timepolicy::source_name(time_sync_source())
+                                : "none");
     json += "}";
     return send_json(req, json);
 }
@@ -384,6 +570,10 @@ esp_err_t handle_stop(httpd_req_t *req)
     }
     return send_json(req, "{\"ok\":true}");
 }
+
+#if CONFIG_CAMERA_VIDEO_MP4_ON_REQUEST
+std::string offered_mp4(const std::string &directory, const std::string &name);
+#endif
 
 esp_err_t handle_files(httpd_req_t *req)
 {
@@ -422,6 +612,27 @@ esp_err_t handle_files(httpd_req_t *req)
                  S_ISDIR(info.st_mode) ? "true" : "false",
                  (long long)info.st_size, (long long)info.st_mtime);
         chunk += fields;
+#if CONFIG_CAMERA_VIDEO_MP4_ON_REQUEST
+        // The MP4 of a video is built when it is requested; the size listed
+        // is that of its two streams, close to the one that is sent.
+        const std::string mp4_name = offered_mp4(directory, entry->d_name);
+        if (!mp4_name.empty()) {
+            long long size = (long long)info.st_size;
+            struct stat audio = {};
+            const std::string base =
+                directory + "/" +
+                std::string(entry->d_name, strlen(entry->d_name) - 5);
+            if (stat((base + ".aac").c_str(), &audio) == 0) {
+                size += (long long)audio.st_size;
+            }
+            chunk += ",{\"name\":";
+            web::append_json_string(chunk, mp4_name);
+            snprintf(fields, sizeof(fields),
+                     ",\"dir\":false,\"size\":%lld,\"mtime\":%lld}", size,
+                     (long long)info.st_mtime);
+            chunk += fields;
+        }
+#endif
         if (chunk.size() > 1024) {
             if (httpd_resp_send_chunk(req, chunk.data(), chunk.size()) !=
                 ESP_OK) {
@@ -473,6 +684,324 @@ esp_err_t send_file_bytes(httpd_req_t *req, FILE *file, long size)
     return httpd_resp_send_chunk(req, NULL, 0);
 }
 
+#if CONFIG_CAMERA_VIDEO_MP4_ON_REQUEST
+#define WEB_MP4_CHUNK (16 * 1024)
+
+// A stream file for the MP4 builder. It opens the file when it is read and
+// remembers the position, so the sequential scans do not seek. release()
+// closes the file: the builder is kept between requests, but no file stays
+// open while a camera session writes to the card.
+class StreamSource : public mp4::Source
+{
+  public:
+    explicit StreamSource(const std::string &path) : m_path(path)
+    {
+        struct stat info = {};
+        if (stat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode)) {
+            m_size = (uint64_t)info.st_size;
+            m_mtime = (long long)info.st_mtime;
+            m_exists = true;
+        }
+    }
+    ~StreamSource() override
+    {
+        release();
+    }
+    bool exists() const
+    {
+        return m_exists;
+    }
+    long long mtime() const
+    {
+        return m_mtime;
+    }
+    uint64_t size() const override
+    {
+        return m_size;
+    }
+    // Time spent in reads since the last call, in ms.
+    int64_t take_read_ms()
+    {
+        const int64_t ms = m_read_us / 1000;
+        m_read_us = 0;
+        return ms;
+    }
+    void release()
+    {
+        if (m_file != NULL) {
+            fclose(m_file);
+            m_file = NULL;
+        }
+        m_position = 0;
+    }
+    bool read(uint64_t offset, uint8_t *destination, size_t length) override
+    {
+        if (!m_exists || offset + length > m_size) {
+            return false;
+        }
+        if (m_file == NULL) {
+            m_file = fopen(m_path.c_str(), "rb");
+            m_position = 0;
+            if (m_file == NULL) {
+                return false;
+            }
+        }
+        const int64_t started_us = esp_timer_get_time();
+        bool ok = true;
+        if (offset != m_position &&
+            fseek(m_file, (long)offset, SEEK_SET) != 0) {
+            ok = false;
+        }
+        if (ok && fread(destination, 1, length, m_file) != length) {
+            ok = false;
+        }
+        m_position = ok ? offset + length : UINT64_MAX;
+        m_read_us += esp_timer_get_time() - started_us;
+        return ok;
+    }
+
+  private:
+    std::string m_path;
+    FILE *m_file = NULL;
+    bool m_exists = false;
+    uint64_t m_size = 0;
+    uint64_t m_position = 0;
+    long long m_mtime = 0;
+    int64_t m_read_us = 0;
+};
+
+// The MP4 that was built last, kept so that the next request for it (a
+// player asks several times, to seek) does not scan the video again. Only
+// the HTTP server task uses it.
+struct Mp4Cache {
+    std::string path;
+    std::unique_ptr<StreamSource> video;
+    std::unique_ptr<StreamSource> audio;
+    std::unique_ptr<mp4::Mp4File> file;
+
+    void reset()
+    {
+        file.reset();
+        video.reset();
+        audio.reset();
+        path.clear();
+    }
+};
+Mp4Cache s_mp4_cache;
+
+// The camera session writes the SD card at the limit of what it can do, so
+// an MP4 is not built while one runs.
+bool session_active()
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    const bool active =
+        strcmp(s_phase, "idle") != 0 && strcmp(s_phase, "finished") != 0;
+    xSemaphoreGive(s_lock);
+    return active;
+}
+
+bool send_all(int fd, const char *data, size_t length)
+{
+    while (length > 0) {
+        const int sent = send(fd, data, length, 0);
+        if (sent <= 0) {
+            return false;
+        }
+        data += sent;
+        length -= (size_t)sent;
+    }
+    return true;
+}
+
+// Sends <name>.mp4, built from the two stream files of the video. The
+// response is written to the socket directly: the HTTP server's chunked
+// responses carry no Content-Length, which players need for seeking.
+esp_err_t serve_mp4(httpd_req_t *req, const std::string &relative,
+                    bool download)
+{
+    std::string video_relative;
+    std::string audio_relative;
+    if (!web::mp4_sources(relative, video_relative, audio_relative)) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no file");
+    }
+    struct stat info = {};
+    if (stat(absolute(video_relative).c_str(), &info) != 0 ||
+        S_ISDIR(info.st_mode)) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no file");
+    }
+    if (session_active()) {
+        // Do not hold the builder, or files, while the camera session runs.
+        s_mp4_cache.reset();
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_hdr(req, "Retry-After", "20");
+        return httpd_resp_sendstr(
+            req, "A camera session is running; try again when it has ended.");
+    }
+
+    // The files are closed again whichever way this request ends.
+    struct ReleaseFiles {
+        ~ReleaseFiles()
+        {
+            if (s_mp4_cache.video != nullptr) {
+                s_mp4_cache.video->release();
+            }
+            if (s_mp4_cache.audio != nullptr) {
+                s_mp4_cache.audio->release();
+            }
+        }
+    } release_files;
+
+    // The cached builder is good if the streams are the ones it scanned.
+    std::unique_ptr<StreamSource> video(
+        new (std::nothrow) StreamSource(absolute(video_relative)));
+    std::unique_ptr<StreamSource> audio(
+        new (std::nothrow) StreamSource(absolute(audio_relative)));
+    if (video == nullptr || audio == nullptr || !video->exists()) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "no memory");
+    }
+    const bool cached = s_mp4_cache.file != nullptr &&
+                        s_mp4_cache.path == relative &&
+                        s_mp4_cache.video->size() == video->size() &&
+                        s_mp4_cache.video->mtime() == video->mtime() &&
+                        s_mp4_cache.audio->exists() == audio->exists() &&
+                        s_mp4_cache.audio->size() == audio->size() &&
+                        s_mp4_cache.audio->mtime() == audio->mtime();
+    if (!cached) {
+        s_mp4_cache.reset();
+        std::unique_ptr<mp4::Mp4File> file(new (std::nothrow) mp4::Mp4File);
+        if (file == nullptr) {
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                       "no memory");
+        }
+        const int64_t started_us = esp_timer_get_time();
+        if (!file->open(*video, audio->exists() ? audio.get() : nullptr)) {
+            ESP_LOGW(TAG, "Cannot build %s: %s", relative.c_str(),
+                     file->error().c_str());
+            video->release();
+            audio->release();
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                       file->error().c_str());
+        }
+        ESP_LOGI(TAG,
+                 "%s: %u video and %u audio frames, %llu bytes, scanned in "
+                 "%lld ms (%lld ms of it reading)",
+                 relative.c_str(), (unsigned)file->video_frames(),
+                 (unsigned)file->audio_frames(),
+                 (unsigned long long)file->size(),
+                 (long long)((esp_timer_get_time() - started_us) / 1000),
+                 (long long)(video->take_read_ms() + audio->take_read_ms()));
+        s_mp4_cache.path = relative;
+        s_mp4_cache.video = std::move(video);
+        s_mp4_cache.audio = std::move(audio);
+        s_mp4_cache.file = std::move(file);
+    }
+    mp4::Mp4File *const file = s_mp4_cache.file.get();
+    const uint64_t size = file->size();
+
+    uint64_t first = 0;
+    uint64_t last = size - 1;
+    const char *status = "200 OK";
+    web::RangeResult range = web::RangeResult::kNone;
+    const size_t range_length = httpd_req_get_hdr_value_len(req, "Range");
+    if (range_length > 0 && range_length < 80) {
+        char value[80];
+        if (httpd_req_get_hdr_value_str(req, "Range", value, sizeof(value)) ==
+            ESP_OK) {
+            range = web::parse_range(value, size, first, last);
+        }
+    }
+    char extra[96] = "";
+    if (range == web::RangeResult::kPartial) {
+        status = "206 Partial Content";
+        snprintf(extra, sizeof(extra),
+                 "Content-Range: bytes %llu-%llu/%llu\r\n",
+                 (unsigned long long)first, (unsigned long long)last,
+                 (unsigned long long)size);
+    } else if (range == web::RangeResult::kUnsatisfiable) {
+        httpd_resp_set_status(req, "416 Range Not Satisfiable");
+        snprintf(extra, sizeof(extra), "bytes */%llu",
+                 (unsigned long long)size);
+        httpd_resp_set_hdr(req, "Content-Range", extra);
+        return httpd_resp_send(req, NULL, 0);
+    }
+    std::string disposition;
+    if (download) {
+        const size_t slash = relative.rfind('/');
+        std::string name =
+            slash == std::string::npos ? relative : relative.substr(slash + 1);
+        for (char &c : name) {
+            if (c == '"' || static_cast<unsigned char>(c) >= 0x80) {
+                c = '_';
+            }
+        }
+        disposition =
+            "Content-Disposition: attachment; filename=\"" + name + "\"\r\n";
+    }
+    char header[320];
+    const int header_length = snprintf(
+        header, sizeof(header),
+        "HTTP/1.1 %s\r\nContent-Type: video/mp4\r\nAccept-Ranges: bytes\r\n"
+        "Content-Length: %llu\r\nCache-Control: no-store\r\n%s%s\r\n",
+        status, (unsigned long long)(last - first + 1), extra,
+        disposition.c_str());
+    if (header_length <= 0 || header_length >= (int)sizeof(header)) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "header");
+    }
+    std::unique_ptr<uint8_t, decltype(&free)> buffer(
+        static_cast<uint8_t *>(heap_caps_malloc(
+            WEB_MP4_CHUNK, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)),
+        free);
+    if (buffer == nullptr) {
+        buffer.reset(static_cast<uint8_t *>(malloc(WEB_MP4_CHUNK)));
+    }
+    if (buffer == nullptr) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "no memory");
+    }
+    const int fd = httpd_req_to_sockfd(req);
+    if (!send_all(fd, header, (size_t)header_length)) {
+        return ESP_FAIL;
+    }
+    for (uint64_t position = first; position <= last;) {
+        const size_t want =
+            (size_t)(last - position + 1 < WEB_MP4_CHUNK ? last - position + 1
+                                                         : WEB_MP4_CHUNK);
+        // A camera session needs the card; the length was announced, so the
+        // connection ends.
+        if (session_active()) {
+            ESP_LOGW(TAG, "Stopped sending %s: a camera session started",
+                     relative.c_str());
+            return ESP_FAIL;
+        }
+        const int64_t got = file->read(position, buffer.get(), want);
+        if (got <= 0 ||
+            !send_all(fd, (const char *)buffer.get(), (size_t)got)) {
+            return ESP_FAIL;
+        }
+        position += (uint64_t)got;
+    }
+    return ESP_OK;
+}
+
+// The name of the MP4 that the listing offers for the video file `name`
+// (<base>.h264), or "" if it is no such file or an MP4 of that name exists.
+std::string offered_mp4(const std::string &directory, const std::string &name)
+{
+    if (name.size() <= 5 ||
+        strcasecmp(name.c_str() + name.size() - 5, ".h264") != 0) {
+        return "";
+    }
+    const std::string mp4_name = name.substr(0, name.size() - 5) + ".mp4";
+    struct stat info = {};
+    if (stat((directory + "/" + mp4_name).c_str(), &info) == 0) {
+        return "";
+    }
+    return mp4_name;
+}
+#endif
+
 esp_err_t handle_file(httpd_req_t *req)
 {
     std::string uri = req->uri + strlen("/files");
@@ -489,6 +1018,15 @@ esp_err_t handle_file(httpd_req_t *req)
     const std::string path = absolute(relative);
     struct stat info = {};
     if (stat(path.c_str(), &info) != 0 || S_ISDIR(info.st_mode)) {
+#if CONFIG_CAMERA_VIDEO_MP4_ON_REQUEST
+        std::string video;
+        std::string audio;
+        if (!S_ISDIR(info.st_mode) &&
+            web::mp4_sources(relative, video, audio)) {
+            return serve_mp4(req, relative,
+                             query_long(req, "download", 0) != 0);
+        }
+#endif
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no file");
     }
     FILE *file = fopen(path.c_str(), "rb");
@@ -588,16 +1126,20 @@ esp_err_t start_server()
     config.lru_purge_enable = true;
     config.max_open_sockets = 5;
     config.stack_size = 6144;
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 14;
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "HTTP server");
 
     static const httpd_uri_t kHandlers[] = {
         {"/", HTTP_GET, handle_asset, const_cast<Asset *>(&kIndexHtml)},
+        // The page itself, for the address of a directory or file on the card.
+        {"/browse", HTTP_GET, handle_asset, const_cast<Asset *>(&kIndexHtml)},
+        {"/browse/*", HTTP_GET, handle_asset, const_cast<Asset *>(&kIndexHtml)},
         {"/style.css", HTTP_GET, handle_asset, const_cast<Asset *>(&kStyleCss)},
         {"/app.js", HTTP_GET, handle_asset, const_cast<Asset *>(&kAppJs)},
         {"/api/status", HTTP_GET, handle_status, NULL},
         {"/api/search", HTTP_POST, handle_search, NULL},
         {"/api/stop", HTTP_POST, handle_stop, NULL},
+        {"/api/time", HTTP_POST, handle_time, NULL},
         {"/api/files", HTTP_GET, handle_files, NULL},
         {"/api/log", HTTP_GET, handle_log, NULL},
         {"/files/*", HTTP_GET, handle_file, NULL},
@@ -619,10 +1161,22 @@ esp_err_t web_ui_start(const web_ui_callbacks_t *callbacks)
     }
     s_lock = xSemaphoreCreateMutex();
     ESP_RETURN_ON_FALSE(s_lock != NULL, ESP_ERR_NO_MEM, TAG, "no memory");
-    ESP_RETURN_ON_ERROR(start_access_point(), TAG, "access point");
+    ESP_RETURN_ON_ERROR(start_network(), TAG, "network");
     return start_server();
 }
 
+#if CONFIG_WEB_UI_OVER_ETHERNET
+// Called with s_lock held; there is no access point to open.
+static void reopen_access_point()
+{
+}
+
+// The Ethernet interface is not affected by the BLE connection setup.
+void web_ui_suspend_access_point(bool suspend)
+{
+    (void)suspend;
+}
+#else
 // Opens the suspended access point if it is wanted and the memory suffices.
 // Called with s_lock held.
 static void reopen_access_point()
@@ -674,6 +1228,7 @@ void web_ui_suspend_access_point(bool suspend)
     }
     xSemaphoreGive(s_lock);
 }
+#endif
 
 const char *web_ui_ssid(void)
 {
@@ -704,6 +1259,9 @@ void web_ui_set_status(const char *phase, const char *ssid,
         s_media_total = 0;
     }
     snprintf(s_phase, sizeof(s_phase), "%s", phase);
+    if (strcmp(phase, "finished") == 0) {
+        s_cameras_us = 0;  // the sync time on the card has just changed
+    }
     reopen_access_point();
     snprintf(s_camera_ssid, sizeof(s_camera_ssid), "%s",
              ssid != NULL ? ssid : "");

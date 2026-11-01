@@ -18,6 +18,7 @@
 #include "device_info.hpp"
 #include "media_catalog.hpp"
 #include "media_store.hpp"
+#include "time_sync.h"
 #include "uplink_protocol.hpp"
 
 namespace uplink
@@ -157,14 +158,8 @@ std::string describe(const HttpResult &result)
 
 void set_clock(std::int64_t unix_seconds)
 {
-    if (unix_seconds <= 0) {
-        return;
-    }
-    struct timeval now = {};
-    now.tv_sec = static_cast<time_t>(unix_seconds);
-    if (settimeofday(&now, nullptr) == 0) {
-        ESP_LOGI(TAG, "Clock set from the backend: %lld",
-                 (long long)unix_seconds);
+    if (unix_seconds > 0) {
+        time_sync_set(unix_seconds, timepolicy::Source::backend);
     }
 }
 

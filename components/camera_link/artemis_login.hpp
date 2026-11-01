@@ -18,6 +18,11 @@
 namespace camera::artemis
 {
 
+// The login request (cmdId 0). The camera sets its clock from "utcTime"
+// (see camera_wall_clock() for what to put there); a `camera_time` of 0 or
+// less leaves the field out, and the camera keeps the clock it has.
+std::string build_login_json(std::int64_t camera_time);
+
 class LoginSession
 {
   public:
@@ -31,8 +36,8 @@ class LoginSession
     LoginSession(pppp::Session &session, const Aes128 &cipher);
 
     // Sends the login request (cmdId 0) as an RUDP DATA packet. `utc_time` is
-    // the current Unix time carried in the request. Returns false if the send
-    // fails; call only from the idle state.
+    // the time to set on the camera (0: leave it out). Returns false if the
+    // send fails; call only from the idle state.
     bool start(std::uint32_t utc_time, std::int64_t now_us);
 
     // Feeds one UDP packet received from the camera. Drives the RUDP session

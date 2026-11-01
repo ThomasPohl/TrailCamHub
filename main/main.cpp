@@ -9,6 +9,9 @@
  * The BLE stack is started by the camera BLE module when it is needed.
  */
 
+#include <stdlib.h>
+#include <time.h>
+
 #include "esp_err.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -26,6 +29,7 @@
 #include "sd_log.h"
 #include "session_controller.h"
 #include "system_diagnostics.h"
+#include "time_sync.h"
 #include "web_ui.h"
 
 static const char *TAG = "trailcamhub";
@@ -125,6 +129,10 @@ static void on_stop_request(void)
 
 extern "C" void app_main(void)
 {
+    // Local time follows this zone (TZ as in the C library, set once).
+    setenv("TZ", CONFIG_TIME_ZONE, 1);
+    tzset();
+
 #if CONFIG_SD_LOG_ENABLE
     // First, so that the boot messages are kept until the card is mounted.
     const bool sd_log_ready = sd_log_init() == ESP_OK;
@@ -164,6 +172,10 @@ extern "C" void app_main(void)
     // access point or a wired uplink), so they are set up once here.
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // The clock is needed for the times that are recorded and for the camera
+    // login; it is set as soon as a network reaches an NTP server.
+    time_sync_start();
 
 #if CONFIG_COPROCESSOR_UPDATE_ENABLE
     // Restarts the application after an update; Wi-Fi and BLE may not work

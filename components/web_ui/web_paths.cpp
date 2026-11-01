@@ -113,6 +113,146 @@ const char *content_type(const std::string &name)
     return "application/octet-stream";
 }
 
+bool mp4_sources(const std::string &mp4_path, std::string &video,
+                 std::string &audio)
+{
+    if (mp4_path.size() <= 4 || !ends_with(mp4_path, ".mp4")) {
+        return false;
+    }
+    const std::string base = mp4_path.substr(0, mp4_path.size() - 4);
+    video = base + ".h264";
+    audio = base + ".aac";
+    return true;
+}
+
+namespace
+{
+bool parse_number(const std::string &text, std::uint64_t &value)
+{
+    if (text.empty() || text.size() > 18) {
+        return false;
+    }
+    value = 0;
+    for (char c : text) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        value = value * 10 + static_cast<std::uint64_t>(c - '0');
+    }
+    return true;
+}
+}  // namespace
+
+RangeResult parse_range(const std::string &header, std::uint64_t size,
+                        std::uint64_t &first, std::uint64_t &last)
+{
+    static const std::string kUnit = "bytes=";
+    if (header.compare(0, kUnit.size(), kUnit) != 0) {
+        return RangeResult::kNone;
+    }
+    const std::string spec = header.substr(kUnit.size());
+    const size_t dash = spec.find('-');
+    if (dash == std::string::npos || spec.find(',') != std::string::npos) {
+        return RangeResult::kNone;  // several ranges: send everything
+    }
+    const std::string from = spec.substr(0, dash);
+    const std::string to = spec.substr(dash + 1);
+    std::uint64_t a = 0;
+    std::uint64_t b = 0;
+    if (from.empty()) {  // the last `b` bytes
+        if (!parse_number(to, b)) {
+            return RangeResult::kNone;
+        }
+        if (b == 0 || size == 0) {
+            return RangeResult::kUnsatisfiable;
+        }
+        first = b >= size ? 0 : size - b;
+        last = size - 1;
+        return RangeResult::kPartial;
+    }
+    if (!parse_number(from, a)) {
+        return RangeResult::kNone;
+    }
+    if (to.empty()) {
+        b = size > 0 ? size - 1 : 0;
+    } else if (!parse_number(to, b) || b < a) {
+        return RangeResult::kNone;
+    }
+    if (a >= size) {
+        return RangeResult::kUnsatisfiable;
+    }
+    first = a;
+    last = b >= size ? size - 1 : b;
+    return RangeResult::kPartial;
+}
+
+namespace
+{
+// Position of the value of `key`, or npos.
+size_t json_value_at(const std::string &json, const std::string &key)
+{
+    const std::string needle = "\"" + key + "\"";
+    size_t at = json.find(needle);
+    while (at != std::string::npos) {
+        size_t i = at + needle.size();
+        while (i < json.size() && json[i] == ' ') {
+            i++;
+        }
+        if (i < json.size() && json[i] == ':') {
+            i++;
+            while (i < json.size() && json[i] == ' ') {
+                i++;
+            }
+            return i;
+        }
+        at = json.find(needle, at + 1);
+    }
+    return std::string::npos;
+}
+}  // namespace
+
+bool json_int(const std::string &json, const std::string &key, long long &value)
+{
+    size_t i = json_value_at(json, key);
+    if (i == std::string::npos) {
+        return false;
+    }
+    bool negative = false;
+    if (i < json.size() && json[i] == '-') {
+        negative = true;
+        i++;
+    }
+    if (i >= json.size() || json[i] < '0' || json[i] > '9') {
+        return false;
+    }
+    long long result = 0;
+    for (; i < json.size() && json[i] >= '0' && json[i] <= '9'; i++) {
+        result = result * 10 + (json[i] - '0');
+    }
+    value = negative ? -result : result;
+    return true;
+}
+
+bool json_string(const std::string &json, const std::string &key,
+                 std::string &value)
+{
+    size_t i = json_value_at(json, key);
+    if (i == std::string::npos || i >= json.size() || json[i] != '"') {
+        return false;
+    }
+    value.clear();
+    for (i++; i < json.size(); i++) {
+        if (json[i] == '"') {
+            return true;
+        }
+        if (json[i] == '\\' && i + 1 < json.size()) {
+            i++;
+        }
+        value.push_back(json[i]);
+    }
+    return false;
+}
+
 void append_json_string(std::string &out, const std::string &text)
 {
     out.push_back('"');
