@@ -31,8 +31,6 @@ The clone stays shallow. Then:
   pushed commits. Fix mistakes with new commits.
 - No modified timestamps (no `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE`, no
   `--date`).
-- Commit window: Monday from 12:00, Tuesday to Friday from 17:00, weekends at
-  any time (Europe/Berlin). Outside it, wait; never back- or forward-date.
 - Take over PRs from forks with a merge commit. Conflicts between fork PRs are
   resolved in a separate `merge/...` PR with a merge commit.
 
