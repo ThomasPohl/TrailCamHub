@@ -30,13 +30,40 @@ export function formatRelative(unixSeconds: number, nowSeconds: number): string 
   return days === 1 ? '1 day ago' : `${days} days ago`;
 }
 
+const DATE_TIME: Intl.DateTimeFormatOptions = {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+};
+
+/**
+ * A real instant (Unix seconds), e.g. a check-in or sync time, in the time
+ * zone of the browser.
+ */
 export function formatDateTime(unixSeconds: number, locale?: string): string {
-  return new Date(unixSeconds * 1000).toLocaleString(locale, {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+  return new Date(unixSeconds * 1000).toLocaleString(locale, DATE_TIME);
+}
+
+/**
+ * A time from the camera (`mediaTime`): its wall clock read as if it were UTC
+ * (docs/clock.md). The camera has no time zone, so the value is shown as it
+ * is, formatted in UTC; the browser's zone would shift it by its offset.
+ */
+export function formatCameraTime(cameraSeconds: number, locale?: string): string {
+  return new Date(cameraSeconds * 1000).toLocaleString(locale, {
+    ...DATE_TIME,
+    timeZone: 'UTC',
   });
+}
+
+/**
+ * The camera wall clock (as the camera would show it) for a real instant, by
+ * the browser's time zone, the inverse of what the hub does in
+ * camera_wall_clock_to_utc().
+ */
+export function toCameraWallClock(unixSeconds: number): number {
+  return unixSeconds - new Date(unixSeconds * 1000).getTimezoneOffset() * 60;
 }
 
 export function videoStateLabel(state: VideoState): string {

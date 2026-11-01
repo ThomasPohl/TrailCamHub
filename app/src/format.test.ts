@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   batteryLevel,
   canRequestVideo,
+  formatCameraTime,
+  formatDateTime,
   formatRelative,
   formatStorage,
   mediaKey,
+  toCameraWallClock,
   videoStateLabel,
 } from './format';
 
@@ -66,5 +69,26 @@ describe('canRequestVideo', () => {
 describe('videoStateLabel', () => {
   it('explains that requests are served at the next wake-up', () => {
     expect(videoStateLabel('requested')).toContain('next wake-up');
+  });
+});
+
+describe('formatCameraTime', () => {
+  // 15.01.2026 and 15.07.2026, 14:00 on the camera (wall clock read as UTC).
+  const winter = 1_768_485_600;
+  const summer = 1_784_124_000;
+
+  it('shows the camera wall clock as it is, whatever the browser zone', () => {
+    expect(formatCameraTime(winter, 'en-GB')).toBe('15/01, 14:00');
+    expect(formatCameraTime(summer, 'de-DE')).toBe('15.07., 14:00');
+  });
+
+  it('matches the local time of the real instant', () => {
+    // A photo taken at a real instant shows the same time as that instant
+    // formatted in the browser zone (which the camera clock was set to).
+    for (const instant of [winter - 3_600, summer - 7_200, 1_793_484_891]) {
+      expect(formatCameraTime(toCameraWallClock(instant), 'en-GB')).toBe(
+        formatDateTime(instant, 'en-GB'),
+      );
+    }
   });
 });

@@ -1,5 +1,5 @@
 import type { MediaItem } from '../api/types';
-import { canRequestVideo, formatDateTime, mediaKey, videoStateLabel } from '../format';
+import { canRequestVideo, formatCameraTime, mediaKey, videoStateLabel } from '../format';
 
 interface Props {
   item: MediaItem;
@@ -22,7 +22,7 @@ export function MediaDetail({ item, busy, showBackLink, onBack, onRequestVideo }
       <div className="card">
         <dl className="facts">
           <dt>Recorded</dt>
-          <dd>{formatDateTime(item.mediaTime)}</dd>
+          <dd>{formatCameraTime(item.mediaTime)}</dd>
           <dt>Type</dt>
           <dd>{isVideo ? 'Video' : 'Photo'}</dd>
           <dt>File</dt>

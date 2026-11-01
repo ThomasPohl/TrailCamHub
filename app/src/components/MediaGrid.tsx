@@ -1,5 +1,5 @@
 import type { MediaItem } from '../api/types';
-import { formatDateTime, mediaKey } from '../format';
+import { formatCameraTime, mediaKey } from '../format';
 
 interface Props {
   items: MediaItem[];
@@ -22,7 +22,7 @@ export function MediaGrid({ items, onSelect }: Props) {
                   ▶
                 </span>
               )}
-              {formatDateTime(item.mediaTime)}
+              {formatCameraTime(item.mediaTime)}
             </span>
           </button>
         </li>

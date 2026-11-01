@@ -33,7 +33,11 @@ export interface MediaItem {
   dir: number;
   num: number;
   fileType: FileType;
-  /** Capture time, Unix seconds (unreliable until the camera clock is set). */
+  /**
+   * Capture time: the camera's wall clock read as if it were UTC, in seconds
+   * (not a real instant; show it with formatCameraTime()). Unreliable until
+   * the camera clock is set.
+   */
   mediaTime: number;
   /** Short-lived URL of the thumbnail JPEG (S3 presigned URL in production). */
   thumbUrl: string;
