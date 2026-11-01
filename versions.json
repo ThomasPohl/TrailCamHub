@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-164513-86b5d74",
+      "date": "2026-11-01T16:45:13Z",
+      "commit": "86b5d74",
+      "branch": "main",
+      "message": "Merge pull request #74 from ThomasPohl/fix/wifi-stale-disconnect",
+      "dev": "builds/20261101-164513-86b5d74/manifest-dev.json",
+      "release": "builds/20261101-164513-86b5d74/manifest-release.json",
+      "devBin": "builds/20261101-164513-86b5d74/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-164513-86b5d74/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-083329-86b5d74",
       "date": "2026-11-01T08:33:29Z",
       "commit": "86b5d74",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-153405-8c13509/manifest-release.json",
       "devBin": "builds/20261031-153405-8c13509/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-153405-8c13509/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-151757-c5ffcfb",
-      "date": "2026-10-31T15:17:57Z",
-      "commit": "c5ffcfb",
-      "branch": "main",
-      "message": "Merge pull request #31 from ThomasPohl/feature/aws-project-deploy",
-      "dev": "builds/20261031-151757-c5ffcfb/manifest-dev.json",
-      "release": "builds/20261031-151757-c5ffcfb/manifest-release.json",
-      "devBin": "builds/20261031-151757-c5ffcfb/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-151757-c5ffcfb/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
