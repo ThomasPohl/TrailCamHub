@@ -62,7 +62,9 @@ describe('HttpApiClient', () => {
   it('includes the backend error message', async () => {
     const fetchFn = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse({ error: 'Invalid Telegram init data (bad signature)' }, 401));
+      .mockResolvedValue(
+        jsonResponse({ error: 'Invalid Telegram init data (bad signature)' }, 401),
+      );
     const client = new HttpApiClient('https://api.example.com', 'x', fetchFn);
 
     await expect(client.listCameras()).rejects.toThrow(
