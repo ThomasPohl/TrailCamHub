@@ -86,6 +86,10 @@
     reached = -1;
     stageNotes = {};
     currentFrame = null;
+    currentThumb = null;
+    mediaFiles = [];
+    mediaListCnt = null;
+    thumbs = {};
     renderTimeline();
     mediaWrap.hidden = true;
     mediaBody.innerHTML = "";
@@ -107,25 +111,176 @@
     return d.toISOString().replace("T", " ").replace(".000Z", " UTC");
   }
 
-  function renderMediaList(json) {
-    var data;
-    try {
-      data = JSON.parse(json);
-    } catch (e) {
-      return false;
+  // The camera lists a capture's photo (fileType 0) and video (fileType 2) as
+  // two items with neighbouring numbers in the same directory. Without a
+  // capture id in the list, items are paired by that adjacency and a close
+  // capture time; ambiguous neighbours go to the pair with the smaller gap.
+  var PAIR_MAX_GAP_S = 120;
+
+  var mediaFiles = []; // last media list, in the camera's order
+  var mediaListCnt = null; // "cnt" of the last media list
+  var thumbs = {}; // "dir_num" -> data URL of a received thumbnail
+
+  function isPhoto(f) {
+    return Number(f.fileType) === 0;
+  }
+
+  function mediaKey(dir, num) {
+    return dir + "_" + num;
+  }
+
+  function timeGap(a, b) {
+    var ta = Number(a.mediaTime) || 0;
+    var tb = Number(b.mediaTime) || 0;
+    // Unknown times neither confirm nor rule out a pair.
+    return ta > 0 && tb > 0 ? Math.abs(ta - tb) : PAIR_MAX_GAP_S;
+  }
+
+  // Returns groups of 1–2 items ({ items: [...] }), in the list's order.
+  function groupMedia(files) {
+    var entries = files.map(function (f, i) {
+      return { f: f, idx: i, group: null };
+    });
+    var sorted = entries.slice().sort(function (a, b) {
+      return (
+        (Number(a.f.mediaDirNum) || 0) - (Number(b.f.mediaDirNum) || 0) ||
+        (Number(a.f.mediaNum) || 0) - (Number(b.f.mediaNum) || 0)
+      );
+    });
+    var candidates = [];
+    for (var k = 0; k + 1 < sorted.length; k++) {
+      var a = sorted[k];
+      var b = sorted[k + 1];
+      if (
+        a.f.mediaDirNum != null &&
+        a.f.mediaDirNum === b.f.mediaDirNum &&
+        Math.abs(Number(a.f.mediaNum) - Number(b.f.mediaNum)) === 1 &&
+        isPhoto(a.f) !== isPhoto(b.f) &&
+        timeGap(a.f, b.f) <= PAIR_MAX_GAP_S
+      ) {
+        candidates.push({ a: a, b: b, gap: timeGap(a.f, b.f) });
+      }
     }
-    var files = (data && data.mediaFiles) || [];
+    candidates.sort(function (x, y) {
+      return x.gap - y.gap;
+    });
+    var groups = [];
+    candidates.forEach(function (c) {
+      if (c.a.group || c.b.group) {
+        return;
+      }
+      var g = { items: [], first: Math.min(c.a.idx, c.b.idx) };
+      c.a.group = c.b.group = g;
+      groups.push(g);
+    });
+    entries.forEach(function (e) {
+      if (!e.group) {
+        e.group = { items: [], first: e.idx };
+        groups.push(e.group);
+      }
+      e.group.items.push(e.f);
+    });
+    groups.forEach(function (g) {
+      // Video first: the photo is the video's still.
+      g.items.sort(function (x, y) {
+        return Number(isPhoto(x)) - Number(isPhoto(y));
+      });
+    });
+    return groups.sort(function (x, y) {
+      return x.first - y.first;
+    });
+  }
+
+  function groupThumb(group) {
+    for (var i = 0; i < group.items.length; i++) {
+      var f = group.items[i];
+      var url = thumbs[mediaKey(f.mediaDirNum, f.mediaNum)];
+      if (url) {
+        return { url: url, item: f };
+      }
+    }
+    return null;
+  }
+
+  function typeLabel(group) {
+    if (group.items.length === 2) {
+      return "🎬 Video + 📷 Photo";
+    }
+    return isPhoto(group.items[0]) ? "📷 Photo" : "🎬 Video";
+  }
+
+  function joined(group, field) {
+    return group.items
+      .map(function (f) {
+        return f[field] != null ? String(f[field]) : "—";
+      })
+      .join(" + ");
+  }
+
+  function groupTime(group) {
+    var times = group.items
+      .map(function (f) {
+        return Number(f.mediaTime) || 0;
+      })
+      .filter(function (t) {
+        return t > 0;
+      });
+    return times.length ? Math.min.apply(null, times) : 0;
+  }
+
+  function groupDuration(group) {
+    for (var i = 0; i < group.items.length; i++) {
+      var ms = Number(group.items[i].durationMs) || 0;
+      if (ms > 0) {
+        return Math.round(ms / 1000) + " s";
+      }
+    }
+    return "";
+  }
+
+  function thumbCell(group) {
+    var td = document.createElement("td");
+    td.className = "pv-thumb-cell";
+    var thumb = groupThumb(group);
+    if (thumb) {
+      var img = document.createElement("img");
+      img.className = "pv-thumb";
+      img.src = thumb.url;
+      img.alt =
+        "Thumbnail " + mediaKey(thumb.item.mediaDirNum, thumb.item.mediaNum);
+      img.title = "Click to enlarge";
+      img.addEventListener("click", function () {
+        img.classList.toggle("enlarged");
+      });
+      td.appendChild(img);
+    } else {
+      var ph = document.createElement("span");
+      ph.className = "pv-thumb-placeholder";
+      ph.textContent = "no preview";
+      td.appendChild(ph);
+    }
+    return td;
+  }
+
+  function renderMedia() {
     mediaBody.innerHTML = "";
-    files.forEach(function (f, i) {
+    var groups = groupMedia(mediaFiles);
+    groups.forEach(function (group, i) {
       var tr = document.createElement("tr");
-      var type = Number(f.fileType) === 0 ? "📷 Photo" : "🎬 Video";
+      if (group.items.length === 2) {
+        tr.className = "pv-pair";
+      }
+      tr.appendChild(thumbCell(group));
+      var duration = groupDuration(group);
       var cells = [
         String(i + 1),
-        type,
-        f.mediaDirNum != null ? String(f.mediaDirNum) : "—",
-        f.mediaNum != null ? String(f.mediaNum) : "—",
-        f.mediaId != null ? String(f.mediaId) : "—",
-        fmtTime(f.mediaTime),
+        typeLabel(group) + (duration ? " · " + duration : ""),
+        group.items[0].mediaDirNum != null
+          ? String(group.items[0].mediaDirNum)
+          : "—",
+        joined(group, "mediaNum"),
+        joined(group, "mediaId"),
+        fmtTime(groupTime(group)),
       ];
       cells.forEach(function (text) {
         var td = document.createElement("td");
@@ -134,19 +289,57 @@
       });
       mediaBody.appendChild(tr);
     });
-    var photos = files.filter(function (f) {
-      return Number(f.fileType) === 0;
+    var photos = mediaFiles.filter(isPhoto).length;
+    var pairs = groups.filter(function (g) {
+      return g.items.length === 2;
     }).length;
+    var shown = Object.keys(thumbs).length;
     mediaCaption.textContent =
-      files.length +
-      " files · " +
+      mediaFiles.length +
+      " files in " +
+      groups.length +
+      " captures (" +
+      pairs +
+      " video + photo) · " +
       photos +
       " photos · " +
-      (files.length - photos) +
+      (mediaFiles.length - photos) +
       " videos" +
-      (data.cnt != null ? " · camera reports cnt " + data.cnt : "");
-    mediaWrap.hidden = files.length === 0;
+      (shown ? " · " + shown + " thumbnail" + (shown === 1 ? "" : "s") : "") +
+      (mediaListCnt != null ? " · camera reports cnt " + mediaListCnt : "");
+    mediaWrap.hidden = mediaFiles.length === 0;
+  }
+
+  function renderMediaList(json) {
+    var data;
+    try {
+      data = JSON.parse(json);
+    } catch (e) {
+      return false;
+    }
+    mediaFiles = (data && data.mediaFiles) || [];
+    mediaListCnt = data && data.cnt != null ? data.cnt : null;
+    renderMedia();
     return true;
+  }
+
+  // --- Thumbnail preview -----------------------------------------------------
+  // With CONFIG_CAMERA_THUMBNAIL_SERIAL_PREVIEW the firmware prints the first
+  // thumbnail of a session as "THUMB JPEG dir=… num=… bytes=…", Base64 lines
+  // "THUMB b64:…" and "THUMB b64:END".
+
+  var currentThumb = null;
+
+  function finishThumb() {
+    var t = currentThumb;
+    currentThumb = null;
+    if (!t || !t.b64) {
+      return;
+    }
+    thumbs[mediaKey(t.dir, t.num)] = "data:image/jpeg;base64," + t.b64;
+    stageNotes.thumb = mediaKey(t.dir, t.num) + " shown";
+    renderTimeline();
+    renderMedia();
   }
 
   // --- Bulk frames -----------------------------------------------------------
@@ -310,6 +503,22 @@
     [/^Media list parsed: (\d+) items/, function (m) { stageNotes.list = m[1] + " items"; renderTimeline(); }],
     [/^Sent ARTEMIS GetThumbnail \(cmdId 772\)/, function () { reach("thumb", "requested"); }],
     [
+      /^THUMB JPEG dir=(-?\d+) num=(-?\d+) bytes=(\d+)/,
+      function (m) {
+        reach("thumb", "receiving preview");
+        currentThumb = { dir: Number(m[1]), num: Number(m[2]), b64: "" };
+      },
+    ],
+    [/^THUMB b64:END$/, finishThumb],
+    [
+      /^THUMB b64:([A-Za-z0-9+/=]+)$/,
+      function (m) {
+        if (currentThumb) {
+          currentThumb.b64 += m[1];
+        }
+      },
+    ],
+    [
       /^ARTEMIS response cmdId 768:\s*(\{.*\})\s*$/,
       function (m) {
         reach("list");
@@ -381,6 +590,8 @@
       mediaFiles: [
         { fileType: 0, mediaDirNum: 100, mediaNum: 36, durationMs: 0, mediaId: 4136037234, mediaTime: 1766505692 },
         { fileType: 2, mediaDirNum: 100, mediaNum: 35, durationMs: 10000, mediaId: 3987654321, mediaTime: 1766505600 },
+        { fileType: 0, mediaDirNum: 100, mediaNum: 34, durationMs: 0, mediaId: 2871466130, mediaTime: 1766490135 },
+        { fileType: 2, mediaDirNum: 100, mediaNum: 33, durationMs: 10000, mediaId: 2765310048, mediaTime: 1766490043 },
         { fileType: 0, mediaDirNum: 100, mediaNum: 1, durationMs: 0, mediaId: 1343182691, mediaTime: 1766400000 },
       ],
       cnt: 36,
@@ -388,6 +599,15 @@
       result: 0,
       cmdId: 768,
     });
+    // A small night-vision style JPEG standing in for the camera's thumbnail
+    // of 100_35, as the firmware's serial preview prints it.
+    var demoThumb =
+      "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";
+    var thumbLines = [info(3550, "THUMB JPEG dir=100 num=35 bytes=1727")];
+    for (var t = 0; t < demoThumb.length; t += 120) {
+      thumbLines.push(info(3560, "THUMB b64:" + demoThumb.slice(t, t + 120)));
+    }
+    thumbLines.push(info(3570, "THUMB b64:END"));
     // A plausible first thumbnail frame: ARTEMIS header + 72-byte media header
     // (dir 100, num 36, id 4136037234) + JPEG SOI.
     var payload = new Array(94).fill(0);
@@ -425,11 +645,11 @@
       info(2480, "ARTEMIS response cmdId 512: {\"model\":\"TC100\",\"result\":0,\"cmdId\":512}"),
       info(2600, "Sent ARTEMIS GetMediaList (cmdId 768), index 3"),
       info(2900, "ARTEMIS response cmdId 768: " + mediaJson),
-      info(2910, "Media list parsed: 3 items (2 photos, 1 videos), cnt 36, pageNo 0, result 0"),
+      info(2910, "Media list parsed: 5 items (3 photos, 2 videos), cnt 36, pageNo 0, result 0"),
       info(2915, "  first item: dir 100 num 36 id 4136037234 time 1766505692"),
       info(3100, "Sent ARTEMIS GetThumbnail (cmdId 772), index 4"),
       info(3400, "BULK frame: subtype 0x04 seq 0 body_len 98 payload 94 bytes"),
-    ].concat(hexLines, [info(3600, "Heartbeat index 2 acknowledged")]);
+    ].concat(hexLines, thumbLines, [info(3600, "Heartbeat index 2 acknowledged")]);
   }
 
   function replayDemo() {
