@@ -88,7 +88,11 @@
               <input name="device_key" type="password" placeholder="&lt;hubId&gt;.&lt;secret&gt;" spellcheck="false">
               <small>Stored: <span id="ds-current-device_key">–</span> · hub key from <code>npm run register-hub</code> in <code>backend/</code></small>
             </label>
-            <p class="note">Uplink: <span id="ds-current-uplink">–</span>. Empty fields keep their stored value. Secrets are written to the hub only and are never read back.</p>
+            <p class="note">Uplink: <span id="ds-current-uplink">–</span>. Empty fields keep their stored value. Secrets are never read back from the hub.</p>
+            <label class="ds-remember">
+              <input id="ds-remember" type="checkbox">
+              <span>Remember these values in this browser <small>(stored unencrypted in local storage, including the password and device key; unticking deletes them)</small></span>
+            </label>
             <button class="primary-button" type="submit">Save to hub</button>
             <p id="ds-form-status" class="note" role="status" aria-live="polite"></p>
           </form>
