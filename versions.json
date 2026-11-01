@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-185520-43a05a0",
+      "date": "2026-11-01T18:55:20Z",
+      "commit": "43a05a0",
+      "branch": "main",
+      "message": "Merge pull request #82 from ThomasPohl/fix/sd-file-times-time-zone",
+      "dev": "builds/20261101-185520-43a05a0/manifest-dev.json",
+      "release": "builds/20261101-185520-43a05a0/manifest-release.json",
+      "devBin": "builds/20261101-185520-43a05a0/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-185520-43a05a0/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-184612-91c4fe4",
       "date": "2026-11-01T18:46:12Z",
       "commit": "91c4fe4",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-162144-6de0db1/manifest-release.json",
       "devBin": "builds/20261031-162144-6de0db1/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-162144-6de0db1/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-161242-a8439a0",
-      "date": "2026-10-31T16:12:42Z",
-      "commit": "a8439a0",
-      "branch": "main",
-      "message": "Merge pull request #29 from ThomasPohl/feature/session-control-interface",
-      "dev": "builds/20261031-161242-a8439a0/manifest-dev.json",
-      "release": "builds/20261031-161242-a8439a0/manifest-release.json",
-      "devBin": "builds/20261031-161242-a8439a0/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-161242-a8439a0/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
