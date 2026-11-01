@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-071132-87d98bc",
+      "date": "2026-11-01T07:11:32Z",
+      "commit": "87d98bc",
+      "branch": "main",
+      "message": "Merge pull request #72 from ThomasPohl/feat/web-remember-device-setup",
+      "dev": "builds/20261101-071132-87d98bc/manifest-dev.json",
+      "release": "builds/20261101-071132-87d98bc/manifest-release.json",
+      "devBin": "builds/20261101-071132-87d98bc/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-071132-87d98bc/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-070940-4ad05e3",
       "date": "2026-11-01T07:09:40Z",
       "commit": "4ad05e3",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-072011-1f325ab/manifest-release.json",
       "devBin": "builds/20261031-072011-1f325ab/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-072011-1f325ab/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-063750-89e5b8f",
-      "date": "2026-10-31T06:37:50Z",
-      "commit": "89e5b8f",
-      "branch": "main",
-      "message": "Merge pull request #28 from ThomasPohl/feature/hub-uplink",
-      "dev": "builds/20261031-063750-89e5b8f/manifest-dev.json",
-      "release": "builds/20261031-063750-89e5b8f/manifest-release.json",
-      "devBin": "builds/20261031-063750-89e5b8f/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-063750-89e5b8f/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
