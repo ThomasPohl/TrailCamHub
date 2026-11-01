@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261101-064352-cab208f",
+      "date": "2026-11-01T06:43:52Z",
+      "commit": "cab208f",
+      "branch": "main",
+      "message": "Merge pull request #45 from ThomasPohl/fix/register-hub-via-lambda",
+      "dev": "builds/20261101-064352-cab208f/manifest-dev.json",
+      "release": "builds/20261101-064352-cab208f/manifest-release.json",
+      "devBin": "builds/20261101-064352-cab208f/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261101-064352-cab208f/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261101-062832-091a66e",
       "date": "2026-11-01T06:28:32Z",
       "commit": "091a66e",
@@ -208,17 +219,6 @@
       "release": "builds/20261031-063002-f327dee/manifest-release.json",
       "devBin": "builds/20261031-063002-f327dee/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261031-063002-f327dee/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261031-061615-99594a6",
-      "date": "2026-10-31T06:16:15Z",
-      "commit": "99594a6",
-      "branch": "main",
-      "message": "Merge pull request #24 from HeikoGr/chore/dependency-updates",
-      "dev": "builds/20261031-061615-99594a6/manifest-dev.json",
-      "release": "builds/20261031-061615-99594a6/manifest-release.json",
-      "devBin": "builds/20261031-061615-99594a6/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261031-061615-99594a6/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
