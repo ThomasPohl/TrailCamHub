@@ -1,5 +1,6 @@
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
+import { handleAdmin, isAdminEvent, type AdminEvent, type AdminResult } from './admin';
 import { handleRequest, type Deps } from './api';
 import type { ApiRequest } from './http';
 import { S3MediaStorage } from './storage';
@@ -72,9 +73,14 @@ export function toApiRequest(event: APIGatewayProxyEventV2): ApiRequest {
   };
 }
 
-/** Lambda entry point (Function URL, payload format 2.0). CORS is handled by the URL config. */
+/**
+ * Lambda entry point. Function URL requests (payload format 2.0, CORS handled
+ * by the URL config) go to the API; direct invocations with an `admin` field
+ * run an admin task (see admin.ts).
+ */
 export async function handler(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayProxyStructuredResultV2> {
-  return handleRequest(toApiRequest(event), getDeps());
+  event: APIGatewayProxyEventV2 | AdminEvent,
+): Promise<APIGatewayProxyStructuredResultV2 | AdminResult> {
+  if (isAdminEvent(event)) return handleAdmin(event, getDeps().store);
+  return handleRequest(toApiRequest(event as APIGatewayProxyEventV2), getDeps());
 }
