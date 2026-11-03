@@ -32,16 +32,20 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 
 ## API v1
 
-| Method | Path                           | Auth                   | Purpose                                      |
-| ------ | ------------------------------ | ---------------------- | -------------------------------------------- |
-| GET    | `/v1/health`                   | –                      | Liveness check                               |
-| GET    | `/v1/cameras`                  | `tma <initData>`       | Cameras linked to the Telegram user          |
-| GET    | `/v1/cameras/{camId}/media`    | `tma <initData>`       | Recordings with uploaded thumbnails          |
-| POST   | `/v1/cameras/{camId}/commands` | `tma <initData>`       | `{"type":"requestVideo","dir":100,"num":35}` |
-| POST   | `/v1/cameras/{camId}/commands` | `tma <initData>`       | `{"type":"readCamera"}`                      |
-| PUT    | `/v1/hubs/{hubId}/schedule`    | `tma <initData>`       | Wake-up schedule of a hub (see below)        |
-| POST   | `/v1/device/checkin`           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)     |
-| POST   | `/v1/device/ack`               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands     |
+| Method | Path                           | Auth                   | Purpose                                        |
+| ------ | ------------------------------ | ---------------------- | ---------------------------------------------- |
+| GET    | `/v1/health`                   | –                      | Liveness check                                 |
+| GET    | `/v1/cameras`                  | `tma <initData>`       | Cameras linked to the Telegram user            |
+| GET    | `/v1/cameras/{camId}/media`    | `tma <initData>`       | Recordings with uploaded thumbnails            |
+| POST   | `/v1/cameras/{camId}/commands` | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}` |
+| POST   | `/v1/cameras/{camId}/commands` | `tma <initData>`       | `{"type":"readCamera"}`                        |
+| PUT    | `/v1/hubs/{hubId}/schedule`    | `tma <initData>`       | Wake-up schedule of a hub (see below)          |
+| POST   | `/v1/device/checkin`           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)       |
+| POST   | `/v1/device/ack`               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands       |
+
+A recording is identified by its **`mediaId`** (per camera), not by `dir`/`num`:
+the camera reuses `dir`/`num` after its card was cleared. `dir`/`num` are only
+data. See [docs/media-identity.md](../docs/media-identity.md).
 
 ### Hub check-in cycle
 
@@ -71,7 +75,9 @@ request (and TLS handshake) however many cameras there are — important over LT
          "firmware": "2.3.0.3",
          "batPercent": 78,
          "sdFreeMB": 28412,
-         "media": [{ "dir": 100, "num": 36, "fileType": 0, "mediaTime": 1766505692 }]
+         "media": [
+           { "mediaId": 4136037234, "dir": 100, "num": 36, "fileType": 0, "mediaTime": 1766505692 }
+         ]
        },
        { "camId": "A1B2C3D4E5F6", "batPercent": 40, "media": [] }
      ]
@@ -95,8 +101,8 @@ request (and TLS handshake) however many cameras there are — important over LT
          "camId": "F4C15606ED3B",
          "accepted": true,
          "resync": false,
-         "thumbUploads": [{ "dir": 100, "num": 36, "url": "https://…" }],
-         "commands": [{ "id": "…", "type": "requestVideo", "dir": 100, "num": 35 }]
+         "thumbUploads": [{ "mediaId": 4136037234, "url": "https://…" }],
+         "commands": [{ "id": "…", "type": "requestVideo", "mediaId": 3987654321 }]
        }
      ],
      "config": { "cameraPlan": "05:00-09:00=30,*=120" }
@@ -126,7 +132,7 @@ request (and TLS handshake) however many cameras there are — important over LT
      "cameras": [
        {
          "camId": "F4C15606ED3B",
-         "uploadedThumbs": [{ "dir": 100, "num": 36 }],
+         "uploadedThumbs": [{ "mediaId": 4136037234 }],
          "commands": [{ "id": "…", "state": "done" }]
        }
      ]

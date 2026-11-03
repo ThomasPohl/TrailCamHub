@@ -216,8 +216,8 @@ void collect_cameras(CheckinRequest &request, std::vector<CameraState> &cameras)
                                       : kMaxMediaPerCamera;
         for (const auto &e : state.catalog.without_flag(
                  camera::artemis::MediaCatalog::kReported, limit)) {
-            const MediaRef ref = {e.dir_num, e.media_num, e.file_type,
-                                  e.media_time};
+            const MediaRef ref = {e.media_id, e.dir_num, e.media_num,
+                                  e.file_type, e.media_time};
             report.media.push_back(ref);
             state.sent.push_back(e.media_id);
         }
@@ -330,8 +330,18 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
         // 2. Upload the thumbnails the backend is missing. Cameras the hub
         // has no data for (camera == nullptr) have nothing on the SD card.
         for (const ThumbUpload &upload : result.thumb_uploads) {
+            const camera::artemis::CatalogEntry *entry =
+                camera != nullptr ? camera->catalog.find(upload.media_id)
+                                  : nullptr;
+            if (entry == nullptr ||
+                !camera->catalog.has_flag(
+                    upload.media_id,
+                    camera::artemis::MediaCatalog::kThumbPresent)) {
+                report.thumbs_not_on_sd++;
+                continue;
+            }
             const std::string path = camera::store::thumbnail_path(
-                result.cam_id, upload.dir, upload.num);
+                result.cam_id, entry->dir_num, entry->media_num);
             const HttpResult put = put_file(upload.url, path);
             if (put.error == ESP_ERR_NOT_FOUND) {
                 report.thumbs_not_on_sd++;
@@ -339,12 +349,11 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
             }
             if (put.error == ESP_OK && put.status >= 200 && put.status < 300) {
                 report.thumbs_uploaded++;
-                camera_ack.uploaded_thumbs.push_back(
-                    {upload.dir, upload.num, 0, 0});
+                camera_ack.uploaded_thumbs.push_back(upload.media_id);
             } else {
-                ESP_LOGW(TAG, "Upload of %s %lld_%lld failed: %s",
-                         result.cam_id.c_str(), (long long)upload.dir,
-                         (long long)upload.num, describe(put).c_str());
+                ESP_LOGW(TAG, "Upload of %s media %lld failed: %s",
+                         result.cam_id.c_str(), (long long)upload.media_id,
+                         describe(put).c_str());
             }
         }
 
@@ -374,15 +383,9 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
                 continue;
             }
             if (command.type == "requestVideo") {
-                // The command still names dir/num (#85); take the recording
-                // the camera holds under it now.
-                const camera::artemis::CatalogEntry *entry =
-                    camera != nullptr ? camera->catalog.find_by_dir_num(
-                                            command.dir, command.num)
-                                      : nullptr;
-                if (entry != nullptr) {
+                if (camera != nullptr) {
                     camera->catalog_changed |= camera->catalog.set_flag(
-                        entry->media_id,
+                        command.media_id,
                         camera::artemis::MediaCatalog::kVideoRequested);
                 }
                 command_result.error = "video download is not supported by "

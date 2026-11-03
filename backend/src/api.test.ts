@@ -24,15 +24,15 @@ const garden = {
   sdFreeMB: 28412,
   readAt: NOW - 120,
   media: [
-    { dir: 100, num: 35, fileType: 2, mediaTime: NOW - 600 },
-    { dir: 100, num: 36, fileType: 0, mediaTime: NOW - 300 },
+    { mediaId: 2035, dir: 100, num: 35, fileType: 2, mediaTime: NOW - 600 },
+    { mediaId: 2036, dir: 100, num: 36, fileType: 0, mediaTime: NOW - 300 },
   ],
 };
 
 const meadow = {
   camId: CAM_2,
   batPercent: 40,
-  media: [{ dir: 100, num: 7, fileType: 0, mediaTime: NOW - 100 }],
+  media: [{ mediaId: 3007, dir: 100, num: 7, fileType: 0, mediaTime: NOW - 100 }],
 };
 
 const checkinBody: CheckinRequest = {
@@ -81,8 +81,8 @@ describe('hub check-in with several cameras', () => {
     // New cameras: the hub should send the full media list next time.
     expect(camera(res, CAM_ID)).toMatchObject({ accepted: true, resync: true });
 
-    expect(camera(res, CAM_2)?.thumbUploads.map((t) => t.num)).toEqual([7]);
-    expect(camera(res, CAM_ID)?.thumbUploads.map((t) => t.num)).toEqual([36, 35]);
+    expect(camera(res, CAM_2)?.thumbUploads.map((t) => t.mediaId)).toEqual([3007]);
+    expect(camera(res, CAM_ID)?.thumbUploads.map((t) => t.mediaId)).toEqual([2036, 2035]);
     expect(camera(res, CAM_2)?.thumbUploads[0]?.url).toContain(`/put/${CAM_2}/`);
 
     expect(await store.getCamera(CAM_ID)).toMatchObject({
@@ -104,19 +104,19 @@ describe('hub check-in with several cameras', () => {
     deps.config = { maxThumbUploadsPerCheckin: 2 };
     const res = await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
     const all = body<CheckinResponse>(res).cameras.flatMap((c) =>
-      c.thumbUploads.map((t) => `${c.camId}:${t.num}`),
+      c.thumbUploads.map((t) => `${c.camId}:${t.mediaId}`),
     );
     // The two newest recordings, whichever camera they belong to.
-    expect(all.sort()).toEqual([`${CAM_2}:7`, `${CAM_ID}:36`].sort());
+    expect(all.sort()).toEqual([`${CAM_2}:3007`, `${CAM_ID}:2036`].sort());
   });
 
   it('accepts deltas: known media keep their state, no resync for known cameras', async () => {
     const { deps, hubKey, storage } = await setup();
     await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
-    storage.uploaded.add(`${CAM_ID}/100_36`);
+    storage.uploaded.add(`${CAM_ID}/2036`);
     await handleRequest(
       hubRequest('/v1/device/ack', hubKey, {
-        cameras: [{ camId: CAM_ID, uploadedThumbs: [{ dir: 100, num: 36 }] }],
+        cameras: [{ camId: CAM_ID, uploadedThumbs: [{ mediaId: 2036 }] }],
       }),
       deps,
     );
@@ -125,16 +125,49 @@ describe('hub check-in with several cameras', () => {
     const res = await handleRequest(
       hubRequest('/v1/device/checkin', hubKey, {
         cameras: [
-          { camId: CAM_ID, media: [{ dir: 100, num: 37, fileType: 0, mediaTime: NOW - 10 }] },
+          {
+            camId: CAM_ID,
+            media: [{ mediaId: 2037, dir: 100, num: 37, fileType: 0, mediaTime: NOW - 10 }],
+          },
         ],
       }),
       deps,
     );
     expect(camera(res, CAM_ID)).toMatchObject({ accepted: true, resync: false });
     // 37 is new, 35 is still missing, 36 is done.
-    expect(camera(res, CAM_ID)?.thumbUploads.map((t) => t.num)).toEqual([37, 35]);
+    expect(camera(res, CAM_ID)?.thumbUploads.map((t) => t.mediaId)).toEqual([2037, 2035]);
     // The second camera was not read, but its missing thumbnail is still asked for.
-    expect(camera(res, CAM_2)?.thumbUploads.map((t) => t.num)).toEqual([7]);
+    expect(camera(res, CAM_2)?.thumbUploads.map((t) => t.mediaId)).toEqual([3007]);
+  });
+
+  it('keeps a new recording that reuses a dir/num after a card clear', async () => {
+    const { deps, hubKey, storage, store } = await setup();
+    await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
+    storage.uploaded.add(`${CAM_ID}/2036`);
+    await handleRequest(
+      hubRequest('/v1/device/ack', hubKey, {
+        cameras: [{ camId: CAM_ID, uploadedThumbs: [{ mediaId: 2036 }] }],
+      }),
+      deps,
+    );
+
+    // The card was cleared: 100_36 comes back with a new mediaId.
+    const res = await handleRequest(
+      hubRequest('/v1/device/checkin', hubKey, {
+        cameras: [
+          {
+            camId: CAM_ID,
+            media: [{ mediaId: 4036, dir: 100, num: 36, fileType: 0, mediaTime: NOW - 5 }],
+          },
+        ],
+      }),
+      deps,
+    );
+    // Its thumbnail is asked for under its own id; the old one stays done.
+    expect(camera(res, CAM_ID)?.thumbUploads.map((t) => t.mediaId)).toEqual([4036, 2035]);
+    expect(camera(res, CAM_ID)?.thumbUploads[0]?.url).toContain(`/put/${CAM_ID}/4036.jpg`);
+    expect(await store.getMedia(CAM_ID, 2036)).toMatchObject({ num: 36, thumbPresent: true });
+    expect(await store.getMedia(CAM_ID, 4036)).toMatchObject({ num: 36, thumbPresent: false });
   });
 
   it('keeps a camera with the hub that reported it first', async () => {
@@ -153,7 +186,7 @@ describe('hub check-in with several cameras', () => {
     // Its acknowledgements for that camera are ignored as well.
     const ack = await handleRequest(
       hubRequest('/v1/device/ack', otherHubKey, {
-        cameras: [{ camId: CAM_ID, uploadedThumbs: [{ dir: 100, num: 36 }] }],
+        cameras: [{ camId: CAM_ID, uploadedThumbs: [{ mediaId: 2036 }] }],
       }),
       deps,
     );
@@ -168,6 +201,10 @@ describe('hub check-in with several cameras', () => {
     expect((await bad([{ camId: '../x' }])).statusCode).toBe(400);
     expect((await bad([{ camId: 'A' }, { camId: 'A' }])).statusCode).toBe(400);
     expect((await bad([garden, { camId: CAM_2, media: [{ dir: 'x' }] }])).statusCode).toBe(400);
+    // A media entry needs a valid mediaId.
+    const noId = { dir: 100, num: 1, fileType: 0, mediaTime: NOW };
+    expect((await bad([{ camId: CAM_2, media: [noId] }])).statusCode).toBe(400);
+    expect((await bad([{ camId: CAM_2, media: [{ ...noId, mediaId: 0 }] }])).statusCode).toBe(400);
     expect((await bad('nope')).statusCode).toBe(400);
     expect(await store.getCamera(CAM_ID)).toBeUndefined();
 
@@ -232,16 +269,13 @@ describe('app API', () => {
   it('shows thumbnails only after S3 confirms the upload', async () => {
     const { deps, hubKey, storage } = await setup();
     await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
-    storage.uploaded.add(`${CAM_ID}/100_36`); // 100_35 "failed" to upload
+    storage.uploaded.add(`${CAM_ID}/2036`); // 2035 "failed" to upload
     const ack = await handleRequest(
       hubRequest('/v1/device/ack', hubKey, {
         cameras: [
           {
             camId: CAM_ID,
-            uploadedThumbs: [
-              { dir: 100, num: 36 },
-              { dir: 100, num: 35 },
-            ],
+            uploadedThumbs: [{ mediaId: 2036 }, { mediaId: 2035 }],
           },
         ],
       }),
@@ -250,8 +284,12 @@ describe('app API', () => {
     expect(body(ack)).toEqual({ thumbsConfirmed: 1, commandsUpdated: 0 });
 
     const media = await handleRequest(appRequest('GET', `/v1/cameras/${CAM_ID}/media`), deps);
-    expect(body<Array<{ num: number; thumbUrl: string }>>(media)).toEqual([
-      expect.objectContaining({ num: 36, thumbUrl: expect.stringContaining('/get/') }),
+    expect(body<Array<{ mediaId: number; num: number; thumbUrl: string }>>(media)).toEqual([
+      expect.objectContaining({
+        mediaId: 2036,
+        num: 36,
+        thumbUrl: expect.stringContaining(`/get/${CAM_ID}/2036.jpg`),
+      }),
     ]);
   });
 
@@ -289,15 +327,16 @@ describe('video requests (app → hub → app)', () => {
     const path = `/v1/cameras/${CAM_ID}/commands`;
     const bad = (b: unknown) => handleRequest(appRequest('POST', path, b), deps);
     expect((await bad({ type: 'format' })).statusCode).toBe(400);
-    expect((await bad({ type: 'requestVideo', dir: 100 })).statusCode).toBe(400);
-    expect((await bad({ type: 'requestVideo', dir: 100, num: 99 })).statusCode).toBe(404);
-    expect((await bad({ type: 'requestVideo', dir: 100, num: 36 })).statusCode).toBe(409);
+    expect((await bad({ type: 'requestVideo', dir: 100, num: 35 })).statusCode).toBe(400);
+    expect((await bad({ type: 'requestVideo', mediaId: 0 })).statusCode).toBe(400);
+    expect((await bad({ type: 'requestVideo', mediaId: 9999 })).statusCode).toBe(404);
+    expect((await bad({ type: 'requestVideo', mediaId: 2036 })).statusCode).toBe(409);
   });
 
   it('delivers the command for the right camera until it is acknowledged', async () => {
     const { deps, hubKey, store } = await withMedia();
     const path = `/v1/cameras/${CAM_ID}/commands`;
-    const request = { type: 'requestVideo', dir: 100, num: 35 };
+    const request = { type: 'requestVideo', mediaId: 2035 };
 
     const created = await handleRequest(appRequest('POST', path, request), deps);
     expect(created.statusCode).toBe(201);
@@ -310,11 +349,11 @@ describe('video requests (app → hub → app)', () => {
     for (const cameras of [[], [meadow]]) {
       const res = await handleRequest(hubRequest('/v1/device/checkin', hubKey, { cameras }), deps);
       expect(camera(res, CAM_ID)?.commands).toEqual([
-        { id: 'cmd-1', type: 'requestVideo', dir: 100, num: 35 },
+        { id: 'cmd-1', type: 'requestVideo', mediaId: 2035 },
       ]);
       expect(camera(res, CAM_2)?.commands ?? []).toEqual([]);
     }
-    expect((await store.getMedia(CAM_ID, 100, 35))?.videoState).toBe('downloading');
+    expect((await store.getMedia(CAM_ID, 2035))?.videoState).toBe('downloading');
 
     await handleRequest(
       hubRequest('/v1/device/ack', hubKey, {
@@ -323,7 +362,7 @@ describe('video requests (app → hub → app)', () => {
       deps,
     );
     expect((await store.getCommand(CAM_ID, 'cmd-1'))?.state).toBe('done');
-    expect((await store.getMedia(CAM_ID, 100, 35))?.videoState).toBe('available');
+    expect((await store.getMedia(CAM_ID, 2035))?.videoState).toBe('available');
 
     const after = await handleRequest(
       hubRequest('/v1/device/checkin', hubKey, { cameras: [] }),
@@ -337,8 +376,7 @@ describe('video requests (app → hub → app)', () => {
     await handleRequest(
       appRequest('POST', `/v1/cameras/${CAM_ID}/commands`, {
         type: 'requestVideo',
-        dir: 100,
-        num: 35,
+        mediaId: 2035,
       }),
       deps,
     );
@@ -354,7 +392,7 @@ describe('video requests (app → hub → app)', () => {
       state: 'failed',
       error: 'camera offline',
     });
-    expect((await store.getMedia(CAM_ID, 100, 35))?.videoState).toBe('failed');
+    expect((await store.getMedia(CAM_ID, 2035))?.videoState).toBe('failed');
   });
 });
 

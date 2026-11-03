@@ -18,9 +18,9 @@ TEST_CASE("check-in body lists every camera with its delta media")
     garden.firmware = "2.3.0.3";
     garden.bat_percent = 78;
     garden.sd_free_mb = 28412;
-    garden.media = {{100, 36, 0, 1766505692},
-                    {100, 35, 2, 1766505600},
-                    {100, 34, 7, 1766505500}};
+    garden.media = {{4136037234, 100, 36, 0, 1766505692},
+                    {3987654321, 100, 35, 2, 1766505600},
+                    {2871466130, 100, 34, 7, 1766505500}};
 
     CameraReport meadow;
     meadow.cam_id = "A1B2C3D4E5F6";
@@ -30,9 +30,10 @@ TEST_CASE("check-in body lists every camera with its delta media")
           "{\"hubFirmware\":\"0.5.0\",\"cameras\":["
           "{\"camId\":\"F4C15606ED3B\",\"readAt\":1766505900,"
           "\"model\":\"TC100\",\"firmware\":\"2.3.0.3\",\"batPercent\":78,"
-          "\"sdFreeMB\":28412,\"media\":[{\"dir\":100,\"num\":36,"
-          "\"fileType\":0,\"mediaTime\":1766505692},{\"dir\":100,\"num\":35,"
-          "\"fileType\":2,\"mediaTime\":1766505600}]},"
+          "\"sdFreeMB\":28412,\"media\":[{\"mediaId\":4136037234,"
+          "\"dir\":100,\"num\":36,\"fileType\":0,\"mediaTime\":1766505692},"
+          "{\"mediaId\":3987654321,\"dir\":100,\"num\":35,\"fileType\":2,"
+          "\"mediaTime\":1766505600}]},"
           "{\"camId\":\"A1B2C3D4E5F6\",\"media\":[]}]}");
 }
 
@@ -56,11 +57,12 @@ TEST_CASE("check-in response is read per camera")
     const std::string json =
         "{\"serverTime\":1766506000,\"cameras\":["
         "{\"camId\":\"F4C15606ED3B\",\"accepted\":true,\"resync\":false,"
-        "\"thumbUploads\":[{\"dir\":100,\"num\":36,\"url\":\"https://bucket."
-        "s3.eu-central-1.amazonaws.com/thumb/F4/100_36.jpg?X-Amz-Signature="
-        "ab%2Fcd&x=1\"},{\"dir\":100,\"num\":35,\"url\":\"http://insecure."
-        "example/\"}],\"commands\":[{\"id\":\"c-1\",\"type\":\"requestVideo\","
-        "\"dir\":100,\"num\":35}]},"
+        "\"thumbUploads\":[{\"mediaId\":4136037234,\"url\":\"https://bucket."
+        "s3.eu-central-1.amazonaws.com/thumb/F4/4136037234.jpg?X-Amz-Signature="
+        "ab%2Fcd&x=1\"},{\"mediaId\":3987654321,\"url\":\"http://insecure."
+        "example/\"},{\"mediaId\":0,\"url\":\"https://bucket.example/\"}],"
+        "\"commands\":[{\"id\":\"c-1\",\"type\":\"requestVideo\","
+        "\"mediaId\":3987654321}]},"
         "{\"camId\":\"A1B2C3D4E5F6\",\"accepted\":true,\"resync\":true,"
         "\"thumbUploads\":[],\"commands\":[]},"
         "{\"camId\":\"OTHER\",\"accepted\":false,\"resync\":false,"
@@ -80,13 +82,14 @@ TEST_CASE("check-in response is read per camera")
     CHECK(garden.cam_id == "F4C15606ED3B");
     CHECK(garden.accepted);
     CHECK_FALSE(garden.resync);
-    REQUIRE(garden.thumb_uploads.size() == 1);  // http URL rejected
-    CHECK(garden.thumb_uploads[0].num == 36);
+    // The http URL and the invalid mediaId are rejected.
+    REQUIRE(garden.thumb_uploads.size() == 1);
+    CHECK(garden.thumb_uploads[0].media_id == 4136037234);
     CHECK(garden.thumb_uploads[0].url.find("X-Amz-Signature=ab%2Fcd") !=
           std::string::npos);
     REQUIRE(garden.commands.size() == 1);
     CHECK(garden.commands[0].id == "c-1");
-    CHECK(garden.commands[0].num == 35);
+    CHECK(garden.commands[0].media_id == 3987654321);
 
     CHECK(response.cameras[1].resync);
     CHECK(response.cameras[1].thumb_uploads.empty());
@@ -154,7 +157,7 @@ TEST_CASE("ack body is grouped by camera and skips empty cameras")
     AckRequest request;
     CameraAck garden;
     garden.cam_id = "F4C15606ED3B";
-    garden.uploaded_thumbs = {{100, 36, 0, 0}};
+    garden.uploaded_thumbs = {4136037234};
     garden.commands = {{"c-1", true, ""}, {"c-2", false, "not supported"}};
     CameraAck idle;
     idle.cam_id = "A1B2C3D4E5F6";
@@ -163,7 +166,7 @@ TEST_CASE("ack body is grouped by camera and skips empty cameras")
     CHECK_FALSE(ack_is_empty(request));
     CHECK(build_ack_json(request) ==
           "{\"cameras\":[{\"camId\":\"F4C15606ED3B\",\"uploadedThumbs\":["
-          "{\"dir\":100,\"num\":36}],\"commands\":[{\"id\":\"c-1\",\"state\":"
+          "{\"mediaId\":4136037234}],\"commands\":[{\"id\":\"c-1\",\"state\":"
           "\"done\"},{\"id\":\"c-2\",\"state\":\"failed\",\"error\":"
           "\"not supported\"}]}]}");
 

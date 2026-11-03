@@ -6,7 +6,6 @@ import type {
   ScheduleConfig,
   VideoState,
 } from '../model';
-import { mediaKey } from '../model';
 import type { CameraTelemetry, HubTelemetry, Store } from './types';
 
 function defined<T extends object>(values: T): Partial<T> {
@@ -20,7 +19,7 @@ export class MemoryStore implements Store {
   private readonly hubs = new Map<string, HubRecord>();
   private readonly cameras = new Map<string, CameraRecord>();
   private readonly links = new Map<number, Set<string>>();
-  private readonly media = new Map<string, Map<string, MediaRecord>>();
+  private readonly media = new Map<string, Map<number, MediaRecord>>();
   private readonly commands = new Map<string, Map<string, CommandRecord>>();
 
   async putHub(hub: HubRecord): Promise<void> {
@@ -88,27 +87,26 @@ export class MemoryStore implements Store {
     return [...(this.media.get(camId)?.values() ?? [])].map((m) => ({ ...m }));
   }
 
-  async getMedia(camId: string, dir: number, num: number): Promise<MediaRecord | undefined> {
-    const item = this.media.get(camId)?.get(mediaKey({ dir, num }));
+  async getMedia(camId: string, mediaId: number): Promise<MediaRecord | undefined> {
+    const item = this.media.get(camId)?.get(mediaId);
     return item && { ...item };
   }
 
   async addMedia(camId: string, items: MediaRecord[]): Promise<void> {
-    const map = this.media.get(camId) ?? new Map<string, MediaRecord>();
+    const map = this.media.get(camId) ?? new Map<number, MediaRecord>();
     for (const item of items) {
-      const key = mediaKey(item);
-      if (!map.has(key)) map.set(key, { ...item });
+      if (!map.has(item.mediaId)) map.set(item.mediaId, { ...item });
     }
     this.media.set(camId, map);
   }
 
-  async markThumbPresent(camId: string, dir: number, num: number): Promise<void> {
-    const item = this.media.get(camId)?.get(mediaKey({ dir, num }));
+  async markThumbPresent(camId: string, mediaId: number): Promise<void> {
+    const item = this.media.get(camId)?.get(mediaId);
     if (item) item.thumbPresent = true;
   }
 
-  async setVideoState(camId: string, dir: number, num: number, state: VideoState): Promise<void> {
-    const item = this.media.get(camId)?.get(mediaKey({ dir, num }));
+  async setVideoState(camId: string, mediaId: number, state: VideoState): Promise<void> {
+    const item = this.media.get(camId)?.get(mediaId);
     if (item) item.videoState = state;
   }
 

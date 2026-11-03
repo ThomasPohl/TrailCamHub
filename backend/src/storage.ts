@@ -9,14 +9,13 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 /** Object storage for thumbnails (and later videos). */
 export interface MediaStorage {
   /** Short-lived URL the app uses to show a thumbnail. */
-  thumbReadUrl(camId: string, dir: number, num: number): Promise<string>;
+  thumbReadUrl(camId: string, mediaId: number): Promise<string>;
   /** Short-lived URL the hub PUTs a JPEG thumbnail to. */
-  thumbUploadUrl(camId: string, dir: number, num: number): Promise<string>;
-  thumbExists(camId: string, dir: number, num: number): Promise<boolean>;
+  thumbUploadUrl(camId: string, mediaId: number): Promise<string>;
+  thumbExists(camId: string, mediaId: number): Promise<boolean>;
 }
 
-export const thumbKey = (camId: string, dir: number, num: number) =>
-  `thumb/${camId}/${dir}_${num}.jpg`;
+export const thumbKey = (camId: string, mediaId: number) => `thumb/${camId}/${mediaId}.jpg`;
 
 const READ_URL_TTL_S = 15 * 60;
 const UPLOAD_URL_TTL_S = 30 * 60;
@@ -27,30 +26,30 @@ export class S3MediaStorage implements MediaStorage {
     private readonly s3: S3Client = new S3Client({}),
   ) {}
 
-  thumbReadUrl(camId: string, dir: number, num: number): Promise<string> {
+  thumbReadUrl(camId: string, mediaId: number): Promise<string> {
     return getSignedUrl(
       this.s3,
-      new GetObjectCommand({ Bucket: this.bucket, Key: thumbKey(camId, dir, num) }),
+      new GetObjectCommand({ Bucket: this.bucket, Key: thumbKey(camId, mediaId) }),
       { expiresIn: READ_URL_TTL_S },
     );
   }
 
-  thumbUploadUrl(camId: string, dir: number, num: number): Promise<string> {
+  thumbUploadUrl(camId: string, mediaId: number): Promise<string> {
     return getSignedUrl(
       this.s3,
       new PutObjectCommand({
         Bucket: this.bucket,
-        Key: thumbKey(camId, dir, num),
+        Key: thumbKey(camId, mediaId),
         ContentType: 'image/jpeg',
       }),
       { expiresIn: UPLOAD_URL_TTL_S },
     );
   }
 
-  async thumbExists(camId: string, dir: number, num: number): Promise<boolean> {
+  async thumbExists(camId: string, mediaId: number): Promise<boolean> {
     try {
       await this.s3.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: thumbKey(camId, dir, num) }),
+        new HeadObjectCommand({ Bucket: this.bucket, Key: thumbKey(camId, mediaId) }),
       );
       return true;
     } catch (error) {

@@ -87,19 +87,14 @@ std::vector<std::string> array_objects(const std::string &json,
     return objects;
 }
 
-void append_media(std::string &out, const MediaRef &m, bool full)
+void append_media(std::string &out, const MediaRef &m)
 {
-    char buffer[160];
-    if (full) {
-        std::snprintf(buffer, sizeof(buffer),
-                      "{\"dir\":%lld,\"num\":%lld,\"fileType\":%lld,"
-                      "\"mediaTime\":%lld}",
-                      (long long)m.dir, (long long)m.num,
-                      (long long)m.file_type, (long long)m.media_time);
-    } else {
-        std::snprintf(buffer, sizeof(buffer), "{\"dir\":%lld,\"num\":%lld}",
-                      (long long)m.dir, (long long)m.num);
-    }
+    char buffer[192];
+    std::snprintf(buffer, sizeof(buffer),
+                  "{\"mediaId\":%lld,\"dir\":%lld,\"num\":%lld,"
+                  "\"fileType\":%lld,\"mediaTime\":%lld}",
+                  (long long)m.media_id, (long long)m.dir, (long long)m.num,
+                  (long long)m.file_type, (long long)m.media_time);
     out += buffer;
 }
 
@@ -235,7 +230,7 @@ std::string build_checkin_json(const CheckinRequest &request)
             if (!first) {
                 out += ",";
             }
-            append_media(out, m, true);
+            append_media(out, m);
             first = false;
         }
         out += "]}";
@@ -272,7 +267,8 @@ std::string build_ack_json(const AckRequest &request)
             if (i > 0) {
                 out += ",";
             }
-            append_media(out, camera.uploaded_thumbs[i], false);
+            out += "{\"mediaId\":" + std::to_string(camera.uploaded_thumbs[i]) +
+                   "}";
         }
         out += "],\"commands\":[";
         for (std::size_t i = 0; i < camera.commands.size(); i++) {
@@ -321,8 +317,8 @@ bool parse_checkin_response(const std::string &json, CheckinResponse &out)
         for (const std::string &obj :
              array_objects(camera_json, "thumbUploads")) {
             ThumbUpload upload;
-            if (json_find_int(obj, "dir", upload.dir) &&
-                json_find_int(obj, "num", upload.num) &&
+            if (json_find_int(obj, "mediaId", upload.media_id) &&
+                upload.media_id > 0 &&
                 json_find_string(obj, "url", upload.url) &&
                 upload.url.rfind("https://", 0) == 0) {
                 camera.thumb_uploads.push_back(upload);
@@ -332,8 +328,7 @@ bool parse_checkin_response(const std::string &json, CheckinResponse &out)
             Command command;
             if (json_find_string(obj, "id", command.id) &&
                 json_find_string(obj, "type", command.type)) {
-                json_find_int(obj, "dir", command.dir);
-                json_find_int(obj, "num", command.num);
+                json_find_int(obj, "mediaId", command.media_id);
                 camera.commands.push_back(command);
             }
         }

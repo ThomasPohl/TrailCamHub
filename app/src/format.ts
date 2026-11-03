@@ -1,7 +1,15 @@
 import type { MediaItem, VideoState } from './api/types';
 
-/** File-style key used across firmware, backend and app: `<dir>_<num>`. */
-export function mediaKey(item: Pick<MediaItem, 'dir' | 'num'>): string {
+/** Identifies a recording within its camera, as firmware and backend do. */
+export function mediaKey(item: Pick<MediaItem, 'mediaId'>): string {
+  return String(item.mediaId);
+}
+
+/**
+ * The camera's file name of a recording, `<dir>_<num>`. For display only: the
+ * camera reuses it after its card was cleared.
+ */
+export function mediaLabel(item: Pick<MediaItem, 'dir' | 'num'>): string {
   return `${item.dir}_${item.num}`;
 }
 

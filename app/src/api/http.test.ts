@@ -65,13 +65,16 @@ describe('HttpApiClient', () => {
       .mockResolvedValue(jsonResponse({ id: 'c1', type: 'requestVideo', state: 'queued' }));
     const client = new HttpApiClient('https://api.example.com', 'x', fetchFn);
 
-    const result = await client.requestVideo('F4C15606ED3B', { dir: 100, num: 35 });
+    const result = await client.requestVideo('F4C15606ED3B', { mediaId: 3987654321 });
 
     expect(result.state).toBe('queued');
     const [url, init] = fetchFn.mock.calls[0] ?? [];
     expect(url).toBe('https://api.example.com/v1/cameras/F4C15606ED3B/commands');
     expect(init?.method).toBe('POST');
-    expect(JSON.parse(String(init?.body))).toEqual({ type: 'requestVideo', dir: 100, num: 35 });
+    expect(JSON.parse(String(init?.body))).toEqual({
+      type: 'requestVideo',
+      mediaId: 3987654321,
+    });
   });
 
   it('throws ApiError with the HTTP status on failure', async () => {

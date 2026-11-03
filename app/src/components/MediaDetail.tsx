@@ -1,5 +1,5 @@
 import type { MediaItem } from '../api/types';
-import { canRequestVideo, formatCameraTime, mediaKey, videoStateLabel } from '../format';
+import { canRequestVideo, formatCameraTime, mediaLabel, videoStateLabel } from '../format';
 
 interface Props {
   item: MediaItem;
@@ -12,13 +12,13 @@ interface Props {
 export function MediaDetail({ item, busy, showBackLink, onBack, onRequestVideo }: Props) {
   const isVideo = item.fileType === 2;
   return (
-    <section className="detail" aria-label={`Recording ${mediaKey(item)}`}>
+    <section className="detail" aria-label={`Recording ${mediaLabel(item)}`}>
       {showBackLink && (
         <button type="button" className="link" onClick={onBack}>
           ← All recordings
         </button>
       )}
-      <img className="detail__image" src={item.thumbUrl} alt={`Recording ${mediaKey(item)}`} />
+      <img className="detail__image" src={item.thumbUrl} alt={`Recording ${mediaLabel(item)}`} />
       <div className="card">
         <dl className="facts">
           <dt>Recorded</dt>
@@ -26,7 +26,7 @@ export function MediaDetail({ item, busy, showBackLink, onBack, onRequestVideo }
           <dt>Type</dt>
           <dd>{isVideo ? 'Video' : 'Photo'}</dd>
           <dt>File</dt>
-          <dd>{mediaKey(item)}</dd>
+          <dd>{mediaLabel(item)}</dd>
           {isVideo && (
             <>
               <dt>Video</dt>

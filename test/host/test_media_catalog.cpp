@@ -107,28 +107,6 @@ TEST_CASE("merge marks exactly the listed entries")
     CHECK(cat.missing_thumbnails()[0].media_id == 222);
 }
 
-TEST_CASE("find_by_dir_num prefers the listed entry, else the newest")
-{
-    MediaCatalog cat;
-    MediaList before;
-    before.files = {item(100, 1, 0, 111)};
-    cat.merge(before);
-    MediaList after;
-    after.files = {item(100, 1, 0, 999)};
-    cat.merge(after);
-
-    REQUIRE(cat.find_by_dir_num(100, 1) != nullptr);
-    CHECK(cat.find_by_dir_num(100, 1)->media_id == 999);
-
-    // After a reload nothing is listed; the newest entry wins.
-    MediaCatalog loaded;
-    REQUIRE(loaded.parse(cat.serialize()));
-    REQUIRE(loaded.find_by_dir_num(100, 1) != nullptr);
-    CHECK(loaded.find_by_dir_num(100, 1)->media_id == 999);
-    CHECK(loaded.find_listed(100, 1) == nullptr);
-    CHECK(loaded.find_by_dir_num(100, 7) == nullptr);
-}
-
 TEST_CASE("flag helpers operate on the addressed entry only")
 {
     MediaCatalog cat;

@@ -6,6 +6,7 @@ describe('buildDemoMedia', () => {
     const media = buildDemoMedia(1_000_000, 4);
     expect(media.map((m) => m.fileType)).toEqual([0, 2, 0, 2]);
     expect(media.map((m) => m.num)).toEqual([36, 35, 34, 33]);
+    expect(new Set(media.map((m) => m.mediaId)).size).toBe(4);
     const times = media.map((m) => m.mediaTime);
     expect([...times].sort((a, b) => b - a)).toEqual(times);
   });
@@ -47,13 +48,11 @@ describe('DemoApiClient', () => {
     const result = await api.requestVideo(camId, video!);
 
     expect(result).toMatchObject({ type: 'requestVideo', state: 'queued' });
-    const reloaded = (await api.listMedia(camId)).find((m) => m.num === video!.num);
+    const reloaded = (await api.listMedia(camId)).find((m) => m.mediaId === video!.mediaId);
     expect(reloaded?.videoState).toBe('requested');
   });
 
   it('rejects unknown media', async () => {
-    await expect(client().requestVideo('nope', { dir: 1, num: 1 })).rejects.toThrow(
-      'Unknown media',
-    );
+    await expect(client().requestVideo('nope', { mediaId: 1 })).rejects.toThrow('Unknown media');
   });
 });

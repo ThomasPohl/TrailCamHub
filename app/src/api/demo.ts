@@ -71,6 +71,7 @@ export function buildDemoMedia(now: number, count = 12, firstNum = 36): MediaIte
     const mediaTime = toCameraWallClock(now - i * 5_400 - 600);
     const isVideo = i % 2 === 1;
     items.push({
+      mediaId: 4_136_037_000 + num,
       dir: 100,
       num,
       fileType: isVideo ? 2 : 0,
@@ -136,11 +137,11 @@ export class DemoApiClient implements ApiClient {
     return (this.media.get(camId) ?? []).map((m) => ({ ...m }));
   }
 
-  async requestVideo(camId: string, item: Pick<MediaItem, 'dir' | 'num'>): Promise<CommandResult> {
+  async requestVideo(camId: string, item: Pick<MediaItem, 'mediaId'>): Promise<CommandResult> {
     await this.delay();
-    const target = this.media.get(camId)?.find((m) => m.dir === item.dir && m.num === item.num);
+    const target = this.media.get(camId)?.find((m) => m.mediaId === item.mediaId);
     if (!target) {
-      throw new Error(`Unknown media ${item.dir}_${item.num}`);
+      throw new Error(`Unknown media ${item.mediaId}`);
     }
     if (target.videoState === 'none' || target.videoState === 'failed') {
       target.videoState = 'requested';

@@ -37,13 +37,13 @@ Checked on hardware by the maintainer (November 2026):
 
 ## Where it applies
 
-| Layer | Key | State |
-| --- | --- | --- |
-| Hub catalog (`catalog.csv` v2) | `mediaId` | done |
-| Hub SD files (`thumb/`, `media/`) | `dir`/`num` | to do |
-| Check-in, ack, commands | `dir`/`num` | to do |
-| Backend (DynamoDB, S3) | `dir`/`num` | to do |
-| App (`mediaKey()`, video request) | `dir`/`num` | to do |
+| Layer                                                                 | Key         | State |
+| --------------------------------------------------------------------- | ----------- | ----- |
+| Hub catalog (`catalog.csv` v2)                                        | `mediaId`   | done  |
+| Check-in, ack, commands (API v1)                                      | `mediaId`   | done  |
+| Backend: DynamoDB `MEDIA#<mediaId>`, S3 `thumb/<camId>/<mediaId>.jpg` | `mediaId`   | done  |
+| App (`mediaKey()`, video request)                                     | `mediaId`   | done  |
+| Hub SD files (`thumb/`, `media/`)                                     | `dir`/`num` | to do |
 
 ## Hub catalog
 
@@ -55,11 +55,27 @@ Checked on hardware by the maintainer (November 2026):
   may belong to another recording now.
 - The answer to a thumbnail request names `dir`/`num`; it is matched to the
   listed entry with that `dir`/`num`.
-- Interfaces that do not carry the `mediaId` yet (the backend API) map
-  `dir`/`num` to the listed entry, or else to the newest entry with that
-  `dir`/`num`.
 - `catalog.csv` has the header `# trailcamhub-catalog v2`. The columns did not
   change (`dir,num,mediaId,fileType,mediaTime,flags`); v1 is read as well and
   written back as v2. Rows without a valid `mediaId` and repeated `mediaId`s
   are dropped. Firmware before this change does not read v2 and starts with an
   empty catalog.
+
+## Backend and app
+
+- Every media entry of a check-in carries `mediaId`, `dir`, `num`,
+  `fileType` and `mediaTime`; an entry without a valid `mediaId` makes the
+  check-in fail with 400.
+- `thumbUploads`, `uploadedThumbs` and `requestVideo` commands name only the
+  `mediaId`. The hub finds `dir`/`num` (for the camera and its SD files) in its
+  catalog.
+- The app keys and selects recordings by `mediaId` (`mediaKey()`) and shows
+  `dir`/`num` as the file name (`mediaLabel()`).
+- The switch to `mediaId` was made without a migration. Records stored under
+  `dir`/`num` before do not fit: delete every item whose `PK` starts with
+  `CAM#` and the `HUB#…`/`CAM#…` link items, and the `thumb/` prefix in S3.
+  Hub records (`HUB#…`/`META`) and user links stay, so the hub keeps its key.
+  The next check-in creates the cameras again with `resync`, and the hub
+  reports all its recordings again, now with `mediaId`. Emptying the whole
+  table works as well, but then the hub has to be registered again and gets a
+  new key.

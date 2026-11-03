@@ -59,11 +59,6 @@ class MediaCatalog
     // The listed entry with this dir/num (unique on the card at one time), or
     // nullptr. For answers of the camera, which name dir/num.
     const CatalogEntry *find_listed(std::int64_t dir, std::int64_t num) const;
-    // The entry with this dir/num: the listed one if any, otherwise the one
-    // added last. Only for interfaces that do not carry the mediaId yet (the
-    // backend API, see #85).
-    const CatalogEntry *find_by_dir_num(std::int64_t dir,
-                                        std::int64_t num) const;
 
     bool set_flag(std::int64_t media_id, Flag flag);
     bool clear_flag(std::int64_t media_id, Flag flag);

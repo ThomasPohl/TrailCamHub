@@ -30,8 +30,7 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
 const hubPk = (hubId: string) => `HUB#${hubId}`;
 const camPk = (camId: string) => `CAM#${camId}`;
 const userPk = (userId: number) => `USER#${userId}`;
-const mediaSk = (dir: number, num: number) =>
-  `MEDIA#${String(dir).padStart(5, '0')}#${String(num).padStart(6, '0')}`;
+const mediaSk = (mediaId: number) => `MEDIA#${mediaId}`;
 const cmdSk = (id: string) => `CMD#${id}`;
 
 function strip<T>(item: Record<string, unknown>): T {
@@ -153,8 +152,8 @@ export class DynamoStore implements Store {
     return items.map((item) => strip<MediaRecord>(item));
   }
 
-  async getMedia(camId: string, dir: number, num: number): Promise<MediaRecord | undefined> {
-    return this.getItem<MediaRecord>(camPk(camId), mediaSk(dir, num));
+  async getMedia(camId: string, mediaId: number): Promise<MediaRecord | undefined> {
+    return this.getItem<MediaRecord>(camPk(camId), mediaSk(mediaId));
   }
 
   async addMedia(camId: string, items: MediaRecord[]): Promise<void> {
@@ -163,7 +162,7 @@ export class DynamoStore implements Store {
         await this.db.send(
           new PutCommand({
             TableName: this.table,
-            Item: { PK: camPk(camId), SK: mediaSk(item.dir, item.num), ...item },
+            Item: { PK: camPk(camId), SK: mediaSk(item.mediaId), ...item },
             ConditionExpression: 'attribute_not_exists(PK)',
           }),
         );
@@ -173,12 +172,12 @@ export class DynamoStore implements Store {
     }
   }
 
-  async markThumbPresent(camId: string, dir: number, num: number): Promise<void> {
-    await this.updateIfExists(camPk(camId), mediaSk(dir, num), 'thumbPresent', true);
+  async markThumbPresent(camId: string, mediaId: number): Promise<void> {
+    await this.updateIfExists(camPk(camId), mediaSk(mediaId), 'thumbPresent', true);
   }
 
-  async setVideoState(camId: string, dir: number, num: number, state: VideoState): Promise<void> {
-    await this.updateIfExists(camPk(camId), mediaSk(dir, num), 'videoState', state);
+  async setVideoState(camId: string, mediaId: number, state: VideoState): Promise<void> {
+    await this.updateIfExists(camPk(camId), mediaSk(mediaId), 'videoState', state);
   }
 
   // ---- Commands ------------------------------------------------------------

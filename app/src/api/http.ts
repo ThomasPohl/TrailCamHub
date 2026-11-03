@@ -37,14 +37,13 @@ export class HttpApiClient implements ApiClient {
     return this.request<MediaItem[]>('GET', `/v1/cameras/${encodeURIComponent(camId)}/media`);
   }
 
-  requestVideo(camId: string, item: Pick<MediaItem, 'dir' | 'num'>): Promise<CommandResult> {
+  requestVideo(camId: string, item: Pick<MediaItem, 'mediaId'>): Promise<CommandResult> {
     return this.request<CommandResult>(
       'POST',
       `/v1/cameras/${encodeURIComponent(camId)}/commands`,
       {
         type: 'requestVideo',
-        dir: item.dir,
-        num: item.num,
+        mediaId: item.mediaId,
       },
     );
   }

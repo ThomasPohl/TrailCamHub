@@ -12,7 +12,10 @@
 namespace uplink
 {
 
+// A recording is identified by its mediaId (docs/media-identity.md); dir/num
+// are only data.
 struct MediaRef {
+    std::int64_t media_id = 0;
     std::int64_t dir = 0;
     std::int64_t num = 0;
     std::int64_t file_type = 0;   // 0 = photo, 2 = video
@@ -52,16 +55,14 @@ struct CheckinRequest {
 };
 
 struct ThumbUpload {
-    std::int64_t dir = 0;
-    std::int64_t num = 0;
+    std::int64_t media_id = 0;
     std::string url;
 };
 
 struct Command {
     std::string id;
     std::string type;
-    std::int64_t dir = 0;
-    std::int64_t num = 0;
+    std::int64_t media_id = 0;  // requestVideo; 0 = none
 };
 
 struct CameraCheckin {
@@ -91,7 +92,7 @@ struct CommandResult {
 
 struct CameraAck {
     std::string cam_id;
-    std::vector<MediaRef> uploaded_thumbs;  // dir/num used
+    std::vector<std::int64_t> uploaded_thumbs;  // mediaIds
     std::vector<CommandResult> commands;
 };
 

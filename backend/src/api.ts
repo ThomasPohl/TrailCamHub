@@ -26,7 +26,7 @@ import type {
   ScheduleConfig,
   ScheduleOrigin,
 } from './model';
-import { ID_PATTERN } from './model';
+import { ID_PATTERN, isMediaId } from './model';
 import {
   formatPlan,
   MAX_CHECKIN_INTERVAL_S,
@@ -186,12 +186,13 @@ async function listMedia(req: ApiRequest, params: Record<string, string>, deps: 
     .sort((a, b) => b.mediaTime - a.mediaTime || b.num - a.num);
   const items: MediaItem[] = await Promise.all(
     media.map(async (m) => ({
+      mediaId: m.mediaId,
       dir: m.dir,
       num: m.num,
       fileType: m.fileType,
       mediaTime: m.mediaTime,
       videoState: m.videoState,
-      thumbUrl: await deps.storage.thumbReadUrl(camera.camId, m.dir, m.num),
+      thumbUrl: await deps.storage.thumbReadUrl(camera.camId, m.mediaId),
     })),
   );
   return json(200, items);
@@ -199,16 +200,13 @@ async function listMedia(req: ApiRequest, params: Record<string, string>, deps: 
 
 async function createCommand(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const camera = await authUserForCamera(req, params.camId ?? '', deps);
-  const body = parseJsonBody<{ type?: unknown; dir?: unknown; num?: unknown }>(req);
+  const body = parseJsonBody<{ type?: unknown; mediaId?: unknown }>(req);
   if (body.type === 'readCamera') return createReadCommand(camera, deps);
   if (body.type !== 'requestVideo') throw new HttpError(400, 'Unsupported command type');
-  if (!Number.isInteger(body.dir) || !Number.isInteger(body.num)) {
-    throw new HttpError(400, 'dir and num must be integers');
-  }
-  const dir = body.dir as number;
-  const num = body.num as number;
+  if (!isMediaId(body.mediaId)) throw new HttpError(400, 'mediaId must be a valid media id');
+  const mediaId = body.mediaId;
 
-  const media = await deps.store.getMedia(camera.camId, dir, num);
+  const media = await deps.store.getMedia(camera.camId, mediaId);
   if (!media) throw new HttpError(404, 'Recording not found');
   if (media.fileType !== 2) throw new HttpError(409, 'Recording is not a video');
 
@@ -216,8 +214,7 @@ async function createCommand(req: ApiRequest, params: Record<string, string>, de
   const pending = (await deps.store.listCommands(camera.camId)).find(
     (c) =>
       c.type === 'requestVideo' &&
-      c.dir === dir &&
-      c.num === num &&
+      c.mediaId === mediaId &&
       (c.state === 'queued' || c.state === 'delivered'),
   );
   if (pending) return json(200, commandResult(pending));
@@ -226,14 +223,13 @@ async function createCommand(req: ApiRequest, params: Record<string, string>, de
   const command: CommandRecord = {
     id: (deps.newId ?? randomUUID)(),
     type: 'requestVideo',
-    dir,
-    num,
+    mediaId,
     state: 'queued',
     created: now,
     updated: now,
   };
   await deps.store.putCommand(camera.camId, command);
-  await deps.store.setVideoState(camera.camId, dir, num, 'requested');
+  await deps.store.setVideoState(camera.camId, mediaId, 'requested');
   return json(201, commandResult(command));
 }
 
@@ -250,8 +246,7 @@ async function createReadCommand(camera: CameraRecord, deps: Deps) {
   const command: CommandRecord = {
     id: (deps.newId ?? randomUUID)(),
     type: 'readCamera',
-    dir: 0,
-    num: 0,
+    mediaId: 0,
     state: 'queued',
     created: now,
     updated: now,
@@ -354,12 +349,14 @@ function sanitizeMedia(raw: CameraReport['media'], camId: string): MediaRecord[]
   if (!Array.isArray(raw)) throw new HttpError(400, `media of ${camId} must be an array`);
   return raw.map((m, i) => {
     const ok =
+      isMediaId(m?.mediaId) &&
       Number.isInteger(m?.dir) &&
       Number.isInteger(m?.num) &&
       (m?.fileType === 0 || m?.fileType === 2) &&
       Number.isInteger(m?.mediaTime);
     if (!ok) throw new HttpError(400, `Invalid media entry ${i} of camera ${camId}`);
     return {
+      mediaId: m.mediaId,
       dir: m.dir,
       num: m.num,
       fileType: m.fileType as 0 | 2,
@@ -442,14 +439,16 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
 
   // Every camera of the hub can have work: missing thumbnails and commands
   // also for cameras the hub did not read in this cycle.
-  const work: Array<{ camId: string; dir: number; num: number; mediaTime: number }> = [];
+  const work: Array<{ camId: string; mediaId: number; num: number; mediaTime: number }> = [];
   for (const camId of await deps.store.listHubCameraIds(hub.hubId)) {
     const camera = await deps.store.getCamera(camId);
     if (!camera || camera.hubId !== hub.hubId) continue;
     const result = results.get(camId) ?? emptyResult(camId, true, false);
 
     for (const m of await deps.store.listMedia(camId)) {
-      if (!m.thumbPresent) work.push({ camId, dir: m.dir, num: m.num, mediaTime: m.mediaTime });
+      if (!m.thumbPresent) {
+        work.push({ camId, mediaId: m.mediaId, num: m.num, mediaTime: m.mediaTime });
+      }
     }
 
     // Hand out open commands; a delivered command is re-sent until acknowledged.
@@ -457,12 +456,12 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     for (const command of open.filter((c) => c.state === 'queued')) {
       await deps.store.putCommand(camId, { ...command, state: 'delivered', updated: now });
       if (command.type === 'requestVideo') {
-        await deps.store.setVideoState(camId, command.dir, command.num, 'downloading');
+        await deps.store.setVideoState(camId, command.mediaId, 'downloading');
       }
     }
     result.commands = open.map((c) =>
       c.type === 'requestVideo'
-        ? { id: c.id, type: c.type, dir: c.dir, num: c.num }
+        ? { id: c.id, type: c.type, mediaId: c.mediaId }
         : { id: c.id, type: c.type },
     );
     results.set(camId, result);
@@ -474,9 +473,8 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
   work.sort((a, b) => b.mediaTime - a.mediaTime || b.num - a.num);
   for (const m of work.slice(0, maxUploads)) {
     results.get(m.camId)?.thumbUploads.push({
-      dir: m.dir,
-      num: m.num,
-      url: await deps.storage.thumbUploadUrl(m.camId, m.dir, m.num),
+      mediaId: m.mediaId,
+      url: await deps.storage.thumbUploadUrl(m.camId, m.mediaId),
     });
   }
 
@@ -513,10 +511,10 @@ async function ack(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
     if (!camera || camera.hubId !== hub.hubId) continue;
 
     for (const t of Array.isArray(entry.uploadedThumbs) ? entry.uploadedThumbs : []) {
-      if (!Number.isInteger(t?.dir) || !Number.isInteger(t?.num)) continue;
+      if (!isMediaId(t?.mediaId)) continue;
       // Trust S3, not the device: only mark thumbnails that really arrived.
-      if (await deps.storage.thumbExists(camera.camId, t.dir, t.num)) {
-        await deps.store.markThumbPresent(camera.camId, t.dir, t.num);
+      if (await deps.storage.thumbExists(camera.camId, t.mediaId)) {
+        await deps.store.markThumbPresent(camera.camId, t.mediaId);
         thumbsConfirmed++;
       }
     }
@@ -534,8 +532,7 @@ async function ack(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
       if (command.type === 'requestVideo') {
         await deps.store.setVideoState(
           camera.camId,
-          command.dir,
-          command.num,
+          command.mediaId,
           c.state === 'done' ? 'available' : 'failed',
         );
       }

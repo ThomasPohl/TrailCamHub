@@ -8,13 +8,20 @@ import {
   formatStorage,
   formatUpcoming,
   mediaKey,
+  mediaLabel,
   toCameraWallClock,
   videoStateLabel,
 } from './format';
 
 describe('mediaKey', () => {
-  it('matches the firmware thumbnail naming <dir>_<num>', () => {
-    expect(mediaKey({ dir: 100, num: 36 })).toBe('100_36');
+  it('is the mediaId', () => {
+    expect(mediaKey({ mediaId: 4136037234 })).toBe('4136037234');
+  });
+});
+
+describe('mediaLabel', () => {
+  it('shows the camera file name <dir>_<num>', () => {
+    expect(mediaLabel({ dir: 100, num: 36 })).toBe('100_36');
   });
 });
 

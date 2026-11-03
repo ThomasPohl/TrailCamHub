@@ -76,19 +76,6 @@ const CatalogEntry *MediaCatalog::find_listed(std::int64_t dir,
     return nullptr;
 }
 
-const CatalogEntry *MediaCatalog::find_by_dir_num(std::int64_t dir,
-                                                  std::int64_t num) const
-{
-    const CatalogEntry *listed = find_listed(dir, num);
-    if (listed != nullptr)
-        return listed;
-    for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
-        if (it->dir_num == dir && it->media_num == num)
-            return &*it;
-    }
-    return nullptr;
-}
-
 bool MediaCatalog::set_flag(std::int64_t media_id, Flag flag)
 {
     CatalogEntry *e = find(media_id);

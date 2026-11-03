@@ -4,6 +4,8 @@
  * A user sees every camera of the hubs linked to them; one hub can serve
  * several cameras. Field names follow the camera protocol where possible
  * (`dir`/`num` = mediaDirNum/mediaNum, `mediaTime` in Unix seconds).
+ * A recording is identified by its `mediaId`; `dir`/`num` are only shown,
+ * because the camera reuses them after its card was cleared.
  */
 
 export interface Camera {
@@ -60,6 +62,8 @@ export type FileType = 0 | 2;
 export type VideoState = 'none' | 'requested' | 'downloading' | 'available' | 'failed';
 
 export interface MediaItem {
+  /** Identifies the recording within its camera (docs/media-identity.md). */
+  mediaId: number;
   dir: number;
   num: number;
   fileType: FileType;
@@ -87,7 +91,7 @@ export interface ApiClient {
   readonly isDemo: boolean;
   listCameras(): Promise<Camera[]>;
   listMedia(camId: string): Promise<MediaItem[]>;
-  requestVideo(camId: string, item: Pick<MediaItem, 'dir' | 'num'>): Promise<CommandResult>;
+  requestVideo(camId: string, item: Pick<MediaItem, 'mediaId'>): Promise<CommandResult>;
   /** Asks the hub to read the camera at its next check-in. */
   readCamera(camId: string): Promise<CommandResult>;
   /** Replaces the schedule set in the app for a hub; returns what is stored. */

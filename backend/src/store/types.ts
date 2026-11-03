@@ -34,11 +34,11 @@ export interface Store {
   isLinked(userId: number, hubId: string): Promise<boolean>;
 
   listMedia(camId: string): Promise<MediaRecord[]>;
-  getMedia(camId: string, dir: number, num: number): Promise<MediaRecord | undefined>;
+  getMedia(camId: string, mediaId: number): Promise<MediaRecord | undefined>;
   /** Inserts new media; never overwrites existing records (their flags survive). */
   addMedia(camId: string, items: MediaRecord[]): Promise<void>;
-  markThumbPresent(camId: string, dir: number, num: number): Promise<void>;
-  setVideoState(camId: string, dir: number, num: number, state: VideoState): Promise<void>;
+  markThumbPresent(camId: string, mediaId: number): Promise<void>;
+  setVideoState(camId: string, mediaId: number, state: VideoState): Promise<void>;
 
   putCommand(camId: string, command: CommandRecord): Promise<void>;
   getCommand(camId: string, id: string): Promise<CommandRecord | undefined>;

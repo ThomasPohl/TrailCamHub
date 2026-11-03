@@ -12,7 +12,7 @@
 
 export type FileType = 0 | 2;
 export type VideoState = 'none' | 'requested' | 'downloading' | 'available' | 'failed';
-/** requestVideo: fetch a video (dir/num); readCamera: read the camera now. */
+/** requestVideo: fetch a video (mediaId); readCamera: read the camera now. */
 export type CommandType = 'requestVideo' | 'readCamera';
 export type CommandState = 'queued' | 'delivered' | 'done' | 'failed';
 
@@ -69,7 +69,13 @@ export interface CameraRecord {
   lastSeen: number;
 }
 
+/**
+ * A recording is identified by its `mediaId`, per camera. `dir`/`num` are only
+ * data: the camera reuses them after its card was cleared. See
+ * docs/media-identity.md.
+ */
 export interface MediaRecord {
+  mediaId: number;
   dir: number;
   num: number;
   fileType: FileType;
@@ -81,8 +87,8 @@ export interface MediaRecord {
 export interface CommandRecord {
   id: string;
   type: CommandType;
-  dir: number;
-  num: number;
+  /** The recording of a requestVideo; 0 for readCamera. */
+  mediaId: number;
   state: CommandState;
   created: number;
   updated: number;
@@ -113,6 +119,7 @@ export interface Camera {
 }
 
 export interface MediaItem {
+  mediaId: number;
   dir: number;
   num: number;
   fileType: FileType;
@@ -130,6 +137,7 @@ export interface CommandResult {
 // ---- Hub (device) API ------------------------------------------------------
 
 export interface MediaEntry {
+  mediaId: number;
   dir: number;
   num: number;
   fileType: number;
@@ -168,9 +176,9 @@ export interface CameraCheckin {
    */
   resync: boolean;
   /** Missing thumbnails: PUT the JPEG to `url`, then report it via /ack. */
-  thumbUploads: Array<{ dir: number; num: number; url: string }>;
-  /** dir/num only for requestVideo. */
-  commands: Array<{ id: string; type: CommandType; dir?: number; num?: number }>;
+  thumbUploads: Array<{ mediaId: number; url: string }>;
+  /** mediaId only for requestVideo. */
+  commands: Array<{ id: string; type: CommandType; mediaId?: number }>;
 }
 
 export interface CheckinResponse {
@@ -182,7 +190,7 @@ export interface CheckinResponse {
 
 export interface CameraAck {
   camId: string;
-  uploadedThumbs?: Array<{ dir: number; num: number }>;
+  uploadedThumbs?: Array<{ mediaId: number }>;
   commands?: Array<{ id: string; state: 'done' | 'failed'; error?: string }>;
 }
 
@@ -190,8 +198,9 @@ export interface AckRequest {
   cameras?: CameraAck[];
 }
 
-export function mediaKey(item: { dir: number; num: number }): string {
-  return `${item.dir}_${item.num}`;
+/** A camera's mediaId: an unsigned 32-bit value, 0 is not valid. */
+export function isMediaId(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) > 0 && (value as number) <= 0xffffffff;
 }
 
 /** Ids of hubs and cameras: safe as S3 key and URL path segments. */

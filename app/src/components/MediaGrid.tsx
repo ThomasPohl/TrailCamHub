@@ -1,5 +1,5 @@
 import type { MediaItem } from '../api/types';
-import { formatCameraTime, mediaKey } from '../format';
+import { formatCameraTime, mediaKey, mediaLabel } from '../format';
 
 interface Props {
   items: MediaItem[];
@@ -15,7 +15,7 @@ export function MediaGrid({ items, onSelect }: Props) {
       {items.map((item) => (
         <li key={mediaKey(item)}>
           <button type="button" className="tile" onClick={() => onSelect(item)}>
-            <img src={item.thumbUrl} alt={`Recording ${mediaKey(item)}`} loading="lazy" />
+            <img src={item.thumbUrl} alt={`Recording ${mediaLabel(item)}`} loading="lazy" />
             <span className="tile__meta">
               {item.fileType === 2 && (
                 <span className="badge" aria-label="Video">

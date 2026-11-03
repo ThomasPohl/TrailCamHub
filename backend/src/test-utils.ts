@@ -25,14 +25,14 @@ export function makeInitData(userId = USER_ID, authDate = NOW - 60, botToken = B
 
 export class FakeStorage implements MediaStorage {
   readonly uploaded = new Set<string>();
-  async thumbReadUrl(camId: string, dir: number, num: number) {
-    return `https://media.test/get/${camId}/${dir}_${num}.jpg`;
+  async thumbReadUrl(camId: string, mediaId: number) {
+    return `https://media.test/get/${camId}/${mediaId}.jpg`;
   }
-  async thumbUploadUrl(camId: string, dir: number, num: number) {
-    return `https://media.test/put/${camId}/${dir}_${num}.jpg`;
+  async thumbUploadUrl(camId: string, mediaId: number) {
+    return `https://media.test/put/${camId}/${mediaId}.jpg`;
   }
-  async thumbExists(camId: string, dir: number, num: number) {
-    return this.uploaded.has(`${camId}/${dir}_${num}`);
+  async thumbExists(camId: string, mediaId: number) {
+    return this.uploaded.has(`${camId}/${mediaId}`);
   }
 }
 
