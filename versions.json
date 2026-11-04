@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261104-203632-db6ab31",
+      "date": "2026-11-04T20:36:32Z",
+      "commit": "db6ab31",
+      "branch": "main",
+      "message": "Merge pull request #119 from HeikoGr/feature/camera-list-command",
+      "dev": "builds/20261104-203632-db6ab31/manifest-dev.json",
+      "release": "builds/20261104-203632-db6ab31/manifest-release.json",
+      "devBin": "builds/20261104-203632-db6ab31/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261104-203632-db6ab31/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261104-201401-e510c48",
       "date": "2026-11-04T20:14:01Z",
       "commit": "e510c48",
@@ -208,17 +219,6 @@
       "release": "builds/20261101-190337-5dba57f/manifest-release.json",
       "devBin": "builds/20261101-190337-5dba57f/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261101-190337-5dba57f/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261101-190120-c488def",
-      "date": "2026-11-01T19:01:20Z",
-      "commit": "c488def",
-      "branch": "main",
-      "message": "Merge pull request #83 from ThomasPohl/fix/app-camera-wall-clock",
-      "dev": "builds/20261101-190120-c488def/manifest-dev.json",
-      "release": "builds/20261101-190120-c488def/manifest-release.json",
-      "devBin": "builds/20261101-190120-c488def/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261101-190120-c488def/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
