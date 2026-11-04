@@ -349,6 +349,8 @@ static camera::artemis::MediaCatalog s_catalog;
 static std::vector<camera::artemis::CatalogEntry> s_thumb_queue;
 static size_t s_thumb_index;
 static bool s_thumb_emitted;
+// Diagnostics for #105: header dumps left in this session.
+static unsigned s_thumb_header_dumps;
 static bool s_work_done;
 // The session cannot do its work (e.g. the camera has no SD card): close it
 // like a finished one, but do not count it as synced.
@@ -1794,6 +1796,24 @@ static void handle_bulk_frame(int socket_fd,
                          (long long)header.media_num);
             } else {
                 const int64_t media_id = entry->media_id;
+                if (s_thumb_header_dumps > 0) {
+                    // Diagnostics for #105: the 72-byte record header next to
+                    // the media list values of the same dir/num.
+                    s_thumb_header_dumps--;
+                    ESP_LOGW(TAG,
+                             "#105 thumb header: dir %lld num %lld mediaId "
+                             "%lld (0x%08llx) mediaTime %lld (0x%08llx) "
+                             "fileType %lld, %u JPEG bytes",
+                             (long long)entry->dir_num,
+                             (long long)entry->media_num, (long long)media_id,
+                             (unsigned long long)media_id,
+                             (long long)entry->media_time,
+                             (unsigned long long)entry->media_time,
+                             (long long)entry->file_type, (unsigned)jpeg_size);
+                    ESP_LOG_BUFFER_HEX_LEVEL(TAG, s_bulk.payload(),
+                                             kMediaRecordHeaderSize,
+                                             ESP_LOG_WARN);
+                }
                 if (header.media_id != media_id) {
                     ESP_LOGW(TAG,
                              "Thumbnail dir %lld num %lld: record id %lld, "
@@ -1970,6 +1990,7 @@ static void process_artemis_response(const SessionEvent &event)
             s_thumb_queue = s_catalog.missing_thumbnails();
             s_thumb_index = 0;
             s_thumb_emitted = false;
+            s_thumb_header_dumps = 5;
             ESP_LOGI(TAG,
                      "Catalog %s: %u items (%u new), %u thumbnails to fetch",
                      s_camera_id.c_str(), (unsigned)s_catalog.size(),
@@ -2049,6 +2070,7 @@ static esp_err_t run_artemis_session(int socket_fd,
     s_thumb_queue.clear();
     s_thumb_index = 0;
     s_thumb_emitted = false;
+    s_thumb_header_dumps = 0;
     s_work_done = false;
     s_end_session = false;
     s_last_progress_us = esp_timer_get_time();
