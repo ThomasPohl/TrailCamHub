@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261104-170636-00f6676",
+      "date": "2026-11-04T17:06:36Z",
+      "commit": "00f6676",
+      "branch": "feature/diag-thumb-header-105",
+      "message": "Diagnostics: dump photo download record headers (#105)",
+      "dev": "builds/20261104-170636-00f6676/manifest-dev.json",
+      "release": "builds/20261104-170636-00f6676/manifest-release.json",
+      "devBin": "builds/20261104-170636-00f6676/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261104-170636-00f6676/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261104-164053-8dc052d",
       "date": "2026-11-04T16:40:53Z",
       "commit": "8dc052d",
@@ -208,17 +219,6 @@
       "release": "builds/20261101-071132-87d98bc/manifest-release.json",
       "devBin": "builds/20261101-071132-87d98bc/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261101-071132-87d98bc/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261101-070940-4ad05e3",
-      "date": "2026-11-01T07:09:40Z",
-      "commit": "4ad05e3",
-      "branch": "main",
-      "message": "Merge pull request #71 from ThomasPohl/fix/register-hub-region",
-      "dev": "builds/20261101-070940-4ad05e3/manifest-dev.json",
-      "release": "builds/20261101-070940-4ad05e3/manifest-release.json",
-      "devBin": "builds/20261101-070940-4ad05e3/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261101-070940-4ad05e3/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
