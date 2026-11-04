@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261104-184001-956bd3b",
+      "date": "2026-11-04T18:40:01Z",
+      "commit": "956bd3b",
+      "branch": "main",
+      "message": "Merge pull request #108 from HeikoGr/refactor/video-stats",
+      "dev": "builds/20261104-184001-956bd3b/manifest-dev.json",
+      "release": "builds/20261104-184001-956bd3b/manifest-release.json",
+      "devBin": "builds/20261104-184001-956bd3b/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261104-184001-956bd3b/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261104-183316-775af78",
       "date": "2026-11-04T18:33:16Z",
       "commit": "775af78",
@@ -208,17 +219,6 @@
       "release": "builds/20261101-164513-86b5d74/manifest-release.json",
       "devBin": "builds/20261101-164513-86b5d74/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261101-164513-86b5d74/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261101-083329-86b5d74",
-      "date": "2026-11-01T08:33:29Z",
-      "commit": "86b5d74",
-      "branch": "main",
-      "message": "Merge pull request #74 from ThomasPohl/fix/wifi-stale-disconnect",
-      "dev": "builds/20261101-083329-86b5d74/manifest-dev.json",
-      "release": "builds/20261101-083329-86b5d74/manifest-release.json",
-      "devBin": "builds/20261101-083329-86b5d74/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261101-083329-86b5d74/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
