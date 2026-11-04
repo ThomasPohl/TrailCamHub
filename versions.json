@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261104-164053-8dc052d",
+      "date": "2026-11-04T16:40:53Z",
+      "commit": "8dc052d",
+      "branch": "feature/diag-thumb-header-105",
+      "message": "Diagnostics: dump thumbnail record headers (#105)",
+      "dev": "builds/20261104-164053-8dc052d/manifest-dev.json",
+      "release": "builds/20261104-164053-8dc052d/manifest-release.json",
+      "devBin": "builds/20261104-164053-8dc052d/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261104-164053-8dc052d/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261103-175248-8c64642",
       "date": "2026-11-03T17:52:48Z",
       "commit": "8c64642",
@@ -208,17 +219,6 @@
       "release": "builds/20261101-070940-4ad05e3/manifest-release.json",
       "devBin": "builds/20261101-070940-4ad05e3/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261101-070940-4ad05e3/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261101-064352-cab208f",
-      "date": "2026-11-01T06:43:52Z",
-      "commit": "cab208f",
-      "branch": "main",
-      "message": "Merge pull request #45 from ThomasPohl/fix/register-hub-via-lambda",
-      "dev": "builds/20261101-064352-cab208f/manifest-dev.json",
-      "release": "builds/20261101-064352-cab208f/manifest-release.json",
-      "devBin": "builds/20261101-064352-cab208f/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261101-064352-cab208f/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
