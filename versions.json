@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261104-201401-e510c48",
+      "date": "2026-11-04T20:14:01Z",
+      "commit": "e510c48",
+      "branch": "main",
+      "message": "Merge pull request #120 from ThomasPohl/docs/media-delete-followup",
+      "dev": "builds/20261104-201401-e510c48/manifest-dev.json",
+      "release": "builds/20261104-201401-e510c48/manifest-release.json",
+      "devBin": "builds/20261104-201401-e510c48/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261104-201401-e510c48/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261104-200447-9108bb1",
       "date": "2026-11-04T20:04:47Z",
       "commit": "9108bb1",
@@ -208,17 +219,6 @@
       "release": "builds/20261101-190120-c488def/manifest-release.json",
       "devBin": "builds/20261101-190120-c488def/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261101-190120-c488def/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261101-185520-43a05a0",
-      "date": "2026-11-01T18:55:20Z",
-      "commit": "43a05a0",
-      "branch": "main",
-      "message": "Merge pull request #82 from ThomasPohl/fix/sd-file-times-time-zone",
-      "dev": "builds/20261101-185520-43a05a0/manifest-dev.json",
-      "release": "builds/20261101-185520-43a05a0/manifest-release.json",
-      "devBin": "builds/20261101-185520-43a05a0/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261101-185520-43a05a0/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
