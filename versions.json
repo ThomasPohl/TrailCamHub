@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261104-185412-82330e1",
+      "date": "2026-11-04T18:54:12Z",
+      "commit": "82330e1",
+      "branch": "main",
+      "message": "Merge pull request #110 from HeikoGr/fix/viewer-landscape-video",
+      "dev": "builds/20261104-185412-82330e1/manifest-dev.json",
+      "release": "builds/20261104-185412-82330e1/manifest-release.json",
+      "devBin": "builds/20261104-185412-82330e1/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261104-185412-82330e1/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261104-184001-956bd3b",
       "date": "2026-11-04T18:40:01Z",
       "commit": "956bd3b",
@@ -208,17 +219,6 @@
       "release": "builds/20261101-172254-d3a3396/manifest-release.json",
       "devBin": "builds/20261101-172254-d3a3396/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261101-172254-d3a3396/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261101-164513-86b5d74",
-      "date": "2026-11-01T16:45:13Z",
-      "commit": "86b5d74",
-      "branch": "main",
-      "message": "Merge pull request #74 from ThomasPohl/fix/wifi-stale-disconnect",
-      "dev": "builds/20261101-164513-86b5d74/manifest-dev.json",
-      "release": "builds/20261101-164513-86b5d74/manifest-release.json",
-      "devBin": "builds/20261101-164513-86b5d74/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261101-164513-86b5d74/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
