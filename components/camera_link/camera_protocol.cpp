@@ -351,6 +351,7 @@ static size_t s_thumb_index;
 static bool s_thumb_emitted;
 // Diagnostics for #105: header dumps left in this session.
 static unsigned s_thumb_header_dumps;
+static unsigned s_download_header_dumps;
 static bool s_work_done;
 // The session cannot do its work (e.g. the camera has no SD card): close it
 // like a finished one, but do not count it as synced.
@@ -975,6 +976,7 @@ static void start_downloads()
         s_catalog.missing_downloads(kDownloadPhotos, kDownloadVideos);
     s_download_index = 0;
     s_download_stored = 0;
+    s_download_header_dumps = 5;
     s_stop_downloads = false;
     if (kDownloadPhotos || kDownloadVideos) {
         ESP_LOGI(TAG, "%u files to download",
@@ -1302,6 +1304,29 @@ static void handle_download_frame(int socket_fd,
     const uint64_t delivered = s_download_stream.delivered_bytes();
     if (delivered > before) {
         s_download_progress_us = esp_timer_get_time();
+    }
+    if (s_download_header_dumps > 0 &&
+        before < camera::artemis::kMediaRecordHeaderSize &&
+        delivered >= camera::artemis::kMediaRecordHeaderSize &&
+        s_download_stream.prefix().size() >=
+            camera::artemis::kMediaRecordHeaderSize) {
+        // Diagnostics for #105: the 72-byte record header of a download next
+        // to the media list values of the requested dir/num.
+        s_download_header_dumps--;
+        const camera::artemis::CatalogEntry &e =
+            s_download_queue[s_download_index];
+        ESP_LOGW(TAG,
+                 "#105 download header: subtype 0x%02x dir %lld num %lld "
+                 "mediaId %lld (0x%08llx) mediaTime %lld (0x%08llx) "
+                 "fileType %lld, record %u bytes",
+                 (unsigned)subtype, (long long)e.dir_num,
+                 (long long)e.media_num, (long long)e.media_id,
+                 (unsigned long long)e.media_id, (long long)e.media_time,
+                 (unsigned long long)e.media_time, (long long)e.file_type,
+                 (unsigned)s_download_stream.record_len());
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, s_download_stream.prefix().data(),
+                                 camera::artemis::kMediaRecordHeaderSize,
+                                 ESP_LOG_WARN);
     }
     if (before == 0 && s_download_stream.header_ready()) {
         ESP_LOGI(TAG, "Download record start: subtype 0x%02x, %u bytes",
@@ -2071,6 +2096,7 @@ static esp_err_t run_artemis_session(int socket_fd,
     s_thumb_index = 0;
     s_thumb_emitted = false;
     s_thumb_header_dumps = 0;
+    s_download_header_dumps = 0;
     s_work_done = false;
     s_end_session = false;
     s_last_progress_us = esp_timer_get_time();
