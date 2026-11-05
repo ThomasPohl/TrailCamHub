@@ -72,8 +72,14 @@ static void on_session_status(const session_status_t *status, void *context)
     case SESSION_FRONT_END_FINISHED:
         phase = DONGLE_UI_FINISHED;
         break;
+    case SESSION_FRONT_END_PARTIAL:
+        phase = DONGLE_UI_PARTIAL;
+        break;
     case SESSION_FRONT_END_NOT_FOUND:
         phase = DONGLE_UI_NOT_FOUND;
+        break;
+    case SESSION_FRONT_END_NO_CARD:
+        phase = DONGLE_UI_NO_CARD;
         break;
     case SESSION_FRONT_END_UPLOAD_FAILED:
         phase = DONGLE_UI_UPLOAD_FAILED;

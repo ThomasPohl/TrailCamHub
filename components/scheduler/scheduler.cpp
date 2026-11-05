@@ -80,7 +80,9 @@ void on_status(const session_status_t *status, void *context)
     }
     const bool stopped =
         status->cycle_finished && status->last_result == SESSION_RESULT_STOPPED;
-    // The camera part ends with the start of the sync or with the cycle.
+    // The camera part ends with the start of the sync or with the cycle. A
+    // session that ended with an error before storing anything, or found no
+    // SD card in the camera, is not a read (camera_ok is false).
     if (camera_phase(s_last_phase) && !camera_phase(status->phase) &&
         !stopped) {
         schedule::on_camera_result(s_session_reached && status->camera_ok);
@@ -90,9 +92,12 @@ void on_status(const session_status_t *status, void *context)
     }
     if (status->cycle_finished) {
         schedule::CycleEnd end;
-        end.camera_ok = s_session_reached && !stopped;
+        end.camera_ok = s_session_reached && status->camera_ok && !stopped;
+        // Backs off the next reads; a camera without an SD card would only
+        // spend its battery on them.
         end.camera_failed =
-            status->last_result == SESSION_RESULT_CAMERA_UNREACHABLE;
+            status->last_result == SESSION_RESULT_CAMERA_UNREACHABLE ||
+            status->last_result == SESSION_RESULT_CAMERA_NO_CARD;
         end.sync_attempted =
             status->last_result == SESSION_RESULT_UPLINK_DONE ||
             status->last_result == SESSION_RESULT_UPLINK_UNREACHABLE;

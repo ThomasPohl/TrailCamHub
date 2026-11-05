@@ -826,8 +826,8 @@ bool session_active()
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
     bool active = true;
-    for (const char *idle :
-         {"idle", "finished", "not_found", "upload_failed", "stopped"}) {
+    for (const char *idle : {"idle", "finished", "partial", "not_found",
+                             "no_card", "upload_failed", "stopped"}) {
         if (strcmp(s_phase, idle) == 0) {
             active = false;
         }
@@ -1352,7 +1352,8 @@ void web_ui_set_status(const char *phase, const char *ssid,
         s_media_total = 0;
     }
     snprintf(s_phase, sizeof(s_phase), "%s", phase);
-    if (strcmp(phase, "finished") == 0 || strcmp(phase, "upload_failed") == 0) {
+    if (strcmp(phase, "finished") == 0 || strcmp(phase, "partial") == 0 ||
+        strcmp(phase, "upload_failed") == 0) {
         s_cameras_us = 0;  // the sync time on the card has just changed
     }
     reopen_access_point();

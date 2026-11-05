@@ -40,6 +40,26 @@ bool Fsm::stop_pending() const
     return stop_pending_;
 }
 
+bool Fsm::partial() const
+{
+    return partial_;
+}
+
+Event session_end_event(bool ok, bool media_list_error,
+                        std::uint32_t stored_items)
+{
+    if (ok) {
+        return Event::session_ended;
+    }
+    if (stored_items > 0) {
+        return Event::session_partial;
+    }
+    if (media_list_error) {
+        return Event::session_no_card;
+    }
+    return Event::session_failed;
+}
+
 Result Fsm::transition(State next, std::uint32_t actions,
                        std::uint32_t timer_ms, Outcome outcome)
 {
@@ -87,10 +107,12 @@ Result Fsm::handle(Event event)
     case State::idle:
         if (event == Event::scan_requested) {
             attempt_ = 1;
+            partial_ = false;
             return transition(State::ble_activation, kResumeBle | kStartTimer,
                               config_.ble_activation_timeout_ms);
         }
         if (event == Event::upload_requested && uplink_enabled_) {
+            partial_ = false;
             return start_uplink(kNone);
         }
         break;
@@ -136,11 +158,22 @@ Result Fsm::handle(Event event)
             stop_pending_ = true;
             return {state_, state_, actions, 0, true, Outcome::none};
         }
-        if (event == Event::session_ended) {
+        if (event == Event::session_ended || event == Event::session_partial ||
+            event == Event::session_failed || event == Event::session_no_card) {
             if (stop_pending_) {
                 return stop(kDisconnectWifi);
             }
+            if (event == Event::session_failed) {
+                // Nothing was fetched: like a camera that was not reached.
+                return camera_failed(kDisconnectWifi);
+            }
+            if (event == Event::session_no_card) {
+                // Another attempt would end the same way.
+                return transition(State::idle, kDisconnectWifi, 0,
+                                  Outcome::camera_no_card);
+            }
             // Whatever the session fetched is on the SD card; sync it.
+            partial_ = event == Event::session_partial;
             return camera_done(kDisconnectWifi);
         }
         break;
@@ -222,6 +255,12 @@ const char *to_string(Event event)
         return "Wi-Fi failed";
     case Event::session_ended:
         return "session ended";
+    case Event::session_partial:
+        return "session ended early";
+    case Event::session_failed:
+        return "session failed";
+    case Event::session_no_card:
+        return "session found no SD card";
     case Event::uplink_done:
         return "uplink done";
     case Event::timeout:
@@ -241,6 +280,8 @@ const char *to_string(Outcome outcome)
         return "uplink-done";
     case Outcome::camera_unreachable:
         return "camera-unreachable";
+    case Outcome::camera_no_card:
+        return "camera-no-card";
     case Outcome::uplink_unreachable:
         return "uplink-unreachable";
     case Outcome::stopped:
@@ -249,7 +290,8 @@ const char *to_string(Outcome outcome)
     return "unknown";
 }
 
-FrontEndPhase front_end_phase(State state, Outcome last_outcome)
+FrontEndPhase front_end_phase(State state, Outcome last_outcome,
+                              bool camera_partial)
 {
     switch (state) {
     case State::idle:
@@ -258,9 +300,12 @@ FrontEndPhase front_end_phase(State state, Outcome last_outcome)
             return FrontEndPhase::idle;
         case Outcome::camera_scanned:
         case Outcome::uplink_done:
-            return FrontEndPhase::finished;
+            return camera_partial ? FrontEndPhase::partial
+                                  : FrontEndPhase::finished;
         case Outcome::camera_unreachable:
             return FrontEndPhase::not_found;
+        case Outcome::camera_no_card:
+            return FrontEndPhase::no_card;
         case Outcome::uplink_unreachable:
             return FrontEndPhase::upload_failed;
         case Outcome::stopped:
@@ -299,8 +344,12 @@ const char *to_string(FrontEndPhase phase)
         return "uploading";
     case FrontEndPhase::finished:
         return "finished";
+    case FrontEndPhase::partial:
+        return "partial";
     case FrontEndPhase::not_found:
         return "not_found";
+    case FrontEndPhase::no_card:
+        return "no_card";
     case FrontEndPhase::upload_failed:
         return "upload_failed";
     case FrontEndPhase::stopped:

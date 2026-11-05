@@ -73,6 +73,18 @@ void set_media_result(char (&line)[kLineColumns + 1],
     set(line, text);
 }
 
+// "Saved 2 of 3 files" of a session that ended early, or "Session ended
+// early" when it ended before the downloads.
+void set_partial_result(char (&line)[kLineColumns + 1],
+                        const MediaProgress &media)
+{
+    if (media.total == 0) {
+        set(line, "Session ended early");
+        return;
+    }
+    set_media_result(line, media);
+}
+
 }  // namespace
 
 Screen make_screen(Phase phase, const char *ssid, std::uint32_t retry_in_s,
@@ -134,10 +146,22 @@ Screen make_screen(Phase phase, const char *ssid, std::uint32_t retry_in_s,
         set_media_result(screen.line1, media);
         set_idle_lines(screen, web);
         break;
+    case Phase::partial:
+        screen.tone = Tone::warning;
+        set(screen.title, "INCOMPLETE");
+        set_partial_result(screen.line1, media);
+        set_idle_lines(screen, web);
+        break;
     case Phase::not_found:
         screen.tone = Tone::warning;
         set(screen.title, "NOT FOUND");
         set(screen.line1, "Camera not reached");
+        set_idle_lines(screen, web);
+        break;
+    case Phase::no_card:
+        screen.tone = Tone::warning;
+        set(screen.title, "NO SD CARD");
+        set(screen.line1, "Camera has no SD card");
         set_idle_lines(screen, web);
         break;
     case Phase::upload_failed:

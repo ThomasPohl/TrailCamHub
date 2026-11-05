@@ -141,6 +141,11 @@ static bool s_work_done;
 // The session cannot do its work (e.g. the camera has no SD card): close it
 // like a finished one, but do not count it as synced.
 static bool s_end_session;
+// The camera reported an error for its media list (getMediaListRet != 0),
+// as it does without an SD card.
+static std::atomic<bool> s_media_list_error;
+// Thumbnails and files stored on the SD card in the last session.
+static std::atomic<uint32_t> s_stored_items;
 // Listing only (camera_protocol_set_list_only()): the page being read and the
 // files reported so far.
 static std::atomic<bool> s_list_only;
@@ -227,6 +232,7 @@ static camera::link::PlaybackDownload s_video(
                                 camera::artemis::MediaCatalog::kFileDownloaded);
              camera::store::save_catalog(s_camera_id, s_catalog);
              ++s_download_stored;
+             ++s_stored_items;
          }
          if (sd_failed) {
              s_stop_downloads = true;
@@ -484,6 +490,7 @@ static void finish_current_download(bool stored, bool stop_all)
         s_catalog.set_flag(e.media_id, MediaCatalog::kFileDownloaded);
         camera::store::save_catalog(s_camera_id, s_catalog);
         ++s_download_stored;
+        ++s_stored_items;
     } else {
         file.abort();
         if (!(was_video && kDiscardVideoData)) {
@@ -821,6 +828,7 @@ static void handle_bulk_frame(int socket_fd,
                                                    entry->media_time)) {
                     s_catalog.set_flag(media_id, MediaCatalog::kThumbPresent);
                     camera::store::save_catalog(s_camera_id, s_catalog);
+                    ++s_stored_items;
                 } else {
                     ESP_LOGW(TAG, "Could not store thumbnail dir %lld num %lld",
                              (long long)header.dir_num,
@@ -952,6 +960,8 @@ static void handle_scan_page(const std::string &json)
             // Nothing to fetch: no thumbnail or download would be queued, so
             // the session would idle on heartbeats. Leave the catalog as is.
             ESP_LOGE(TAG, "Ending the camera session");
+            s_media_list_error =
+                parsed && camera::artemis::media_list_failed(list);
             s_end_session = true;
         } else {
             // Work with the pages read so far.
@@ -1185,7 +1195,11 @@ static esp_err_t run_artemis_session(int socket_fd,
             send_udp_request(socket_fd, camera_address, "CLOSE", close);
             ESP_LOGI(TAG, "%s; closed the camera session",
                      s_work_done ? "Work complete" : "Nothing more to do");
-            return ESP_OK;
+            // A listing ends this way when it is done. A scan that could not
+            // do its work (e.g. no SD card in the camera) did not read the
+            // camera.
+            return s_work_done || s_list_only.load() ? ESP_OK
+                                                     : ESP_ERR_INVALID_RESPONSE;
         }
         int64_t now_us = esp_timer_get_time();
         // A request the camera never answers (or an answer we do not
@@ -1413,6 +1427,9 @@ esp_err_t camera_protocol_run(const esp_ip4_addr_t *gateway)
         return ESP_ERR_INVALID_ARG;
     }
     camera::link::clear_stop();
+    s_media_list_error = false;
+    s_stored_items = 0;
+    s_work_done = false;
     camera::store::sd_writer_begin_session();
     const esp_err_t error = connect_and_run_session(*gateway);
     camera::store::sd_writer_end_session();
@@ -1434,6 +1451,16 @@ void camera_protocol_request_stop(void)
 bool camera_protocol_work_completed(void)
 {
     return s_work_done;
+}
+
+bool camera_protocol_media_list_error(void)
+{
+    return s_media_list_error;
+}
+
+uint32_t camera_protocol_stored_items(void)
+{
+    return s_stored_items;
 }
 
 int camera_protocol_last_battery_percent(void)

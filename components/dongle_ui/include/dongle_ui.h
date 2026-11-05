@@ -18,8 +18,11 @@ typedef enum {
     DONGLE_UI_RETRY_WAIT,
     /* Idle after a session that did all its work. */
     DONGLE_UI_FINISHED,
+    /* Idle after a session that stored some media and then failed. */
+    DONGLE_UI_PARTIAL,
     /* Idle after a cycle that failed or was stopped, until the next search. */
     DONGLE_UI_NOT_FOUND,
+    DONGLE_UI_NO_CARD,
     DONGLE_UI_UPLOAD_FAILED,
     DONGLE_UI_STOPPED,
 } dongle_ui_phase_t;

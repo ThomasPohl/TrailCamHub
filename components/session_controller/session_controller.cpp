@@ -178,6 +178,8 @@ session_result_t result_of(session::Outcome outcome)
         return SESSION_RESULT_UPLINK_DONE;
     case session::Outcome::camera_unreachable:
         return SESSION_RESULT_CAMERA_UNREACHABLE;
+    case session::Outcome::camera_no_card:
+        return SESSION_RESULT_CAMERA_NO_CARD;
     case session::Outcome::uplink_unreachable:
         return SESSION_RESULT_UPLINK_UNREACHABLE;
     case session::Outcome::stopped:
@@ -203,8 +205,12 @@ session_front_end_phase_t front_end_of(session::FrontEndPhase phase)
         return SESSION_FRONT_END_UPLOADING;
     case session::FrontEndPhase::finished:
         return SESSION_FRONT_END_FINISHED;
+    case session::FrontEndPhase::partial:
+        return SESSION_FRONT_END_PARTIAL;
     case session::FrontEndPhase::not_found:
         return SESSION_FRONT_END_NOT_FOUND;
+    case session::FrontEndPhase::no_card:
+        return SESSION_FRONT_END_NO_CARD;
     case session::FrontEndPhase::upload_failed:
         return SESSION_FRONT_END_UPLOAD_FAILED;
     case session::FrontEndPhase::stopped:
@@ -215,10 +221,11 @@ session_front_end_phase_t front_end_of(session::FrontEndPhase phase)
 
 // Sets the front-end phase of `status` for `state`.
 void set_front_end_phase(session_status_t &status, session::State state,
-                         session::Outcome last_outcome)
+                         session::Outcome last_outcome,
+                         bool camera_partial = false)
 {
     const session::FrontEndPhase phase =
-        session::front_end_phase(state, last_outcome);
+        session::front_end_phase(state, last_outcome, camera_partial);
     status.front_end_phase = front_end_of(phase);
     status.front_end_phase_name = session::to_string(phase);
 }
@@ -245,6 +252,7 @@ void publish_status(const session::Result &result)
         s_status.camera_ssid[0] = '\0';
     }
     s_status.camera_ok = s_camera_ok;
+    s_status.camera_partial = s_fsm.partial();
     s_status.list_only = s_list_only;
     s_status.sync_ok = s_sync_ok;
     if (s_status.cycle_finished) {
@@ -252,7 +260,7 @@ void publish_status(const session::Result &result)
         s_status.last_result = result_of(result.outcome);
         s_status.last_result_name = session::to_string(result.outcome);
     }
-    set_front_end_phase(s_status, result.next, s_last_outcome);
+    set_front_end_phase(s_status, result.next, s_last_outcome, s_fsm.partial());
     // The SSID belongs to the camera part of the cycle. It stays set after the
     // cycle ends, so a front end can show it with the result until the next
     // cycle starts (cleared above).
@@ -326,9 +334,14 @@ void session_task(void *arg)
     while (true) {
         xQueueReceive(s_session_requests, &gateway, portMAX_DELAY);
         diagnostics_log_memory("camera Wi-Fi connected");
-        QueuedEvent event = make_event(session::Event::session_ended);
-        event.error = camera_protocol_run(&gateway);
-        ESP_LOGI(TAG, "Camera session ended: %s", esp_err_to_name(event.error));
+        const esp_err_t error = camera_protocol_run(&gateway);
+        const uint32_t stored = camera_protocol_stored_items();
+        QueuedEvent event = make_event(session::session_end_event(
+            error == ESP_OK, camera_protocol_media_list_error(), stored));
+        event.error = error;
+        ESP_LOGI(TAG, "Camera session ended: %s, %u item(s) stored (%s)",
+                 esp_err_to_name(error), (unsigned)stored,
+                 session::to_string(event.type));
         post_event(event);
     }
 }
@@ -430,6 +443,14 @@ void execute(const session::Result &result)
     }
 }
 
+bool is_session_end(session::Event event)
+{
+    return event == session::Event::session_ended ||
+           event == session::Event::session_partial ||
+           event == session::Event::session_failed ||
+           event == session::Event::session_no_card;
+}
+
 // Reads the stored settings when a cycle starts; the uplink only runs if
 // they are complete.
 void load_settings_for_cycle()
@@ -467,9 +488,12 @@ void controller_task(void *arg)
             s_list_only = event.list_only;
             camera_protocol_set_list_only(s_list_only);
         }
-        if (event.type == session::Event::session_ended &&
+        if (is_session_end(event.type) &&
             s_fsm.state() == session::State::session && !s_fsm.stop_pending()) {
-            s_camera_ok = event.error == ESP_OK;
+            // Read in full or in part; a retry after a failed attempt sets it
+            // again.
+            s_camera_ok = event.type == session::Event::session_ended ||
+                          event.type == session::Event::session_partial;
         }
         if (event.type == session::Event::uplink_done &&
             s_fsm.state() == session::State::uplink) {

@@ -17,8 +17,11 @@ enum class Phase : std::uint8_t {
     retry_wait,
     // Idle after a session that did all its work.
     finished,
+    // Idle after a session that stored some media and then failed.
+    partial,
     // Idle after a cycle that did not succeed, until the next search.
     not_found,      // the camera was not reached
+    no_card,        // the camera has no SD card
     upload_failed,  // the home Wi-Fi was not reached
     stopped,        // stopped with the button or the web UI
 };

@@ -348,8 +348,117 @@ TEST_CASE("front-end phase names stay stable for the console and web UI")
     CHECK(std::string(to_string(FrontEndPhase::retry_wait)) == "retry_wait");
     CHECK(std::string(to_string(FrontEndPhase::uploading)) == "uploading");
     CHECK(std::string(to_string(FrontEndPhase::finished)) == "finished");
+    CHECK(std::string(to_string(FrontEndPhase::partial)) == "partial");
     CHECK(std::string(to_string(FrontEndPhase::not_found)) == "not_found");
+    CHECK(std::string(to_string(FrontEndPhase::no_card)) == "no_card");
     CHECK(std::string(to_string(FrontEndPhase::upload_failed)) ==
           "upload_failed");
     CHECK(std::string(to_string(FrontEndPhase::stopped)) == "stopped");
+}
+
+TEST_CASE("the end of a camera session is classified by what it did")
+{
+    CHECK(session_end_event(true, false, 0) == Event::session_ended);
+    CHECK(session_end_event(true, false, 7) == Event::session_ended);
+    CHECK(session_end_event(false, false, 3) == Event::session_partial);
+    CHECK(session_end_event(false, false, 0) == Event::session_failed);
+    CHECK(session_end_event(false, true, 0) == Event::session_no_card);
+    // Stored media count more than a later error.
+    CHECK(session_end_event(false, true, 2) == Event::session_partial);
+}
+
+TEST_CASE("a failed camera session is retried like an unreached camera")
+{
+    Fsm fsm(kConfig);
+    fsm.set_uplink_enabled(true);
+    reach_session(fsm);
+
+    Result result = fsm.handle(Event::session_failed);
+    CHECK(result.next == State::backoff);
+    CHECK(has(result, kDisconnectWifi));
+    CHECK(result.timer_ms == 5000);
+    CHECK(result.outcome == Outcome::none);
+
+    // The remaining attempts fail too: the cycle gives up without a sync.
+    fsm.handle(Event::timeout);
+    fsm.handle(Event::credentials_received);
+    fsm.handle(Event::wifi_connected);
+    REQUIRE(fsm.handle(Event::session_failed).next == State::backoff);
+    fsm.handle(Event::timeout);
+    fsm.handle(Event::credentials_received);
+    fsm.handle(Event::wifi_connected);
+    REQUIRE(fsm.attempt() == 3);
+    result = fsm.handle(Event::session_failed);
+    CHECK(result.next == State::idle);
+    CHECK(result.outcome == Outcome::camera_unreachable);
+    CHECK(front_end_phase(fsm.state(), result.outcome, fsm.partial()) ==
+          FrontEndPhase::not_found);
+}
+
+TEST_CASE("a later attempt can still read the camera after a failed session")
+{
+    Fsm fsm(kConfig);
+    reach_session(fsm);
+    REQUIRE(fsm.handle(Event::session_failed).next == State::backoff);
+    fsm.handle(Event::timeout);
+    fsm.handle(Event::credentials_received);
+    fsm.handle(Event::wifi_connected);
+    const Result result = fsm.handle(Event::session_ended);
+    CHECK(result.outcome == Outcome::camera_scanned);
+    CHECK_FALSE(fsm.partial());
+}
+
+TEST_CASE("a session that stored media before failing is synced, as partial")
+{
+    Fsm fsm(kConfig);
+    fsm.set_uplink_enabled(true);
+    reach_session(fsm);
+
+    Result result = fsm.handle(Event::session_partial);
+    CHECK(result.next == State::uplink_join);
+    CHECK(fsm.partial());
+    fsm.handle(Event::wifi_connected);
+    result = fsm.handle(Event::uplink_done);
+    CHECK(result.outcome == Outcome::uplink_done);
+    CHECK(front_end_phase(fsm.state(), result.outcome, fsm.partial()) ==
+          FrontEndPhase::partial);
+
+    // Without an uplink the cycle ends right away, also as partial.
+    Fsm local(kConfig);
+    reach_session(local);
+    result = local.handle(Event::session_partial);
+    CHECK(result.outcome == Outcome::camera_scanned);
+    CHECK(front_end_phase(local.state(), result.outcome, local.partial()) ==
+          FrontEndPhase::partial);
+
+    // The next cycle starts without the flag.
+    local.handle(Event::scan_requested);
+    CHECK_FALSE(local.partial());
+}
+
+TEST_CASE("a camera without an SD card ends the cycle without retries")
+{
+    Fsm fsm(kConfig);
+    fsm.set_uplink_enabled(true);
+    reach_session(fsm);
+
+    const Result result = fsm.handle(Event::session_no_card);
+    CHECK(result.next == State::idle);
+    CHECK(has(result, kDisconnectWifi));
+    CHECK_FALSE(has(result, kConnectHomeWifi));
+    CHECK(result.outcome == Outcome::camera_no_card);
+    CHECK(std::string(to_string(result.outcome)) == "camera-no-card");
+    CHECK(front_end_phase(fsm.state(), result.outcome) ==
+          FrontEndPhase::no_card);
+}
+
+TEST_CASE("a stop wins over how the session ended")
+{
+    for (Event end : {Event::session_ended, Event::session_partial,
+                      Event::session_failed, Event::session_no_card}) {
+        Fsm fsm(kConfig);
+        reach_session(fsm);
+        fsm.handle(Event::stop_requested);
+        CHECK(fsm.handle(end).outcome == Outcome::stopped);
+    }
 }

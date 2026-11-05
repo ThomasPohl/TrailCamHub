@@ -64,10 +64,15 @@ effect, where each comes from, and the next planned read and check-in.
 
 ### Adaptive behaviour
 
-- **Failed reads** (camera not reached after all attempts) stretch the read
-  interval 2, 4, 8, 16 times after one to four failures in a row, up to one
-  day; a read that reaches the camera resets it. Failed check-ins stretch the
-  check-in interval in the same way.
+- **Failed reads** stretch the read interval 2, 4, 8, 16 times after one to
+  four failures in a row, up to one day; a successful read resets it. A read
+  fails when the camera is not reached after all attempts, when every camera
+  session of the cycle ended with an error before it stored anything (each
+  such session counts as an attempt), or when the camera has no SD card (no
+  further attempts in that cycle). A session that stored some media before an
+  error counts as a read: the sync runs, and the front ends show it as
+  incomplete (`partial`). Failed check-ins stretch the check-in interval in
+  the same way.
 - **Low camera battery** (`batPercent` of cmdId 512 below
   `SCHEDULE_LOW_BATTERY_PERCENT`, 20 %) stretches the read interval by
   `SCHEDULE_LOW_BATTERY_FACTOR` (3). The level reaches the backend with every
@@ -76,7 +81,7 @@ effect, where each comes from, and the next planned read and check-in.
   next successful check-in.
 - **Read on request**: a `readCamera` command from the app makes a read due
   right after the check-in that brought it. The hub acknowledges it at the
-  check-in after the read (`done`, or `failed` if the camera was not reached).
+  check-in after the read (`done`, or `failed` if the read failed as above).
 
 Cycles started by hand (console, button, web UI) count like scheduled ones.
 

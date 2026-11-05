@@ -37,6 +37,8 @@ typedef enum {
     /* Camera session (unless upload only) and backend sync done. */
     SESSION_RESULT_UPLINK_DONE,
     SESSION_RESULT_CAMERA_UNREACHABLE,
+    /* The camera reported an error for its media list (no SD card). */
+    SESSION_RESULT_CAMERA_NO_CARD,
     SESSION_RESULT_UPLINK_UNREACHABLE,
     /* Ended early by session_controller_request_stop(). */
     SESSION_RESULT_STOPPED,
@@ -56,9 +58,13 @@ typedef enum {
     SESSION_FRONT_END_UPLOADING,
     /* Idle after a cycle with the result CAMERA_SCANNED or UPLINK_DONE. */
     SESSION_FRONT_END_FINISHED,
-    /* Idle after CAMERA_UNREACHABLE, UPLINK_UNREACHABLE or STOPPED; kept until
-     * the next cycle starts. */
+    /* The same, but the camera session ended with an error after storing
+     * some media (camera_partial). */
+    SESSION_FRONT_END_PARTIAL,
+    /* Idle after CAMERA_UNREACHABLE, CAMERA_NO_CARD, UPLINK_UNREACHABLE or
+     * STOPPED; kept until the next cycle starts. */
     SESSION_FRONT_END_NOT_FOUND,
+    SESSION_FRONT_END_NO_CARD,
     SESSION_FRONT_END_UPLOAD_FAILED,
     SESSION_FRONT_END_STOPPED,
 } session_front_end_phase_t;
@@ -81,11 +87,13 @@ typedef struct {
      */
     char camera_ssid[33];
     /*
-     * The camera session of this cycle ended without an error, and the
-     * backend sync of this cycle succeeded. Kept after the cycle ends and
-     * cleared when the next cycle starts.
+     * The camera was read in this cycle: its session did all its work, or
+     * stored some media before an error (camera_partial). The backend sync of
+     * this cycle succeeded. Kept after the cycle ends and cleared when the
+     * next cycle starts.
      */
     bool camera_ok;
+    bool camera_partial;
     bool sync_ok;
     /*
      * The cycle only lists the camera's media
@@ -103,7 +111,8 @@ typedef struct {
     /*
      * Stable name of front_end_phase for the console and the web UI JSON:
      * "idle", "searching", "connecting", "connected", "retry_wait",
-     * "uploading", "finished", "not_found", "upload_failed" or "stopped".
+     * "uploading", "finished", "partial", "not_found", "no_card",
+     * "upload_failed" or "stopped".
      */
     const char *front_end_phase_name;
 } session_status_t;

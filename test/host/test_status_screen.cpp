@@ -44,6 +44,12 @@ TEST_CASE("failed and stopped screens name the cause and how to go on")
 
     CHECK(std::string(ui::make_screen(Phase::stopped, "", 0).line1) ==
           "Search stopped");
+
+    const Screen no_card = ui::make_screen(Phase::no_card, "", 0);
+    CHECK(std::string(no_card.title) == "NO SD CARD");
+    CHECK(no_card.tone == Tone::warning);
+    CHECK(std::string(no_card.line1) == "Camera has no SD card");
+    CHECK(std::string(no_card.line2) == "Press button to");
 }
 
 TEST_CASE("camera Wi-Fi name is shown while connecting and connected")
@@ -140,8 +146,8 @@ TEST_CASE("all lines fit the screen")
 {
     for (Phase phase :
          {Phase::idle, Phase::searching, Phase::connecting, Phase::connected,
-          Phase::retry_wait, Phase::finished, Phase::not_found,
-          Phase::upload_failed, Phase::stopped}) {
+          Phase::retry_wait, Phase::finished, Phase::partial, Phase::not_found,
+          Phase::no_card, Phase::upload_failed, Phase::stopped}) {
         const Screen screen =
             ui::make_screen(phase, "", 4294967u, {99998, 99998, 99999},
                             {"TrailCamHub-ABCDEFGHIJKLMNOPQRSTUVWXYZ",
@@ -152,4 +158,15 @@ TEST_CASE("all lines fit the screen")
         CHECK(std::strlen(screen.line3) <= ui::kLineColumns);
         CHECK(std::strlen(screen.hint) <= ui::kLineColumns);
     }
+}
+
+TEST_CASE("a session that ended early is not shown as finished")
+{
+    const Screen with_media = ui::make_screen(Phase::partial, "", 0, {3, 1, 3});
+    CHECK(std::string(with_media.title) == "INCOMPLETE");
+    CHECK(with_media.tone == Tone::warning);
+    CHECK(std::string(with_media.line1) == "Saved 1 of 3 files");
+
+    const Screen thumbnails_only = ui::make_screen(Phase::partial, "", 0);
+    CHECK(std::string(thumbnails_only.line1) == "Session ended early");
 }

@@ -9,10 +9,11 @@
 /*
  * Runs one camera session (discovery, PRE_LOGIN, ARTEMIS heartbeats) with the
  * camera at `gateway`. Blocks until the camera closes the session
- * (ESP_ERR_INVALID_STATE), an error occurs, the work is done or cannot be
- * done (no SD card in the camera) or a stop is requested (ESP_OK), or the
- * camera made no progress for CAMERA_SESSION_IDLE_TIMEOUT_S
- * (ESP_ERR_TIMEOUT).
+ * (ESP_ERR_INVALID_STATE), an error occurs, the work is done, a listing is
+ * done or a stop is requested (ESP_OK), the work cannot be done, e.g. without
+ * an SD card in the camera (ESP_ERR_INVALID_RESPONSE, see
+ * camera_protocol_media_list_error()), or the camera made no progress for
+ * CAMERA_SESSION_IDLE_TIMEOUT_S (ESP_ERR_TIMEOUT).
  */
 esp_err_t camera_protocol_run(const esp_ip4_addr_t *gateway);
 
@@ -27,6 +28,18 @@ void camera_protocol_request_stop(void);
  * list, thumbnails, downloads) was done, not because of a stop or an error.
  */
 bool camera_protocol_work_completed(void);
+
+/*
+ * True if in the last camera_protocol_run() the camera reported an error for
+ * its media list (getMediaListRet != 0), as it does without an SD card.
+ */
+bool camera_protocol_media_list_error(void);
+
+/*
+ * Thumbnails and files stored on the SD card in the last
+ * camera_protocol_run(), also when it ended with an error.
+ */
+uint32_t camera_protocol_stored_items(void);
 
 /*
  * Battery level in percent that the camera reported in the last session

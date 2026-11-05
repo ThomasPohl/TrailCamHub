@@ -39,7 +39,14 @@ enum class Event : std::uint8_t {
     wifi_connected,
     wifi_disconnected,
     wifi_failed,
+    // The camera session ended: all its work done (session_ended), some
+    // media stored before an error (session_partial), nothing stored
+    // (session_failed), or the camera reported an error for its media list,
+    // e.g. no SD card (session_no_card). See session_end_event().
     session_ended,
+    session_partial,
+    session_failed,
+    session_no_card,
     uplink_done,
     timeout,
 };
@@ -66,6 +73,7 @@ enum class Outcome : std::uint8_t {
     camera_scanned,      // camera session done, no uplink configured
     uplink_done,         // camera session (if any) and uplink done
     camera_unreachable,  // all camera attempts failed
+    camera_no_card,      // the camera has no SD card (media list error)
     uplink_unreachable,  // the home Wi-Fi could not be joined
     stopped,             // ended early by a stop request
 };
@@ -80,15 +88,27 @@ enum class FrontEndPhase : std::uint8_t {
     retry_wait,  // waiting for the next camera attempt
     uploading,   // home Wi-Fi and backend sync
     finished,    // idle after a successful cycle
+    // Idle after a cycle whose camera session ended with an error after
+    // storing some media (the sync still ran, if configured).
+    partial,
     // Idle after a cycle that did not succeed; shown until the next one.
     not_found,      // all camera attempts failed
+    no_card,        // the camera has no SD card
     upload_failed,  // the home Wi-Fi could not be joined
     stopped,        // ended early by a stop request
 };
 
 // Front-end phase for the FSM `state`; `last_outcome` is the outcome of the
-// last finished cycle (none while a cycle runs or before the first one).
-FrontEndPhase front_end_phase(State state, Outcome last_outcome);
+// last finished cycle (none while a cycle runs or before the first one), and
+// `camera_partial` whether its camera session ended early (Fsm::partial()).
+FrontEndPhase front_end_phase(State state, Outcome last_outcome,
+                              bool camera_partial = false);
+
+// The event that reports the end of a camera session: `ok` if it did all its
+// work, `media_list_error` if the camera reported an error for its media list
+// (no SD card), `stored_items` thumbnails and files it stored.
+Event session_end_event(bool ok, bool media_list_error,
+                        std::uint32_t stored_items);
 
 struct Config {
     std::uint32_t ble_activation_timeout_ms;
@@ -132,6 +152,10 @@ class Fsm
     // that session (the session needs a moment to close cleanly).
     bool stop_pending() const;
 
+    // The camera session of the current (or last) cycle ended with an error
+    // after storing some media. Cleared when a cycle starts.
+    bool partial() const;
+
   private:
     Result transition(State next, std::uint32_t actions,
                       std::uint32_t timer_ms = 0,
@@ -146,6 +170,7 @@ class Fsm
     bool uplink_enabled_{false};
     std::uint32_t attempt_{0};
     bool stop_pending_{false};
+    bool partial_{false};
 };
 
 const char *to_string(State state);
