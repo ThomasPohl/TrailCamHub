@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261105-163756-b59c9b2",
+      "date": "2026-11-05T16:37:56Z",
+      "commit": "b59c9b2",
+      "branch": "main",
+      "message": "Merge pull request #132 from ThomasPohl/feature/camera-sd-state",
+      "dev": "builds/20261105-163756-b59c9b2/manifest-dev.json",
+      "release": "builds/20261105-163756-b59c9b2/manifest-release.json",
+      "devBin": "builds/20261105-163756-b59c9b2/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261105-163756-b59c9b2/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261105-112819-1a594d0",
       "date": "2026-11-05T11:28:19Z",
       "commit": "1a594d0",
@@ -208,17 +219,6 @@
       "release": "builds/20261103-163238-39ef744/manifest-release.json",
       "devBin": "builds/20261103-163238-39ef744/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261103-163238-39ef744/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261103-162443-766e3e0",
-      "date": "2026-11-03T16:24:43Z",
-      "commit": "766e3e0",
-      "branch": "main",
-      "message": "Merge pull request #91 from HeikoGr/fix/web-ui-csrf-auth",
-      "dev": "builds/20261103-162443-766e3e0/manifest-dev.json",
-      "release": "builds/20261103-162443-766e3e0/manifest-release.json",
-      "devBin": "builds/20261103-162443-766e3e0/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261103-162443-766e3e0/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
