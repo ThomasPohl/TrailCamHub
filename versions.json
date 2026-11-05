@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261105-045126-d4b0549",
+      "date": "2026-11-05T04:51:26Z",
+      "commit": "d4b0549",
+      "branch": "main",
+      "message": "Merge pull request #125 from ThomasPohl/feature/watchdog-real-progress",
+      "dev": "builds/20261105-045126-d4b0549/manifest-dev.json",
+      "release": "builds/20261105-045126-d4b0549/manifest-release.json",
+      "devBin": "builds/20261105-045126-d4b0549/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261105-045126-d4b0549/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261105-044500-bc6df42",
       "date": "2026-11-05T04:45:00Z",
       "commit": "bc6df42",
@@ -208,17 +219,6 @@
       "release": "builds/20261103-160431-6e856ed/manifest-release.json",
       "devBin": "builds/20261103-160431-6e856ed/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261103-160431-6e856ed/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261102-142021-2280016",
-      "date": "2026-11-02T14:20:21Z",
-      "commit": "2280016",
-      "branch": "main",
-      "message": "Merge pull request #86 from ThomasPohl/feature/power-profile-schedule",
-      "dev": "builds/20261102-142021-2280016/manifest-dev.json",
-      "release": "builds/20261102-142021-2280016/manifest-release.json",
-      "devBin": "builds/20261102-142021-2280016/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261102-142021-2280016/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
