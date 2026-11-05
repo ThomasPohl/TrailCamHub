@@ -1,6 +1,6 @@
 {
   "name": "TrailCamHub ESP32-S3 (Release — size-optimized)",
-  "version": "20261103-161553-98d7bb8",
+  "version": "20261105-112819-1a594d0",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
