@@ -27,6 +27,7 @@
 #include "camera_protocol.h"
 #include "camera_wifi.h"
 #include "hub_config.hpp"
+#include "modem_uplink.hpp"
 #include "session_controller.h"
 #include "session_fsm.hpp"
 #include "system_diagnostics.h"
@@ -98,6 +99,8 @@ char s_password[MAX_PASSWORD_LEN + 1];
 esp_ip4_addr_t s_gateway;
 // Settings read when the current cycle started (home Wi-Fi, backend).
 hub_config::Settings s_settings;
+// The cycle's uplink goes over the modem, not the home Wi-Fi.
+bool s_uplink_modem = false;
 
 // The camera being read: its BLE name, and its id and battery once its
 // session ended. Only touched by the controller task.
@@ -378,6 +381,20 @@ void on_wifi_failed(std::uint8_t reason)
     post_event(event);
 }
 
+// The modem uplink reports like the home Wi-Fi: the FSM does not tell them
+// apart.
+void on_modem_connected()
+{
+    const esp_ip4_addr_t none = {};
+    on_wifi_connected(&none);
+}
+
+void on_modem_failed(const char *reason)
+{
+    ESP_LOGW(TAG, "Modem uplink: %s", reason);
+    on_wifi_failed(0);
+}
+
 void on_timer(void *arg)
 {
     (void)arg;
@@ -472,6 +489,9 @@ void execute(const session::Result &result)
     }
     if (actions & session::kDisconnectWifi) {
         camera_wifi_disconnect();
+        if (modem_uplink::active()) {
+            modem_uplink::disconnect();
+        }
     }
     if (actions & session::kClearExcludedCameras) {
         camera_ble_clear_done();
@@ -492,12 +512,24 @@ void execute(const session::Result &result)
         }
     }
     if (actions & session::kConnectHomeWifi) {
-        esp_err_t error = camera_wifi_connect_home(
-            s_settings.wifi_ssid.c_str(), s_settings.wifi_password.c_str());
-        if (error != ESP_OK) {
-            ESP_LOGE(TAG, "Could not join home Wi-Fi: %s",
-                     esp_err_to_name(error));
-            on_wifi_failed(0);
+        if (s_uplink_modem) {
+            modem_uplink::Settings modem;
+            modem.apn = s_settings.apn;
+            modem.sim_pin = s_settings.sim_pin;
+            const esp_err_t error = modem_uplink::connect(modem);
+            if (error != ESP_OK) {
+                ESP_LOGE(TAG, "Could not start the modem uplink: %s",
+                         esp_err_to_name(error));
+                on_wifi_failed(0);
+            }
+        } else {
+            esp_err_t error = camera_wifi_connect_home(
+                s_settings.wifi_ssid.c_str(), s_settings.wifi_password.c_str());
+            if (error != ESP_OK) {
+                ESP_LOGE(TAG, "Could not join home Wi-Fi: %s",
+                         esp_err_to_name(error));
+                on_wifi_failed(0);
+            }
         }
     }
     if (actions & session::kStartSession) {
@@ -531,8 +563,15 @@ void load_settings_for_cycle()
     if (hub_config::load(s_settings) != ESP_OK) {
         s_settings = hub_config::Settings{};
     }
-    s_fsm.set_uplink_enabled(hub_config::uplink_configured(s_settings) &&
+    s_fsm.set_uplink_enabled(hub_config::uplink_ready(s_settings) &&
                              !s_list_only);
+    // Over the modem or the home Wi-Fi; attaching the modem takes longer.
+    s_uplink_modem = hub_config::uplink_transport(s_settings) ==
+                     hub_config::Transport::modem;
+#if CONFIG_MODEM_UPLINK
+    s_fsm.set_uplink_join_timeout_ms(
+        s_uplink_modem ? CONFIG_MODEM_ATTACH_TIMEOUT_S * 1000u + 5000u : 0);
+#endif
     s_fsm.set_listing(s_list_only);
 }
 
@@ -678,6 +717,12 @@ esp_err_t session_controller_init(void)
     };
     ESP_RETURN_ON_ERROR(camera_wifi_init(&wifi_callbacks), TAG,
                         "Could not initialize camera Wi-Fi");
+    static const modem_uplink::Callbacks modem_callbacks = {
+        .connected = on_modem_connected,
+        .failed = on_modem_failed,
+    };
+    ESP_RETURN_ON_ERROR(modem_uplink::init(modem_callbacks), TAG,
+                        "Could not initialize the modem uplink");
     diagnostics_log_memory("Wi-Fi initialized");
     return ESP_OK;
 }
@@ -734,7 +779,7 @@ esp_err_t session_controller_request_upload(void)
     }
     hub_config::Settings settings;
     if (hub_config::load(settings) != ESP_OK ||
-        !hub_config::uplink_configured(settings)) {
+        !hub_config::uplink_ready(settings)) {
         return ESP_ERR_NOT_FOUND;
     }
     post_event(make_event(session::Event::upload_requested));

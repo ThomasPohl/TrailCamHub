@@ -54,6 +54,11 @@ void Fsm::set_uplink_enabled(bool enabled)
     uplink_enabled_ = enabled;
 }
 
+void Fsm::set_uplink_join_timeout_ms(std::uint32_t timeout_ms)
+{
+    uplink_join_timeout_ms_ = timeout_ms;
+}
+
 bool Fsm::uplink_enabled() const
 {
     return uplink_enabled_;
@@ -195,9 +200,10 @@ Result Fsm::camera_done(std::uint32_t actions)
 
 Result Fsm::start_uplink(std::uint32_t actions)
 {
-    return transition(State::uplink_join,
-                      actions | kConnectHomeWifi | kStartTimer,
-                      config_.wifi_join_timeout_ms);
+    return transition(
+        State::uplink_join, actions | kConnectHomeWifi | kStartTimer,
+        uplink_join_timeout_ms_ > 0 ? uplink_join_timeout_ms_
+                                    : config_.wifi_join_timeout_ms);
 }
 
 Result Fsm::stop(std::uint32_t actions)

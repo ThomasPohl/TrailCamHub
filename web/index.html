@@ -80,6 +80,22 @@
               <input name="wifi_password" type="password" maxlength="64">
               <small>Stored: <span id="ds-current-wifi_password">–</span></small>
             </label>
+            <label>Uplink to the backend
+              <select name="uplink">
+                <option value="">Keep stored</option>
+                <option value="wifi">Home Wi-Fi</option>
+                <option value="modem">Cellular modem (A7670E)</option>
+              </select>
+              <small>Stored: <span id="ds-current-uplink">–</span> · default: the home Wi-Fi if one is set, otherwise the modem</small>
+            </label>
+            <label>APN of the SIM card's provider
+              <input name="apn" placeholder="internet.telekom" spellcheck="false" maxlength="63">
+              <small>Stored: <span id="ds-current-apn">–</span> · modem only; empty = the network's default</small>
+            </label>
+            <label>SIM PIN
+              <input name="sim_pin" type="password" inputmode="numeric" maxlength="8">
+              <small>Stored: <span id="ds-current-sim_pin">–</span> · modem only; a wrong PIN is not tried again</small>
+            </label>
             <label>Backend API URL
               <input name="api_url" type="url" placeholder="https://….lambda-url.eu-central-1.on.aws/" spellcheck="false">
               <small>Stored: <span id="ds-current-api_url">–</span></small>
@@ -96,7 +112,7 @@
               <input name="checkin_min" inputmode="numeric" placeholder="30" spellcheck="false">
               <small>Stored: <span id="ds-current-checkin_min">–</span> · 0 = only after camera reads</small>
             </label>
-            <p class="note">Uplink: <span id="ds-current-uplink">–</span>. Empty fields keep their stored value. Secrets are never read back from the hub. A schedule set in the app takes precedence over the one stored here.</p>
+            <p class="note">Backend: <span id="ds-current-backend">–</span>. Empty fields keep their stored value. Secrets are never read back from the hub. A schedule set in the app takes precedence over the one stored here.</p>
             <label class="ds-remember">
               <input id="ds-remember" type="checkbox">
               <span>Remember these values in this browser <small>(stored unencrypted in local storage, including the password and device key; unticking deletes them)</small></span>

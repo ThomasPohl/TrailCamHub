@@ -6,3 +6,14 @@ CONFIG_SPIRAM_MODE_OCT=y
 # Console: UART0 only. The native USB of the ESP32-S3 is wired to the A7670E
 # modem, so the USB-Serial-JTAG console is not reachable on this board.
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# Modem uplink (A7670E on the native USB port, docs/modem.md): PPP in lwIP,
+# the USB hub between the S3 and the modem, and the esp-iot-solution modem
+# driver's checks before a data call (more patience, weaker signal allowed:
+# CSQ 5 is about -103 dBm).
+CONFIG_LWIP_PPP_SUPPORT=y
+CONFIG_LWIP_PPP_NOTIFY_PHASE_SUPPORT=y
+CONFIG_LWIP_PPP_PAP_SUPPORT=y
+CONFIG_USB_HOST_HUBS_SUPPORTED=y
+CONFIG_MODEM_OPERATION_RETRY_TIMES=10
+CONFIG_MODEM_RSSI_THRESHOLD=5

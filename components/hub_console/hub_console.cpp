@@ -232,10 +232,13 @@ void print_settings()
                             hub_config::display_value(
                                 key, hub_config::field(settings, key)));
     }
+    // "backend", not "uplink": that is the name of a setting.
+    const char *transport =
+        hub_config::transport_name(hub_config::uplink_transport(settings));
     reply("CONFIG",
-          std::string("uplink ") + (hub_config::uplink_configured(settings)
-                                        ? "configured"
-                                        : "incomplete"));
+          hub_config::uplink_ready(settings)
+              ? std::string("backend configured, over ") + transport
+              : std::string("backend incomplete (") + transport + ")");
 }
 
 // "in 1234 s (2026-11-02 15:20)", "in 1234 s" without a clock, or "never".

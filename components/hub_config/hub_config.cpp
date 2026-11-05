@@ -5,6 +5,8 @@
 
 #include "hub_config.hpp"
 
+#include "sdkconfig.h"
+
 #include <vector>
 
 #include "esp_check.h"
@@ -108,6 +110,25 @@ esp_err_t set(Key key, const std::string &value, std::string *reason)
     ESP_LOGI(TAG, "Setting %s %s", key_name(key),
              value.empty() ? "erased" : "stored");
     return ESP_OK;
+}
+
+bool modem_available()
+{
+#if CONFIG_MODEM_UPLINK
+    return true;
+#else
+    return false;
+#endif
+}
+
+Transport uplink_transport(const Settings &settings)
+{
+    return transport(settings, modem_available());
+}
+
+bool uplink_ready(const Settings &settings)
+{
+    return uplink_configured(settings, modem_available());
 }
 
 esp_err_t clear()

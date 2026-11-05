@@ -22,4 +22,11 @@ esp_err_t set(Key key, const std::string &value, std::string *reason);
 // Erases all settings.
 esp_err_t clear();
 
+// True if this build drives a cellular modem (CONFIG_MODEM_UPLINK).
+bool modem_available();
+
+// transport() and uplink_configured() for this build.
+Transport uplink_transport(const Settings &settings);
+bool uplink_ready(const Settings &settings);
+
 }  // namespace hub_config

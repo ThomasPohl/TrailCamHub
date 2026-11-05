@@ -53,7 +53,7 @@ The target board is the **Waveshare ESP32-S3-A7670E-4G** development board. Acco
 
 The firmware configuration (`sdkconfig.defaults`, `partitions.csv`) targets this board: 16 MB flash, octal PSRAM, two 4 MB OTA application slots, a 64 KB core dump partition, and 64 KB NVS. Camera media is intended to be buffered on the SD card. Board revisions V1 and V2 differ in some GPIO assignments (camera and I2C); the SD card pins can be changed in `menuconfig` if a revision differs. Still to verify:
 
-- Board revision, modem power-control GPIOs, and the USB host/PPP setup for the A7670E
+- Board revision and modem power-control GPIO (the USB host/PPP uplink is implemented, see [docs/modem.md](docs/modem.md), but not yet tested on hardware)
 - Power supply and cellular modem peak current requirements on battery
 - Supported LTE bands, SIM format, and antenna connections for the deployment location
 - ESP32-S3 BLE and Wi-Fi capabilities during simultaneous operation

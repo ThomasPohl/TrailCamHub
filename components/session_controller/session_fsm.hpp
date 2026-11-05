@@ -180,6 +180,11 @@ class Fsm
     void set_uplink_enabled(bool enabled);
     bool uplink_enabled() const;
 
+    // How long joining the uplink may take (the home Wi-Fi, or attaching
+    // the modem, which takes longer); 0: wifi_join_timeout_ms. Read when the
+    // uplink is joined.
+    void set_uplink_join_timeout_ms(std::uint32_t timeout_ms);
+
     // Whether a scan only lists the camera's media: it ends after the camera
     // session with camera_listed and never syncs. Read when a cycle starts.
     void set_listing(bool listing);
@@ -230,6 +235,7 @@ class Fsm
     Config config_;
     State state_{State::idle};
     bool uplink_enabled_{false};
+    std::uint32_t uplink_join_timeout_ms_{0};
     bool listing_{false};
     std::uint32_t attempt_{0};
     bool stop_pending_{false};
