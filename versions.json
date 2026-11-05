@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261105-054633-3344b8c",
+      "date": "2026-11-05T05:46:33Z",
+      "commit": "3344b8c",
+      "branch": "main",
+      "message": "Merge pull request #129 from ThomasPohl/feature/session-result",
+      "dev": "builds/20261105-054633-3344b8c/manifest-dev.json",
+      "release": "builds/20261105-054633-3344b8c/manifest-release.json",
+      "devBin": "builds/20261105-054633-3344b8c/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261105-054633-3344b8c/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261105-045126-d4b0549",
       "date": "2026-11-05T04:51:26Z",
       "commit": "d4b0549",
@@ -208,17 +219,6 @@
       "release": "builds/20261103-161553-98d7bb8/manifest-release.json",
       "devBin": "builds/20261103-161553-98d7bb8/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261103-161553-98d7bb8/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261103-160431-6e856ed",
-      "date": "2026-11-03T16:04:31Z",
-      "commit": "6e856ed",
-      "branch": "main",
-      "message": "Merge pull request #88 from ThomasPohl/fix/media-key-catalog",
-      "dev": "builds/20261103-160431-6e856ed/manifest-dev.json",
-      "release": "builds/20261103-160431-6e856ed/manifest-release.json",
-      "devBin": "builds/20261103-160431-6e856ed/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261103-160431-6e856ed/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
