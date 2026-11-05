@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261105-044500-bc6df42",
+      "date": "2026-11-05T04:45:00Z",
+      "commit": "bc6df42",
+      "branch": "main",
+      "message": "Merge pull request #124 from ThomasPohl/feature/media-list-paging",
+      "dev": "builds/20261105-044500-bc6df42/manifest-dev.json",
+      "release": "builds/20261105-044500-bc6df42/manifest-release.json",
+      "devBin": "builds/20261105-044500-bc6df42/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261105-044500-bc6df42/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261104-203632-db6ab31",
       "date": "2026-11-04T20:36:32Z",
       "commit": "db6ab31",
@@ -208,17 +219,6 @@
       "release": "builds/20261102-142021-2280016/manifest-release.json",
       "devBin": "builds/20261102-142021-2280016/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261102-142021-2280016/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261101-190337-5dba57f",
-      "date": "2026-11-01T19:03:37Z",
-      "commit": "5dba57f",
-      "branch": "main",
-      "message": "Add CLAUDE.md with git setup and project conventions (#84)",
-      "dev": "builds/20261101-190337-5dba57f/manifest-dev.json",
-      "release": "builds/20261101-190337-5dba57f/manifest-release.json",
-      "devBin": "builds/20261101-190337-5dba57f/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261101-190337-5dba57f/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
