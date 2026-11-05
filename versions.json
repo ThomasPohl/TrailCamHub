@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261105-170125-358b4b9",
+      "date": "2026-11-05T17:01:25Z",
+      "commit": "358b4b9",
+      "branch": "main",
+      "message": "Merge pull request #133 from ThomasPohl/feature/telegram-bot",
+      "dev": "builds/20261105-170125-358b4b9/manifest-dev.json",
+      "release": "builds/20261105-170125-358b4b9/manifest-release.json",
+      "devBin": "builds/20261105-170125-358b4b9/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261105-170125-358b4b9/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261105-163756-b59c9b2",
       "date": "2026-11-05T16:37:56Z",
       "commit": "b59c9b2",
@@ -208,17 +219,6 @@
       "release": "builds/20261103-163806-0c24b6d/manifest-release.json",
       "devBin": "builds/20261103-163806-0c24b6d/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261103-163806-0c24b6d/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261103-163238-39ef744",
-      "date": "2026-11-03T16:32:38Z",
-      "commit": "39ef744",
-      "branch": "main",
-      "message": "Merge pull request #92 from HeikoGr/test/sd-log-host-tests",
-      "dev": "builds/20261103-163238-39ef744/manifest-dev.json",
-      "release": "builds/20261103-163238-39ef744/manifest-release.json",
-      "devBin": "builds/20261103-163238-39ef744/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261103-163238-39ef744/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
