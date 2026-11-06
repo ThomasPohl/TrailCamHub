@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261106-193215-79cc4c6",
+      "date": "2026-11-06T19:32:15Z",
+      "commit": "79cc4c6",
+      "branch": "main",
+      "message": "Merge pull request #140 from ThomasPohl/feature/ota-updates",
+      "dev": "builds/20261106-193215-79cc4c6/manifest-dev.json",
+      "release": "builds/20261106-193215-79cc4c6/manifest-release.json",
+      "devBin": "builds/20261106-193215-79cc4c6/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261106-193215-79cc4c6/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261106-190813-fd1e667",
       "date": "2026-11-06T19:08:13Z",
       "commit": "fd1e667",
@@ -208,17 +219,6 @@
       "release": "builds/20261103-175248-8c64642/manifest-release.json",
       "devBin": "builds/20261103-175248-8c64642/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261103-175248-8c64642/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261103-174730-bcac3da",
-      "date": "2026-11-03T17:47:30Z",
-      "commit": "bcac3da",
-      "branch": "main",
-      "message": "Merge pull request #97 from HeikoGr/feature/show-failed-search",
-      "dev": "builds/20261103-174730-bcac3da/manifest-dev.json",
-      "release": "builds/20261103-174730-bcac3da/manifest-release.json",
-      "devBin": "builds/20261103-174730-bcac3da/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261103-174730-bcac3da/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
