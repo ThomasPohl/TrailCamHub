@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261106-190813-fd1e667",
+      "date": "2026-11-06T19:08:13Z",
+      "commit": "fd1e667",
+      "branch": "main",
+      "message": "Merge pull request #139 from ThomasPohl/feature/video-on-request",
+      "dev": "builds/20261106-190813-fd1e667/manifest-dev.json",
+      "release": "builds/20261106-190813-fd1e667/manifest-release.json",
+      "devBin": "builds/20261106-190813-fd1e667/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261106-190813-fd1e667/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261106-065833-2210915",
       "date": "2026-11-06T06:58:33Z",
       "commit": "2210915",
@@ -208,17 +219,6 @@
       "release": "builds/20261103-174730-bcac3da/manifest-release.json",
       "devBin": "builds/20261103-174730-bcac3da/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261103-174730-bcac3da/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261103-170812-acd93ce",
-      "date": "2026-11-03T17:08:12Z",
-      "commit": "acd93ce",
-      "branch": "main",
-      "message": "Merge pull request #96 from HeikoGr/refactor/front-end-phase",
-      "dev": "builds/20261103-170812-acd93ce/manifest-dev.json",
-      "release": "builds/20261103-170812-acd93ce/manifest-release.json",
-      "devBin": "builds/20261103-170812-acd93ce/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261103-170812-acd93ce/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
