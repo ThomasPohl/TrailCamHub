@@ -18,7 +18,19 @@ export function MediaDetail({ item, busy, showBackLink, onBack, onRequestVideo }
           ← All recordings
         </button>
       )}
-      <img className="detail__image" src={item.thumbUrl} alt={`Recording ${mediaLabel(item)}`} />
+      {item.videoUrl ? (
+        <video
+          className="detail__image"
+          src={item.videoUrl}
+          poster={item.thumbUrl}
+          controls
+          playsInline
+          preload="none"
+          aria-label={`Video ${mediaLabel(item)}`}
+        />
+      ) : (
+        <img className="detail__image" src={item.thumbUrl} alt={`Recording ${mediaLabel(item)}`} />
+      )}
       <div className="card">
         <dl className="facts">
           <dt>Recorded</dt>
@@ -34,6 +46,11 @@ export function MediaDetail({ item, busy, showBackLink, onBack, onRequestVideo }
             </>
           )}
         </dl>
+        {item.videoUrl && (
+          <a className="link" href={item.videoUrl} target="_blank" rel="noreferrer">
+            Open video
+          </a>
+        )}
         {isVideo && canRequestVideo(item) && (
           <button
             type="button"

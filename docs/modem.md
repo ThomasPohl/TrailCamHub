@@ -44,6 +44,7 @@ Steps 1–6 must finish within `CONFIG_MODEM_ATTACH_TIMEOUT_S` (120 s), otherwis
 
 ## Not covered yet
 
-- Data volume: video uploads (#55) and firmware updates (#59) also go over the modem. Once those are merged they should be limited on the modem (smaller video limit, firmware updates only over Wi-Fi or on request).
-- GNSS, SMS and a modem status in the app.
+- Data volume: requested videos (up to `CONFIG_UPLINK_VIDEO_MAX_MB`, see `docs/video-download.md`) and firmware updates (`docs/ota.md`) currently also go over the modem. A lower video limit over the modem is #143, firmware updates only over Wi-Fi or Ethernet #142.
+- A firmware update restarts the hub right after the sync, without taking the modem down; with the 4G DIP switch ON the modem keeps its radio on until the next modem sync (#142).
+- Modem status in the app (#144); GNSS and SMS (#146).
 - A USB connection lost during a data call can leave the driver waiting; the next deep sleep resets the hub.

@@ -2,7 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >-
   TrailCamHub backend: one Lambda function behind a Function URL, a DynamoDB
-  table for cameras, media and commands, and an S3 bucket for thumbnails.
+  table for cameras, media and commands, and an S3 bucket for thumbnails and
+  requested videos.
 
 Parameters:
   AllowedOrigin:
@@ -38,11 +39,26 @@ Parameters:
     Description: >-
       Time zone of a user's quiet hours until they set their own with
       /timezone.
+  FirmwareManifestUrl:
+    Type: String
+    Default: https://github.com/ThomasPohl/TrailCamHub/releases/latest/download/ota.json
+    AllowedPattern: '^$|^https://\S+$'
+    Description: >-
+      Manifest of the latest firmware release (ota.json, written by the CI for
+      every vX.Y.Z tag). Hubs running an older release get its image offered at
+      check-in and install it. Empty: no firmware updates.
   ThumbnailRetentionDays:
     Type: Number
     Default: 365
     MinValue: 1
     Description: Thumbnails older than this are deleted from S3.
+  VideoRetentionDays:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    Description: >-
+      Requested videos are deleted from S3 this many days after the upload
+      (they stay on the hub's SD card).
 
 Conditions:
   UseSsmToken: !Not [!Equals [!Ref TelegramBotTokenParameter, '']]
@@ -106,6 +122,10 @@ Resources:
             Status: Enabled
             Prefix: thumb/
             ExpirationInDays: !Ref ThumbnailRetentionDays
+          - Id: expire-videos
+            Status: Enabled
+            Prefix: video/
+            ExpirationInDays: !Ref VideoRetentionDays
           - Id: abort-incomplete-uploads
             Status: Enabled
             AbortIncompleteMultipartUpload:
@@ -159,6 +179,7 @@ Resources:
           TELEGRAM_BOT_TOKEN_PARAM: !Ref TelegramBotTokenParameter
           APP_URL: !Ref MiniAppUrl
           DEFAULT_TIME_ZONE: !Ref DefaultTimeZone
+          FIRMWARE_MANIFEST_URL: !Ref FirmwareManifestUrl
           NODE_OPTIONS: --enable-source-maps
       LoggingConfig:
         LogGroup: !Ref ApiLogGroup
@@ -168,7 +189,9 @@ Resources:
         - Statement:
             - Effect: Allow
               Action: [s3:GetObject, s3:PutObject]
-              Resource: !Sub '${MediaBucket.Arn}/thumb/*'
+              Resource:
+                - !Sub '${MediaBucket.Arn}/thumb/*'
+                - !Sub '${MediaBucket.Arn}/video/*'
             - Effect: Allow
               Action: s3:ListBucket
               Resource: !GetAtt MediaBucket.Arn

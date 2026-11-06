@@ -43,6 +43,19 @@ class MediaCatalog
         kFileDownloaded = 1u << 2,  // the full photo/video is on the SD card
         kVideoUploaded = 1u << 3,   // the full video was uploaded to the cloud
         kReported = 1u << 4,  // the backend knows this item (check-in accepted)
+        // A requested video cannot be fetched: it is not on the camera's
+        // card any more, or its download failed kMaxVideoAttempts times.
+        kVideoUnavailable = 1u << 5,
+    };
+    // Failed downloads of a requested video, kept in two bits of the flags
+    // (so the CSV format does not change); at this count it is given up.
+    static constexpr std::uint32_t kMaxVideoAttempts = 3;
+
+    // Which videos a camera session fetches.
+    enum class VideoDownload {
+        none,       // no videos
+        missing,    // every video that is not on the SD card yet
+        requested,  // only the videos the user asked for
     };
 
     // Adds entries from a freshly fetched list. Existing entries (matched by
@@ -79,11 +92,30 @@ class MediaCatalog
     // recordings are fetched first when a session cannot fetch them all.
     // Items whose thumbnail is not stored yet.
     std::vector<CatalogEntry> missing_thumbnails() const;
-    // Video items the user requested that are not downloaded yet.
+    // Video items the user requested that are not downloaded yet (and not
+    // given up as unavailable).
     std::vector<CatalogEntry> pending_video_requests() const;
     // Items whose full file is not stored yet, photos before videos (each
     // newest first); each kind is included only if selected.
     std::vector<CatalogEntry> missing_downloads(bool photos, bool videos) const;
+    // The downloads of a camera session: missing photos if `photos`, then the
+    // videos `videos` selects, at most `max_videos` of them (0: no limit).
+    std::vector<CatalogEntry> download_queue(bool photos, VideoDownload videos,
+                                             std::size_t max_videos) const;
+
+    // After a complete media list: requested videos that are not downloaded
+    // and not on the camera's card are marked kVideoUnavailable. Returns how
+    // many were newly marked.
+    std::size_t mark_unlisted_requests_unavailable();
+    // Failed downloads of a requested video so far.
+    std::uint32_t video_attempts(std::int64_t media_id) const;
+    // Counts a failed download of a requested video; at kMaxVideoAttempts it
+    // is marked kVideoUnavailable. Returns the new count (0 if unknown).
+    std::uint32_t count_failed_video_attempt(std::int64_t media_id);
+    // Forgets a request (after it was answered as failed): clears
+    // kVideoRequested, kVideoUnavailable and the attempts, so that a new
+    // request starts over.
+    bool forget_video_request(std::int64_t media_id);
     // Up to `limit` items without `flag`, in catalog order.
     std::vector<CatalogEntry> without_flag(Flag flag, std::size_t limit) const;
     // Clears `flag` on every item (e.g. to report everything again).

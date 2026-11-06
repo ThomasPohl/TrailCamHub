@@ -27,6 +27,7 @@
 #include "dongle_ui.h"
 #include "ethernet_uplink.h"
 #include "hub_console.h"
+#include "ota_update.hpp"
 #include "schedule_state.hpp"
 #include "scheduler.h"
 #include "sd_card.h"
@@ -173,6 +174,9 @@ extern "C" void app_main(void)
     if (error != ESP_OK) {
         ESP_LOGW(TAG, "Diagnostics are incomplete: %s", esp_err_to_name(error));
     }
+    // Firmware version and slot, and whether a new firmware still has to
+    // confirm itself (it does after its first successful check-in).
+    ota::log_boot_state();
 
 #if CONFIG_SD_CARD_ENABLE
     // Media buffering is not implemented yet, so a missing card is not fatal.

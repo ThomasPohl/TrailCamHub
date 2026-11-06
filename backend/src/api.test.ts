@@ -393,7 +393,7 @@ describe('video requests (app → hub → app)', () => {
   });
 
   it('delivers the command for the right camera until it is acknowledged', async () => {
-    const { deps, hubKey, store } = await withMedia();
+    const { deps, hubKey, store, storage } = await withMedia();
     const path = `/v1/cameras/${CAM_ID}/commands`;
     const request = { type: 'requestVideo', mediaId: 2035 };
 
@@ -408,12 +408,18 @@ describe('video requests (app → hub → app)', () => {
     for (const cameras of [[], [meadow]]) {
       const res = await handleRequest(hubRequest('/v1/device/checkin', hubKey, { cameras }), deps);
       expect(camera(res, CAM_ID)?.commands).toEqual([
-        { id: 'cmd-1', type: 'requestVideo', mediaId: 2035 },
+        {
+          id: 'cmd-1',
+          type: 'requestVideo',
+          mediaId: 2035,
+          uploadUrl: `https://media.test/put/${CAM_ID}/2035.mp4`,
+        },
       ]);
       expect(camera(res, CAM_2)?.commands ?? []).toEqual([]);
     }
     expect((await store.getMedia(CAM_ID, 2035))?.videoState).toBe('downloading');
 
+    storage.uploadedVideos.add(`${CAM_ID}/2035`);
     await handleRequest(
       hubRequest('/v1/device/ack', hubKey, {
         cameras: [{ camId: CAM_ID, commands: [{ id: 'cmd-1', state: 'done' }] }],
@@ -428,6 +434,38 @@ describe('video requests (app → hub → app)', () => {
       deps,
     );
     expect(camera(after, CAM_ID)?.commands ?? []).toEqual([]);
+
+    // The app gets a link to play it (listed once its thumbnail is there).
+    await store.markThumbPresent(CAM_ID, 2035);
+    await store.markThumbPresent(CAM_ID, 2036);
+    const media = await handleRequest(appRequest('GET', `/v1/cameras/${CAM_ID}/media`), deps);
+    const items = body(media) as Array<{ mediaId: number; videoUrl?: string }>;
+    expect(items.find((m) => m.mediaId === 2035)?.videoUrl).toBe(
+      `https://media.test/get/${CAM_ID}/2035.mp4`,
+    );
+    expect(items.find((m) => m.mediaId === 2036)?.videoUrl).toBeUndefined();
+  });
+
+  it('does not trust a "done" for a video that never reached S3', async () => {
+    const { deps, hubKey, store } = await withMedia();
+    await handleRequest(
+      appRequest('POST', `/v1/cameras/${CAM_ID}/commands`, {
+        type: 'requestVideo',
+        mediaId: 2035,
+      }),
+      deps,
+    );
+    await handleRequest(
+      hubRequest('/v1/device/ack', hubKey, {
+        cameras: [{ camId: CAM_ID, commands: [{ id: 'cmd-1', state: 'done' }] }],
+      }),
+      deps,
+    );
+    expect(await store.getCommand(CAM_ID, 'cmd-1')).toMatchObject({
+      state: 'failed',
+      error: 'the video did not arrive',
+    });
+    expect((await store.getMedia(CAM_ID, 2035))?.videoState).toBe('failed');
   });
 
   it('marks the video as failed when the hub reports an error', async () => {

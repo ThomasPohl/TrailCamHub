@@ -23,6 +23,7 @@ struct Report {
     int thumbs_uploaded = 0;    // ... uploaded successfully
     int thumbs_not_on_sd = 0;   // ... not stored on the SD card yet
     int commands_received = 0;  // commands handed out by the backend
+    int videos_uploaded = 0;    // requested videos uploaded as MP4
     std::int64_t server_time = 0;
     std::string error;  // set when the sync failed
 };

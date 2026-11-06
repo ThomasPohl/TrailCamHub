@@ -85,6 +85,10 @@ void set_camera_battery(int percent);
 ReadRequests::Reply on_read_command(const std::string &id,
                                     const std::string &cam_id);
 
+// Something new needs the camera (a requested video): a read is due at once.
+// Unlike on_read_command() there is nothing to acknowledge.
+void request_camera_read(const char *reason);
+
 // Called whenever something changes that may move the next cycle (settings,
 // a requested read), e.g. to wake the scheduler task. Optional.
 void set_change_callback(void (*callback)(void));

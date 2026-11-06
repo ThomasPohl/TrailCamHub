@@ -90,8 +90,9 @@ describe('canRequestVideo', () => {
 });
 
 describe('videoStateLabel', () => {
-  it('explains that requests are served at the next wake-up', () => {
-    expect(videoStateLabel('requested')).toContain('next wake-up');
+  it('explains that requests are served at the next check-in', () => {
+    expect(videoStateLabel('requested')).toContain('next check-in');
+    expect(videoStateLabel('downloading')).toContain('from the camera');
   });
 });
 

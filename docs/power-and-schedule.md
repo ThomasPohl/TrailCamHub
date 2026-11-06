@@ -146,6 +146,25 @@ survive everything.
 After a power-on or reset the state starts afresh: the first read and check-in
 are due after the start delay.
 
+## Hub battery
+
+The Waveshare ESP32-S3-A7670E-4G has a MAX17048 fuel gauge (I2C address
+`0x36`, SDA GPIO 15, SCL GPIO 16) on its 18650 cell. With
+`CONFIG_HUB_BATTERY_MAX17048` (default on that board, off on the others) the
+hub reads it
+
+- for each check-in (`hubBatPercent`; left out when unknown),
+- for the console's `status` (`TCH INFO battery 3987 mV, 82% (MAX17048)`),
+- at boot and with every periodic memory log.
+
+The gauge is powered by the cell: without a cell it does not answer and the
+level is unknown. The reported percentage is the gauge's own state of charge
+(ModelGauge, less affected by the modem's load peaks than the voltage). With
+`CONFIG_HUB_BATTERY_PERCENT_FROM_VOLTAGE` it is computed from the cell voltage
+instead, along a typical Li-ion curve between `CONFIG_HUB_BATTERY_EMPTY_MV`
+(3300) and `CONFIG_HUB_BATTERY_FULL_MV` (4200). The schedule does not react to
+the hub battery yet.
+
 ## Not yet covered
 
 - The A7670E modem uplink (#54) is not used; the check-in still joins the home

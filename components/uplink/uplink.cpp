@@ -14,14 +14,21 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "device_info.hpp"
+#include "hub_battery.hpp"
 #include "media_catalog.hpp"
 #include "media_store.hpp"
+#include "mp4_file_source.hpp"
+#include "mp4_mux.hpp"
+#include "ota_policy.hpp"
+#include "ota_update.hpp"
 #include "schedule_state.hpp"
 #include "sdkconfig.h"
 #include "time_sync.h"
 #include "uplink_protocol.hpp"
+#include "video_request.hpp"
 
 namespace uplink
 {
@@ -38,6 +45,16 @@ constexpr size_t kUploadChunk = 4096;
 constexpr std::size_t kMaxCamerasPerCheckin = 16;
 constexpr std::size_t kMaxMediaPerCamera = 300;
 constexpr std::size_t kMaxMediaPerCheckin = 1000;
+constexpr std::size_t kVideoChunk = 16 * 1024;
+
+#if CONFIG_CAMERA_DOWNLOAD_VIDEOS
+constexpr bool kDownloadsVideos = true;
+constexpr std::uint64_t kMaxVideoBytes =
+    (std::uint64_t)CONFIG_UPLINK_VIDEO_MAX_MB * 1024 * 1024;
+#else
+constexpr bool kDownloadsVideos = false;
+constexpr std::uint64_t kMaxVideoBytes = 50ull * 1024 * 1024;
+#endif
 
 struct HttpResult {
     esp_err_t error = ESP_FAIL;
@@ -144,6 +161,65 @@ HttpResult put_file(const std::string &url, const std::string &path)
         result = ok ? read_response(client) : HttpResult{};
     }
     fclose(file);
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+    return result;
+}
+
+// PUTs a recording as MP4 to a presigned URL. The MP4 is built while it is
+// sent, from the stored H.264 and AAC streams, so no copy is written.
+// `too_large` is set (and nothing sent) if it exceeds kMaxVideoBytes.
+HttpResult put_mp4(const std::string &url, const std::string &camera_id,
+                   std::int64_t media_id, std::uint64_t &size, bool &too_large)
+{
+    HttpResult result;
+    size = 0;
+    too_large = false;
+    mp4::FileSource video(
+        camera::store::media_path(camera_id, media_id, "h264"));
+    mp4::FileSource audio(
+        camera::store::media_path(camera_id, media_id, "aac"));
+    if (!video.exists()) {
+        result.error = ESP_ERR_NOT_FOUND;
+        return result;
+    }
+    mp4::Mp4File file;
+    if (!file.open(video,
+                   audio.exists() && audio.size() > 0 ? &audio : nullptr)) {
+        ESP_LOGW(TAG, "Cannot build the MP4 of %s media %lld: %s",
+                 camera_id.c_str(), (long long)media_id, file.error().c_str());
+        result.error = ESP_ERR_INVALID_STATE;
+        return result;
+    }
+    size = file.size();
+    if (size > kMaxVideoBytes) {
+        too_large = true;
+        result.error = ESP_ERR_INVALID_SIZE;
+        return result;
+    }
+    esp_http_client_handle_t client = open_client(url, HTTP_METHOD_PUT);
+    if (client == nullptr) {
+        result.error = ESP_ERR_NO_MEM;
+        return result;
+    }
+    // Must match the content type the URL was signed with.
+    esp_http_client_set_header(client, "Content-Type", "video/mp4");
+    result.error = esp_http_client_open(client, (int)size);
+    if (result.error == ESP_OK) {
+        std::vector<std::uint8_t> chunk(kVideoChunk);
+        std::uint64_t position = 0;
+        bool ok = true;
+        while (ok && position < size) {
+            const std::int64_t n =
+                file.read(position, chunk.data(), chunk.size());
+            ok = n > 0 &&
+                 esp_http_client_write(
+                     client, reinterpret_cast<const char *>(chunk.data()),
+                     (int)n) == (int)n;
+            position += n > 0 ? (std::uint64_t)n : 0;
+        }
+        result = ok ? read_response(client) : HttpResult{};
+    }
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
     return result;
@@ -275,6 +351,112 @@ void apply_checkin_result(CameraState &camera, const CameraCheckin &result)
     }
 }
 
+// Installs a firmware the backend offers, if this hub takes it, and
+// restarts into it.
+void update_firmware(const FirmwareOffer &offered)
+{
+    const ota::Decision decision =
+        ota::decide(offered.version, ota::running_version(),
+                    ota::rolled_back_version(), ota::automatic());
+    if (decision != ota::Decision::install) {
+        ESP_LOGI(TAG, "Firmware %s offered, not installed: %s",
+                 offered.version.c_str(), ota::decision_text(decision));
+        return;
+    }
+    ota::Offer offer;
+    offer.version = offered.version;
+    offer.url = offered.url;
+    offer.sha256 = offered.sha256;
+    offer.size = offered.size;
+    std::string error;
+    if (ota::install(offer, error) != ESP_OK) {
+        // Tried again at the next check-in.
+        ESP_LOGE(TAG, "Firmware update to %s failed: %s",
+                 offered.version.c_str(), error.c_str());
+        return;
+    }
+    ota::restart();
+}
+
+// Answers a requestVideo command: uploads the video if it is on the SD card,
+// asks for a camera read if the request is new. Returns whether the command
+// is settled (`out` is the answer); otherwise it is not acknowledged and
+// comes again with the next check-in, with a fresh upload URL.
+bool handle_video_command(CameraState *camera, const std::string &cam_id,
+                          const Command &command, CommandResult &out,
+                          Report &report)
+{
+    using camera::artemis::MediaCatalog;
+    const VideoDecision decision = decide_video(
+        camera != nullptr ? &camera->catalog : nullptr, command.media_id,
+        kDownloadsVideos, !command.upload_url.empty());
+    switch (decision.step) {
+    case VideoStep::request:
+        camera->catalog_changed |= camera->catalog.set_flag(
+            command.media_id, MediaCatalog::kVideoRequested);
+        ESP_LOGI(TAG, "Video %lld of %s requested", (long long)command.media_id,
+                 cam_id.c_str());
+        schedule::request_camera_read("a video was requested");
+        return false;
+    case VideoStep::wait:
+        return false;
+    case VideoStep::done:
+        out.done = true;
+        return true;
+    case VideoStep::upload: {
+        std::uint64_t size = 0;
+        bool too_large = false;
+        const std::int64_t started_us = esp_timer_get_time();
+        const HttpResult put = put_mp4(command.upload_url, cam_id,
+                                       command.media_id, size, too_large);
+        if (too_large) {
+            out.error = "the video is too large (" +
+                        std::to_string((unsigned long long)(size >> 20)) +
+                        " MB)";
+            camera->catalog_changed |=
+                camera->catalog.forget_video_request(command.media_id);
+            ESP_LOGW(TAG, "Video %lld of %s: %s", (long long)command.media_id,
+                     cam_id.c_str(), out.error.c_str());
+            return true;
+        }
+        if (put.error == ESP_OK && put.status >= 200 && put.status < 300) {
+            const std::int64_t ms = (esp_timer_get_time() - started_us) / 1000;
+            ESP_LOGI(TAG, "Uploaded video %lld of %s: %llu KB in %lld ms",
+                     (long long)command.media_id, cam_id.c_str(),
+                     (unsigned long long)(size >> 10), (long long)ms);
+            camera->catalog_changed |= camera->catalog.set_flag(
+                command.media_id, MediaCatalog::kVideoUploaded);
+            report.videos_uploaded++;
+            out.done = true;
+            return true;
+        }
+        if (put.error == ESP_ERR_NOT_FOUND ||
+            put.error == ESP_ERR_INVALID_STATE) {
+            // The stored streams are gone or broken: fetch the video again.
+            camera->catalog_changed |= camera->catalog.clear_flag(
+                command.media_id, MediaCatalog::kFileDownloaded);
+            camera->catalog_changed |= camera->catalog.set_flag(
+                command.media_id, MediaCatalog::kVideoRequested);
+        }
+        // Tried again with the next check-in.
+        ESP_LOGW(TAG, "Upload of video %lld of %s failed: %s",
+                 (long long)command.media_id, cam_id.c_str(),
+                 describe(put).c_str());
+        return false;
+    }
+    case VideoStep::fail:
+        out.error = video_failure_text(decision.failure);
+        if (camera != nullptr) {
+            camera->catalog_changed |=
+                camera->catalog.forget_video_request(command.media_id);
+        }
+        ESP_LOGW(TAG, "Video %lld of %s: %s", (long long)command.media_id,
+                 cam_id.c_str(), out.error.c_str());
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 esp_err_t run(const hub_config::Settings &settings, Report &report)
@@ -284,6 +466,10 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
 
     CheckinRequest request;
     request.hub_firmware = esp_app_get_description()->version;
+    request.hub_board = ota::board();
+    request.hub_variant = ota::variant();
+    // -1 (left out of the check-in) on boards without a measurement.
+    request.hub_bat_percent = hub_battery::percent();
     request.schedule = schedule_report();
     std::vector<CameraState> cameras;
     collect_cameras(request, cameras);
@@ -307,6 +493,8 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
         return checkin.error != ESP_OK ? checkin.error : ESP_FAIL;
     }
     report.server_time = response.server_time;
+    // The firmware can reach the backend: a new one is kept.
+    ota::confirm_running();
     set_clock(response.server_time);
     schedule::Remote remote;
     remote.has_camera_plan = response.has_camera_plan;
@@ -361,10 +549,9 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
         }
 
         // 3. Commands. A camera read is acknowledged at the check-in after
-        // the read (the backend sends the command again until then). Video
-        // downloads are not implemented yet: remember the request in the
-        // catalog and tell the backend it failed, so the user sees it instead
-        // of waiting forever.
+        // the read (the backend sends the command again until then). A video
+        // request is acknowledged once the video was uploaded or cannot be
+        // fetched (see handle_video_command()).
         for (const Command &command : result.commands) {
             CommandResult command_result;
             command_result.id = command.id;
@@ -386,13 +573,11 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
                 continue;
             }
             if (command.type == "requestVideo") {
-                if (camera != nullptr) {
-                    camera->catalog_changed |= camera->catalog.set_flag(
-                        command.media_id,
-                        camera::artemis::MediaCatalog::kVideoRequested);
+                if (handle_video_command(camera, result.cam_id, command,
+                                         command_result, report)) {
+                    camera_ack.commands.push_back(command_result);
                 }
-                command_result.error = "video download is not supported by "
-                                       "this firmware yet";
+                continue;
             } else {
                 command_result.error = "unsupported command " + command.type;
             }
@@ -428,9 +613,16 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
             return acked.error != ESP_OK ? acked.error : ESP_FAIL;
         }
     }
-    ESP_LOGI(TAG, "Sync done: %d/%d thumbnails uploaded (%d not on SD)",
+    ESP_LOGI(TAG,
+             "Sync done: %d/%d thumbnails uploaded (%d not on SD), %d "
+             "videos uploaded",
              report.thumbs_uploaded, report.thumbs_requested,
-             report.thumbs_not_on_sd);
+             report.thumbs_not_on_sd, report.videos_uploaded);
+
+    // 5. A newer firmware, last, so this sync is complete before it.
+    if (response.firmware.present) {
+        update_firmware(response.firmware);
+    }
     return ESP_OK;
 }
 

@@ -13,6 +13,7 @@
 #include "esp_timer.h"
 #include "sdkconfig.h"
 
+#include "hub_battery.hpp"
 #include "system_diagnostics.h"
 
 #ifndef CONFIG_DIAG_MEMORY_LOG_INTERVAL_S
@@ -67,6 +68,7 @@ static void periodic_memory_log(void *arg)
 {
     (void)arg;
     diagnostics_log_memory("periodic");
+    hub_battery::log_reading("periodic");
 }
 
 void diagnostics_log_memory(const char *stage)
@@ -96,6 +98,7 @@ esp_err_t diagnostics_start(void)
                  (unsigned)(psram_size / 1024));
     }
     diagnostics_log_memory("boot");
+    hub_battery::log_reading("boot");
 
 #if CONFIG_DIAG_MEMORY_LOG_INTERVAL_S > 0
     const esp_timer_create_args_t timer_args = {

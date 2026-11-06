@@ -32,6 +32,7 @@
 
 #include "command_parser.hpp"
 #include "diagnostics.hpp"
+#include "hub_battery.hpp"
 #include "hub_config.hpp"
 #include "schedule_state.hpp"
 #include "sd_card.h"
@@ -174,7 +175,26 @@ void on_status(const session_status_t *status, void *context)
     }
 }
 
-// The cycle's phase, the download progress, the memory and the SD card.
+// The hub's own battery: "battery 3987 mV, 82% (MAX17048)"; nothing on
+// boards without a measurement.
+void print_battery()
+{
+    if (!hub_battery::supported()) {
+        return;
+    }
+    hub_battery::Reading reading;
+    if (hub_battery::read(reading)) {
+        reply("INFO",
+              format_line("battery %d mV, %d%% (%s)", reading.millivolts,
+                          reading.percent, hub_battery::source_name()));
+    } else {
+        reply("INFO", std::string("battery unknown (") +
+                          hub_battery::source_name() + " does not answer)");
+    }
+}
+
+// The cycle's phase, the download progress, the battery, the memory and the SD
+// card.
 void print_details()
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -197,6 +217,7 @@ void print_details()
     xSemaphoreGive(s_lock);
     reply("INFO", format_line("uptime %lld s",
                               (long long)(esp_timer_get_time() / 1000000)));
+    print_battery();
     reply("INFO",
           format_line(
               "internal RAM %u KB free, %u KB minimum",

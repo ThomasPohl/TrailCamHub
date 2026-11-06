@@ -357,6 +357,54 @@ config MODEM_ATTACH_TIMEOUT_S
 
 endmenu
 
+menu "Hub battery"
+
+config HUB_BATTERY_MAX17048
+    bool "Measure the hub battery with a MAX17048 fuel gauge"
+    default y if IDF_TARGET_ESP32S3 && !BOARD_TDONGLE_S3
+    default n
+    help
+        Read the hub's battery from a MAX17048 fuel gauge on I2C, as on the
+        Waveshare ESP32-S3-A7670E-4G. The level is sent in the check-in
+        (hubBatPercent), shown by the console's status command and written
+        to the memory log. Without a cell the gauge has no power and the
+        level stays unknown. Boards without a gauge leave this off.
+
+config HUB_BATTERY_I2C_SDA_GPIO
+    int "I2C SDA GPIO of the gauge"
+    depends on HUB_BATTERY_MAX17048
+    default 15
+
+config HUB_BATTERY_I2C_SCL_GPIO
+    int "I2C SCL GPIO of the gauge"
+    depends on HUB_BATTERY_MAX17048
+    default 16
+
+config HUB_BATTERY_PERCENT_FROM_VOLTAGE
+    bool "Compute the percentage from the cell voltage"
+    depends on HUB_BATTERY_MAX17048
+    default n
+    help
+        Report a percentage from the cell voltage along a typical Li-ion
+        curve between the empty and the full voltage below, instead of the
+        gauge's own state of charge. The gauge's estimate is usually better
+        (it is less affected by load peaks of the modem), but it needs some
+        time to settle after the cell was inserted.
+
+config HUB_BATTERY_EMPTY_MV
+    int "Empty cell voltage (mV)"
+    depends on HUB_BATTERY_PERCENT_FROM_VOLTAGE
+    range 2500 4000
+    default 3300
+
+config HUB_BATTERY_FULL_MV
+    int "Full cell voltage (mV)"
+    depends on HUB_BATTERY_PERCENT_FROM_VOLTAGE
+    range 3500 4500
+    default 4200
+
+endmenu
+
 menu "SD card"
 
 config SD_CARD_ENABLE
@@ -535,10 +583,11 @@ config CAMERA_DOWNLOAD_PHOTOS
 config CAMERA_DOWNLOAD_VIDEOS
     bool "Download videos (raw H.264 and AAC streams)"
     depends on SPIRAM
+    default y if HUB_PROFILE_AUTONOMOUS
     default n
     help
-        After the photos, play back every video of the media list that is
-        not on the SD card yet (cmdId 769) and store its streams as
+        After the photos, play back the videos selected below that are not
+        on the SD card yet (cmdId 769) and store their streams as
         /sdcard/<camera>/media/<dir>_<num>.h264 (H.264 Annex-B, playable
         with VLC) and .aac (AAC with ADTS headers). One MP4 can be made
         without re-encoding:
@@ -546,6 +595,50 @@ config CAMERA_DOWNLOAD_VIDEOS
         The camera streams the frames one by one; they are put in order in
         PSRAM and written through a 4 MB buffer in PSRAM. Verified on the
         T-Dongle-C5: a 15-second 1080p video takes about 31 s.
+
+choice CAMERA_VIDEO_DOWNLOAD
+    prompt "Which videos to download"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    default CAMERA_VIDEO_ON_REQUEST if HUB_PROFILE_AUTONOMOUS
+    default CAMERA_VIDEO_ALL
+    help
+        A video costs the camera's battery (about twice its length of
+        playback) and, when uploaded, data volume.
+
+config CAMERA_VIDEO_ALL
+    bool "Every video"
+    help
+        Every video of the media list that is not on the SD card yet.
+
+config CAMERA_VIDEO_ON_REQUEST
+    bool "Only videos requested in the app"
+    help
+        Only the videos asked for with "Download video" in the app or the
+        bot. The request reaches the hub with the next check-in, which makes
+        a camera read due at once; the video is uploaded with the sync after
+        that read. A video that is no longer on the camera's card, or whose
+        download failed three times, is reported as failed.
+
+endchoice
+
+config CAMERA_VIDEO_MAX_PER_SESSION
+    int "Videos downloaded in one camera session (0: no limit)"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    range 0 100
+    default 3 if CAMERA_VIDEO_ON_REQUEST
+    default 0
+    help
+        The newest ones first; the rest follow in later sessions.
+
+config UPLINK_VIDEO_MAX_MB
+    int "Largest video uploaded to the backend (MB)"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    range 1 1000
+    default 50
+    help
+        Requested videos are uploaded as MP4, built while they are sent from
+        the stored H.264 and AAC files (nothing extra is stored). A larger
+        one is reported as failed.
 
 choice CAMERA_VIDEO_MP4
     prompt "MP4 files for downloaded videos"
@@ -743,6 +836,40 @@ config WEB_UI_AP_PASSWORD
     help
         At least 8 characters. When empty, a random password is generated
         at the first boot, stored in NVS and shown on the dongle display.
+
+endmenu
+
+menu "Firmware updates"
+
+config OTA_AUTO_UPDATE
+    bool "Install newer releases offered at the check-in"
+    default y
+    help
+        The backend offers the newest GitHub release (tag vX.Y.Z) for this
+        board and build variant. A hub that runs an older release downloads
+        it over HTTPS into the other OTA slot, checks its size, SHA-256 and
+        version, and restarts into it. The new firmware is kept once a
+        check-in succeeds; a restart before that goes back to the old one,
+        and that version is not installed again automatically. Development
+        builds (a commit hash as version) are never replaced. See
+        docs/ota.md.
+
+config HUB_BOARD_ID
+    string "Board name of the firmware images"
+    default "tdongle-s3" if BOARD_TDONGLE_S3
+    default "tdongle-c5" if BOARD_TDONGLE_C5
+    default "esp32p4" if IDF_TARGET_ESP32P4
+    default "esp32s3"
+    help
+        Names the image of a release that fits this board (the board names
+        of the CI build matrix).
+
+config HUB_BUILD_VARIANT
+    string "Build variant of the firmware images"
+    default "dev"
+    help
+        "dev" (INFO logging) or "release" (size-optimized, warnings only;
+        set by sdkconfig.defaults.release). An update keeps the variant.
 
 endmenu
 

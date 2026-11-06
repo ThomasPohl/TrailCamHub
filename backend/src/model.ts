@@ -167,6 +167,8 @@ export interface MediaItem {
   mediaTime: number;
   thumbUrl: string;
   videoState: VideoState;
+  /** With videoState `available`: short-lived URL of the MP4. */
+  videoUrl?: string;
 }
 
 export interface CommandResult {
@@ -206,7 +208,11 @@ export interface CameraReport {
 }
 
 export interface CheckinRequest {
+  /** Version of the hub firmware: a release tag (v1.2.3) or a commit hash. */
   hubFirmware?: string;
+  /** Board and build variant (`esp32s3`, `release`): which image fits. */
+  hubBoard?: string;
+  hubVariant?: string;
   hubBatPercent?: number;
   schedule?: HubSchedule;
   cameras?: CameraReport[];
@@ -223,8 +229,12 @@ export interface CameraCheckin {
   resync: boolean;
   /** Missing thumbnails: PUT the JPEG to `url`, then report it via /ack. */
   thumbUploads: Array<{ mediaId: number; url: string }>;
-  /** mediaId only for requestVideo. */
-  commands: Array<{ id: string; type: CommandType; mediaId?: number }>;
+  /**
+   * mediaId and uploadUrl only for requestVideo. The hub PUTs the MP4
+   * (Content-Type video/mp4) to `uploadUrl` and then acknowledges the command;
+   * an open command comes again with every check-in, with a fresh URL.
+   */
+  commands: Array<{ id: string; type: CommandType; mediaId?: number; uploadUrl?: string }>;
 }
 
 export interface CheckinResponse {
@@ -232,6 +242,11 @@ export interface CheckinResponse {
   cameras: CameraCheckin[];
   /** Schedule set in the app; empty if none, so the hub uses its own. */
   config: ScheduleConfig;
+  /**
+   * A newer firmware release for the hub's board and variant (docs/ota.md);
+   * absent if there is none or the hub runs a development build.
+   */
+  firmware?: { version: string; url: string; sha256: string; size: number };
 }
 
 export interface CameraAck {

@@ -76,6 +76,19 @@ The raw `.h264` and `.aac` files play poorly: no duration, no index, no sound in
 - **Speed (ESP32-P4, SD card in 4-bit mode).** The first request for a video scans the `.h264` file before it sends the first byte: 8.6 s for 9.6 MB, of which 8.0 s are the reads, about 1.2 MB/s with 8 KB as well as with 32 KB per read. The scanned layout is kept for the next request (a player asks several times), so those answer within 50 ms; the cache holds one video. Sending takes about as long again (about 1 MB/s) and was limited by the connection or the card, not measured separately.
 - **Limits.** Requests get `503 Service Unavailable` while a camera session runs, and a transfer in progress is ended when one starts: the session needs the card. Over Ethernet the web UI asks for a password (shown in the boot log).
 
+## Videos on request (app → hub → backend)
+
+With `CONFIG_CAMERA_VIDEO_ON_REQUEST` (the default of the autonomous profile) a session downloads only the videos the user asked for in the app or the bot, at most `CONFIG_CAMERA_VIDEO_MAX_PER_SESSION` (3), newest first. `CONFIG_CAMERA_VIDEO_ALL` downloads every missing video as before (dongles, P4).
+
+1. The app queues a `requestVideo` command. At the next check-in the hub sets `kVideoRequested` in the camera's catalog and makes a camera read due at once (`schedule::request_camera_read()`); the command stays unanswered.
+2. That read downloads the video (`MediaCatalog::download_queue()`).
+3. At the sync after the read the backend sends the command again, with a fresh presigned `uploadUrl`. The hub builds the MP4 from the stored `.h264` and `.aac` while it sends it (`mp4::FileSource` + `mp4::Mp4File`, nothing extra on the card), sets `kVideoUploaded` and acknowledges `done`. A failed upload is tried again with the next check-in.
+4. The backend checks S3 and marks the video `available`; the app plays it from a presigned URL.
+
+The hub answers `failed` (and forgets the request, so a new one starts over) when the video is no longer on the camera's card (a complete media list without it: `kVideoUnavailable`), when its download failed three times (counted in two bits of the catalog flags), when the MP4 is larger than `CONFIG_UPLINK_VIDEO_MAX_MB` (50), or when the build does not download videos. A video downloaded before (e.g. with "every video") is uploaded without a camera read. Decisions: `uplink::decide_video()` (host-tested).
+
+Not covered yet: the data volume over the modem (#54) and a notification when the video is there.
+
 ## What the log shows
 
 `ARTEMIS response cmdId 769: {...}` with the camera's answer, `First video frame: WxH, pts …` with the first 16 decrypted bytes (they should start with `00 00 00 01`), progress every 100 frames, and a summary per video: video and audio frames, dropped markers, records of another session and other records, and the file sizes, followed by `Video transfer:` with the counts of frames out of order, frames repeated by the camera, frames beyond the reorder window and failed ACK sends, the time spent in SD writes (in total and the longest), the internal heap (free and minimum) and frames far behind the expected one. `Video transfer:` is also logged with every progress line and when the session ends during a video. The first 40 frames beyond the reorder window, and then every 500th, are logged as `Playback frame seq …, expected … (delta …)` with their first bytes.

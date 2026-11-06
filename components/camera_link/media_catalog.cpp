@@ -20,6 +20,9 @@ bool valid_media_id(std::int64_t id)
     return id > 0;
 }
 
+constexpr std::uint32_t kAttemptShift = 6;
+constexpr std::uint32_t kAttemptMask = 3u << kAttemptShift;
+
 // Newest first: a higher dir/num is a later recording on the card.
 void sort_newest_first(std::vector<CatalogEntry> &entries)
 {
@@ -141,7 +144,7 @@ std::vector<CatalogEntry> MediaCatalog::pending_video_requests() const
     std::vector<CatalogEntry> out;
     for (const CatalogEntry &e : entries_) {
         if (e.listed && (e.flags & kVideoRequested) != 0 &&
-            (e.flags & kFileDownloaded) == 0)
+            (e.flags & (kFileDownloaded | kVideoUnavailable)) == 0)
             out.push_back(e);
     }
     sort_newest_first(out);
@@ -166,6 +169,72 @@ std::vector<CatalogEntry> MediaCatalog::missing_downloads(bool photos,
         out.insert(out.end(), kind.begin(), kind.end());
     }
     return out;
+}
+
+std::vector<CatalogEntry>
+MediaCatalog::download_queue(bool photos, VideoDownload videos,
+                             std::size_t max_videos) const
+{
+    std::vector<CatalogEntry> out = missing_downloads(photos, false);
+    std::vector<CatalogEntry> wanted;
+    switch (videos) {
+    case VideoDownload::none:
+        break;
+    case VideoDownload::missing:
+        wanted = missing_downloads(false, true);
+        break;
+    case VideoDownload::requested:
+        wanted = pending_video_requests();
+        break;
+    }
+    if (max_videos > 0 && wanted.size() > max_videos)
+        wanted.resize(max_videos);
+    out.insert(out.end(), wanted.begin(), wanted.end());
+    return out;
+}
+
+std::size_t MediaCatalog::mark_unlisted_requests_unavailable()
+{
+    std::size_t marked = 0;
+    for (CatalogEntry &e : entries_) {
+        if (!e.listed && (e.flags & kVideoRequested) != 0 &&
+            (e.flags & (kFileDownloaded | kVideoUnavailable)) == 0) {
+            e.flags |= kVideoUnavailable;
+            ++marked;
+        }
+    }
+    return marked;
+}
+
+std::uint32_t MediaCatalog::video_attempts(std::int64_t media_id) const
+{
+    const CatalogEntry *e = find(media_id);
+    return e == nullptr ? 0 : (e->flags & kAttemptMask) >> kAttemptShift;
+}
+
+std::uint32_t MediaCatalog::count_failed_video_attempt(std::int64_t media_id)
+{
+    CatalogEntry *e = find(media_id);
+    if (e == nullptr)
+        return 0;
+    std::uint32_t attempts = (e->flags & kAttemptMask) >> kAttemptShift;
+    if (attempts < kMaxVideoAttempts)
+        ++attempts;
+    e->flags = (e->flags & ~kAttemptMask) | (attempts << kAttemptShift);
+    if (attempts >= kMaxVideoAttempts)
+        e->flags |= kVideoUnavailable;
+    return attempts;
+}
+
+bool MediaCatalog::forget_video_request(std::int64_t media_id)
+{
+    CatalogEntry *e = find(media_id);
+    if (e == nullptr)
+        return false;
+    const std::uint32_t before = e->flags;
+    e->flags &= ~(static_cast<std::uint32_t>(kVideoRequested) |
+                  static_cast<std::uint32_t>(kVideoUnavailable) | kAttemptMask);
+    return e->flags != before;
 }
 
 std::vector<CatalogEntry> MediaCatalog::without_flag(Flag flag,

@@ -400,6 +400,13 @@ std::string thumbnail_path(const std::string &camera_id, std::int64_t media_id)
            ".jpg";
 }
 
+std::string media_path(const std::string &camera_id, std::int64_t media_id,
+                       const char *extension)
+{
+    return camera_dir(camera_id) + "/media/" + media_base_name(media_id) + "." +
+           extension;
+}
+
 bool save_camera_info(const camera::artemis::DeviceInfo &info,
                       std::int64_t read_at)
 {

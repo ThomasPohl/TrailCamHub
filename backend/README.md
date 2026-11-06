@@ -7,7 +7,7 @@ Hub (ESP32) ──Bearer <hub key>─────┐
 Mini App ──tma <Telegram initData>─┼─▶ Lambda (Function URL) ──▶ DynamoDB (hubs, cameras, media, commands, users)
 Telegram ──webhook secret token────┘          │        │
                                               │        └─▶ Telegram Bot API (notifications, replies)
-                                              └─▶ S3 (thumbnails, via presigned URLs)
+                                              └─▶ S3 (thumbnails and videos, via presigned URLs)
 ```
 
 ## Hubs, cameras and users
@@ -26,8 +26,10 @@ Telegram ──webhook secret token────┘          │        │
   — no API Gateway needed.
 - **DynamoDB** single table with provisioned 5/5 capacity, which stays in the
   always-free tier.
-- **S3** bucket for thumbnails. The hub uploads and the app downloads directly via
-  short-lived presigned URLs; the bucket stays private.
+- **S3** bucket for thumbnails and requested videos. The hub uploads and the app
+  downloads directly via short-lived presigned URLs; the bucket stays private.
+  Thumbnails expire after `ThumbnailRetentionDays` (365), videos after
+  `VideoRetentionDays` (30).
 - The **Telegram bot token** is a GitHub secret, passed to the Lambda function at
   deploy time; it never appears in the repository.
 
@@ -114,7 +116,14 @@ request (and TLS handshake) however many cameras there are — important over LT
          "accepted": true,
          "resync": false,
          "thumbUploads": [{ "mediaId": 4136037234, "url": "https://…" }],
-         "commands": [{ "id": "…", "type": "requestVideo", "mediaId": 3987654321 }]
+         "commands": [
+           {
+             "id": "…",
+             "type": "requestVideo",
+             "mediaId": 3987654321,
+             "uploadUrl": "https://…"
+           }
+         ]
        }
      ],
      "config": { "cameraPlan": "05:00-09:00=30,*=120" }
@@ -126,6 +135,9 @@ request (and TLS handshake) however many cameras there are — important over LT
      `remote` from this backend), and the planned next camera read and check-in
      (Unix seconds, absent without a valid clock or if none is planned). Shown in
      the app; implausible values are dropped.
+   - `hubBoard`, `hubVariant` (request) and `firmware` (response): a newer firmware
+     release for the hub's board and variant, which the hub installs. See
+     [docs/ota.md](../docs/ota.md).
    - `config` (response): the schedule set in the app for this hub
      (`cameraPlan`, `checkinIntervalS`); a missing field leaves the setting to the
      hub. See [docs/power-and-schedule.md](../docs/power-and-schedule.md).
@@ -156,6 +168,15 @@ request (and TLS handshake) however many cameras there are — important over LT
    A hub acknowledges `readCamera` at the check-in after it has tried the read:
    `done` if that scan read the camera, `failed` if it did not. It scans (all its
    cameras) right after the check-in that brought the command.
+
+   A `requestVideo` comes with a presigned `uploadUrl` (fresh at every check-in,
+   valid for an hour). The hub reads the camera right after the check-in that
+   first brought it, downloads the video by playback, and with the next sync
+   `PUT`s it as MP4 (`Content-Type: video/mp4`) and acknowledges `done`. It
+   acknowledges `failed` with a reason if the video cannot be fetched (no longer
+   on the camera, three failed downloads, too large, firmware without video
+   downloads). The backend checks S3 before it marks the video `available`; the
+   app then gets a `videoUrl` with the recording.
 
 ### Hub schedule
 

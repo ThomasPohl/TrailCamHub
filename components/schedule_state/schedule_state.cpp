@@ -412,6 +412,16 @@ ReadRequests::Reply on_read_command(const std::string &id,
     return reply;
 }
 
+void request_camera_read(const char *reason)
+{
+    {
+        Lock lock;
+        s_rtc.state.camera_requested = true;
+    }
+    ESP_LOGI(TAG, "A camera read is due: %s", reason);
+    changed();
+}
+
 void set_change_callback(void (*callback)(void))
 {
     s_change_callback = callback;

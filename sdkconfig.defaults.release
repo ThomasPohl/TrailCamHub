@@ -26,3 +26,6 @@ CONFIG_DIAG_MEMORY_LOG_INTERVAL_S=0
 
 # No diagnostic console commands (files, memory) in release images.
 # CONFIG_HUB_CONSOLE_DIAGNOSTICS is not set
+
+# Firmware updates: release hubs get release images.
+CONFIG_HUB_BUILD_VARIANT="release"

@@ -85,6 +85,8 @@ export interface MediaItem {
   /** Short-lived URL of the thumbnail JPEG (S3 presigned URL in production). */
   thumbUrl: string;
   videoState: VideoState;
+  /** With videoState `available`: short-lived URL of the MP4. */
+  videoUrl?: string;
 }
 
 export type CommandType = 'requestVideo' | 'readCamera';

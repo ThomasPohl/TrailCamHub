@@ -42,6 +42,16 @@ export class FakeStorage implements MediaStorage {
   async thumbExists(camId: string, mediaId: number) {
     return this.uploaded.has(`${camId}/${mediaId}`);
   }
+  readonly uploadedVideos = new Set<string>();
+  async videoReadUrl(camId: string, mediaId: number) {
+    return `https://media.test/get/${camId}/${mediaId}.mp4`;
+  }
+  async videoUploadUrl(camId: string, mediaId: number) {
+    return `https://media.test/put/${camId}/${mediaId}.mp4`;
+  }
+  async videoExists(camId: string, mediaId: number) {
+    return this.uploadedVideos.has(`${camId}/${mediaId}`);
+  }
 }
 
 export const APP_URL = 'https://app.test/app/';

@@ -45,6 +45,9 @@ jobs:
       BOARD: ${{ matrix.board }}
       TARGET: ${{ matrix.target }}
       BOARD_DEFAULTS: ${{ matrix.board_defaults }}
+      # A tag build carries the tag as its version (esp_app_desc), which the
+      # firmware updates compare (docs/ota.md); other builds the commit.
+      TRAILCAMHUB_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -73,6 +76,7 @@ jobs:
           package_dir="dist/trailcamhub-$BOARD"
           mkdir -p "$package_dir"
           cp build/trailcamhub_ble_poc.bin "$package_dir/app.bin"
+          cp build-release/trailcamhub_ble_poc.bin "$package_dir/app-release.bin"
           cp build/bootloader/bootloader.bin "$package_dir/bootloader.bin"
           cp build/partition_table/partition-table.bin "$package_dir/partition-table.bin"
           cp build/ota_data_initial.bin "$package_dir/ota_data_initial.bin"
@@ -95,6 +99,71 @@ jobs:
           path: dist/trailcamhub-${{ matrix.board }}.tar.gz
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: Publish GitHub release
+    # A tag vX.Y.Z publishes a release with the application images of every
+    # board and variant and the manifest the backend offers to hubs
+    # (docs/ota.md). A tag with a suffix (v1.3.0-rc1) becomes a pre-release,
+    # which "latest" and so the hubs skip.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download firmware packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: trailcamhub-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Assemble release files and manifest
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          manifest='{}'
+          for archive in artifacts/trailcamhub-*.tar.gz; do
+            tar -xzf "$archive" -C artifacts
+            cp "$archive" release/
+          done
+          for dir in artifacts/trailcamhub-*/; do
+            board="$(basename "$dir")"
+            board="${board#trailcamhub-}"
+            for variant in dev release; do
+              source="$dir/app.bin"
+              [[ "$variant" == release ]] && source="$dir/app-release.bin"
+              name="trailcamhub-$board-$variant.app.bin"
+              cp "$source" "release/$name"
+              sha="$(sha256sum "release/$name" | cut -d' ' -f1)"
+              size="$(stat -c %s "release/$name")"
+              url="https://github.com/$REPO/releases/download/$TAG/$name"
+              manifest="$(jq --arg key "$board-$variant" --arg url "$url" \
+                --arg sha "$sha" --argjson size "$size" \
+                '.[$key] = {url: $url, sha256: $sha, size: $size}' <<<"$manifest")"
+            done
+          done
+          jq -n --arg version "$TAG" --argjson images "$manifest" \
+            '{version: $version, images: $images}' > release/ota.json
+          cat release/ota.json
+          (cd release && sha256sum * > SHA256SUMS)
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          flags=()
+          [[ "$TAG" == *-* ]] && flags+=(--prerelease)
+          gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" \
+            --title "TrailCamHub $TAG" --generate-notes --verify-tag "${flags[@]}"
 
   format:
     name: Check C/C++ formatting

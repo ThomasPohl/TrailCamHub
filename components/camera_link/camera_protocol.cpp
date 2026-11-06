@@ -82,10 +82,25 @@ static const bool kDownloadPhotos = false;
 // Videos are not offered by the file download (cmdId 1285): the camera
 // acknowledges the request but sends nothing. They are fetched by playing
 // them back (cmdId 769), which streams their H.264 and AAC frames.
-#ifdef CONFIG_CAMERA_DOWNLOAD_VIDEOS
-static const bool kDownloadVideos = true;
+#if defined(CONFIG_CAMERA_DOWNLOAD_VIDEOS) &&                                  \
+    defined(CONFIG_CAMERA_VIDEO_ON_REQUEST)
+static const camera::artemis::MediaCatalog::VideoDownload kVideoDownload =
+    camera::artemis::MediaCatalog::VideoDownload::requested;
+#elif defined(CONFIG_CAMERA_DOWNLOAD_VIDEOS)
+static const camera::artemis::MediaCatalog::VideoDownload kVideoDownload =
+    camera::artemis::MediaCatalog::VideoDownload::missing;
 #else
-static const bool kDownloadVideos = false;
+static const camera::artemis::MediaCatalog::VideoDownload kVideoDownload =
+    camera::artemis::MediaCatalog::VideoDownload::none;
+#endif
+static const bool kDownloadVideos =
+    kVideoDownload != camera::artemis::MediaCatalog::VideoDownload::none;
+// Videos fetched in one session (0: no limit); each takes about twice its
+// length.
+#ifdef CONFIG_CAMERA_VIDEO_MAX_PER_SESSION
+#define CAMERA_VIDEO_MAX_PER_SESSION CONFIG_CAMERA_VIDEO_MAX_PER_SESSION
+#else
+#define CAMERA_VIDEO_MAX_PER_SESSION 0
 #endif
 // Throughput test: receive and parse videos without writing them to the SD
 // card (nothing is stored or marked as downloaded).
@@ -441,8 +456,8 @@ static void request_current_download()
 // downloads, the session is closed right away.
 static void start_downloads()
 {
-    s_download_queue =
-        s_catalog.missing_downloads(kDownloadPhotos, kDownloadVideos);
+    s_download_queue = s_catalog.download_queue(kDownloadPhotos, kVideoDownload,
+                                                CAMERA_VIDEO_MAX_PER_SESSION);
     s_download_index = 0;
     s_download_stored = 0;
     s_stop_downloads = false;
@@ -502,6 +517,18 @@ static void finish_current_download(bool stored, bool stop_all)
         if (!(was_video && kDiscardVideoData)) {
             ESP_LOGW(TAG, "Download of dir %lld num %lld failed",
                      (long long)e.dir_num, (long long)e.media_num);
+        }
+        // A requested video is given up after a few failed downloads, so the
+        // request is answered instead of waiting forever. A failure of the
+        // SD card is not the video's.
+        if (was_video && !kDiscardVideoData && !stop_all &&
+            s_catalog.has_flag(e.media_id, MediaCatalog::kVideoRequested)) {
+            const uint32_t attempts =
+                s_catalog.count_failed_video_attempt(e.media_id);
+            ESP_LOGW(TAG, "Requested video %lld: %u of %u attempts failed",
+                     (long long)e.media_id, (unsigned)attempts,
+                     (unsigned)MediaCatalog::kMaxVideoAttempts);
+            camera::store::save_catalog(s_camera_id, s_catalog);
         }
     }
     s_download_stream.reset();
@@ -975,7 +1002,9 @@ static void request_scan_page()
 
 // All pages are merged: persist the catalog, then fetch the thumbnail of
 // every listed item we do not have one for yet (newest first).
-static void finish_scan_list()
+// `complete`: every page of the media list was read, so an item that was
+// not listed is not on the camera's card.
+static void finish_scan_list(bool complete)
 {
     // The web protocol view reads the "Media list parsed: N items" prefix.
     ESP_LOGI(TAG,
@@ -983,6 +1012,15 @@ static void finish_scan_list()
              "page(s)",
              (unsigned)(s_scan_photos + s_scan_videos), (unsigned)s_scan_photos,
              (unsigned)s_scan_videos, (long long)s_scan_page);
+    if (complete) {
+        const size_t gone = s_catalog.mark_unlisted_requests_unavailable();
+        if (gone > 0) {
+            ESP_LOGW(TAG,
+                     "%u requested video(s) are no longer on the camera's "
+                     "card",
+                     (unsigned)gone);
+        }
+    }
     camera::store::save_catalog(s_camera_id, s_catalog);
     s_thumb_queue = s_catalog.missing_thumbnails();
     s_thumb_index = 0;
@@ -1018,7 +1056,7 @@ static void handle_scan_page(const std::string &json)
             s_end_session = true;
         } else {
             // Work with the pages read so far.
-            finish_scan_list();
+            finish_scan_list(false);
         }
         return;
     }
@@ -1045,13 +1083,13 @@ static void handle_scan_page(const std::string &json)
              (unsigned)added, (long long)list.count);
     ++s_scan_page;
     if (!camera::artemis::media_list_has_more(list)) {
-        finish_scan_list();
+        finish_scan_list(true);
     } else if (s_scan_page >= CONFIG_CAMERA_MEDIA_LIST_MAX_PAGES) {
         ESP_LOGW(TAG,
                  "Media list has more than %d pages; older files are not "
                  "read in this session",
                  CONFIG_CAMERA_MEDIA_LIST_MAX_PAGES);
-        finish_scan_list();
+        finish_scan_list(false);
     } else {
         request_scan_page();
     }

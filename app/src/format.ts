@@ -110,9 +110,9 @@ export function videoStateLabel(state: VideoState): string {
     case 'none':
       return 'Not downloaded';
     case 'requested':
-      return 'Requested · loads at next wake-up';
+      return 'Requested · the hub gets it at its next check-in';
     case 'downloading':
-      return 'Downloading…';
+      return 'The hub fetches it from the camera…';
     case 'available':
       return 'Available';
     case 'failed':

@@ -62,7 +62,10 @@ TEST_CASE("check-in response is read per camera")
         "ab%2Fcd&x=1\"},{\"mediaId\":3987654321,\"url\":\"http://insecure."
         "example/\"},{\"mediaId\":0,\"url\":\"https://bucket.example/\"}],"
         "\"commands\":[{\"id\":\"c-1\",\"type\":\"requestVideo\","
-        "\"mediaId\":3987654321}]},"
+        "\"mediaId\":3987654321,\"uploadUrl\":\"https://bucket.example/"
+        "video/F4/3987654321.mp4?X-Amz-Signature=ef\"},"
+        "{\"id\":\"c-2\",\"type\":\"requestVideo\",\"mediaId\":7,"
+        "\"uploadUrl\":\"http://insecure.example/\"}]},"
         "{\"camId\":\"A1B2C3D4E5F6\",\"accepted\":true,\"resync\":true,"
         "\"thumbUploads\":[],\"commands\":[]},"
         "{\"camId\":\"OTHER\",\"accepted\":false,\"resync\":false,"
@@ -87,9 +90,13 @@ TEST_CASE("check-in response is read per camera")
     CHECK(garden.thumb_uploads[0].media_id == 4136037234);
     CHECK(garden.thumb_uploads[0].url.find("X-Amz-Signature=ab%2Fcd") !=
           std::string::npos);
-    REQUIRE(garden.commands.size() == 1);
+    REQUIRE(garden.commands.size() == 2);
     CHECK(garden.commands[0].id == "c-1");
     CHECK(garden.commands[0].media_id == 3987654321);
+    CHECK(garden.commands[0].upload_url ==
+          "https://bucket.example/video/F4/3987654321.mp4?X-Amz-Signature=ef");
+    // Only https upload URLs are taken.
+    CHECK(garden.commands[1].upload_url.empty());
 
     CHECK(response.cameras[1].resync);
     CHECK(response.cameras[1].thumb_uploads.empty());

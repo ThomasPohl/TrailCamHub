@@ -145,6 +145,11 @@ class MediaFileWriter
 // Path of a recording's stored thumbnail; the file may not exist.
 std::string thumbnail_path(const std::string &camera_id, std::int64_t media_id);
 
+// Path of a recording's stored file with `extension` ("jpg", "h264", "aac");
+// the file may not exist.
+std::string media_path(const std::string &camera_id, std::int64_t media_id,
+                       const char *extension);
+
 // Stores the camera's device info next to its catalog, at
 // /sdcard/<camera-id>/camera.json, together with the time it was read
 // (Unix seconds, 0 = unknown). An upload sends every camera stored this way.
