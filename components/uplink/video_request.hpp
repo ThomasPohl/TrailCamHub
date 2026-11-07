@@ -10,6 +10,7 @@
 // the hub answers nothing.
 
 #include <cstdint>
+#include <string>
 
 #include "media_catalog.hpp"
 
@@ -52,5 +53,19 @@ VideoDecision decide_video(const camera::artemis::MediaCatalog *catalog,
                            bool has_upload_url);
 
 const char *video_failure_text(VideoFailure failure);
+
+// Largest MP4 the hub uploads, per transport (bytes).
+struct VideoLimits {
+    std::uint64_t wifi_bytes = 0;
+    // Over the cellular modem (data volume, radio time).
+    std::uint64_t modem_bytes = 0;
+};
+
+// Checked once the MP4's size is known, before anything is sent. Empty if
+// the video may be uploaded over this transport, else the reason to answer
+// "failed" with. A hub syncs over one transport only (setting "transport"),
+// so a video too large for the modem is not kept for a later Wi-Fi sync.
+std::string video_size_failure(std::uint64_t size, const VideoLimits &limits,
+                               bool over_modem);
 
 }  // namespace uplink
