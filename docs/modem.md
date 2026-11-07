@@ -40,11 +40,13 @@ The session state machine is unchanged: `UPLINK_JOIN` brings the uplink up, `UPL
 6. The PPP interface gets an IP address and becomes the default route; the sync runs.
 7. Afterwards: data call ended, radio off (`AT+CFUN=4`) or power off (GPIO), drivers removed. Deep sleep waits for this (at most 30 s).
 
+Below `CONFIG_HUB_BATTERY_MODEM_MIN_MV` (3400 mV, read right before step 1) the modem is not switched on at all: its current peaks of up to ~2 A could cause a brownout on a nearly empty cell. The cycle then ends like a failed sync. See "Saving power on a low hub battery" in `docs/power-and-schedule.md`.
+
 Steps 1–6 must finish within `CONFIG_MODEM_ATTACH_TIMEOUT_S` (120 s), otherwise the cycle ends with `uplink_unreachable` and the schedule's back-off applies. The log names the step that failed (`Modem uplink failed: …`).
 
 ## Not covered yet
 
-- Data volume: requested videos (up to `CONFIG_UPLINK_VIDEO_MAX_MB`, see `docs/video-download.md`) and firmware updates (`docs/ota.md`) currently also go over the modem. A lower video limit over the modem is #143, firmware updates only over Wi-Fi or Ethernet #142.
-- A firmware update restarts the hub right after the sync, without taking the modem down; with the 4G DIP switch ON the modem keeps its radio on until the next modem sync (#142).
+- Data volume: requested videos (up to `CONFIG_UPLINK_VIDEO_MAX_MB`, see `docs/video-download.md`) also go over the modem; a lower limit is #143.
+- Firmware updates (`docs/ota.md`) go over the modem too: the manifest at most once a day, an update only with enough battery and a signal of at least `CONFIG_OTA_MODEM_MIN_SIGNAL_DBM` (−105 dBm, measured during the attach). The hub restarts into a new firmware only after the modem is down.
 - Modem status in the app (#144); GNSS and SMS (#146).
 - A USB connection lost during a data call can leave the driver waiting; the next deep sleep resets the hub.

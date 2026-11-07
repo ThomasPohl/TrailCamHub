@@ -135,9 +135,9 @@ request (and TLS handshake) however many cameras there are — important over LT
      `remote` from this backend), and the planned next camera read and check-in
      (Unix seconds, absent without a valid clock or if none is planned). Shown in
      the app; implausible values are dropped.
-   - `hubBoard`, `hubVariant` (request) and `firmware` (response): a newer firmware
-     release for the hub's board and variant, which the hub installs. See
-     [docs/ota.md](../docs/ota.md).
+   - `hubBoard`, `hubVariant` (request): the hub's board and build variant.
+     The backend offers no firmware; the hub reads the releases from GitHub
+     itself (see [docs/ota.md](../docs/ota.md)).
    - `config` (response): the schedule set in the app for this hub
      (`cameraPlan`, `checkinIntervalS`); a missing field leaves the setting to the
      hub. See [docs/power-and-schedule.md](../docs/power-and-schedule.md).

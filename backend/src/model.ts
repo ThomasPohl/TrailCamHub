@@ -250,11 +250,6 @@ export interface CheckinResponse {
   cameras: CameraCheckin[];
   /** Schedule set in the app; empty if none, so the hub uses its own. */
   config: ScheduleConfig;
-  /**
-   * A newer firmware release for the hub's board and variant (docs/ota.md);
-   * absent if there is none or the hub runs a development build.
-   */
-  firmware?: { version: string; url: string; sha256: string; size: number };
 }
 
 export interface CameraAck {
