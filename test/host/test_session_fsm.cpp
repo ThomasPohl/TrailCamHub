@@ -104,6 +104,28 @@ TEST_CASE("upload only skips the camera")
     CHECK(result.next == State::uplink_join);
     CHECK(has(result, kConnectHomeWifi));
     CHECK_FALSE(has(result, kResumeBle));
+    CHECK(result.timer_ms == kConfig.wifi_join_timeout_ms);
+}
+
+TEST_CASE("joining the modem uplink may take longer")
+{
+    Fsm fsm(kConfig);
+    fsm.set_uplink_enabled(true);
+    fsm.set_uplink_join_timeout_ms(120000);
+    Result result = fsm.handle(Event::upload_requested);
+    REQUIRE(result.next == State::uplink_join);
+    CHECK(result.timer_ms == 120000);
+    // Joined: the sync runs; a failed join ends the cycle as before.
+    CHECK(fsm.handle(Event::wifi_connected).next == State::uplink);
+
+    Fsm failing(kConfig);
+    failing.set_uplink_enabled(true);
+    failing.set_uplink_join_timeout_ms(120000);
+    failing.handle(Event::upload_requested);
+    result = failing.handle(Event::timeout);
+    CHECK(result.next == State::idle);
+    CHECK(result.outcome == Outcome::uplink_unreachable);
+    CHECK(has(result, kDisconnectWifi));
 }
 
 TEST_CASE("camera failures are retried, then the cycle gives up")

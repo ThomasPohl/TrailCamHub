@@ -24,7 +24,10 @@
     device_key: panel.querySelector("#ds-current-device_key"),
     camera_plan: panel.querySelector("#ds-current-camera_plan"),
     checkin_min: panel.querySelector("#ds-current-checkin_min"),
-    uplink: panel.querySelector("#ds-current-uplink"),
+    transport: panel.querySelector("#ds-current-transport"),
+    apn: panel.querySelector("#ds-current-apn"),
+    sim_pin: panel.querySelector("#ds-current-sim_pin"),
+    backend: panel.querySelector("#ds-current-backend"),
   };
   const scheduleList = panel.querySelector("#ds-schedule");
   // "TCH INFO" lines of the status reply that describe the schedule.
@@ -36,7 +39,7 @@
     WIFI_JOIN: "Joining the camera Wi-Fi",
     SESSION: "Reading the camera",
     BACKOFF: "Camera not reached — retrying",
-    UPLINK_JOIN: "Joining the home Wi-Fi",
+    UPLINK_JOIN: "Going online (home Wi-Fi or modem)",
     UPLINK: "Uploading to the backend",
   };
 
@@ -46,7 +49,7 @@
     "uplink-done": "Scan and upload finished",
     "camera-unreachable": "Camera not reached",
     "camera-no-card": "The camera has no SD card",
-    "uplink-unreachable": "Home Wi-Fi not reached",
+    "uplink-unreachable": "Not online (home Wi-Fi or modem)",
     stopped: "Scan stopped",
   };
 
@@ -54,7 +57,7 @@
 
   // Remembered form values, so the settings need not be typed again on every
   // visit. Opt-out via the checkbox, which also deletes what is stored.
-  const FIELDS = ["wifi_ssid", "wifi_password", "api_url", "device_key", "camera_plan", "checkin_min"];
+  const FIELDS = ["wifi_ssid", "wifi_password", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
   const STORAGE_KEY = "trailcamhub.deviceSetup";
   const PREFERENCE_KEY = "trailcamhub.deviceSetup.remember";
   const rememberBox = panel.querySelector("#ds-remember");
@@ -174,6 +177,13 @@
     if (values.wifi_password && (values.wifi_password.length < 8 || values.wifi_password.length > 64)) {
       return "The Wi-Fi password must have 8 to 64 characters.";
     }
+    // The APN goes into an AT command on the hub.
+    if (values.apn && !/^[A-Za-z0-9._-]{1,63}$/.test(values.apn)) {
+      return "The APN may only contain letters, digits, '.', '-' and '_'.";
+    }
+    if (values.sim_pin && !/^\d{4,8}$/.test(values.sim_pin)) {
+      return "The SIM PIN must have 4 to 8 digits.";
+    }
     if (values.api_url && !/^https:\/\/\S+$/.test(values.api_url)) {
       return "The API URL must start with https://.";
     }
@@ -213,13 +223,14 @@
     formStatus.textContent = "Saving…";
     try {
       for (const [key, value] of entries) {
-        const secret = key === "wifi_password" || key === "device_key";
+        const secret = key === "wifi_password" || key === "device_key" || key === "sim_pin";
         await send(`config set-hex ${key} ${toHex(value)}`, `config set ${key} ${secret ? "••••" : value}`);
       }
       await send("config show");
       if (!rememberBox.checked) {
         form.elements.wifi_password.value = "";
         form.elements.device_key.value = "";
+        form.elements.sim_pin.value = "";
       }
       formStatus.textContent = "Saved. Empty fields keep their stored value.";
     } catch {

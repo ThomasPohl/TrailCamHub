@@ -1,0 +1,8 @@
+## USB host modem driver (CDC, PPP) of esp-iot-solution, for the A7670E of
+## the Waveshare ESP32-S3-A7670E-4G. Only the ESP32-S3 drives a modem.
+dependencies:
+  idf: ">=5.3"
+  espressif/iot_usbh_modem:
+    version: "~2.2.0"
+    rules:
+      - if: "target in [esp32s3]"

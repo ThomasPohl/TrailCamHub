@@ -274,7 +274,7 @@ Effective effective()
                                       kBuiltInCheckin, &out.checkin_origin),
                                  CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN);
     out.settings.checkin_min = out.checkin_min;
-    out.settings.uplink = hub_config::uplink_configured(local);
+    out.settings.uplink = hub_config::uplink_ready(local);
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;
     out.settings.low_battery_factor = CONFIG_SCHEDULE_LOW_BATTERY_FACTOR;
     return out;

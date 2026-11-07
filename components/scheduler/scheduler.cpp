@@ -19,6 +19,7 @@
 #include "freertos/task.h"
 #include "sdkconfig.h"
 
+#include "modem_uplink.hpp"
 #include "schedule_state.hpp"
 #include "sd_log.h"
 #include "session_controller.h"
@@ -162,6 +163,14 @@ std::int64_t earliest(std::int64_t a, std::int64_t b)
 #if CONFIG_POWER_DEEP_SLEEP
 [[noreturn]] void sleep_for(std::int64_t sleep_s)
 {
+    // The modem is taken down after a sync in its own task (data call
+    // ended, radio off); sleeping before that would leave its radio on.
+    for (int i = 0; i < 300 && modem_uplink::active(); ++i) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    if (modem_uplink::active()) {
+        ESP_LOGW(TAG, "Modem still active; sleeping anyway");
+    }
     ESP_LOGI(TAG, "Deep sleep for %lld s", (long long)sleep_s);
     schedule::prepare_sleep(sleep_s);
 #if CONFIG_SD_LOG_ENABLE

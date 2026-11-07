@@ -41,6 +41,12 @@ const char *key_name(Key key)
         return "camera_plan";
     case Key::checkin_min:
         return "checkin_min";
+    case Key::transport:
+        return "transport";
+    case Key::apn:
+        return "apn";
+    case Key::sim_pin:
+        return "sim_pin";
     }
     return "unknown";
 }
@@ -58,7 +64,8 @@ bool key_from_name(const std::string &name, Key &out)
 
 bool is_secret(Key key)
 {
-    return key == Key::wifi_password || key == Key::device_key;
+    return key == Key::wifi_password || key == Key::device_key ||
+           key == Key::sim_pin;
 }
 
 std::string &field(Settings &settings, Key key)
@@ -74,6 +81,12 @@ std::string &field(Settings &settings, Key key)
         return settings.camera_plan;
     case Key::checkin_min:
         return settings.checkin_min;
+    case Key::transport:
+        return settings.transport;
+    case Key::apn:
+        return settings.apn;
+    case Key::sim_pin:
+        return settings.sim_pin;
     case Key::device_key:
         break;
     }
@@ -153,6 +166,33 @@ std::string validate(Key key, const std::string &value)
         }
         return "";
     }
+    case Key::transport:
+        if (value != "wifi" && value != "modem") {
+            return "transport must be wifi or modem";
+        }
+        return "";
+    case Key::apn:
+        // Goes into AT+CGDCONT="..." as it is: only the characters of APN
+        // names (labels of letters, digits and hyphens, joined by dots).
+        if (value.empty() || value.size() > 63) {
+            return "APN must be 1-63 characters";
+        }
+        for (char c : value) {
+            if (!is_key_char(c) && c != '.') {
+                return "APN may only contain letters, digits, '.', '-', '_'";
+            }
+        }
+        return "";
+    case Key::sim_pin:
+        if (value.size() < 4 || value.size() > 8) {
+            return "SIM PIN must be 4-8 digits";
+        }
+        for (char c : value) {
+            if (c < '0' || c > '9') {
+                return "SIM PIN must be 4-8 digits";
+            }
+        }
+        return "";
     }
     return "unknown setting";
 }
@@ -160,10 +200,12 @@ std::string validate(Key key, const std::string &value)
 std::string display_value(Key key, const std::string &value)
 {
     if (value.empty()) {
-        return key == Key::camera_plan || key == Key::checkin_min ? "(default)"
-                                                                  : "(not set)";
+        return key == Key::camera_plan || key == Key::checkin_min ||
+                       key == Key::transport || key == Key::apn
+                   ? "(default)"
+                   : "(not set)";
     }
-    if (key == Key::wifi_password) {
+    if (key == Key::wifi_password || key == Key::sim_pin) {
         return "(set)";
     }
     if (key == Key::device_key) {
@@ -173,12 +215,33 @@ std::string display_value(Key key, const std::string &value)
     return value;
 }
 
-bool uplink_configured(const Settings &settings)
+Transport transport(const Settings &settings, bool modem_available)
 {
+    if (!modem_available || settings.transport == "wifi") {
+        return Transport::wifi;
+    }
+    if (settings.transport == "modem") {
+        return Transport::modem;
+    }
+    return settings.wifi_ssid.empty() ? Transport::modem : Transport::wifi;
+}
+
+const char *transport_name(Transport transport)
+{
+    return transport == Transport::modem ? "modem" : "wifi";
+}
+
+bool uplink_configured(const Settings &settings, bool modem_available)
+{
+    if (!validate(Key::api_url, settings.api_url).empty() ||
+        !validate(Key::device_key, settings.device_key).empty()) {
+        return false;
+    }
+    if (transport(settings, modem_available) == Transport::modem) {
+        return true;
+    }
     return validate(Key::wifi_ssid, settings.wifi_ssid).empty() &&
-           validate(Key::wifi_password, settings.wifi_password).empty() &&
-           validate(Key::api_url, settings.api_url).empty() &&
-           validate(Key::device_key, settings.device_key).empty();
+           validate(Key::wifi_password, settings.wifi_password).empty();
 }
 
 std::string api_base(const std::string &api_url)

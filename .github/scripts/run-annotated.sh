@@ -13,7 +13,10 @@ log="$(mktemp)"
 status=${PIPESTATUS[0]}
 if [[ $status -ne 0 ]]; then
   # Annotations take one line: encode %, CR and LF as the runner expects.
-  message="$(tail -n 40 "$log" | sed 's/\x1b\[[0-9;]*m//g' |
+  # Compiler command lines and build progress are left out: one command line
+  # alone fills the annotation and hides the error after it.
+  message="$(grep -v -E '^(ccache |\[[0-9]+/[0-9]+\] )' "$log" | tail -n 40 |
+    sed 's/\x1b\[[0-9;]*m//g' |
     sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')"
   echo "::error title=${title} failed::${message}"
 fi
