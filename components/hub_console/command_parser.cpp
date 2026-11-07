@@ -248,6 +248,9 @@ Command parse_command(const std::string &line)
     if (word == "upload") {
         return simple(CommandType::upload);
     }
+    if (word == "update") {
+        return simple(CommandType::update);
+    }
     if (word == "stop") {
         return simple(CommandType::stop);
     }
@@ -262,6 +265,8 @@ const char *help_text()
            "camlist                    list the media on the camera\n"
            "upload                     sync stored data with the backend "
            "only\n"
+           "update                     sync, then look for a firmware "
+           "update now\n"
            "stop                       end the running scan\n"
            "heap [blocks]              internal RAM by capability and "
            "region\n"

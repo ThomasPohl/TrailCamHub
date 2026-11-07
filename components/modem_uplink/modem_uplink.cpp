@@ -55,6 +55,8 @@ Settings s_next_settings;
 SemaphoreHandle_t s_settings_lock = nullptr;
 std::atomic<bool> s_cancel{false};
 std::atomic<bool> s_active{false};
+// Signal of the last attach in dBm; 0: unknown.
+std::atomic<int> s_signal_dbm{0};
 // Owned by the task.
 bool s_cdc_installed = false;
 bool s_modem_installed = false;
@@ -216,6 +218,7 @@ void log_network(at_handle_t at)
     at_cmd_get_signal_quality(at, &csq);
     at_cmd_get_operator_name(at, op, sizeof(op));
     // rssi 0..31 is -113..-51 dBm; 99 unknown.
+    s_signal_dbm = csq.rssi >= 0 && csq.rssi <= 31 ? -113 + 2 * csq.rssi : 0;
     if (csq.rssi >= 0 && csq.rssi <= 31) {
         ESP_LOGI(TAG, "Network %s, signal %d dBm (CSQ %d)", op,
                  -113 + 2 * csq.rssi, csq.rssi);
@@ -426,6 +429,7 @@ esp_err_t connect(const Settings &settings)
     s_next_settings = settings;
     xSemaphoreGive(s_settings_lock);
     s_cancel = false;
+    s_signal_dbm = 0;
     s_active = true;
     const Command command = Command::connect;
     return xQueueSend(s_commands, &command, 0) == pdTRUE ? ESP_OK
@@ -445,6 +449,11 @@ void disconnect()
 bool active()
 {
     return s_active.load();
+}
+
+int signal_dbm()
+{
+    return s_signal_dbm.load();
 }
 
 #else  // !CONFIG_MODEM_UPLINK
@@ -473,6 +482,11 @@ void disconnect()
 bool active()
 {
     return false;
+}
+
+int signal_dbm()
+{
+    return 0;
 }
 
 #endif  // CONFIG_MODEM_UPLINK

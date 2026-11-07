@@ -47,4 +47,7 @@ void disconnect();
 // True from connect() until the matching disconnect() is done.
 bool active();
 
+// Signal strength measured during the last connect() in dBm; 0 if unknown.
+int signal_dbm();
+
 }  // namespace modem_uplink

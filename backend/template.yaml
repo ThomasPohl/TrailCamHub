@@ -39,14 +39,6 @@ Parameters:
     Description: >-
       Time zone of a user's quiet hours until they set their own with
       /timezone.
-  FirmwareManifestUrl:
-    Type: String
-    Default: https://github.com/ThomasPohl/TrailCamHub/releases/latest/download/ota.json
-    AllowedPattern: '^$|^https://\S+$'
-    Description: >-
-      Manifest of the latest firmware release (ota.json, written by the CI for
-      every vX.Y.Z tag). Hubs running an older release get its image offered at
-      check-in and install it. Empty: no firmware updates.
   ThumbnailRetentionDays:
     Type: Number
     Default: 365
@@ -179,7 +171,6 @@ Resources:
           TELEGRAM_BOT_TOKEN_PARAM: !Ref TelegramBotTokenParameter
           APP_URL: !Ref MiniAppUrl
           DEFAULT_TIME_ZONE: !Ref DefaultTimeZone
-          FIRMWARE_MANIFEST_URL: !Ref FirmwareManifestUrl
           NODE_OPTIONS: --enable-source-maps
       LoggingConfig:
         LogGroup: !Ref ApiLogGroup

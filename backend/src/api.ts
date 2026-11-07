@@ -2,7 +2,6 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { parseDeviceKey, verifySecret } from './auth/device';
 import { validateInitData } from './auth/telegram';
 import { requestVideo } from './commands';
-import { firmwareOffer, type FirmwareManifest } from './firmware';
 import {
   HttpError,
   json,
@@ -52,8 +51,6 @@ export interface Deps {
   botToken: () => Promise<string>;
   now: () => number;
   newId?: () => string;
-  /** The latest firmware release (docs/ota.md); without it no updates are offered. */
-  firmwareManifest?: () => Promise<FirmwareManifest | undefined>;
   config?: {
     /** Thumbnail upload URLs handed out per check-in, over all cameras. */
     maxThumbUploadsPerCheckin?: number;
@@ -525,12 +522,6 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     // The schedule set in the app; without it the hub keeps its own.
     config: hub.scheduleConfig ?? {},
   };
-  const offer = firmwareOffer(await deps.firmwareManifest?.(), {
-    firmware: body.hubFirmware,
-    board: body.hubBoard,
-    variant: body.hubVariant,
-  });
-  if (offer) response.firmware = offer;
   return json(200, response);
 }
 
