@@ -122,9 +122,9 @@ TEST_CASE("setting validation")
     CHECK_FALSE(validate(Key::checkin_min, "-5").empty());
     CHECK_FALSE(validate(Key::checkin_min, "30m").empty());
 
-    CHECK(validate(Key::uplink, "wifi").empty());
-    CHECK(validate(Key::uplink, "modem").empty());
-    CHECK_FALSE(validate(Key::uplink, "lte").empty());
+    CHECK(validate(Key::transport, "wifi").empty());
+    CHECK(validate(Key::transport, "modem").empty());
+    CHECK_FALSE(validate(Key::transport, "lte").empty());
 
     CHECK(validate(Key::apn, "internet.telekom").empty());
     CHECK(validate(Key::apn, "web.vodafone.de").empty());
@@ -155,12 +155,12 @@ TEST_CASE("secrets are never displayed")
           "CAM1.*** (set)");
     CHECK(display_value(Key::sim_pin, "1234") == "(set)");
     CHECK(display_value(Key::sim_pin, "") == "(not set)");
-    CHECK(display_value(Key::uplink, "") == "(default)");
+    CHECK(display_value(Key::transport, "") == "(default)");
     CHECK(display_value(Key::apn, "") == "(default)");
     CHECK(hub_config::is_secret(Key::sim_pin));
 }
 
-TEST_CASE("the uplink goes over the Wi-Fi or the modem")
+TEST_CASE("the transport is the Wi-Fi or the modem")
 {
     using hub_config::Transport;
     hub_config::Settings settings;
@@ -170,11 +170,11 @@ TEST_CASE("the uplink goes over the Wi-Fi or the modem")
     // Without a modem in the build: always the Wi-Fi, which must be set.
     CHECK(hub_config::transport(settings, false) == Transport::wifi);
     CHECK_FALSE(hub_config::uplink_configured(settings, false));
-    settings.uplink = "modem";
+    settings.transport = "modem";
     CHECK(hub_config::transport(settings, false) == Transport::wifi);
 
     // With a modem: no home Wi-Fi means the modem.
-    settings.uplink.clear();
+    settings.transport.clear();
     CHECK(hub_config::transport(settings, true) == Transport::modem);
     CHECK(hub_config::uplink_configured(settings, true));
     // A home Wi-Fi is used when it is set ...
@@ -182,16 +182,16 @@ TEST_CASE("the uplink goes over the Wi-Fi or the modem")
     settings.wifi_password = "12345678";
     CHECK(hub_config::transport(settings, true) == Transport::wifi);
     // ... unless the modem is chosen.
-    settings.uplink = "modem";
+    settings.transport = "modem";
     CHECK(hub_config::transport(settings, true) == Transport::modem);
-    settings.uplink = "wifi";
+    settings.transport = "wifi";
     settings.wifi_ssid.clear();
     CHECK(hub_config::transport(settings, true) == Transport::wifi);
     CHECK_FALSE(hub_config::uplink_configured(settings, true));
     CHECK(std::string(hub_config::transport_name(Transport::modem)) == "modem");
 
     // The backend settings are always needed.
-    settings.uplink = "modem";
+    settings.transport = "modem";
     settings.device_key.clear();
     CHECK_FALSE(hub_config::uplink_configured(settings, true));
 }

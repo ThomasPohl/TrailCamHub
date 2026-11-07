@@ -326,8 +326,8 @@ config MODEM_UPLINK
     help
         Drive the A7670E LTE modem of the Waveshare ESP32-S3-A7670E-4G on
         the S3's native USB port (USB host, PPP). It is switched on for a
-        backend sync and off again afterwards. Which uplink a hub uses is a
-        setting ("config set uplink wifi|modem"); without one the modem is
+        backend sync and off again afterwards. Which transport a hub uses is a
+        setting ("config set transport wifi|modem"); without one the modem is
         used when no home Wi-Fi is set. The APN and the SIM PIN are settings
         too. On the board the USB DIP switch must be OFF (modem on the S3).
         See docs/modem.md.

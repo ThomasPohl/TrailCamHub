@@ -24,7 +24,7 @@
     device_key: panel.querySelector("#ds-current-device_key"),
     camera_plan: panel.querySelector("#ds-current-camera_plan"),
     checkin_min: panel.querySelector("#ds-current-checkin_min"),
-    uplink: panel.querySelector("#ds-current-uplink"),
+    transport: panel.querySelector("#ds-current-transport"),
     apn: panel.querySelector("#ds-current-apn"),
     sim_pin: panel.querySelector("#ds-current-sim_pin"),
     backend: panel.querySelector("#ds-current-backend"),
@@ -57,7 +57,7 @@
 
   // Remembered form values, so the settings need not be typed again on every
   // visit. Opt-out via the checkbox, which also deletes what is stored.
-  const FIELDS = ["wifi_ssid", "wifi_password", "uplink", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
+  const FIELDS = ["wifi_ssid", "wifi_password", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
   const STORAGE_KEY = "trailcamhub.deviceSetup";
   const PREFERENCE_KEY = "trailcamhub.deviceSetup.remember";
   const rememberBox = panel.querySelector("#ds-remember");

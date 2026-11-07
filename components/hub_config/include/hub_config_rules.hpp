@@ -23,7 +23,7 @@ enum class Key {
     checkin_min,
     // How the hub reaches the backend: "wifi" or "modem"; empty: the home
     // Wi-Fi if one is set, otherwise the modem (see transport()).
-    uplink,
+    transport,
     // APN of the SIM card's provider for the modem; empty: the one the
     // network suggests.
     apn,
@@ -34,7 +34,7 @@ enum class Key {
 constexpr Key kAllKeys[] = {
     Key::wifi_ssid,  Key::wifi_password, Key::api_url,
     Key::device_key, Key::camera_plan,   Key::checkin_min,
-    Key::uplink,     Key::apn,           Key::sim_pin};
+    Key::transport,  Key::apn,           Key::sim_pin};
 
 struct Settings {
     std::string wifi_ssid;
@@ -43,7 +43,7 @@ struct Settings {
     std::string device_key;
     std::string camera_plan;
     std::string checkin_min;
-    std::string uplink;
+    std::string transport;
     std::string apn;
     std::string sim_pin;
 };

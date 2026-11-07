@@ -13,14 +13,14 @@ The Waveshare ESP32-S3-A7670E-4G has an A7670E LTE Cat-1 modem on the S3's **nat
 
 ## Settings
 
-| Setting   | Values                                                     | Default                                                   |
-| --------- | ---------------------------------------------------------- | --------------------------------------------------------- |
-| `uplink`  | `wifi`, `modem`                                            | the home Wi-Fi if `wifi_ssid` is set, otherwise the modem |
-| `apn`     | letters, digits, `.`, `-`, `_` (it goes into `AT+CGDCONT`) | the network's default                                     |
-| `sim_pin` | 4–8 digits (stored like a password, never shown)           | none                                                      |
+| Setting     | Values                                                     | Default                                                   |
+| ----------- | ---------------------------------------------------------- | --------------------------------------------------------- |
+| `transport` | `wifi`, `modem`                                            | the home Wi-Fi if `wifi_ssid` is set, otherwise the modem |
+| `apn`       | letters, digits, `.`, `-`, `_` (it goes into `AT+CGDCONT`) | the network's default                                     |
+| `sim_pin`   | 4–8 digits (stored like a password, never shown)           | none                                                      |
 
 ```
-config set uplink modem
+config set transport modem
 config set apn internet.telekom
 config set sim_pin 1234
 config show

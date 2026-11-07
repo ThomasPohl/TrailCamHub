@@ -253,7 +253,8 @@ void print_settings()
                             hub_config::display_value(
                                 key, hub_config::field(settings, key)));
     }
-    // "backend", not "uplink": that is the name of a setting.
+    // Starts with "backend", not a setting name, so that it cannot be read as
+    // one of the setting lines above.
     const char *transport =
         hub_config::transport_name(hub_config::uplink_transport(settings));
     reply("CONFIG",

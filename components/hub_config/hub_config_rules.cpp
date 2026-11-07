@@ -41,8 +41,8 @@ const char *key_name(Key key)
         return "camera_plan";
     case Key::checkin_min:
         return "checkin_min";
-    case Key::uplink:
-        return "uplink";
+    case Key::transport:
+        return "transport";
     case Key::apn:
         return "apn";
     case Key::sim_pin:
@@ -81,8 +81,8 @@ std::string &field(Settings &settings, Key key)
         return settings.camera_plan;
     case Key::checkin_min:
         return settings.checkin_min;
-    case Key::uplink:
-        return settings.uplink;
+    case Key::transport:
+        return settings.transport;
     case Key::apn:
         return settings.apn;
     case Key::sim_pin:
@@ -166,9 +166,9 @@ std::string validate(Key key, const std::string &value)
         }
         return "";
     }
-    case Key::uplink:
+    case Key::transport:
         if (value != "wifi" && value != "modem") {
-            return "uplink must be wifi or modem";
+            return "transport must be wifi or modem";
         }
         return "";
     case Key::apn:
@@ -201,7 +201,7 @@ std::string display_value(Key key, const std::string &value)
 {
     if (value.empty()) {
         return key == Key::camera_plan || key == Key::checkin_min ||
-                       key == Key::uplink || key == Key::apn
+                       key == Key::transport || key == Key::apn
                    ? "(default)"
                    : "(not set)";
     }
@@ -217,10 +217,10 @@ std::string display_value(Key key, const std::string &value)
 
 Transport transport(const Settings &settings, bool modem_available)
 {
-    if (!modem_available || settings.uplink == "wifi") {
+    if (!modem_available || settings.transport == "wifi") {
         return Transport::wifi;
     }
-    if (settings.uplink == "modem") {
+    if (settings.transport == "modem") {
         return Transport::modem;
     }
     return settings.wifi_ssid.empty() ? Transport::modem : Transport::wifi;
