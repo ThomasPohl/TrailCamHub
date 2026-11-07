@@ -8,6 +8,7 @@ const NOW = 1_000_000;
 
 async function demoCamera(): Promise<Camera> {
   const [camera] = await new DemoApiClient(() => NOW, 0).listCameras();
+  if (!camera) throw new Error('the demo has a camera');
   return camera;
 }
 
