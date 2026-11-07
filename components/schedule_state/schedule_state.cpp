@@ -37,9 +37,9 @@ const char *TAG = "trailcamhub_schedule";
 const char *kNamespace = "schedule";
 const char *kRemotePlanKey = "plan";
 const char *kRemoteCheckinKey = "checkin_min";
-// Changed with the layout of RtcData: "TCH2" since read requests carry a
-// camera id.
-constexpr std::uint32_t kMagic = 0x54434832;
+// Changed with the layout of RtcData: "TCH3" since the state holds the hub
+// battery.
+constexpr std::uint32_t kMagic = 0x54434833;
 
 // Everything that has to survive deep sleep.
 struct RtcData {
@@ -277,7 +277,23 @@ Effective effective()
     out.settings.uplink = hub_config::uplink_ready(local);
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;
     out.settings.low_battery_factor = CONFIG_SCHEDULE_LOW_BATTERY_FACTOR;
+    out.settings.power = power_settings();
     return out;
+}
+
+PowerSettings power_settings()
+{
+    PowerSettings power;
+#if CONFIG_HUB_BATTERY_MAX17048
+    power.low_percent = CONFIG_HUB_BATTERY_LOW_PERCENT;
+    power.critical_percent = CONFIG_HUB_BATTERY_CRITICAL_PERCENT;
+    power.critical_mv = CONFIG_HUB_BATTERY_CRITICAL_MV;
+    power.hysteresis_percent = CONFIG_HUB_BATTERY_HYSTERESIS_PERCENT;
+    power.low_camera_factor = CONFIG_HUB_BATTERY_LOW_CAMERA_FACTOR;
+    power.low_checkin_factor = CONFIG_HUB_BATTERY_LOW_CHECKIN_FACTOR;
+    power.critical_checkin_min = CONFIG_HUB_BATTERY_CRITICAL_CHECKIN_MIN;
+#endif
+    return power;
 }
 
 bool apply_remote(const Remote &remote)
@@ -390,6 +406,30 @@ void set_camera_battery(int percent)
 {
     Lock lock;
     s_rtc.state.camera_battery = percent;
+}
+
+void set_hub_battery(int percent, int millivolts, bool charging)
+{
+    bool level_changed;
+    PowerLevel level;
+    {
+        Lock lock;
+        level_changed = schedule::set_hub_battery(
+            s_rtc.state, power_settings(), percent, millivolts, charging);
+        level = hub_level(s_rtc.state);
+    }
+    if (level_changed) {
+        if (level == PowerLevel::normal) {
+            ESP_LOGI(TAG,
+                     "Hub battery %d %%, %d mV: back to the normal schedule",
+                     percent, millivolts);
+        } else {
+            ESP_LOGW(TAG, "Hub battery %d %%, %d mV%s: level %s", percent,
+                     millivolts, charging ? " (charging)" : "",
+                     power_level_name(level));
+        }
+        changed();
+    }
 }
 
 ReadRequests::Reply on_read_command(const std::string &id,

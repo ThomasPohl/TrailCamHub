@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { Camera, ScheduleConfig, ScheduleOrigin } from '../api/types';
+import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
 import { formatRelative, formatUpcoming } from '../format';
 
 interface Props {
@@ -14,6 +14,12 @@ const ORIGIN_TEXT: Record<ScheduleOrigin, string> = {
   'built-in': 'hub default',
   local: 'set on the hub',
   remote: 'set in the app',
+};
+
+const STRETCH_TEXT: Record<ScheduleStretch, string> = {
+  hubBatteryCritical: 'Hub battery critical · no camera reads, the hub only checks in now and then',
+  hubBatteryLow: 'Hub battery low · camera reads and check-ins are less frequent',
+  cameraBatteryLow: 'Camera battery low · camera reads are less frequent',
 };
 
 function minutesText(seconds: number): string {
@@ -99,6 +105,12 @@ export function ScheduleCard({ camera, now, busy, onReadNow, onSaveSchedule }: P
             checked in {formatRelative(camera.hubLastSeen, now)}
             {schedule.sleeps ? ' · sleeps between cycles' : ''}
           </dd>
+          {schedule.stretch && (
+            <>
+              <dt>Saving power</dt>
+              <dd>{STRETCH_TEXT[schedule.stretch]}</dd>
+            </>
+          )}
         </dl>
       ) : (
         <p className="hint">The hub has not reported a schedule yet.</p>

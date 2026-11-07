@@ -50,6 +50,8 @@ struct ScheduleReport {
     std::int64_t next_checkin_at = 0;
     // The hub sleeps between cycles (it only answers at check-ins).
     bool sleeps = false;
+    // Why the schedule is stretched ("hubBatteryLow", ...); empty: it is not.
+    std::string stretch;
 };
 
 struct CheckinRequest {

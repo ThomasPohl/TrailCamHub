@@ -403,6 +403,72 @@ config HUB_BATTERY_FULL_MV
     range 3500 4500
     default 4200
 
+config HUB_BATTERY_LOW_PERCENT
+    int "Low level: below this percentage (0 = off)"
+    depends on HUB_BATTERY_MAX17048
+    range 0 100
+    default 30
+    help
+        In the low level the camera reads and the check-ins are stretched
+        (factors below), not while the cell is being charged. The level is
+        left only HUB_BATTERY_HYSTERESIS_PERCENT above the threshold. See
+        docs/power-and-schedule.md.
+
+config HUB_BATTERY_LOW_CAMERA_FACTOR
+    int "Low level: camera read interval factor"
+    depends on HUB_BATTERY_MAX17048
+    range 1 16
+    default 3
+
+config HUB_BATTERY_LOW_CHECKIN_FACTOR
+    int "Low level: check-in interval factor"
+    depends on HUB_BATTERY_MAX17048
+    range 1 16
+    default 2
+
+config HUB_BATTERY_CRITICAL_PERCENT
+    int "Critical level: below this percentage (0 = off)"
+    depends on HUB_BATTERY_MAX17048
+    range 0 100
+    default 10
+    help
+        In the critical level the hub reads no camera (not even one asked
+        for by the backend) and only checks in, at the interval below, so
+        that it keeps reporting its battery. It applies also while the
+        cell is being charged.
+
+config HUB_BATTERY_CRITICAL_MV
+    int "Critical level: below this cell voltage (mV, 0 = off)"
+    depends on HUB_BATTERY_MAX17048
+    range 0 4200
+    default 3500
+    help
+        The level is left 50 mV above this voltage.
+
+config HUB_BATTERY_CRITICAL_CHECKIN_MIN
+    int "Critical level: check-in interval (minutes)"
+    depends on HUB_BATTERY_MAX17048
+    range 30 1440
+    default 720
+
+config HUB_BATTERY_HYSTERESIS_PERCENT
+    int "Leave a level this many percent above its threshold"
+    depends on HUB_BATTERY_MAX17048
+    range 0 50
+    default 5
+
+config HUB_BATTERY_MODEM_MIN_MV
+    int "Lowest cell voltage to switch the modem on (mV, 0 = no limit)"
+    depends on HUB_BATTERY_MAX17048
+    range 0 4200
+    default 3400
+    help
+        The A7670E draws current peaks of up to ~2 A while it transmits; on
+        a nearly empty cell they can cause a brownout and a reset loop.
+        Below this voltage a sync over the modem is not started (it counts
+        as a failed sync). It lies below the critical level on purpose, so
+        that a hub in that level can still report it.
+
 endmenu
 
 menu "SD card"

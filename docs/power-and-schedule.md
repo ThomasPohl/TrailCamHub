@@ -162,8 +162,40 @@ level is unknown. The reported percentage is the gauge's own state of charge
 (ModelGauge, less affected by the modem's load peaks than the voltage). With
 `CONFIG_HUB_BATTERY_PERCENT_FROM_VOLTAGE` it is computed from the cell voltage
 instead, along a typical Li-ion curve between `CONFIG_HUB_BATTERY_EMPTY_MV`
-(3300) and `CONFIG_HUB_BATTERY_FULL_MV` (4200). The schedule does not react to
-the hub battery yet.
+(3300) and `CONFIG_HUB_BATTERY_FULL_MV` (4200). The gauge's charge rate
+(`CRATE`, register `0x16`) tells whether the cell is being charged (at least
++0.5 %/h, e.g. by the solar panel); `status` and the log show it.
+
+### Saving power on a low hub battery
+
+Between cycles the scheduler reads the gauge and puts the hub into one of
+three levels (pure logic in `schedule_plan`, host-tested):
+
+| Level        | Entered below                                                                | Left at          | Effect                                                                                                                                              |
+| ------------ | ---------------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **low**      | `HUB_BATTERY_LOW_PERCENT` (30 %)                                             | 35 %             | camera reads ×`LOW_CAMERA_FACTOR` (3), check-ins ×`LOW_CHECKIN_FACTOR` (2); not while charging                                                      |
+| **critical** | `HUB_BATTERY_CRITICAL_PERCENT` (10 %) or `HUB_BATTERY_CRITICAL_MV` (3500 mV) | 15 % and 3550 mV | no camera reads (also none asked for by the app; they wait), check-ins every `CRITICAL_CHECKIN_MIN` (12 h), no back-off on top; also while charging |
+
+- The hysteresis (`HUB_BATTERY_HYSTERESIS_PERCENT`, 5 %; 50 mV for the
+  voltage) keeps the schedule from flipping near a threshold. A hub leaving
+  the critical level goes to low first if it is still below 35 %.
+- The low stretch multiplies with the back-off and the camera battery
+  stretch, up to one day.
+- **Modem:** the A7670E draws peaks of up to ~2 A while it transmits. Below
+  `HUB_BATTERY_MODEM_MIN_MV` (3400 mV, read right before attaching) a sync
+  over the modem is not started and counts as a failed sync. The limit lies
+  below the critical voltage on purpose: a hub in the critical level can
+  still report it, and only stays silent once the cell is nearly empty.
+- **Visible:** the check-in's `schedule` block carries `stretch`
+  (`hubBatteryCritical`, `hubBatteryLow` or `cameraBatteryLow`, the most
+  important one), the app's schedule card shows it under "Saving power", and
+  `status` prints `hub battery level …` and `schedule stretched: …`.
+- An unknown battery (no gauge, no cell) changes nothing.
+- The level is kept in RTC memory across deep sleep (for the hysteresis);
+  after a power-on it starts at normal and is set by the first reading.
+- The MAX17048 has no temperature input. Charging below 0 °C stays open
+  (#138).
+
 
 ## Not yet covered
 

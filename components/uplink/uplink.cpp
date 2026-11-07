@@ -325,6 +325,8 @@ ScheduleReport schedule_report()
 #if CONFIG_POWER_DEEP_SLEEP
     report.sleeps = true;
 #endif
+    report.stretch = schedule::stretch_name(
+        schedule::stretch(effective.settings, schedule::state()));
     return report;
 }
 

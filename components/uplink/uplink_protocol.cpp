@@ -203,6 +203,9 @@ std::string build_checkin_json(const CheckinRequest &request)
             out += ",\"nextCheckinAt\":" +
                    std::to_string(schedule.next_checkin_at);
         }
+        if (!schedule.stretch.empty()) {
+            out += ",\"stretch\":\"" + json_escape(schedule.stretch) + "\"";
+        }
         out += schedule.sleeps ? ",\"sleeps\":true}" : ",\"sleeps\":false}";
     }
     out += ",\"cameras\":[";

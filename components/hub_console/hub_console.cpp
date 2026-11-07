@@ -185,8 +185,9 @@ void print_battery()
     hub_battery::Reading reading;
     if (hub_battery::read(reading)) {
         reply("INFO",
-              format_line("battery %d mV, %d%% (%s)", reading.millivolts,
-                          reading.percent, hub_battery::source_name()));
+              format_line("battery %d mV, %d%% (%s)%s", reading.millivolts,
+                          reading.percent, hub_battery::source_name(),
+                          reading.charging ? ", charging" : ""));
     } else {
         reply("INFO", std::string("battery unknown (") +
                           hub_battery::source_name() + " does not answer)");
@@ -319,6 +320,17 @@ void print_schedule()
     if (state.camera_battery >= 0) {
         reply("INFO",
               format_line("camera battery %d%%", (int)state.camera_battery));
+    }
+    if (hub_battery::supported()) {
+        reply("INFO",
+              std::string("hub battery level ") +
+                  schedule::power_level_name(schedule::hub_level(state)) +
+                  (state.hub_charging ? " (charging)" : ""));
+    }
+    const char *stretch =
+        schedule::stretch_name(schedule::stretch(effective.settings, state));
+    if (stretch[0] != '\0') {
+        reply("INFO", std::string("schedule stretched: ") + stretch);
     }
 }
 
