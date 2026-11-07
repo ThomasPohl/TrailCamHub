@@ -27,6 +27,7 @@
 #include "camera_protocol.h"
 #include "camera_wifi.h"
 #include "hub_config.hpp"
+#include "hub_battery.hpp"
 #include "modem_uplink.hpp"
 #include "session_controller.h"
 #include "session_fsm.hpp"
@@ -512,7 +513,15 @@ void execute(const session::Result &result)
         }
     }
     if (actions & session::kConnectHomeWifi) {
-        if (s_uplink_modem) {
+        int cell_mv = -1;
+        if (s_uplink_modem && !hub_battery::modem_allowed(cell_mv)) {
+            // The modem's current peaks could cause a brownout.
+            ESP_LOGW(TAG,
+                     "Cell at %d mV, too low to switch the modem on; sync "
+                     "skipped",
+                     cell_mv);
+            on_wifi_failed(0);
+        } else if (s_uplink_modem) {
             modem_uplink::Settings modem;
             modem.apn = s_settings.apn;
             modem.sim_pin = s_settings.sim_pin;

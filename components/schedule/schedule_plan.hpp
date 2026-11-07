@@ -92,6 +92,41 @@ std::uint32_t stretched(std::uint32_t interval_min, std::uint32_t factor);
 std::int64_t next_due(const Plan &plan, std::int64_t last, std::int64_t now,
                       std::uint32_t factor, const LocalMinute &local);
 
+// --- The hub's own battery ---
+
+// How much the hub saves because of its own battery. Low: camera reads and
+// check-ins are stretched (not while the cell charges). Critical: no camera
+// reads, only check-ins at a long interval, so the hub still reports its
+// battery.
+enum class PowerLevel : std::uint8_t {
+    normal = 0,
+    low = 1,
+    critical = 2,
+};
+
+struct PowerSettings {
+    // Below this percentage the level is low; 0: off.
+    int low_percent = 0;
+    // Below this percentage, or below critical_mv, it is critical; 0: off.
+    int critical_percent = 0;
+    int critical_mv = 0;
+    // A level is left only this far above its threshold.
+    int hysteresis_percent = 5;
+    int hysteresis_mv = 50;
+    // Low: factors for the camera read and the check-in interval.
+    std::uint32_t low_camera_factor = 1;
+    std::uint32_t low_checkin_factor = 1;
+    // Critical: check-in interval in minutes (at least the normal one).
+    std::uint32_t critical_checkin_min = 0;
+};
+
+// The level for a reading (`percent`, `millivolts`: -1 unknown), starting
+// from the level before (hysteresis). An unknown battery is normal.
+PowerLevel power_level(const PowerSettings &settings, int percent,
+                       int millivolts, PowerLevel previous);
+
+const char *power_level_name(PowerLevel level);
+
 // --- Camera reads and check-ins ---
 
 struct Settings {
@@ -104,6 +139,8 @@ struct Settings {
     // low_battery_factor; 0: off.
     int low_battery_percent = 0;
     std::uint32_t low_battery_factor = 1;
+    // The hub's own battery.
+    PowerSettings power;
 };
 
 // Kept in RTC memory across deep sleep: only plain fields.
@@ -122,6 +159,13 @@ struct State {
     bool cycle_camera;
     // A read was asked for (by the backend) and is due now.
     bool camera_requested;
+    // The hub's own battery as read last; -1: unknown.
+    std::int32_t hub_battery;
+    std::int32_t hub_millivolts;
+    // The cell is being charged (the gauge reports a rising charge).
+    bool hub_charging;
+    // PowerLevel of the hub battery.
+    std::uint8_t hub_level;
 };
 
 State initial_state();
@@ -131,10 +175,32 @@ struct Times {
     std::int64_t checkin = kNever;
 };
 
+// Stores a reading of the hub battery and updates the level. Returns true if
+// the level changed.
+bool set_hub_battery(State &state, const PowerSettings &settings, int percent,
+                     int millivolts, bool charging);
+
+PowerLevel hub_level(const State &state);
+
 // Factor for the camera read interval: back-off after failed reads and the
-// stretch for a low camera battery.
+// stretches for a low camera battery and a low hub battery.
 std::uint32_t camera_factor(const Settings &settings, const State &state);
 
+// Why the schedule is stretched now, most important first.
+enum class Stretch {
+    none,
+    hub_battery_critical,  // no camera reads, check-ins at a long interval
+    hub_battery_low,       // camera reads and check-ins stretched
+    camera_battery_low,    // camera reads stretched
+};
+
+Stretch stretch(const Settings &settings, const State &state);
+
+// "hubBatteryCritical", "hubBatteryLow", "cameraBatteryLow"; "" for none.
+const char *stretch_name(Stretch stretch);
+
+// In the critical level of the hub battery there is no camera read, also no
+// requested one (it waits until the level is left).
 Times next_times(const Settings &settings, const State &state, std::int64_t now,
                  const LocalMinute &local);
 

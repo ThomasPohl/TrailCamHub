@@ -80,6 +80,12 @@ void on_camera_read(const std::string &cam_id);
 void on_camera_part_ended();
 void on_cycle_finished(const CycleEnd &end);
 void set_camera_battery(int percent);
+// A reading of the hub's own battery (-1: unknown); updates its power level
+// and logs a change.
+void set_hub_battery(int percent, int millivolts, bool charging);
+
+// The battery levels of this build (Kconfig).
+PowerSettings power_settings();
 
 // A "readCamera" command in a check-in. A new one makes a read due at once.
 ReadRequests::Reply on_read_command(const std::string &id,

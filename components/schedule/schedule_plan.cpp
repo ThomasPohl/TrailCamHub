@@ -256,40 +256,182 @@ State initial_state()
     state.last_checkin = kNever;
     state.cycle_start = kNever;
     state.camera_battery = -1;
+    state.hub_battery = -1;
+    state.hub_millivolts = -1;
+    state.hub_level = (std::uint8_t)PowerLevel::normal;
     return state;
+}
+
+namespace
+{
+
+// `value` is below `threshold` (both known and the threshold on).
+bool below(int value, int threshold)
+{
+    return threshold > 0 && value >= 0 && value < threshold;
+}
+
+// The battery is clearly back above `threshold` (or the value is unknown,
+// or the threshold off).
+bool recovered(int value, int threshold, int margin)
+{
+    return threshold <= 0 || value < 0 || value >= threshold + margin;
+}
+
+bool camera_battery_low(const Settings &settings, const State &state)
+{
+    return settings.low_battery_percent > 0 && state.camera_battery >= 0 &&
+           state.camera_battery < settings.low_battery_percent &&
+           settings.low_battery_factor > 1;
+}
+
+// The low level applies to the intervals: not while the cell charges.
+bool hub_stretch_low(const Settings &settings, const State &state)
+{
+    return hub_level(state) == PowerLevel::low && !state.hub_charging &&
+           (settings.power.low_camera_factor > 1 ||
+            settings.power.low_checkin_factor > 1);
+}
+
+}  // namespace
+
+PowerLevel power_level(const PowerSettings &settings, int percent,
+                       int millivolts, PowerLevel previous)
+{
+    if (percent < 0 && millivolts < 0) {
+        return PowerLevel::normal;
+    }
+    if (below(percent, settings.critical_percent) ||
+        below(millivolts, settings.critical_mv)) {
+        return PowerLevel::critical;
+    }
+    if (previous == PowerLevel::critical &&
+        !(recovered(percent, settings.critical_percent,
+                    settings.hysteresis_percent) &&
+          recovered(millivolts, settings.critical_mv,
+                    settings.hysteresis_mv))) {
+        return PowerLevel::critical;
+    }
+    if (below(percent, settings.low_percent)) {
+        return PowerLevel::low;
+    }
+    if (previous != PowerLevel::normal &&
+        !recovered(percent, settings.low_percent,
+                   settings.hysteresis_percent)) {
+        return PowerLevel::low;
+    }
+    return PowerLevel::normal;
+}
+
+const char *power_level_name(PowerLevel level)
+{
+    switch (level) {
+    case PowerLevel::normal:
+        return "normal";
+    case PowerLevel::low:
+        return "low";
+    case PowerLevel::critical:
+        return "critical";
+    }
+    return "normal";
+}
+
+bool set_hub_battery(State &state, const PowerSettings &settings, int percent,
+                     int millivolts, bool charging)
+{
+    const PowerLevel before = hub_level(state);
+    state.hub_battery = percent;
+    state.hub_millivolts = millivolts;
+    state.hub_charging = charging;
+    const PowerLevel after = power_level(settings, percent, millivolts, before);
+    state.hub_level = (std::uint8_t)after;
+    return after != before;
+}
+
+PowerLevel hub_level(const State &state)
+{
+    return state.hub_level <= (std::uint8_t)PowerLevel::critical
+               ? (PowerLevel)state.hub_level
+               : PowerLevel::normal;
 }
 
 std::uint32_t camera_factor(const Settings &settings, const State &state)
 {
     std::uint32_t factor = backoff_factor(state.camera_failures);
-    if (settings.low_battery_percent > 0 && state.camera_battery >= 0 &&
-        state.camera_battery < settings.low_battery_percent &&
-        settings.low_battery_factor > 1) {
+    if (camera_battery_low(settings, state)) {
         factor *= settings.low_battery_factor;
     }
+    if (hub_stretch_low(settings, state) &&
+        settings.power.low_camera_factor > 1) {
+        factor *= settings.power.low_camera_factor;
+    }
     return factor;
+}
+
+Stretch stretch(const Settings &settings, const State &state)
+{
+    if (hub_level(state) == PowerLevel::critical) {
+        return Stretch::hub_battery_critical;
+    }
+    if (hub_stretch_low(settings, state)) {
+        return Stretch::hub_battery_low;
+    }
+    if (camera_battery_low(settings, state)) {
+        return Stretch::camera_battery_low;
+    }
+    return Stretch::none;
+}
+
+const char *stretch_name(Stretch stretch)
+{
+    switch (stretch) {
+    case Stretch::none:
+        return "";
+    case Stretch::hub_battery_critical:
+        return "hubBatteryCritical";
+    case Stretch::hub_battery_low:
+        return "hubBatteryLow";
+    case Stretch::camera_battery_low:
+        return "cameraBatteryLow";
+    }
+    return "";
 }
 
 Times next_times(const Settings &settings, const State &state, std::int64_t now,
                  const LocalMinute &local)
 {
     Times times;
-    if (state.camera_requested) {
+    const bool critical = hub_level(state) == PowerLevel::critical;
+    if (critical) {
+        times.camera = kNever;
+    } else if (state.camera_requested) {
         times.camera = now;
     } else {
         times.camera = next_due(settings.camera, state.last_camera, now,
                                 camera_factor(settings, state), local);
     }
     if (settings.uplink && settings.checkin_min > 0) {
+        std::uint32_t interval_min;
+        if (critical) {
+            // A fixed, long interval: no back-off on top, so the hub keeps
+            // reporting its battery.
+            interval_min =
+                settings.power.critical_checkin_min > settings.checkin_min
+                    ? settings.power.critical_checkin_min
+                    : settings.checkin_min;
+        } else {
+            std::uint32_t factor = backoff_factor(state.checkin_failures);
+            if (hub_stretch_low(settings, state) &&
+                settings.power.low_checkin_factor > 1) {
+                factor *= settings.power.low_checkin_factor;
+            }
+            interval_min = stretched(settings.checkin_min, factor);
+        }
         if (state.last_checkin == kNever) {
             times.checkin = now;
         } else {
             const std::int64_t due =
-                state.last_checkin +
-                (std::int64_t)stretched(
-                    settings.checkin_min,
-                    backoff_factor(state.checkin_failures)) *
-                    60;
+                state.last_checkin + (std::int64_t)interval_min * 60;
             times.checkin = due > now ? due : now;
         }
     }

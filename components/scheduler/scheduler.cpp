@@ -19,6 +19,7 @@
 #include "freertos/task.h"
 #include "sdkconfig.h"
 
+#include "hub_battery.hpp"
 #include "modem_uplink.hpp"
 #include "schedule_state.hpp"
 #include "sd_log.h"
@@ -130,6 +131,22 @@ void on_status(const session_status_t *status, void *context)
     wake_task();
 }
 
+// Reads the hub battery for its power level (only between cycles, so that
+// the modem's load does not pull the voltage down).
+void update_hub_battery()
+{
+    if (!hub_battery::supported()) {
+        return;
+    }
+    hub_battery::Reading reading;
+    if (hub_battery::read(reading)) {
+        schedule::set_hub_battery(reading.percent, reading.millivolts,
+                                  reading.charging);
+    } else {
+        schedule::set_hub_battery(-1, -1, false);
+    }
+}
+
 // "in 1234 s (15:20)" or "never".
 void describe(std::int64_t t, std::int64_t now, char *text, size_t size)
 {
@@ -196,6 +213,7 @@ void scheduler_task(void *arg)
         woke ? boot : boot + CONFIG_POWER_AWAKE_AFTER_BOOT_MIN * 60;
 #endif
 
+    update_hub_battery();
     {
         const schedule::Effective effective = schedule::effective();
         const schedule::Times times = schedule::next_times(effective);
@@ -223,6 +241,7 @@ void scheduler_task(void *arg)
         session_status_t status;
         session_controller_get_status(&status);
         if (status.phase == SESSION_PHASE_IDLE) {
+            update_hub_battery();
             const std::int64_t now = schedule::now();
             const schedule::Times times = schedule::next_times();
             const schedule::Task task = now >= start_at

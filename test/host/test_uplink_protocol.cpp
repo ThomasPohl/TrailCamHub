@@ -139,6 +139,23 @@ TEST_CASE("the check-in carries the schedule")
           "\"nextCameraReadAt\":1766506000,\"sleeps\":true},\"cameras\":[]}");
 }
 
+TEST_CASE("the check-in says why the schedule is stretched")
+{
+    CheckinRequest request;
+    request.hub_firmware = "dev";
+    request.schedule.present = true;
+    request.schedule.camera_plan = "*=120";
+    request.schedule.camera_plan_origin = "built-in";
+    request.schedule.checkin_interval_s = 1800;
+    request.schedule.checkin_origin = "built-in";
+    request.schedule.stretch = "hubBatteryLow";
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"schedule\":{\"cameraPlan\":\"*=120\","
+          "\"cameraPlanOrigin\":\"built-in\",\"checkinIntervalS\":1800,"
+          "\"checkinOrigin\":\"built-in\",\"stretch\":\"hubBatteryLow\","
+          "\"sleeps\":false},\"cameras\":[]}");
+}
+
 TEST_CASE("brackets inside strings and entries without camId")
 {
     CheckinResponse response;
