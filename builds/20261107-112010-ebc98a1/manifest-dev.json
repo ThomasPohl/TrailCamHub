@@ -1,6 +1,6 @@
 {
   "name": "TrailCamHub ESP32-S3 (Dev — verbose logs)",
-  "version": "20261103-175248-8c64642",
+  "version": "20261107-112010-ebc98a1",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

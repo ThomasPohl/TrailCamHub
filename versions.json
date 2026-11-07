@@ -1,6 +1,17 @@
 {
   "builds": [
     {
+      "id": "20261107-112010-ebc98a1",
+      "date": "2026-11-07T11:20:10Z",
+      "commit": "ebc98a1",
+      "branch": "main",
+      "message": "Merge pull request #141 from ThomasPohl/feature/modem-uplink",
+      "dev": "builds/20261107-112010-ebc98a1/manifest-dev.json",
+      "release": "builds/20261107-112010-ebc98a1/manifest-release.json",
+      "devBin": "builds/20261107-112010-ebc98a1/trailcamhub-esp32s3-dev.bin",
+      "releaseBin": "builds/20261107-112010-ebc98a1/trailcamhub-esp32s3-release.bin"
+    },
+    {
       "id": "20261106-193215-79cc4c6",
       "date": "2026-11-06T19:32:15Z",
       "commit": "79cc4c6",
@@ -208,17 +219,6 @@
       "release": "builds/20261104-164053-8dc052d/manifest-release.json",
       "devBin": "builds/20261104-164053-8dc052d/trailcamhub-esp32s3-dev.bin",
       "releaseBin": "builds/20261104-164053-8dc052d/trailcamhub-esp32s3-release.bin"
-    },
-    {
-      "id": "20261103-175248-8c64642",
-      "date": "2026-11-03T17:52:48Z",
-      "commit": "8c64642",
-      "branch": "main",
-      "message": "Merge pull request #98 from ThomasPohl/fix/media-key-sd-files",
-      "dev": "builds/20261103-175248-8c64642/manifest-dev.json",
-      "release": "builds/20261103-175248-8c64642/manifest-release.json",
-      "devBin": "builds/20261103-175248-8c64642/trailcamhub-esp32s3-dev.bin",
-      "releaseBin": "builds/20261103-175248-8c64642/trailcamhub-esp32s3-release.bin"
     }
   ]
 }
