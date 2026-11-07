@@ -194,6 +194,28 @@ TEST_CASE("decide_video: what to do with a requestVideo command")
     }
 }
 
+TEST_CASE("videos have a lower size limit over the modem")
+{
+    constexpr std::uint64_t kMB = 1024 * 1024;
+    uplink::VideoLimits limits;
+    limits.wifi_bytes = 50 * kMB;
+    limits.modem_bytes = 15 * kMB;
+
+    CHECK(uplink::video_size_failure(15 * kMB, limits, true).empty());
+    CHECK(uplink::video_size_failure(15 * kMB + 1, limits, false).empty());
+    CHECK(uplink::video_size_failure(13 * kMB, limits, true).empty());
+    CHECK(uplink::video_size_failure(50 * kMB, limits, false).empty());
+
+    CHECK(uplink::video_size_failure(15 * kMB + 1, limits, true) ==
+          "the video is too large for the cellular uplink (16 MB, at most "
+          "15 MB)");
+    CHECK(uplink::video_size_failure(60 * kMB, limits, false) ==
+          "the video is too large (60 MB, at most 50 MB)");
+    // No limit set.
+    CHECK(uplink::video_size_failure(500 * kMB, uplink::VideoLimits{}, true)
+              .empty());
+}
+
 TEST_CASE("mp4::FileSource reads a file at any offset")
 {
     const std::string path = "test_file_source.bin";

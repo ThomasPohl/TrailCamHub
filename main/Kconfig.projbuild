@@ -640,6 +640,19 @@ config UPLINK_VIDEO_MAX_MB
         the stored H.264 and AAC files (nothing extra is stored). A larger
         one is reported as failed.
 
+config UPLINK_VIDEO_MAX_MB_MODEM
+    int "Largest video uploaded over the cellular modem (MB)"
+    depends on CAMERA_DOWNLOAD_VIDEOS && MODEM_UPLINK
+    range 1 1000
+    default 15
+    help
+        A lower limit when the hub syncs over the A7670E (setting
+        "transport"): data volume and radio time. Measured with LTE Cat-1:
+        about 650 KB of MP4 per second of 1080p video and about 50 KB/s
+        upload, so 15 MB is a clip of ~20 s and ~5 min of transmitting. A
+        larger video is answered as failed with the reason; a hub syncs
+        over one transport only, so it is not kept for a Wi-Fi sync.
+
 choice CAMERA_VIDEO_MP4
     prompt "MP4 files for downloaded videos"
     depends on CAMERA_DOWNLOAD_VIDEOS

@@ -72,4 +72,32 @@ const char *video_failure_text(VideoFailure failure)
     return "";
 }
 
+namespace
+{
+
+// Whole megabytes, rounded up, so that "16 MB, at most 15 MB" never reads
+// "15 MB, at most 15 MB".
+std::string megabytes(std::uint64_t bytes)
+{
+    return std::to_string((unsigned long long)((bytes + (1u << 20) - 1) >> 20));
+}
+
+}  // namespace
+
+std::string video_size_failure(std::uint64_t size, const VideoLimits &limits,
+                               bool over_modem)
+{
+    const std::uint64_t limit =
+        over_modem ? limits.modem_bytes : limits.wifi_bytes;
+    if (limit == 0 || size <= limit) {
+        return "";
+    }
+    if (over_modem) {
+        return "the video is too large for the cellular uplink (" +
+               megabytes(size) + " MB, at most " + megabytes(limit) + " MB)";
+    }
+    return "the video is too large (" + megabytes(size) + " MB, at most " +
+           megabytes(limit) + " MB)";
+}
+
 }  // namespace uplink
