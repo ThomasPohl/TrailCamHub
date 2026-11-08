@@ -300,17 +300,20 @@ void print_schedule()
     const schedule::Times times = schedule::next_times(effective);
     const schedule::State state = schedule::state();
     const std::int64_t now = schedule::now();
-#if CONFIG_HUB_PROFILE_AUTONOMOUS
-    const char *profile = "autonomous";
-#else
-    const char *profile = "on-site";
-#endif
-#if CONFIG_POWER_DEEP_SLEEP
-    const char *sleep = "deep sleep between cycles";
-#else
-    const char *sleep = "stays awake";
-#endif
-    reply("INFO", std::string("profile ") + profile + ", " + sleep);
+    hub_config::Settings settings;
+    if (hub_config::load(settings) != ESP_OK) {
+        settings = hub_config::Settings{};
+    }
+    const hub_config::Mode mode = hub_config::mode(settings);
+    reply("INFO",
+          std::string("mode power ") + hub_config::power_name(mode.power) +
+              " (" + hub_config::origin_name(mode.power_origin) +
+              "), direction " + hub_config::direction_name(mode.direction) +
+              " (" + hub_config::origin_name(mode.direction_origin) +
+              "), transport " + hub_config::transport_name(mode.transport) +
+              ", destination " +
+              hub_config::destination_name(mode.destination) + "; " +
+              (effective.sleeps ? "deep sleep between cycles" : "stays awake"));
     reply("INFO", "camera plan " + effective.camera_plan + " (" +
                       schedule::origin_name(effective.camera_plan_origin) +
                       ")");

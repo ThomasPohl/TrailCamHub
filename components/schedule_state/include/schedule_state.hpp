@@ -40,10 +40,13 @@ struct Effective {
     Origin camera_plan_origin = Origin::built_in;
     std::uint32_t checkin_min = 0;
     Origin checkin_origin = Origin::built_in;
+    // Deep sleep between cycles (battery power, see hub_config::sleeps()).
+    bool sleeps = false;
 };
 
 // The settings that apply now: set from the backend, else stored on the hub,
-// else the defaults of the build (profile). Reads NVS.
+// else the defaults of the build for the hub's mode (power, direction; see
+// hub_config::Mode). Reads NVS.
 Effective effective();
 
 // Settings from the backend's check-in response. A missing value removes the

@@ -14,32 +14,34 @@ permissions:
   contents: read
 
 jobs:
+  # The boards come from boards.json (one image per board, docs/modes.md).
+  boards:
+    name: Read boards.json
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.read.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Build matrix
+        id: read
+        run: |
+          matrix="$(jq -c '[.boards[] | {board: .id, target: .target, board_defaults: .defaults}]' boards.json)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "$matrix"
+
   build:
     name: Build ${{ matrix.board }} deployment package
+    needs: boards
     runs-on: ubuntu-latest
     container: espressif/idf:v5.5.6
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Waveshare ESP32-S3-A7670E-4G (published by the installer).
-          # board_defaults: an optional sdkconfig file applied on top of
-          # sdkconfig.defaults for boards that share a target.
-          - board: esp32s3
-            target: esp32s3
-            board_defaults: ""
-          # LilyGO T-Dongle-S3 with display and button (artifact only)
-          - board: tdongle-s3
-            target: esp32s3
-            board_defaults: sdkconfig.defaults.tdongle-s3
-          # LilyGO T-Dongle-C5 with display and button (artifact only)
-          - board: tdongle-c5
-            target: esp32c5
-            board_defaults: sdkconfig.defaults.tdongle-c5
-          # Waveshare ESP32-P4-NANO (artifact only)
-          - board: esp32p4
-            target: esp32p4
-            board_defaults: ""
+        # board: id in boards.json; board_defaults: an optional sdkconfig
+        # file applied on top of sdkconfig.defaults for boards that share a
+        # target.
+        include: ${{ fromJSON(needs.boards.outputs.matrix) }}
     env:
       IDF_PATH: /opt/esp/idf
       BOARD: ${{ matrix.board }}
@@ -80,6 +82,10 @@ jobs:
             build
           idf.py -B build-release merge-bin -o "trailcamhub-$BOARD-release.bin"
           ccache_report
+
+      - name: Check the capabilities in boards.json
+        shell: bash
+        run: .github/scripts/check-board-capabilities.sh "$BOARD" sdkconfig
 
       # Saved by every run: a pull request run can only restore caches of its
       # own merge ref and of main, not those of the push run of its branch.

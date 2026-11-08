@@ -31,12 +31,17 @@ static char s_target_ssid[33];
 static size_t s_target_ssid_len;
 static const char *s_target_label = "camera";
 static bool s_target_home;
+// Modem sleep on the home network is allowed (battery power, see
+// camera_wifi_set_home_power_save()).
+static std::atomic<bool> s_home_power_save{false};
 
 static void apply_power_save(bool full_power)
 {
 #if CONFIG_UPLINK_WIFI_POWER_SAVE
     const wifi_ps_type_t power_save =
-        s_target_home && !full_power ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE;
+        s_target_home && !full_power && s_home_power_save.load()
+            ? WIFI_PS_MIN_MODEM
+            : WIFI_PS_NONE;
 #else
     (void)full_power;
     const wifi_ps_type_t power_save = WIFI_PS_NONE;
@@ -183,6 +188,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             s_callbacks.on_connected(&event->ip_info.gw);
         }
     }
+}
+
+void camera_wifi_set_home_power_save(bool allowed)
+{
+    s_home_power_save = allowed;
 }
 
 void camera_wifi_set_full_power(bool on)

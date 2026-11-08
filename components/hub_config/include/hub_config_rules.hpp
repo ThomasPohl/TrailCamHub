@@ -31,12 +31,20 @@ enum class Key {
     // PIN of the SIM card (4 digits, all the modem driver sends); empty: the
     // card has no PIN.
     sim_pin,
+    // Mode (docs/modes.md); empty: the board's preset.
+    // "mains" or "battery": deep sleep, power save and the default schedule.
+    power,
+    // "push" (the hub sends to its destination) or "pull" (people fetch
+    // from the hub's web UI).
+    direction,
+    // Where push sends to: "backend" (more to come, see #150).
+    destination,
 };
 
 constexpr Key kAllKeys[] = {
-    Key::wifi_ssid,  Key::wifi_password, Key::api_url,
-    Key::device_key, Key::camera_plan,   Key::checkin_min,
-    Key::transport,  Key::apn,           Key::sim_pin};
+    Key::wifi_ssid,   Key::wifi_password, Key::api_url,   Key::device_key,
+    Key::camera_plan, Key::checkin_min,   Key::transport, Key::apn,
+    Key::sim_pin,     Key::power,         Key::direction, Key::destination};
 
 struct Settings {
     std::string wifi_ssid;
@@ -48,6 +56,9 @@ struct Settings {
     std::string transport;
     std::string apn;
     std::string sim_pin;
+    std::string power;
+    std::string direction;
+    std::string destination;
 };
 
 enum class Transport {
@@ -83,6 +94,72 @@ bool uplink_configured(const Settings &settings, bool modem_available = false);
 
 // The backend URL without trailing slashes, ready for appending "/v1/...".
 std::string api_base(const std::string &api_url);
+
+// --- Mode (#150) ---
+//
+// The hardware of a board is fixed (its capabilities, from Kconfig); how it
+// is used is chosen at run time and stored in NVS. Each setting left empty
+// takes the board's preset (the former profiles of #86).
+
+enum class Power { mains, battery };
+enum class Direction { push, pull };
+enum class Destination { backend };
+
+// What the build of this board can do.
+struct Capabilities {
+    bool modem = false;          // cellular modem (CONFIG_MODEM_UPLINK)
+    bool ethernet = false;       // wired Ethernet
+    bool battery_gauge = false;  // MAX17048
+    bool psram = false;
+    bool display = false;
+    bool button = false;
+    bool web_ui = false;      // pull needs it
+    bool deep_sleep = false;  // battery power uses it
+};
+
+// The board's defaults for the settings left empty.
+struct Preset {
+    Power power = Power::mains;
+    Direction direction = Direction::pull;
+};
+
+enum class ModeOrigin { preset, setting };
+
+struct Mode {
+    Power power = Power::mains;
+    Direction direction = Direction::pull;
+    Transport transport = Transport::wifi;
+    Destination destination = Destination::backend;
+    ModeOrigin power_origin = ModeOrigin::preset;
+    ModeOrigin direction_origin = ModeOrigin::preset;
+};
+
+// The mode from the stored settings and the board. A setting the board
+// cannot use (pull without a web UI) falls back to the preset.
+Mode resolve_mode(const Settings &settings, const Capabilities &caps,
+                  const Preset &preset);
+
+const char *power_name(Power power);
+const char *direction_name(Direction direction);
+const char *destination_name(Destination destination);
+const char *origin_name(ModeOrigin origin);
+
+// What follows from the mode:
+// deep sleep between cycles,
+bool sleeps(const Mode &mode, const Capabilities &caps);
+// modem sleep on the home Wi-Fi (except during large transfers),
+bool wifi_power_save(const Mode &mode);
+// the build's camera read plan when none is set: on battery, or when the
+// hub pushes to a configured destination (`uplink`); otherwise no automatic
+// reads, someone on site starts them,
+bool reads_on_schedule(const Mode &mode, bool uplink);
+// check-ins with the destination.
+bool checks_in(const Mode &mode);
+
+// Empty if `value` for `key` fits the board, else a short reason (e.g.
+// "this board has no modem"). For keys without such limits always empty.
+std::string capability_problem(Key key, const std::string &value,
+                               const Capabilities &caps);
 
 // SIM PIN guard (#152). A PIN the SIM card refused is remembered (as this
 // fingerprint, never 0) across cycles and deep sleep, so that the hub does

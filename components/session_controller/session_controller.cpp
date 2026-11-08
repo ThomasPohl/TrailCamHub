@@ -575,6 +575,9 @@ void load_settings_for_cycle()
     }
     s_fsm.set_uplink_enabled(hub_config::uplink_ready(s_settings) &&
                              !s_list_only);
+    // Modem sleep on the home Wi-Fi only on battery power.
+    camera_wifi_set_home_power_save(
+        hub_config::wifi_power_save(hub_config::mode(s_settings)));
     // Over the modem or the home Wi-Fi; attaching the modem takes longer.
     s_uplink_modem = hub_config::uplink_transport(s_settings) ==
                      hub_config::Transport::modem;

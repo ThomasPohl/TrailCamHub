@@ -47,3 +47,9 @@ esp_err_t camera_wifi_disconnect(void);
  * Does nothing on the camera network, which never uses power save.
  */
 void camera_wifi_set_full_power(bool on);
+
+/*
+ * Whether modem sleep is used on the home network at all: on battery power
+ * only (the hub's mode, set before each cycle). Off by default.
+ */
+void camera_wifi_set_home_power_save(bool allowed);

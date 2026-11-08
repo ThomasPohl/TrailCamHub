@@ -288,7 +288,8 @@ void scheduler_task(void *arg)
                     awake_until =
                         activity + CONFIG_POWER_AWAKE_AFTER_ACTIVITY_MIN * 60;
                 }
-                if (now >= awake_until) {
+                // Only on battery power (the mode can change at run time).
+                if (now >= awake_until && schedule::effective().sleeps) {
                     std::int64_t sleep_s = next == schedule::kNever
                                                ? CONFIG_POWER_MAX_SLEEP_MIN * 60
                                                : next - now;
@@ -304,7 +305,7 @@ void scheduler_task(void *arg)
                                  checkin);
                         sleep_for(sleep_s);
                     }
-                } else {
+                } else if (now < awake_until) {
                     next = earliest(next, awake_until);
                 }
 #endif

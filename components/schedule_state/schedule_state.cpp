@@ -257,9 +257,18 @@ Effective effective()
     }
 
     Effective out;
-    static const std::string kBuiltInPlan = CONFIG_SCHEDULE_CAMERA_PLAN;
-    static const std::string kBuiltInCheckin =
-        std::to_string(CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN);
+    // The build's plan and check-in interval apply as defaults where the
+    // mode runs unattended; otherwise none (someone on site starts reads).
+    const hub_config::Mode mode = hub_config::mode(local);
+    const bool uplink = hub_config::uplink_ready(local);
+    const std::string kBuiltInPlan =
+        hub_config::reads_on_schedule(mode, uplink)
+            ? std::string(CONFIG_SCHEDULE_CAMERA_PLAN)
+            : std::string();
+    const std::string kBuiltInCheckin =
+        hub_config::checks_in(mode)
+            ? std::to_string(CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN)
+            : std::string("0");
     out.camera_plan = pick(&remote_plan, &local.camera_plan, kBuiltInPlan,
                            &out.camera_plan_origin);
     std::string error;
@@ -274,7 +283,8 @@ Effective effective()
                                       kBuiltInCheckin, &out.checkin_origin),
                                  CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN);
     out.settings.checkin_min = out.checkin_min;
-    out.settings.uplink = hub_config::uplink_ready(local);
+    out.settings.uplink = uplink;
+    out.sleeps = hub_config::sleeps(mode, hub_config::capabilities());
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;
     out.settings.low_battery_factor = CONFIG_SCHEDULE_LOW_BATTERY_FACTOR;
     out.settings.power = power_settings();

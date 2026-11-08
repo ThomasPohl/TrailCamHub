@@ -1,0 +1,45 @@
+{
+  "$comment": "Supported boards: one firmware image per board. Read by the CI build matrix (.github/workflows/firmware-package.yml) and documented in docs/modes.md. 'defaults' is applied on top of sdkconfig.defaults (and the target's sdkconfig.defaults.<target>); 'capabilities' must match what the build enables (hub_config::capabilities()); 'preset' is CONFIG_HUB_PROFILE_*.",
+  "boards": [
+    {
+      "id": "esp32s3",
+      "name": "Waveshare ESP32-S3-A7670E-4G",
+      "target": "esp32s3",
+      "defaults": "",
+      "capabilities": ["modem", "battery_gauge", "psram", "deep_sleep"],
+      "preset": { "power": "battery", "direction": "push" },
+      "installer": true,
+      "notes": "Main board: LTE Cat-1 modem, 18650 holder with solar input, MAX17048 battery gauge."
+    },
+    {
+      "id": "tdongle-s3",
+      "name": "LilyGO T-Dongle-S3",
+      "target": "esp32s3",
+      "defaults": "sdkconfig.defaults.tdongle-s3",
+      "capabilities": ["display", "button", "deep_sleep"],
+      "preset": { "power": "mains", "direction": "pull" },
+      "installer": false,
+      "notes": "USB stick with display and button; no PSRAM, so videos are limited."
+    },
+    {
+      "id": "tdongle-c5",
+      "name": "LilyGO T-Dongle-C5",
+      "target": "esp32c5",
+      "defaults": "sdkconfig.defaults.tdongle-c5",
+      "capabilities": ["psram", "display", "button", "web_ui", "deep_sleep"],
+      "preset": { "power": "mains", "direction": "pull" },
+      "installer": false,
+      "notes": "USB stick with display, button and a web UI on its own access point."
+    },
+    {
+      "id": "esp32p4",
+      "name": "Waveshare ESP32-P4-NANO",
+      "target": "esp32p4",
+      "defaults": "",
+      "capabilities": ["ethernet", "psram", "web_ui"],
+      "preset": { "power": "mains", "direction": "pull" },
+      "installer": false,
+      "notes": "Ethernet; Wi-Fi and BLE through the ESP32-C6 co-processor; web UI over Ethernet."
+    }
+  ]
+}

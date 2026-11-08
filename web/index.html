@@ -80,6 +80,29 @@
               <input name="wifi_password" type="password" maxlength="64">
               <small>Stored: <span id="ds-current-wifi_password">–</span></small>
             </label>
+            <label>Power
+              <select name="power">
+                <option value="">Keep stored</option>
+                <option value="mains">Mains (stays awake)</option>
+                <option value="battery">Battery (deep sleep between cycles)</option>
+              </select>
+              <small>Stored: <span id="ds-current-power">–</span> · default: the board's preset</small>
+            </label>
+            <label>Direction
+              <select name="direction">
+                <option value="">Keep stored</option>
+                <option value="push">Push: the hub sends to its destination</option>
+                <option value="pull">Pull: fetch from the hub's web UI</option>
+              </select>
+              <small>Stored: <span id="ds-current-direction">–</span> · default: the board's preset; pull needs a web UI</small>
+            </label>
+            <label>Destination (push)
+              <select name="destination">
+                <option value="">Keep stored</option>
+                <option value="backend">Own backend (AWS)</option>
+              </select>
+              <small>Stored: <span id="ds-current-destination">–</span> · default: backend</small>
+            </label>
             <label>Transport to the backend
               <select name="transport">
                 <option value="">Keep stored</option>

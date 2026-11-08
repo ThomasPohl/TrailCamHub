@@ -47,6 +47,12 @@ const char *key_name(Key key)
         return "apn";
     case Key::sim_pin:
         return "sim_pin";
+    case Key::power:
+        return "power";
+    case Key::direction:
+        return "direction";
+    case Key::destination:
+        return "destination";
     }
     return "unknown";
 }
@@ -87,6 +93,12 @@ std::string &field(Settings &settings, Key key)
         return settings.apn;
     case Key::sim_pin:
         return settings.sim_pin;
+    case Key::power:
+        return settings.power;
+    case Key::direction:
+        return settings.direction;
+    case Key::destination:
+        return settings.destination;
     case Key::device_key:
         break;
     }
@@ -194,6 +206,16 @@ std::string validate(Key key, const std::string &value)
             }
         }
         return "";
+    case Key::power:
+        return value == "mains" || value == "battery"
+                   ? ""
+                   : "power must be mains or battery";
+    case Key::direction:
+        return value == "push" || value == "pull"
+                   ? ""
+                   : "direction must be push or pull";
+    case Key::destination:
+        return value == "backend" ? "" : "destination must be backend";
     }
     return "unknown setting";
 }
@@ -202,7 +224,9 @@ std::string display_value(Key key, const std::string &value)
 {
     if (value.empty()) {
         return key == Key::camera_plan || key == Key::checkin_min ||
-                       key == Key::transport || key == Key::apn
+                       key == Key::transport || key == Key::apn ||
+                       key == Key::power || key == Key::direction ||
+                       key == Key::destination
                    ? "(default)"
                    : "(not set)";
     }
@@ -297,6 +321,92 @@ int parse_spic_pin_attempts(const std::string &line)
         ++i;
     }
     return value;
+}
+
+Mode resolve_mode(const Settings &settings, const Capabilities &caps,
+                  const Preset &preset)
+{
+    Mode mode;
+    mode.power = preset.power;
+    if (settings.power == "mains" || settings.power == "battery") {
+        mode.power =
+            settings.power == "battery" ? Power::battery : Power::mains;
+        mode.power_origin = ModeOrigin::setting;
+    }
+    mode.direction = preset.direction;
+    if (settings.direction == "push") {
+        mode.direction = Direction::push;
+        mode.direction_origin = ModeOrigin::setting;
+    } else if (settings.direction == "pull" && caps.web_ui) {
+        mode.direction = Direction::pull;
+        mode.direction_origin = ModeOrigin::setting;
+    }
+    if (mode.direction == Direction::pull && !caps.web_ui) {
+        // Nothing to pull from.
+        mode.direction = Direction::push;
+    }
+    mode.transport = transport(settings, caps.modem);
+    mode.destination = Destination::backend;
+    return mode;
+}
+
+const char *power_name(Power power)
+{
+    return power == Power::battery ? "battery" : "mains";
+}
+
+const char *direction_name(Direction direction)
+{
+    return direction == Direction::pull ? "pull" : "push";
+}
+
+const char *destination_name(Destination destination)
+{
+    (void)destination;
+    return "backend";
+}
+
+const char *origin_name(ModeOrigin origin)
+{
+    return origin == ModeOrigin::setting ? "setting" : "preset";
+}
+
+bool sleeps(const Mode &mode, const Capabilities &caps)
+{
+    return caps.deep_sleep && mode.power == Power::battery;
+}
+
+bool wifi_power_save(const Mode &mode)
+{
+    return mode.power == Power::battery;
+}
+
+bool reads_on_schedule(const Mode &mode, bool uplink)
+{
+    // On mains without a destination someone is on site (button, web UI)
+    // and starts the reads.
+    return mode.power == Power::battery ||
+           (mode.direction == Direction::push && uplink);
+}
+
+bool checks_in(const Mode &mode)
+{
+    return mode.direction == Direction::push;
+}
+
+std::string capability_problem(Key key, const std::string &value,
+                               const Capabilities &caps)
+{
+    if (key == Key::transport && value == "modem" && !caps.modem) {
+        return "this board has no modem";
+    }
+    if (key == Key::direction && value == "pull" && !caps.web_ui) {
+        return "pull needs the web UI, which this build does not have";
+    }
+    if (key == Key::power && value == "battery" && !caps.deep_sleep) {
+        return "this build has no deep sleep for battery power";
+    }
+    return "";
 }
 
 }  // namespace hub_config
