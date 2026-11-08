@@ -27,11 +27,14 @@
     transport: panel.querySelector("#ds-current-transport"),
     apn: panel.querySelector("#ds-current-apn"),
     sim_pin: panel.querySelector("#ds-current-sim_pin"),
+    power: panel.querySelector("#ds-current-power"),
+    direction: panel.querySelector("#ds-current-direction"),
+    destination: panel.querySelector("#ds-current-destination"),
     backend: panel.querySelector("#ds-current-backend"),
   };
   const scheduleList = panel.querySelector("#ds-schedule");
   // "TCH INFO" lines of the status reply that describe the schedule.
-  const SCHEDULE_INFO = ["profile ", "camera plan ", "check-in every ", "next camera read ", "next check-in ", "failed in a row", "camera battery "];
+  const SCHEDULE_INFO = ["mode ", "camera plan ", "check-in every ", "next camera read ", "next check-in ", "failed in a row", "camera battery "];
 
   const STATE_TEXT = {
     IDLE: "Idle — waiting for a scan",
@@ -57,7 +60,7 @@
 
   // Remembered form values, so the settings need not be typed again on every
   // visit. Opt-out via the checkbox, which also deletes what is stored.
-  const FIELDS = ["wifi_ssid", "wifi_password", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
+  const FIELDS = ["wifi_ssid", "wifi_password", "power", "direction", "destination", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
   const STORAGE_KEY = "trailcamhub.deviceSetup";
   const PREFERENCE_KEY = "trailcamhub.deviceSetup.remember";
   const rememberBox = panel.querySelector("#ds-remember");

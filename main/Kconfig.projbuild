@@ -1,31 +1,34 @@
 menu "TrailCamHub PoC"
 
 choice HUB_PROFILE
-    prompt "Use case profile"
+    prompt "Preset mode"
     default HUB_PROFILE_ON_SITE if BOARD_TDONGLE || IDF_TARGET_ESP32P4
     default HUB_PROFILE_AUTONOMOUS
     help
-        The board selects the hardware (pins, PSRAM, console); the profile
-        selects the defaults that belong to the use case: when the hub reads
-        the cameras and checks in with the backend, whether it sleeps in
-        between, and how much it writes to the SD card. Every option that a
-        profile sets can still be changed on its own. See
-        docs/power-and-schedule.md.
+        The board's build sets what the hub can do (modem, Ethernet, battery
+        gauge, web UI, display); how it is used is chosen at run time with
+        the settings "power" (mains or battery) and "direction" (push or
+        pull), stored in NVS (console "config set", web installer). This
+        preset is the mode of a hub whose settings leave them empty. See
+        docs/modes.md and docs/power-and-schedule.md.
 
 config HUB_PROFILE_AUTONOMOUS
-    bool "Autonomous (no one on site, battery, backend)"
+    bool "Battery + push (no one on site)"
     help
-        Reads the cameras and checks in with the backend on a schedule and
-        sleeps (deep sleep) in between. After a power-on or reset the hub
-        stays awake for a few minutes for the web installer and the serial
-        console. Default for the Waveshare ESP32-S3-A7670E-4G.
+        Reads the cameras on a schedule, pushes to its destination (the
+        backend) and sleeps (deep sleep) in between. After a power-on or
+        reset the hub stays awake for a few minutes for the web installer
+        and the serial console. Preset of the Waveshare
+        ESP32-S3-A7670E-4G.
 
 config HUB_PROFILE_ON_SITE
-    bool "On site (person present, permanent power)"
+    bool "Mains + pull (person present, permanent power)"
     help
         Stays awake and waits for the button, the web UI or the serial
-        console; no automatic reads or check-ins unless a schedule is set.
-        Default for the T-Dongles and the ESP32-P4-NANO.
+        console; no automatic reads or check-ins unless a schedule is set or
+        the hub pushes to a configured destination. Preset of the T-Dongles
+        and the ESP32-P4-NANO. Without a web UI in the build, the direction
+        is push.
 
 endchoice
 
@@ -207,9 +210,11 @@ menu "Schedule"
 
 config SCHEDULE_CAMERA_PLAN
     string "Camera read plan"
-    default "*=120" if HUB_PROFILE_AUTONOMOUS
-    default ""
+    default "*=120"
     help
+        Applies on battery power, or when the hub pushes to a configured
+        destination; otherwise (mains, nothing to push to) there are no
+        automatic reads unless camera_plan is set.
         When the hub reads the cameras on its own: time windows in local time
         (TIME_ZONE), each with an interval in minutes, and "*" for the rest
         of the day, for example
@@ -228,9 +233,10 @@ config SCHEDULE_CAMERA_PLAN
 config SCHEDULE_CHECKIN_INTERVAL_MIN
     int "Backend check-in interval (minutes, 0 = off)"
     range 0 1440
-    default 30 if HUB_PROFILE_AUTONOMOUS
-    default 0
+    default 30
     help
+        Applies when the hub pushes (direction push); with pull there are no
+        check-ins.
         How often the hub syncs with the backend between camera reads, to
         pick up commands from the app (for example a camera read on
         request) and upload what is left. Only with complete uplink
@@ -266,10 +272,13 @@ endmenu
 menu "Power"
 
 config POWER_DEEP_SLEEP
-    bool "Deep sleep between cycles"
-    default y if HUB_PROFILE_AUTONOMOUS
-    default n
+    bool "Deep sleep between cycles on battery power"
+    default n if IDF_TARGET_ESP32P4
+    default y
     help
+        Builds the deep sleep in; it is used only while the mode's power is
+        "battery" (setting "power", or the preset). Off on the ESP32-P4-NANO,
+        whose Wi-Fi co-processor is not set up for it.
         When nothing is due for at least POWER_MIN_SLEEP_S seconds, the hub
         goes into deep sleep until the next camera read or check-in. While
         it sleeps the serial console, a web UI and the display do not
@@ -306,10 +315,10 @@ config POWER_MAX_SLEEP_MIN
         and goes back to sleep after checking its schedule.
 
 config UPLINK_WIFI_POWER_SAVE
-    bool "Wi-Fi modem sleep on the home network"
-    default y if HUB_PROFILE_AUTONOMOUS
-    default n
+    bool "Wi-Fi modem sleep on the home network on battery power"
+    default y
     help
+        Used only while the mode's power is "battery".
         Saves power during the backend sync over the home Wi-Fi at the cost
         of a slower transfer. The camera Wi-Fi never uses power save: in
         modem sleep, acknowledgements queue up and the camera stream runs

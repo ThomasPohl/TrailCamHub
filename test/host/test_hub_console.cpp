@@ -325,3 +325,98 @@ TEST_CASE("PIN attempts from AT+SPIC")
     CHECK(parse_spic_pin_attempts("+SPIC: ,10") == -1);
     CHECK(parse_spic_pin_attempts("+CPIN: READY") == -1);
 }
+
+TEST_CASE("mode: settings override the preset where the board allows")
+{
+    using namespace hub_config;
+    Capabilities main_board;
+    main_board.modem = true;
+    main_board.battery_gauge = true;
+    main_board.deep_sleep = true;
+    Preset autonomous;
+    autonomous.power = Power::battery;
+    autonomous.direction = Direction::push;
+
+    Settings settings;
+    Mode mode = resolve_mode(settings, main_board, autonomous);
+    CHECK(mode.power == Power::battery);
+    CHECK(mode.power_origin == ModeOrigin::preset);
+    CHECK(mode.direction == Direction::push);
+    CHECK(mode.transport == Transport::modem);  // no home Wi-Fi set
+    CHECK(sleeps(mode, main_board));
+    CHECK(wifi_power_save(mode));
+    CHECK(checks_in(mode));
+    CHECK(reads_on_schedule(mode, false));
+
+    settings.power = "mains";
+    settings.wifi_ssid = "Home";
+    mode = resolve_mode(settings, main_board, autonomous);
+    CHECK(mode.power == Power::mains);
+    CHECK(mode.power_origin == ModeOrigin::setting);
+    CHECK(mode.transport == Transport::wifi);
+    CHECK_FALSE(sleeps(mode, main_board));
+    CHECK_FALSE(wifi_power_save(mode));
+    // Mains, push: scheduled reads only with somewhere to push to.
+    CHECK(reads_on_schedule(mode, true));
+    CHECK_FALSE(reads_on_schedule(mode, false));
+
+    // Pull needs a web UI: the main board falls back to push.
+    settings.direction = "pull";
+    mode = resolve_mode(settings, main_board, autonomous);
+    CHECK(mode.direction == Direction::push);
+    CHECK(mode.direction_origin == ModeOrigin::preset);
+    CHECK(capability_problem(Key::direction, "pull", main_board) != "");
+    CHECK(capability_problem(Key::transport, "modem", main_board).empty());
+}
+
+TEST_CASE("mode: an on-site dongle pulls and stays awake")
+{
+    using namespace hub_config;
+    Capabilities dongle;
+    dongle.display = true;
+    dongle.button = true;
+    dongle.web_ui = true;
+    dongle.deep_sleep = true;
+    const Preset on_site;  // mains + pull
+
+    Settings settings;
+    Mode mode = resolve_mode(settings, dongle, on_site);
+    CHECK(mode.power == Power::mains);
+    CHECK(mode.direction == Direction::pull);
+    CHECK(mode.transport == Transport::wifi);
+    CHECK_FALSE(sleeps(mode, dongle));
+    CHECK_FALSE(checks_in(mode));
+    CHECK_FALSE(reads_on_schedule(mode, false));
+    CHECK(capability_problem(Key::transport, "modem", dongle) ==
+          "this board has no modem");
+
+    // Without a web UI there is nothing to pull from.
+    Capabilities no_ui = dongle;
+    no_ui.web_ui = false;
+    mode = resolve_mode(settings, no_ui, on_site);
+    CHECK(mode.direction == Direction::push);
+    CHECK_FALSE(reads_on_schedule(mode, false));
+
+    // Battery on a build without deep sleep is refused.
+    Capabilities no_sleep = dongle;
+    no_sleep.deep_sleep = false;
+    CHECK(capability_problem(Key::power, "battery", no_sleep) != "");
+    settings.power = "battery";
+    mode = resolve_mode(settings, no_sleep, on_site);
+    CHECK_FALSE(sleeps(mode, no_sleep));
+}
+
+TEST_CASE("mode settings are validated")
+{
+    using hub_config::Key;
+    using hub_config::validate;
+    CHECK(validate(Key::power, "mains").empty());
+    CHECK(validate(Key::power, "battery").empty());
+    CHECK_FALSE(validate(Key::power, "solar").empty());
+    CHECK(validate(Key::direction, "push").empty());
+    CHECK(validate(Key::direction, "pull").empty());
+    CHECK_FALSE(validate(Key::direction, "both").empty());
+    CHECK(validate(Key::destination, "backend").empty());
+    CHECK_FALSE(validate(Key::destination, "ftp").empty());
+    CHECK(hub_config::display_value(Key::power, "") == "(default)");
+}

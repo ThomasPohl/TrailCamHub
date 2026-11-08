@@ -31,8 +31,15 @@ esp_err_t set_refused_sim_pin(std::uint32_t fingerprint);
 // True if this build drives a cellular modem (CONFIG_MODEM_UPLINK).
 bool modem_available();
 
-// transport() and uplink_configured() for this build.
+// transport() for this build.
 Transport uplink_transport(const Settings &settings);
+// uplink_configured() for this build, and the mode pushes (checks in).
 bool uplink_ready(const Settings &settings);
+
+// The capabilities and preset of this build (Kconfig), and the mode that
+// applies with `settings`.
+const Capabilities &capabilities();
+const Preset &preset();
+Mode mode(const Settings &settings);
 
 }  // namespace hub_config

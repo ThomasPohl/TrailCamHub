@@ -335,9 +335,7 @@ ScheduleReport schedule_report()
     report.checkin_origin = schedule::origin_name(effective.checkin_origin);
     report.next_camera_read_at = schedule::to_unix(times.camera);
     report.next_checkin_at = schedule::to_unix(times.checkin);
-#if CONFIG_POWER_DEEP_SLEEP
-    report.sleeps = true;
-#endif
+    report.sleeps = effective.sleeps;
     report.stretch = schedule::stretch_name(
         schedule::stretch(effective.settings, schedule::state()));
     return report;

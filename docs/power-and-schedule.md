@@ -1,21 +1,29 @@
-# Profiles, wake-up schedule and power
+# Mode, wake-up schedule and power
 
-The firmware serves two use cases from one code base. The **board** is the
-hardware axis (pins, PSRAM, console); the **profile** (`CONFIG_HUB_PROFILE_*`,
-menu *TrailCamHub PoC → Use case profile*) is the second axis and selects the
-defaults that belong to the use case. Every option a profile sets can still be
-changed on its own.
+The firmware serves two use cases from one code base. The **board** fixes the
+hardware (its capabilities: modem, Ethernet, battery gauge, web UI, display);
+the **mode** says how it is used and is chosen at run time, see
+[`modes.md`](modes.md). Two of its settings decide the schedule and the power
+behaviour:
 
-| Setting                                     | Autonomous             | On site                |
-| ------------------------------------------- | ---------------------- | ---------------------- |
-| Default for                                 | ESP32-S3-A7670E-4G     | T-Dongle-C5/-S3, P4    |
-| Camera read plan (`SCHEDULE_CAMERA_PLAN`)   | `*=120` (every 2 h)    | empty (no reads)       |
-| Check-in interval (`SCHEDULE_CHECKIN_...`)  | 30 min                 | 0 (none)               |
-| Deep sleep between cycles (`POWER_DEEP_...`)| on                     | off                    |
-| Modem sleep on the home Wi-Fi               | on                     | off                    |
-| SD log write interval                       | 10 s                   | 1 s                    |
-| Web UI / access point                       | off                    | per board              |
-| Video download                              | off (on request, #55)  | per board              |
+| Mode                                         | Battery                | Mains                  |
+| -------------------------------------------- | ---------------------- | ---------------------- |
+| Camera read plan (`SCHEDULE_CAMERA_PLAN`)     | `*=120` (every 2 h)    | `*=120` with push to a configured destination, else empty (no reads) |
+| Check-in interval (`SCHEDULE_CHECKIN_...`)   | 30 min with push, 0 with pull | the same        |
+| Deep sleep between cycles (`POWER_DEEP_...`) | on (if built in)       | off                    |
+| Modem sleep on the home Wi-Fi                | on                     | off                    |
+
+The build's preset (`CONFIG_HUB_PROFILE_*`, menu *TrailCamHub PoC → Preset
+mode*) is the mode of a hub whose `power` and `direction` settings are empty:
+battery + push on the ESP32-S3-A7670E-4G, mains + pull on the T-Dongles and
+the ESP32-P4-NANO. A few build options still follow the preset rather than the
+mode:
+
+| Build option                | Battery + push preset  | Mains + pull preset    |
+| --------------------------- | ---------------------- | ---------------------- |
+| SD log write interval       | 10 s                   | 1 s                    |
+| Web UI / access point       | off                    | per board              |
+| Video download              | on request (#55)       | per board              |
 
 ## Two schedules
 

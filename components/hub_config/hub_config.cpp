@@ -91,7 +91,10 @@ esp_err_t load(Settings &out)
 esp_err_t set(Key key, const std::string &value, std::string *reason)
 {
     if (!value.empty()) {
-        const std::string problem = validate(key, value);
+        std::string problem = validate(key, value);
+        if (problem.empty()) {
+            problem = capability_problem(key, value, capabilities());
+        }
         if (!problem.empty()) {
             if (reason != nullptr) {
                 *reason = problem;
@@ -138,7 +141,60 @@ Transport uplink_transport(const Settings &settings)
 
 bool uplink_ready(const Settings &settings)
 {
-    return uplink_configured(settings, modem_available());
+    return checks_in(mode(settings)) &&
+           uplink_configured(settings, modem_available());
+}
+
+const Capabilities &capabilities()
+{
+    static const Capabilities caps = [] {
+        Capabilities c;
+#if CONFIG_MODEM_UPLINK
+        c.modem = true;
+#endif
+#if CONFIG_ETH_UPLINK_ENABLE
+        c.ethernet = true;
+#endif
+#if CONFIG_HUB_BATTERY_MAX17048
+        c.battery_gauge = true;
+#endif
+#if CONFIG_SPIRAM
+        c.psram = true;
+#endif
+#if CONFIG_BOARD_TDONGLE
+        c.display = true;
+        c.button = true;
+#endif
+#if CONFIG_WEB_UI_ENABLE
+        c.web_ui = true;
+#endif
+#if CONFIG_POWER_DEEP_SLEEP
+        c.deep_sleep = true;
+#endif
+        return c;
+    }();
+    return caps;
+}
+
+const Preset &preset()
+{
+    static const Preset value = [] {
+        Preset p;
+#if CONFIG_HUB_PROFILE_AUTONOMOUS
+        p.power = Power::battery;
+        p.direction = Direction::push;
+#else
+        p.power = Power::mains;
+        p.direction = Direction::pull;
+#endif
+        return p;
+    }();
+    return value;
+}
+
+Mode mode(const Settings &settings)
+{
+    return resolve_mode(settings, capabilities(), preset());
 }
 
 std::uint32_t refused_sim_pin()
