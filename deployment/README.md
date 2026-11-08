@@ -1,5 +1,6 @@
 # TrailCamHub ESP32-S3 Deployment Package
 
+
 This archive contains the firmware images for the ESP32-S3 BLE/Wi-Fi proof of concept, built for the Waveshare ESP32-S3-A7670E-4G board (16 MB flash, 8 MB PSRAM).
 
 ## Browser installer
