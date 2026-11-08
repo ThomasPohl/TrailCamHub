@@ -20,6 +20,17 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # (idf.py coredump-info).
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 
+# Default event loop task (sys_evt): the Wi-Fi, IP and time handlers run on
+# it, and each log line they write passes through sd_log's vprintf hook
+# (console output plus a 256-byte line buffer). With the ESP-IDF default the
+# stack overflowed into the event loop's mutex, allocated right below it,
+# and the next mutex give spun forever (interrupt watchdog, #163).
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+# A watchpoint on the end of the running task's stack turns an overflow into
+# an immediate panic that names the task, instead of a corruption that shows
+# much later somewhere else.
+CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK=y
+
 # Bluetooth LE: NimBLE host as central/GATT client only, one connection,
 # no pairing, legacy (BLE 4.2) scanning. The host allocates from PSRAM.
 CONFIG_BT_ENABLED=y
