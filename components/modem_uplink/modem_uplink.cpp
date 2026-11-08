@@ -27,6 +27,7 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_netif_ppp.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "hub_config.hpp"
 #include "iot_usbh_cdc.h"
@@ -48,7 +49,7 @@ constexpr EventBits_t kGotIp = BIT0;
 constexpr EventBits_t kLostIp = BIT1;
 constexpr std::int64_t kSecondUs = 1000 * 1000;
 
-enum class Command : std::uint8_t { connect, disconnect };
+enum class Command : std::uint8_t { connect, disconnect, radio_off };
 
 Callbacks s_callbacks = {};
 QueueHandle_t s_commands = nullptr;
@@ -58,6 +59,8 @@ Settings s_next_settings;
 SemaphoreHandle_t s_settings_lock = nullptr;
 std::atomic<bool> s_cancel{false};
 std::atomic<bool> s_active{false};
+// The start-up switch-off is queued or running (deep sleep waits for it).
+std::atomic<bool> s_switching_off{false};
 // Signal of the last attach in dBm; 0: unknown.
 std::atomic<int> s_signal_dbm{0};
 // Owned by the task.
@@ -365,13 +368,10 @@ void log_network(at_handle_t at)
     }
 }
 
-// Returns null on success, else the reason.
-const char *bring_up(const Settings &settings)
+// USB host and modem driver, without starting a data call. Returns null on
+// success, else the reason.
+const char *install_drivers(const std::string &apn)
 {
-    const Deadline deadline(CONFIG_MODEM_ATTACH_TIMEOUT_S);
-    const std::int64_t started_us = esp_timer_get_time();
-    set_power(true);
-
     if (!s_cdc_installed) {
         usbh_cdc_driver_config_t cdc = {};
         cdc.task_stack_size = 4096;
@@ -392,23 +392,35 @@ const char *bring_up(const Settings &settings)
     // Room for unsolicited lines arriving together with an answer (with 256
     // bytes the driver truncated them).
     config.at_rx_buffer_size = 1024;
-    if (!settings.apn.empty()) {
+    if (!apn.empty()) {
         config.pdp.enable = true;
         config.pdp.cid = 1;
         config.pdp.type = "IP";
-        config.pdp.apn = settings.apn.c_str();
+        config.pdp.apn = apn.c_str();
     }
     xEventGroupClearBits(s_events, kGotIp | kLostIp);
-    esp_err_t error = usbh_modem_install(&config);
+    const esp_err_t error = usbh_modem_install(&config);
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "Modem driver: %s", esp_err_to_name(error));
         return "the modem driver could not be started";
     }
     s_modem_installed = true;
-    // The data call is started below, once the SIM and the network are
+    // A data call is started by bring_up() once the SIM and the network are
     // ready, not as soon as the modem appears on USB.
     usbh_modem_ppp_auto_connect(false);
+    return nullptr;
+}
 
+// Returns null on success, else the reason.
+const char *bring_up(const Settings &settings)
+{
+    const Deadline deadline(CONFIG_MODEM_ATTACH_TIMEOUT_S);
+    const std::int64_t started_us = esp_timer_get_time();
+    set_power(true);
+    const char *installed = install_drivers(settings.apn);
+    if (installed != nullptr) {
+        return installed;
+    }
     at_handle_t at = nullptr;
     const char *problem = wait_for_modem(deadline, at);
     if (problem != nullptr) {
@@ -429,7 +441,7 @@ const char *bring_up(const Settings &settings)
     log_network(at);
 
     s_ppp_started = true;
-    error = usbh_modem_ppp_start(deadline.ticks_left());
+    const esp_err_t error = usbh_modem_ppp_start(deadline.ticks_left());
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "PPP: %s", esp_err_to_name(error));
         return "the data call could not be started";
@@ -491,6 +503,33 @@ void take_down()
     set_power(false);
 }
 
+// How long the start-up switch-off waits for the modem on USB. Without
+// power (4G DIP switch OFF) it never appears, and nothing needs switching
+// off.
+constexpr std::uint32_t kRadioOffTimeoutS = 20;
+
+// After a power-on or reset the modem (powered by the DIP switch) starts with
+// its radio on and registers with the network on its own, whatever the
+// transport: put it into flight mode until a sync needs it (#155).
+void radio_off_at_start()
+{
+#if CONFIG_MODEM_POWER_GPIO >= 0
+    // Off by its power GPIO until a sync switches it on.
+#else
+    const Deadline deadline(kRadioOffTimeoutS);
+    const char *problem = install_drivers("");
+    at_handle_t at = nullptr;
+    if (problem == nullptr) {
+        problem = wait_for_modem(deadline, at);
+    }
+    if (problem != nullptr) {
+        ESP_LOGI(TAG, "Modem radio left as it is at start-up: %s", problem);
+    }
+    // Flight mode (AT+CFUN=4) if the modem answers, drivers removed.
+    take_down();
+#endif
+}
+
 void modem_task(void *arg)
 {
     (void)arg;
@@ -513,6 +552,9 @@ void modem_task(void *arg)
                     s_callbacks.failed(problem);
                 }
             }
+        } else if (command == Command::radio_off) {
+            radio_off_at_start();
+            s_switching_off = false;
         } else {
             take_down();
             s_active = false;
@@ -563,6 +605,12 @@ esp_err_t init(const Callbacks &callbacks)
     if (xTaskCreate(modem_task, "modem", 4096, nullptr, 5, nullptr) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
+    // A wake-up from deep sleep finds the modem as the last cycle left it.
+    if (esp_reset_reason() != ESP_RST_DEEPSLEEP) {
+        s_switching_off = true;
+        const Command command = Command::radio_off;
+        xQueueSend(s_commands, &command, 0);
+    }
     return ESP_OK;
 }
 
@@ -594,7 +642,7 @@ void disconnect()
 
 bool active()
 {
-    return s_active.load();
+    return s_active.load() || s_switching_off.load();
 }
 
 int signal_dbm()
