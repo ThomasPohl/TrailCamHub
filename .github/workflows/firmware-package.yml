@@ -48,14 +48,25 @@ jobs:
       # A tag build carries the tag as its version (esp_app_desc), which the
       # firmware updates compare (docs/ota.md); other builds the commit.
       TRAILCAMHUB_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+      # Compiler cache (.github/scripts/ccache-setup.sh): most objects are
+      # ESP-IDF's own and do not change between runs.
+      CCACHE_KEY: ccache-${{ matrix.board }}-idf5.5.6
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ${{ env.CCACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ env.CCACHE_KEY }}-
 
       - name: Build dev and release merged flash images
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
+          source .github/scripts/ccache-setup.sh
           defaults="sdkconfig.defaults${BOARD_DEFAULTS:+;$BOARD_DEFAULTS}"
           # Dev image: default profile, verbose (INFO) logging.
           .github/scripts/run-annotated.sh "Firmware build" \
@@ -68,6 +79,16 @@ jobs:
             -D SDKCONFIG_DEFAULTS="$defaults;sdkconfig.defaults.release" \
             build
           idf.py -B build-release merge-bin -o "trailcamhub-$BOARD-release.bin"
+          ccache_report
+
+      # Saved by every run: a pull request run can only restore caches of its
+      # own merge ref and of main, not those of the push run of its branch.
+      - name: Save compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ${{ env.CCACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Assemble deployment package
         shell: bash
@@ -214,11 +235,23 @@ jobs:
     container: espressif/idf:v5.5.6
     env:
       IDF_PATH: /opt/esp/idf
+      CCACHE_KEY: ccache-size-report-idf5.5.6
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
           path: head
+
+      # Falls back to the esp32s3 build's cache: the release objects are the
+      # same (ccache-setup.sh makes the paths relative to the workspace).
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ${{ env.CCACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ env.CCACHE_KEY }}-
+            ccache-esp32s3-idf5.5.6-
 
       - name: Check out pull request base
         if: github.event_name == 'pull_request'
@@ -231,11 +264,20 @@ jobs:
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
+          source head/.github/scripts/ccache-setup.sh
           if [[ -d base ]]; then
             head/.github/scripts/size-report.sh head base
           else
             head/.github/scripts/size-report.sh head
           fi
+          ccache_report
+
+      - name: Save compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ${{ env.CCACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   deploy-installer:
     name: Deploy web installer
