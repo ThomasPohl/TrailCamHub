@@ -18,6 +18,7 @@
 
 #include "device_info.hpp"
 #include "hub_battery.hpp"
+#include "hub_config.hpp"
 #include "media_catalog.hpp"
 #include "media_store.hpp"
 #include "mp4_file_source.hpp"
@@ -54,6 +55,12 @@ constexpr std::uint64_t kMaxVideoBytes =
 #else
 constexpr bool kDownloadsVideos = false;
 constexpr std::uint64_t kMaxVideoBytes = 50ull * 1024 * 1024;
+#endif
+#if CONFIG_CAMERA_DOWNLOAD_VIDEOS && CONFIG_MODEM_UPLINK
+constexpr std::uint64_t kMaxVideoBytesModem =
+    (std::uint64_t)CONFIG_UPLINK_VIDEO_MAX_MB_MODEM * 1024 * 1024;
+#else
+constexpr std::uint64_t kMaxVideoBytesModem = kMaxVideoBytes;
 #endif
 
 struct HttpResult {
@@ -168,13 +175,15 @@ HttpResult put_file(const std::string &url, const std::string &path)
 
 // PUTs a recording as MP4 to a presigned URL. The MP4 is built while it is
 // sent, from the stored H.264 and AAC streams, so no copy is written.
-// `too_large` is set (and nothing sent) if it exceeds kMaxVideoBytes.
+// `too_large` is set to the reason (and nothing sent) if it exceeds the limit
+// of the transport.
 HttpResult put_mp4(const std::string &url, const std::string &camera_id,
-                   std::int64_t media_id, std::uint64_t &size, bool &too_large)
+                   std::int64_t media_id, bool over_modem, std::uint64_t &size,
+                   std::string &too_large)
 {
     HttpResult result;
     size = 0;
-    too_large = false;
+    too_large.clear();
     mp4::FileSource video(
         camera::store::media_path(camera_id, media_id, "h264"));
     mp4::FileSource audio(
@@ -192,8 +201,11 @@ HttpResult put_mp4(const std::string &url, const std::string &camera_id,
         return result;
     }
     size = file.size();
-    if (size > kMaxVideoBytes) {
-        too_large = true;
+    VideoLimits limits;
+    limits.wifi_bytes = kMaxVideoBytes;
+    limits.modem_bytes = kMaxVideoBytesModem;
+    too_large = video_size_failure(size, limits, over_modem);
+    if (!too_large.empty()) {
         result.error = ESP_ERR_INVALID_SIZE;
         return result;
     }
@@ -385,8 +397,8 @@ void update_firmware(const FirmwareOffer &offered)
 // is settled (`out` is the answer); otherwise it is not acknowledged and
 // comes again with the next check-in, with a fresh upload URL.
 bool handle_video_command(CameraState *camera, const std::string &cam_id,
-                          const Command &command, CommandResult &out,
-                          Report &report)
+                          const Command &command, bool over_modem,
+                          CommandResult &out, Report &report)
 {
     using camera::artemis::MediaCatalog;
     const VideoDecision decision = decide_video(
@@ -407,14 +419,13 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
         return true;
     case VideoStep::upload: {
         std::uint64_t size = 0;
-        bool too_large = false;
+        std::string too_large;
         const std::int64_t started_us = esp_timer_get_time();
-        const HttpResult put = put_mp4(command.upload_url, cam_id,
-                                       command.media_id, size, too_large);
-        if (too_large) {
-            out.error = "the video is too large (" +
-                        std::to_string((unsigned long long)(size >> 20)) +
-                        " MB)";
+        const HttpResult put =
+            put_mp4(command.upload_url, cam_id, command.media_id, over_modem,
+                    size, too_large);
+        if (!too_large.empty()) {
+            out.error = too_large;
             camera->catalog_changed |=
                 camera->catalog.forget_video_request(command.media_id);
             ESP_LOGW(TAG, "Video %lld of %s: %s", (long long)command.media_id,
@@ -505,6 +516,9 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
     schedule::apply_remote(remote);
 
     AckRequest ack;
+    // Videos have a lower size limit over the cellular modem.
+    const bool over_modem =
+        hub_config::uplink_transport(settings) == hub_config::Transport::modem;
     for (const CameraCheckin &result : response.cameras) {
         CameraState *camera = find_camera(cameras, result.cam_id);
         if (camera != nullptr) {
@@ -576,7 +590,7 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
             }
             if (command.type == "requestVideo") {
                 if (handle_video_command(camera, result.cam_id, command,
-                                         command_result, report)) {
+                                         over_modem, command_result, report)) {
                     camera_ack.commands.push_back(command_result);
                 }
                 continue;
