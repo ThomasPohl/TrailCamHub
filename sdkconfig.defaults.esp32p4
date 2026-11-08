@@ -38,3 +38,8 @@ CONFIG_WEB_UI_ENABLE=y
 # Download videos (raw H.264 and AAC streams) after the thumbnails; the web UI
 # serves them as MP4 on request.
 CONFIG_CAMERA_DOWNLOAD_VIDEOS=y
+
+# TCP send and receive windows of 32 KB instead of 5.7 KB (4 MSS) for video
+# uploads and firmware downloads (#154). lwIP buffers are in PSRAM.
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=32768
+CONFIG_LWIP_TCP_WND_DEFAULT=32768

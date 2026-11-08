@@ -27,6 +27,7 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_netif_ppp.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "hub_config.hpp"
 #include "iot_usbh_cdc.h"
@@ -48,7 +49,7 @@ constexpr EventBits_t kGotIp = BIT0;
 constexpr EventBits_t kLostIp = BIT1;
 constexpr std::int64_t kSecondUs = 1000 * 1000;
 
-enum class Command : std::uint8_t { connect, disconnect };
+enum class Command : std::uint8_t { connect, disconnect, radio_off };
 
 Callbacks s_callbacks = {};
 QueueHandle_t s_commands = nullptr;
@@ -58,11 +59,14 @@ Settings s_next_settings;
 SemaphoreHandle_t s_settings_lock = nullptr;
 std::atomic<bool> s_cancel{false};
 std::atomic<bool> s_active{false};
+// The start-up switch-off is queued or running (deep sleep waits for it).
+std::atomic<bool> s_switching_off{false};
 // Signal of the last attach in dBm; 0: unknown.
 std::atomic<int> s_signal_dbm{0};
 // Owned by the task.
 bool s_cdc_installed = false;
 bool s_modem_installed = false;
+bool s_ppp_started = false;
 
 void on_ip_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -115,42 +119,35 @@ struct Deadline {
     }
 };
 
-const char *pin_state_name(esp_modem_pin_state_t state)
-{
-    switch (state) {
-    case PIN_READY:
-        return "ready";
-    case PIN_SIM_PIN:
-        return "PIN required";
-    case PIN_SIM_PIN2:
-        return "PIN2 required";
-    case PIN_SIM_PUK:
-        return "PUK required";
-    case PIN_SIM_PUK2:
-        return "PUK2 required";
-    case PIN_UNKNOWN:
-        break;
-    }
-    return "unknown";
-}
+// Log tag of the driver's AT parser. Until the modem is on USB it is
+// stopped, and each command logs "AT parser is stopped" as an error.
+const char *kAtParserTag = "Modem AT";
 
-// The SIM state once the modem answers AT commands over USB.
-const char *wait_for_modem(const Deadline &deadline, at_handle_t &at,
-                           esp_modem_pin_state_t &pin)
+// Waits until the modem answers AT commands over USB.
+const char *wait_for_modem(const Deadline &deadline, at_handle_t &at)
 {
+    ESP_LOGI(TAG, "Waiting for the modem on USB");
+    const esp_log_level_t level = esp_log_level_get(kAtParserTag);
+    esp_log_level_set(kAtParserTag, ESP_LOG_NONE);
+    const char *problem = nullptr;
     while (true) {
         if (s_cancel.load()) {
-            return "stopped";
+            problem = "stopped";
+            break;
         }
         at = usbh_modem_get_atparser();
-        if (at != nullptr && at_cmd_read_pin(at, &pin) == ESP_OK) {
-            return nullptr;
+        if (at != nullptr && at_cmd_at(at) == ESP_OK) {
+            break;
         }
         if (deadline.passed()) {
-            return "the modem does not answer over USB (power, DIP switches)";
+            problem = "the modem does not answer over USB (DIP switches: USB "
+                      "OFF, 4G ON)";
+            break;
         }
         pause_ms(1000);
     }
+    esp_log_level_set(kAtParserTag, level);
+    return problem;
 }
 
 // Collects the whole answer of a command up to its final result code.
@@ -194,6 +191,51 @@ int pin_attempts_left(at_handle_t at)
     return hub_config::parse_spic_pin_attempts(answer);
 }
 
+enum class Sim : std::uint8_t { ready, pin, puk, missing, unknown };
+
+const char *sim_name(Sim sim)
+{
+    switch (sim) {
+    case Sim::ready:
+        return "ready";
+    case Sim::pin:
+        return "PIN required";
+    case Sim::puk:
+        return "PUK required";
+    case Sim::missing:
+        return "not inserted";
+    case Sim::unknown:
+        break;
+    }
+    return "unknown";
+}
+
+// AT+CPIN?, with "SIM not inserted" (+CME ERROR: 10) told apart from an
+// answer that is not there yet.
+Sim read_sim(at_handle_t at)
+{
+    std::string answer;
+    const esp_err_t error = at_query(at, "AT+CPIN?", answer);
+    if (answer.find("+CME ERROR: 10") != std::string::npos ||
+        answer.find("SIM not inserted") != std::string::npos ||
+        answer.find("NOT INSERTED") != std::string::npos) {
+        return Sim::missing;
+    }
+    if (error != ESP_OK) {
+        return Sim::unknown;
+    }
+    if (answer.find("READY") != std::string::npos) {
+        return Sim::ready;
+    }
+    if (answer.find("SIM PUK") != std::string::npos) {
+        return Sim::puk;
+    }
+    if (answer.find("SIM PIN") != std::string::npos) {
+        return Sim::pin;
+    }
+    return Sim::unknown;
+}
+
 const char *enter_pin(at_handle_t at, const std::string &sim_pin)
 {
     if (sim_pin.empty()) {
@@ -232,28 +274,49 @@ const char *enter_pin(at_handle_t at, const std::string &sim_pin)
     return nullptr;
 }
 
+// Without a card the modem says so at once; an unknown state that lasts
+// this long ends the attempt as well instead of waiting for the deadline.
+constexpr std::int64_t kSimMissingAfterUs = 10 * kSecondUs;
+
 const char *unlock_sim(const Deadline &deadline, at_handle_t at,
-                       esp_modem_pin_state_t pin, const std::string &sim_pin)
+                       const std::string &sim_pin)
 {
-    if (pin == PIN_SIM_PIN) {
-        const char *problem = enter_pin(at, sim_pin);
-        if (problem != nullptr) {
-            return problem;
-        }
-    }
-    // The card takes a moment after the PIN or after the radio came on.
+    const std::int64_t started_us = esp_timer_get_time();
+    bool pin_entered = false;
+    Sim last = Sim::unknown;
+    // The card takes a moment after the radio came on and after the PIN.
     while (true) {
-        if (at_cmd_read_pin(at, &pin) == ESP_OK && pin == PIN_READY) {
+        const Sim sim = read_sim(at);
+        if (sim != last) {
+            ESP_LOGI(TAG, "SIM %s", sim_name(sim));
+            last = sim;
+        }
+        if (sim == Sim::ready) {
             return nullptr;
         }
-        if (pin == PIN_SIM_PUK || pin == PIN_SIM_PUK2) {
+        if (sim == Sim::puk) {
             return "the SIM card is locked (PUK required)";
+        }
+        if (sim == Sim::pin && !pin_entered) {
+            const char *problem = enter_pin(at, sim_pin);
+            if (problem != nullptr) {
+                return problem;
+            }
+            pin_entered = true;
+            continue;
+        }
+        const bool slow =
+            esp_timer_get_time() - started_us > kSimMissingAfterUs;
+        if (sim == Sim::missing && slow) {
+            return "no SIM card";
+        }
+        if (sim == Sim::unknown && slow && !pin_entered) {
+            return "no SIM card (or it does not answer)";
         }
         if (s_cancel.load()) {
             return "stopped";
         }
         if (deadline.passed()) {
-            ESP_LOGW(TAG, "SIM state: %s", pin_state_name(pin));
             return "the SIM card is not ready";
         }
         pause_ms(1000);
@@ -305,13 +368,10 @@ void log_network(at_handle_t at)
     }
 }
 
-// Returns null on success, else the reason.
-const char *bring_up(const Settings &settings)
+// USB host and modem driver, without starting a data call. Returns null on
+// success, else the reason.
+const char *install_drivers(const std::string &apn)
 {
-    const Deadline deadline(CONFIG_MODEM_ATTACH_TIMEOUT_S);
-    const std::int64_t started_us = esp_timer_get_time();
-    set_power(true);
-
     if (!s_cdc_installed) {
         usbh_cdc_driver_config_t cdc = {};
         cdc.task_stack_size = 4096;
@@ -329,37 +389,49 @@ const char *bring_up(const Settings &settings)
     usbh_modem_config_t config = {};
     config.modem_id_list = trailcamhub_modem_ids;
     config.at_tx_buffer_size = 256;
-    config.at_rx_buffer_size = 256;
-    if (!settings.apn.empty()) {
+    // Room for unsolicited lines arriving together with an answer (with 256
+    // bytes the driver truncated them).
+    config.at_rx_buffer_size = 1024;
+    if (!apn.empty()) {
         config.pdp.enable = true;
         config.pdp.cid = 1;
         config.pdp.type = "IP";
-        config.pdp.apn = settings.apn.c_str();
+        config.pdp.apn = apn.c_str();
     }
     xEventGroupClearBits(s_events, kGotIp | kLostIp);
-    esp_err_t error = usbh_modem_install(&config);
+    const esp_err_t error = usbh_modem_install(&config);
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "Modem driver: %s", esp_err_to_name(error));
         return "the modem driver could not be started";
     }
     s_modem_installed = true;
-    // The data call is started below, once the SIM and the network are
+    // A data call is started by bring_up() once the SIM and the network are
     // ready, not as soon as the modem appears on USB.
     usbh_modem_ppp_auto_connect(false);
+    return nullptr;
+}
 
+// Returns null on success, else the reason.
+const char *bring_up(const Settings &settings)
+{
+    const Deadline deadline(CONFIG_MODEM_ATTACH_TIMEOUT_S);
+    const std::int64_t started_us = esp_timer_get_time();
+    set_power(true);
+    const char *installed = install_drivers(settings.apn);
+    if (installed != nullptr) {
+        return installed;
+    }
     at_handle_t at = nullptr;
-    esp_modem_pin_state_t pin = PIN_UNKNOWN;
-    const char *problem = wait_for_modem(deadline, at, pin);
+    const char *problem = wait_for_modem(deadline, at);
     if (problem != nullptr) {
         return problem;
     }
-    ESP_LOGI(TAG, "Modem answers after %lld ms; SIM %s",
-             (long long)((esp_timer_get_time() - started_us) / 1000),
-             pin_state_name(pin));
+    ESP_LOGI(TAG, "Modem answers after %lld ms",
+             (long long)((esp_timer_get_time() - started_us) / 1000));
     // Back from the flight mode of the last sync. Not an error if the radio
     // was on already.
     at_send_command_response_ok(at, "AT+CFUN=1");
-    problem = unlock_sim(deadline, at, pin, settings.sim_pin);
+    problem = unlock_sim(deadline, at, settings.sim_pin);
     if (problem == nullptr) {
         problem = wait_for_network(deadline, at);
     }
@@ -368,7 +440,8 @@ const char *bring_up(const Settings &settings)
     }
     log_network(at);
 
-    error = usbh_modem_ppp_start(deadline.ticks_left());
+    s_ppp_started = true;
+    const esp_err_t error = usbh_modem_ppp_start(deadline.ticks_left());
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "PPP: %s", esp_err_to_name(error));
         return "the data call could not be started";
@@ -399,8 +472,12 @@ const char *bring_up(const Settings &settings)
 void take_down()
 {
     if (s_modem_installed) {
-        // Ends a running data call; INVALID_STATE if none runs.
-        usbh_modem_ppp_stop();
+        // Ends the data call, if one was started: without one the driver
+        // logs an error.
+        if (s_ppp_started) {
+            usbh_modem_ppp_stop();
+            s_ppp_started = false;
+        }
 #if CONFIG_MODEM_POWER_GPIO < 0
         // The modem keeps its power (DIP switch): flight mode until the
         // next sync, which saves most of its idle current.
@@ -426,6 +503,33 @@ void take_down()
     set_power(false);
 }
 
+// How long the start-up switch-off waits for the modem on USB. Without
+// power (4G DIP switch OFF) it never appears, and nothing needs switching
+// off.
+constexpr std::uint32_t kRadioOffTimeoutS = 20;
+
+// After a power-on or reset the modem (powered by the DIP switch) starts with
+// its radio on and registers with the network on its own, whatever the
+// transport: put it into flight mode until a sync needs it (#155).
+void radio_off_at_start()
+{
+#if CONFIG_MODEM_POWER_GPIO >= 0
+    // Off by its power GPIO until a sync switches it on.
+#else
+    const Deadline deadline(kRadioOffTimeoutS);
+    const char *problem = install_drivers("");
+    at_handle_t at = nullptr;
+    if (problem == nullptr) {
+        problem = wait_for_modem(deadline, at);
+    }
+    if (problem != nullptr) {
+        ESP_LOGI(TAG, "Modem radio left as it is at start-up: %s", problem);
+    }
+    // Flight mode (AT+CFUN=4) if the modem answers, drivers removed.
+    take_down();
+#endif
+}
+
 void modem_task(void *arg)
 {
     (void)arg;
@@ -448,6 +552,9 @@ void modem_task(void *arg)
                     s_callbacks.failed(problem);
                 }
             }
+        } else if (command == Command::radio_off) {
+            radio_off_at_start();
+            s_switching_off = false;
         } else {
             take_down();
             s_active = false;
@@ -468,6 +575,9 @@ esp_err_t init(const Callbacks &callbacks)
         return ESP_ERR_INVALID_STATE;
     }
     s_callbacks = callbacks;
+    // The PPP glue asks the modem driver for a MAC address, which it does not
+    // have; the warning about it on every attach means nothing.
+    esp_log_level_set("iot_eth", ESP_LOG_ERROR);
 #if CONFIG_MODEM_POWER_GPIO >= 0
     gpio_config_t io = {};
     io.pin_bit_mask = 1ULL << CONFIG_MODEM_POWER_GPIO;
@@ -494,6 +604,12 @@ esp_err_t init(const Callbacks &callbacks)
     }
     if (xTaskCreate(modem_task, "modem", 4096, nullptr, 5, nullptr) != pdPASS) {
         return ESP_ERR_NO_MEM;
+    }
+    // A wake-up from deep sleep finds the modem as the last cycle left it.
+    if (esp_reset_reason() != ESP_RST_DEEPSLEEP) {
+        s_switching_off = true;
+        const Command command = Command::radio_off;
+        xQueueSend(s_commands, &command, 0);
     }
     return ESP_OK;
 }
@@ -526,7 +642,7 @@ void disconnect()
 
 bool active()
 {
-    return s_active.load();
+    return s_active.load() || s_switching_off.load();
 }
 
 int signal_dbm()

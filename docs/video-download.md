@@ -82,7 +82,7 @@ With `CONFIG_CAMERA_VIDEO_ON_REQUEST` (the default of the autonomous profile) a 
 
 1. The app queues a `requestVideo` command. At the next check-in the hub sets `kVideoRequested` in the camera's catalog and makes a camera read due at once (`schedule::request_camera_read()`); the command stays unanswered.
 2. That read downloads the video (`MediaCatalog::download_queue()`).
-3. At the sync after the read the backend sends the command again, with a fresh presigned `uploadUrl`. The hub builds the MP4 from the stored `.h264` and `.aac` while it sends it (`mp4::FileSource` + `mp4::Mp4File`, nothing extra on the card), sets `kVideoUploaded` and acknowledges `done`. A failed upload is tried again with the next check-in.
+3. At the sync after the read the backend sends the command again, with a fresh presigned `uploadUrl`. The hub builds the MP4 from the stored `.h264` and `.aac` while it sends it (`mp4::FileSource` + `mp4::Mp4File`, nothing extra on the card), sets `kVideoUploaded` and acknowledges `done`. A failed upload is tried again with the next check-in. The log line `Uploaded video … over Wi-Fi|the modem: … KB in … ms (… KB/s; reading the SD card … ms)` separates the time spent reading the card from the network.
 4. The backend checks S3 and marks the video `available`; the app plays it from a presigned URL.
 
 The hub answers `failed` (and forgets the request, so a new one starts over) when the video is no longer on the camera's card (a complete media list without it: `kVideoUnavailable`), when its download failed three times (counted in two bits of the catalog flags), when the MP4 is larger than `CONFIG_UPLINK_VIDEO_MAX_MB` (50) or, when the hub syncs over the cellular modem, `CONFIG_UPLINK_VIDEO_MAX_MB_MODEM` (15; error "too large for the cellular uplink (… MB, at most … MB)"), or when the build does not download videos. A hub syncs over one transport only, so a video too large for the modem is not kept for a Wi-Fi sync. A video downloaded before (e.g. with "every video") is uploaded without a camera read. Decisions: `uplink::decide_video()` and `uplink::video_size_failure()` (host-tested).
@@ -92,3 +92,12 @@ Not covered yet: the data volume over the modem (#54) and a notification when th
 ## What the log shows
 
 `ARTEMIS response cmdId 769: {...}` with the camera's answer, `First video frame: WxH, pts …` with the first 16 decrypted bytes (they should start with `00 00 00 01`), progress every 100 frames, and a summary per video: video and audio frames, dropped markers, records of another session and other records, and the file sizes, followed by `Video transfer:` with the counts of frames out of order, frames repeated by the camera, frames beyond the reorder window and failed ACK sends, the time spent in SD writes (in total and the longest), the internal heap (free and minimum) and frames far behind the expected one. `Video transfer:` is also logged with every progress line and when the session ends during a video. The first 40 frames beyond the reorder window, and then every 500th, are logged as `Playback frame seq …, expected … (delta …)` with their first bytes.
+
+## Upload throughput (#154)
+
+Measured on the S3 main board before the changes below: ~83–88 KB/s over the home Wi-Fi (7.8 s and 20 s 1080p) and ~49 KB/s over LTE Cat-1 with a very good signal, while the camera download of the same videos ran at ~300 KB/s. Two causes on the hub:
+
+- **Modem sleep on the home Wi-Fi** (`CONFIG_UPLINK_WIFI_POWER_SAVE`, autonomous profile): the station wakes only at DTIM beacons. During a video upload and a firmware check the hub now switches to `WIFI_PS_NONE` (`camera_wifi_set_full_power()`) and back afterwards.
+- **TCP windows of 5.7 KB** (the ESP-IDF default, 4 MSS): at most one window per round trip, i.e. ~60–100 KB/s at the 60–100 ms of an LTE link. The PSRAM boards (ESP32-S3, ESP32-P4) now use 32 KB send and receive windows; the T-Dongle-S3 without PSRAM keeps the default.
+
+Still to be measured on hardware (#166 follow-up).

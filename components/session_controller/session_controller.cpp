@@ -439,7 +439,8 @@ void uplink_task(void *arg)
     std::uint8_t request;
     while (true) {
         xQueueReceive(s_uplink_requests, &request, portMAX_DELAY);
-        diagnostics_log_memory("home Wi-Fi connected");
+        diagnostics_log_memory(s_uplink_modem ? "uplink connected (modem)"
+                                              : "uplink connected (Wi-Fi)");
         uplink::Report report;
         QueuedEvent event = make_event(session::Event::uplink_done);
         event.error = uplink::run(s_settings, report);
@@ -644,15 +645,23 @@ void controller_task(void *arg)
                      session::to_string(result.previous));
             continue;
         }
+        const char *event_name = session::to_string(event.type);
+        if (result.previous == session::State::uplink_join &&
+            event.type == session::Event::wifi_connected) {
+            event_name = s_uplink_modem ? "uplink connected (modem)"
+                                        : "uplink connected (Wi-Fi)";
+        } else if (result.previous == session::State::uplink_join &&
+                   event.type == session::Event::wifi_failed) {
+            event_name = s_uplink_modem ? "uplink failed (modem)"
+                                        : "uplink failed (Wi-Fi)";
+        }
         if (result.next != result.previous) {
             ESP_LOGI(TAG, "Session state %s -> %s (%s)",
                      session::to_string(result.previous),
-                     session::to_string(result.next),
-                     session::to_string(event.type));
+                     session::to_string(result.next), event_name);
         } else {
             ESP_LOGI(TAG, "Session state %s: handling %s",
-                     session::to_string(result.next),
-                     session::to_string(event.type));
+                     session::to_string(result.next), event_name);
         }
         if (result.next == session::State::backoff) {
             ESP_LOGI(TAG, "Retrying camera activation in %u s (attempt %u/%u)",

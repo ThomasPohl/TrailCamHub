@@ -5,7 +5,8 @@ The Waveshare ESP32-S3-A7670E-4G has an A7670E LTE Cat-1 modem on the S3's **nat
 ## Board setup
 
 - **USB DIP switch OFF**: the modem's USB goes to the ESP32-S3 (ON connects it to the USB-C socket instead).
-- **4G DIP switch ON**: the modem has power. Between syncs it is put into flight mode (`AT+CFUN=4`).
+- **4G DIP switch ON**: the modem has power. Between syncs it is put into flight mode (`AT+CFUN=4`). It starts with its radio on after every power-on, so the hub also puts it into flight mode right after a power-on or reset (`Modem radio off` in the boot log, a few seconds of USB host), whatever the `transport`: otherwise a hub on the home Wi-Fi would keep a registered LTE modem running (a few to a few tens of mA, more than the rest of the hub in deep sleep). A wake-up from deep sleep finds the modem as the last cycle left it.
+  A hub that never uses the modem can also have the 4G DIP switch OFF: the start-up switch-off then finds no modem on USB within 20 s and leaves it.
   Waveshare's FAQ describes switching the power with a GPIO instead (4G DIP switch OFF, GPIO33 high = on). On the ESP32-S3R8 GPIO33–37 belong to the octal PSRAM, so this is not the default: set `CONFIG_MODEM_POWER_GPIO` only once the board revision has been checked.
 - **HUB DIP switch**: Waveshare recommends OFF on battery (USB hub circuit without power). Whether the modem's USB path needs the hub on this board has to be checked on hardware.
 - The serial console uses UART0 through the CH343 bridge, as before.
@@ -51,7 +52,14 @@ The session state machine is unchanged: `UPLINK_JOIN` brings the uplink up, `UPL
 
 Below `CONFIG_HUB_BATTERY_MODEM_MIN_MV` (3400 mV, read right before step 1) the modem is not switched on at all: its current peaks of up to ~2 A could cause a brownout on a nearly empty cell. The cycle then ends like a failed sync. See "Saving power on a low hub battery" in `docs/power-and-schedule.md`.
 
-Steps 1–6 must finish within `CONFIG_MODEM_ATTACH_TIMEOUT_S` (120 s), otherwise the cycle ends with `uplink_unreachable` and the schedule's back-off applies. The log names the step that failed (`Modem uplink failed: …`).
+Steps 1–6 must finish within `CONFIG_MODEM_ATTACH_TIMEOUT_S` (120 s), otherwise the cycle ends with `uplink_unreachable` and the schedule's back-off applies. The log names the step that failed (`Modem uplink failed: …`) and the session log names the transport (`uplink connected (modem)`, `uplink failed (modem)`).
+
+Failures that end early instead of after 120 s:
+
+- **No SIM card:** the modem reports it at once (`+CME ERROR: 10`); after 10 s of `SIM not inserted` (or of no SIM state at all) the attempt ends with `no SIM card`, which saves about two minutes of modem current per cycle on battery.
+- **Refused or missing PIN**, a locked card (PUK): see "SIM PIN".
+
+While the modem is not on USB yet, the log shows `Waiting for the modem on USB` once; the driver's `AT parser is stopped` errors of that phase are muted. If it never appears, the error names the DIP switches (USB OFF, 4G ON).
 
 ## Not covered yet
 
