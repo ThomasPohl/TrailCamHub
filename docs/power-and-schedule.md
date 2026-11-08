@@ -65,7 +65,7 @@ In this order of precedence:
 2. **Hub** (NVS, `hub_config`): `config set camera_plan …` and
    `config set checkin_min …` on the serial console or in the web installer's
    *Device setup*.
-3. **Build** (Kconfig, the profile's default).
+3. **Build** (Kconfig), where the mode runs unattended (see the table above).
 
 The console's `status` and every check-in report the plan and interval in
 effect, where each comes from, and the next planned read and check-in.
