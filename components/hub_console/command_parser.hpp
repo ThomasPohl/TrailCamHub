@@ -3,7 +3,7 @@
 // Parses the line-based serial commands of the hub, as sent by the web
 // installer or typed into a terminal:
 //
-//   help | status | scan | camlist | upload | stop
+//   help | status | scan | camlist | upload | update | stop
 //   config show | config clear
 //   config set <key> <value...>   value = rest of the line (empty erases)
 //   config set-hex <key> <hex>    value as hex-encoded bytes (any characters)
@@ -31,6 +31,7 @@ enum class CommandType {
     scan,
     camlist,
     upload,
+    update,
     stop,
     heap,
     ls,

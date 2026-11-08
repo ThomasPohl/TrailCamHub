@@ -5,5 +5,6 @@ idf_component_register(SRCS "uplink.cpp" "uplink_protocol.cpp"
                        REQUIRES hub_config
                        PRIV_REQUIRES camera_link esp_app_format
                                      esp_http_client esp_timer hub_battery
-                                     mbedtls mp4_mux ota_update schedule
+                                     mbedtls modem_uplink mp4_mux ota_update
+                                     schedule
                                      schedule_state time_sync)

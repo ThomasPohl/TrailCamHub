@@ -1,4 +1,4 @@
-# Firmware updates over the check-in
+# Firmware updates from GitHub
 
 Hubs in the field update themselves to the newest **release**. A release is a git tag `vX.Y.Z`; development builds (a commit hash as version) are never replaced automatically.
 
@@ -13,7 +13,7 @@ The firmware workflow builds every board with the tag as version (`TRAILCAMHUB_V
 
 - `trailcamhub-<board>-<variant>.app.bin`: the application image (for OTA) of each board (`esp32s3`, `tdongle-s3`, `tdongle-c5`, `esp32p4`) and variant (`dev`, `release`),
 - the deployment packages (`trailcamhub-<board>.tar.gz`, as built for the installer),
-- `ota.json`, the manifest the backend reads:
+- `ota.json`, the manifest the hubs read:
 
 ```json
 {
@@ -30,27 +30,48 @@ The firmware workflow builds every board with the tag as version (`TRAILCAMHUB_V
 
 A tag with a suffix (`v1.1.0-rc1`) becomes a pre-release: GitHub's "latest release", and so the hubs, skip it.
 
-## Backend
-
-`FIRMWARE_MANIFEST_URL` (template parameter `FirmwareManifestUrl`, default `https://github.com/ThomasPohl/TrailCamHub/releases/latest/download/ota.json`, empty = off) is read at most every ten minutes per Lambda container (`src/firmware.ts`). A hub reports `hubFirmware`, `hubBoard` and `hubVariant` with every check-in; when the manifest has an image for `<board>-<variant>` with a higher version than the hub's own release, the check-in response carries it:
-
-```json
-"firmware": { "version": "v1.0.1", "url": "https://…", "sha256": "…", "size": 1572864 }
-```
-
 ## Hub
 
-After the sync (thumbnails, videos, acknowledgement) the hub decides (`ota::decide()`, host-tested):
+The hub reads the manifest itself; no server is involved (#150). At the end of a successful sync (after thumbnails, videos and the acknowledgement) `ota::check_for_update()` runs:
 
-| Case                                                | Result                             |
-| --------------------------------------------------- | ---------------------------------- |
-| `CONFIG_OTA_AUTO_UPDATE` off                        | not installed                      |
-| running version is not `vX.Y.Z` (development build) | not installed                      |
-| offered version not newer                           | not installed                      |
-| offered version was rolled back on this hub before  | not installed (a later release is) |
-| otherwise                                           | installed                          |
+1. **May it update at all?** (`ota::ready()`, before anything is downloaded)
 
-`ota::install()` downloads the image over HTTPS (following GitHub's redirect to its storage host) straight into the other OTA slot, block by block. Before the first block is written it checks the image's own description (project name and version must match the offer); at the end the size and the SHA-256 of the manifest, then `esp_ota_end()` checks the image itself. Only then is the new slot selected and the hub restarts (the SD log is written first). A failed download leaves the running firmware untouched and is tried again at the next check-in.
+   | Case                                                                            | Result   |
+   | ------------------------------------------------------------------------------- | -------- |
+   | `CONFIG_OTA_AUTO_UPDATE` off                                                    | no check |
+   | running version is not `vX.Y.Z` (development build)                             | no check |
+   | hub battery in the critical or low level (`docs/power-and-schedule.md`)         | no check |
+   | hub battery below `CONFIG_OTA_MIN_BATTERY_PERCENT` (40 %) and not charging      | no check |
+   | over the modem with a signal below `CONFIG_OTA_MODEM_MIN_SIGNAL_DBM` (−105 dBm) | no check |
+
+   An unknown battery (no gauge) or an unknown signal does not block. The battery values are those read between cycles, not under the modem's load.
+
+2. **Manifest due?** At most every `CONFIG_OTA_CHECK_INTERVAL_H` (24 h; the time of the last read is kept in NVS, also when the read failed). The console command `update` syncs and reads it right away. One read costs about 10–20 KB.
+
+3. **Read** `CONFIG_OTA_MANIFEST_URL` (GitHub's "latest release", following its redirect) and take the image `<board>-<variant>`.
+
+4. **Decide** (`ota::decide()`, host-tested):
+
+   | Case                                                    | Result                                                                                |
+   | ------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+   | offered version not newer                               | not installed                                                                         |
+   | offered version was rolled back on this hub before      | not installed (a later release is)                                                    |
+   | this version failed `CONFIG_OTA_MAX_ATTEMPTS` (3) times | waits `CONFIG_OTA_RETRY_AFTER_H` (24 h) after the last failure, then one more attempt |
+   | otherwise                                               | installed                                                                             |
+
+   The failures are counted per version in NVS; a newer release starts afresh, a successful install clears them.
+
+5. **Install:** `ota::install()` downloads the image over HTTPS straight into the other OTA slot, block by block. Before the first block is written it checks the image's own description (project name and version must match the manifest); at the end the size and the SHA-256 of the manifest, then `esp_ota_end()` checks the image itself. A download that breaks off is continued with an HTTP range request from the last byte written (up to three times, while the hub is running); GitHub's asset storage supports ranges.
+
+6. **Restart** once the cycle is over: the uplink ends as usual (over the modem: data call ended, radio off), the scheduler waits until the modem is down (at most 30 s) and restarts the hub (the SD log is written first).
+
+The console's `status` shows the running firmware and the result of the last check (`TCH INFO firmware v1.2.0 (esp32s3-release), release v1.3.0 not installed: the hub battery is too low`).
+
+A hub only checks while it syncs, i.e. with a backend configured; other destinations (#150) will call the same check.
+
+## Backend
+
+The backend no longer offers firmware (#150). It still receives `hubFirmware`, `hubBoard` and `hubVariant` with every check-in.
 
 ## Rollback
 
@@ -64,6 +85,5 @@ The rollback needs a bootloader built with this option. An update over the air d
 
 ## Not covered yet
 
-- The modem uplink (#54): an update is about 1.5–2 MB. Once the hub can check in over LTE, updates should wait for Wi-Fi or Ethernet, or need an explicit permission.
-- The hub battery (#75, #138): no update on a nearly empty battery.
-- Showing the hub firmware and the last update in the app.
+- Reporting updates and failed checks to the backend and the app (#149, backend-only for now).
+- Showing the hub firmware and the last update in the app (#144).

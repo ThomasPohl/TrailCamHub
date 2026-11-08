@@ -21,6 +21,7 @@
 
 #include "hub_battery.hpp"
 #include "modem_uplink.hpp"
+#include "ota_update.hpp"
 #include "schedule_state.hpp"
 #include "sd_log.h"
 #include "session_controller.h"
@@ -177,17 +178,22 @@ std::int64_t earliest(std::int64_t a, std::int64_t b)
     return a < b ? a : b;
 }
 
-#if CONFIG_POWER_DEEP_SLEEP
-[[noreturn]] void sleep_for(std::int64_t sleep_s)
+// The modem is taken down after a sync in its own task (data call ended,
+// radio off); sleeping or restarting before that would leave its radio on.
+void wait_for_modem_down(const char *what)
 {
-    // The modem is taken down after a sync in its own task (data call
-    // ended, radio off); sleeping before that would leave its radio on.
     for (int i = 0; i < 300 && modem_uplink::active(); ++i) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     if (modem_uplink::active()) {
-        ESP_LOGW(TAG, "Modem still active; sleeping anyway");
+        ESP_LOGW(TAG, "Modem still active; %s anyway", what);
     }
+}
+
+#if CONFIG_POWER_DEEP_SLEEP
+[[noreturn]] void sleep_for(std::int64_t sleep_s)
+{
+    wait_for_modem_down("sleeping");
     ESP_LOGI(TAG, "Deep sleep for %lld s", (long long)sleep_s);
     schedule::prepare_sleep(sleep_s);
 #if CONFIG_SD_LOG_ENABLE
@@ -240,6 +246,11 @@ void scheduler_task(void *arg)
         std::uint32_t wait_ms = SCHEDULER_MAX_WAIT_MS;
         session_status_t status;
         session_controller_get_status(&status);
+        if (status.phase == SESSION_PHASE_IDLE && ota::restart_pending()) {
+            // A new firmware was installed during the last sync.
+            wait_for_modem_down("restarting");
+            ota::restart();
+        }
         if (status.phase == SESSION_PHASE_IDLE) {
             update_hub_battery();
             const std::int64_t now = schedule::now();
