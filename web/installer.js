@@ -7,6 +7,8 @@
   var info = document.getElementById("build-info");
   var devButton = document.getElementById("install-dev");
   var relButton = document.getElementById("install-release");
+  // The assistant installs the release build of the chosen version.
+  var wizardButton = document.getElementById("install-wizard");
   var dlDev = document.getElementById("dl-dev");
   var dlRel = document.getElementById("dl-release");
   var dlSha = document.getElementById("dl-sha");
@@ -21,6 +23,9 @@
     }
     devButton.setAttribute("manifest", "./" + build.dev);
     relButton.setAttribute("manifest", "./" + build.release);
+    if (wizardButton) {
+      wizardButton.setAttribute("manifest", "./" + build.release);
+    }
     dlDev.setAttribute("href", "./" + build.devBin);
     dlRel.setAttribute("href", "./" + build.releaseBin);
     dlSha.setAttribute("href", "./" + dirOf(build.dev) + "SHA256SUMS");

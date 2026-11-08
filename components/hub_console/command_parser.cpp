@@ -254,6 +254,9 @@ Command parse_command(const std::string &line)
     if (word == "stop") {
         return simple(CommandType::stop);
     }
+    if (word == "restart") {
+        return simple(CommandType::restart);
+    }
     return invalid("unknown command '" + word + "' (try 'help')");
 }
 
@@ -268,6 +271,8 @@ const char *help_text()
            "update                     sync, then look for a firmware "
            "update now\n"
            "stop                       end the running scan\n"
+           "restart                    restart the hub (like the reset "
+           "button)\n"
            "heap [blocks]              internal RAM by capability and "
            "region\n"
            "ls [path]                  list a directory of the SD card\n"
@@ -279,7 +284,10 @@ const char *help_text()
            "config set-hex <key> <hex> store a hex-encoded setting\n"
            "config unset <key>         erase a setting\n"
            "config clear               erase all settings\n"
-           "keys: wifi_ssid wifi_password api_url device_key\n";
+           "keys: wifi_ssid wifi_password api_url device_key camera_plan\n"
+           "      checkin_min transport apn sim_pin power direction\n"
+           "      destination webdav_url webdav_user webdav_password\n"
+           "      telegram_token telegram_chat health_url\n";
 }
 
 }  // namespace hub_console

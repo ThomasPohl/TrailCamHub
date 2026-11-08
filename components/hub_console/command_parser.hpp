@@ -33,6 +33,7 @@ enum class CommandType {
     upload,
     update,
     stop,
+    restart,
     heap,
     ls,
     cat,

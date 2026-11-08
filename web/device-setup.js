@@ -273,7 +273,7 @@
         break;
       }
       case "INFO":
-        if (text.startsWith("profile ")) {
+        if (text.startsWith("mode ")) {
           scheduleList.replaceChildren();
         }
         if (SCHEDULE_INFO.some((prefix) => text.startsWith(prefix))) {
