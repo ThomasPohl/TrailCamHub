@@ -510,3 +510,14 @@ TEST_CASE("destinations: settings and what each needs")
     CHECK(std::string(destination_name(
               resolve_mode(t, modem, Preset{}).destination)) == "telegram");
 }
+
+TEST_CASE("health check URL")
+{
+    using hub_config::Key;
+    using hub_config::validate;
+    CHECK(validate(Key::health_url, "https://hc-ping.com/abc-123").empty());
+    CHECK(validate(Key::health_url, "http://10.0.0.2/ping").empty());
+    CHECK_FALSE(validate(Key::health_url, "hc-ping.com/abc").empty());
+    CHECK_FALSE(validate(Key::health_url, "https://a b").empty());
+    CHECK(hub_config::display_value(Key::health_url, "") == "(not set)");
+}

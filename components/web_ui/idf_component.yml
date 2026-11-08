@@ -1,0 +1,3 @@
+## mDNS responder for http://trailcamhub.local (web UI).
+dependencies:
+  espressif/mdns: "^1.8.0"

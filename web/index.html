@@ -121,6 +121,10 @@
               <input name="telegram_token" type="password" placeholder="123456789:AA…" spellcheck="false">
               <small>Stored: <span id="ds-current-telegram_token">–</span> · from @BotFather; then send /start to the bot</small>
             </label>
+            <label>Health check URL
+              <input name="health_url" type="url" placeholder="https://hc-ping.com/…" spellcheck="false">
+              <small>Stored: <span id="ds-current-health_url">–</span> · called after every sync; the service warns you when the calls stop</small>
+            </label>
             <label>Telegram chat
               <input name="telegram_chat" placeholder="set by /start" spellcheck="false" maxlength="20">
               <small>Stored: <span id="ds-current-telegram_chat">–</span> · empty: the next chat that sends /start</small>
