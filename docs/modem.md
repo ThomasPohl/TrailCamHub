@@ -51,7 +51,14 @@ The session state machine is unchanged: `UPLINK_JOIN` brings the uplink up, `UPL
 
 Below `CONFIG_HUB_BATTERY_MODEM_MIN_MV` (3400 mV, read right before step 1) the modem is not switched on at all: its current peaks of up to ~2 A could cause a brownout on a nearly empty cell. The cycle then ends like a failed sync. See "Saving power on a low hub battery" in `docs/power-and-schedule.md`.
 
-Steps 1–6 must finish within `CONFIG_MODEM_ATTACH_TIMEOUT_S` (120 s), otherwise the cycle ends with `uplink_unreachable` and the schedule's back-off applies. The log names the step that failed (`Modem uplink failed: …`).
+Steps 1–6 must finish within `CONFIG_MODEM_ATTACH_TIMEOUT_S` (120 s), otherwise the cycle ends with `uplink_unreachable` and the schedule's back-off applies. The log names the step that failed (`Modem uplink failed: …`) and the session log names the transport (`uplink connected (modem)`, `uplink failed (modem)`).
+
+Failures that end early instead of after 120 s:
+
+- **No SIM card:** the modem reports it at once (`+CME ERROR: 10`); after 10 s of `SIM not inserted` (or of no SIM state at all) the attempt ends with `no SIM card`, which saves about two minutes of modem current per cycle on battery.
+- **Refused or missing PIN**, a locked card (PUK): see "SIM PIN".
+
+While the modem is not on USB yet, the log shows `Waiting for the modem on USB` once; the driver's `AT parser is stopped` errors of that phase are muted. If it never appears, the error names the DIP switches (USB OFF, 4G ON).
 
 ## Not covered yet
 
