@@ -5,6 +5,7 @@
 // host-testable; storage in NVS lives in hub_config.cpp.
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace hub_config
@@ -27,7 +28,8 @@ enum class Key {
     // APN of the SIM card's provider for the modem; empty: the one the
     // network suggests.
     apn,
-    // PIN of the SIM card (4-8 digits); empty: the card has no PIN.
+    // PIN of the SIM card (4 digits, all the modem driver sends); empty: the
+    // card has no PIN.
     sim_pin,
 };
 
@@ -81,5 +83,30 @@ bool uplink_configured(const Settings &settings, bool modem_available = false);
 
 // The backend URL without trailing slashes, ready for appending "/v1/...".
 std::string api_base(const std::string &api_url);
+
+// SIM PIN guard (#152). A PIN the SIM card refused is remembered (as this
+// fingerprint, never 0) across cycles and deep sleep, so that the hub does
+// not lock the card by sending it again in the next cycles; "config set
+// sim_pin" forgets it.
+std::uint32_t sim_pin_fingerprint(const std::string &pin);
+
+enum class PinDecision {
+    send,              // enter the PIN
+    refused_before,    // the card refused exactly this PIN before
+    too_few_attempts,  // fewer than kMinPinAttempts left: needs a phone
+};
+
+// Attempts that must be left before the hub enters a PIN: with one left, a
+// wrong PIN would lock the card (PUK).
+constexpr int kMinPinAttempts = 2;
+
+// `refused`: the stored fingerprint (0: none). `attempts_left`: PIN attempts
+// the card has left, -1 if unknown.
+PinDecision sim_pin_decision(std::uint32_t refused, const std::string &pin,
+                             int attempts_left);
+
+// PIN attempts left from a "+SPIC: <pin1>,<puk1>,<pin2>,<puk2>" line of a
+// SIMCom modem (A76xx); -1 if the line is not one.
+int parse_spic_pin_attempts(const std::string &line);
 
 }  // namespace hub_config

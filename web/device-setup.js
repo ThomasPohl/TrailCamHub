@@ -181,8 +181,8 @@
     if (values.apn && !/^[A-Za-z0-9._-]{1,63}$/.test(values.apn)) {
       return "The APN may only contain letters, digits, '.', '-' and '_'.";
     }
-    if (values.sim_pin && !/^\d{4,8}$/.test(values.sim_pin)) {
-      return "The SIM PIN must have 4 to 8 digits.";
+    if (values.sim_pin && !/^\d{4}$/.test(values.sim_pin)) {
+      return "The SIM PIN must have 4 digits.";
     }
     if (values.api_url && !/^https:\/\/\S+$/.test(values.api_url)) {
       return "The API URL must start with https://.";

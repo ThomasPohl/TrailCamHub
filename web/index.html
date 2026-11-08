@@ -93,8 +93,8 @@
               <small>Stored: <span id="ds-current-apn">–</span> · modem only; empty = the network's default</small>
             </label>
             <label>SIM PIN
-              <input name="sim_pin" type="password" inputmode="numeric" maxlength="8">
-              <small>Stored: <span id="ds-current-sim_pin">–</span> · modem only; a wrong PIN is not tried again</small>
+              <input name="sim_pin" type="password" inputmode="numeric" maxlength="4">
+              <small>Stored: <span id="ds-current-sim_pin">–</span> · modem only, 4 digits; a refused PIN is not sent again until you enter it here again</small>
             </label>
             <label>Backend API URL
               <input name="api_url" type="url" placeholder="https://….lambda-url.eu-central-1.on.aws/" spellcheck="false">

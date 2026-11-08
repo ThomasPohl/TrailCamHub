@@ -184,12 +184,13 @@ std::string validate(Key key, const std::string &value)
         }
         return "";
     case Key::sim_pin:
-        if (value.size() < 4 || value.size() > 8) {
-            return "SIM PIN must be 4-8 digits";
+        // The modem driver (at_cmd_set_pin) sends 4-digit PINs only.
+        if (value.size() != 4) {
+            return "SIM PIN must be 4 digits";
         }
         for (char c : value) {
             if (c < '0' || c > '9') {
-                return "SIM PIN must be 4-8 digits";
+                return "SIM PIN must be 4 digits";
             }
         }
         return "";
@@ -251,6 +252,51 @@ std::string api_base(const std::string &api_url)
         base.pop_back();
     }
     return base;
+}
+
+std::uint32_t sim_pin_fingerprint(const std::string &pin)
+{
+    // FNV-1a. Not a secret: the PIN itself is stored next to it.
+    std::uint32_t hash = 2166136261u;
+    for (unsigned char c : std::string("sim_pin:") + pin) {
+        hash ^= c;
+        hash *= 16777619u;
+    }
+    return hash == 0 ? 1 : hash;
+}
+
+PinDecision sim_pin_decision(std::uint32_t refused, const std::string &pin,
+                             int attempts_left)
+{
+    if (refused != 0 && refused == sim_pin_fingerprint(pin)) {
+        return PinDecision::refused_before;
+    }
+    if (attempts_left >= 0 && attempts_left < kMinPinAttempts) {
+        return PinDecision::too_few_attempts;
+    }
+    return PinDecision::send;
+}
+
+int parse_spic_pin_attempts(const std::string &line)
+{
+    const std::string prefix = "+SPIC:";
+    const std::size_t at = line.find(prefix);
+    if (at == std::string::npos) {
+        return -1;
+    }
+    std::size_t i = at + prefix.size();
+    while (i < line.size() && line[i] == ' ') {
+        ++i;
+    }
+    int value = -1;
+    while (i < line.size() && line[i] >= '0' && line[i] <= '9') {
+        value = (value < 0 ? 0 : value * 10) + (line[i] - '0');
+        if (value > 99) {
+            return -1;
+        }
+        ++i;
+    }
+    return value;
 }
 
 }  // namespace hub_config
