@@ -261,10 +261,13 @@ void print_settings()
     // one of the setting lines above.
     const char *transport =
         hub_config::transport_name(hub_config::uplink_transport(settings));
-    reply("CONFIG",
-          hub_config::uplink_ready(settings)
-              ? std::string("backend configured, over ") + transport
-              : std::string("backend incomplete (") + transport + ")");
+    const char *destination =
+        hub_config::destination_name(hub_config::destination(settings));
+    reply("CONFIG", hub_config::uplink_ready(settings)
+                        ? std::string("backend configured, over ") + transport +
+                              ", to " + destination
+                        : std::string("backend incomplete (") + transport +
+                              ", " + destination + ")");
     if (hub_config::modem_available() && !settings.sim_pin.empty() &&
         hub_config::refused_sim_pin() ==
             hub_config::sim_pin_fingerprint(settings.sim_pin)) {

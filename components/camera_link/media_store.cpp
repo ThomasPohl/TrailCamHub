@@ -394,6 +394,11 @@ std::string MediaFileWriter::part_path() const
                               : base_ + "." + extension_ + ".part";
 }
 
+std::string camera_info_path(const std::string &camera_id)
+{
+    return camera_dir(camera_id) + "/camera.json";
+}
+
 std::string thumbnail_path(const std::string &camera_id, std::int64_t media_id)
 {
     return camera_dir(camera_id) + "/thumb/" + media_base_name(media_id) +

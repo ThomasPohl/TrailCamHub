@@ -9,7 +9,7 @@ time and stored on the hub (NVS), without another firmware image (concept:
 | `power`       | `mains`, `battery`            | battery on the S3-A7670E, mains elsewhere          | `config set power battery`       |
 | `direction`   | `push`, `pull`                | push on the S3-A7670E, pull elsewhere              | `config set direction push`      |
 | `transport`   | `wifi`, `ethernet`, `modem`   | Ethernet if the board has it, else the home Wi-Fi if one is set, otherwise the modem | `config set transport modem` |
-| `destination` | `backend`                     | `backend`                                         | `config set destination backend` |
+| `destination` | `backend`, `webdav`, `telegram` | `backend`                                       | `config set destination webdav`  |
 
 `config clear` (or the installer's "Erase") returns everything to the preset.
 
@@ -26,8 +26,8 @@ time and stored on the hub (NVS), without another firmware image (concept:
   the sync waits up to the Wi-Fi join timeout for its DHCP address) or the
   cellular modem. The hub's own access point follows with the web UI as a
   station (#150).
-- **destination** is where push goes. Today only the own backend; WebDAV and
-  Telegram directly follow (#150).
+- **destination** is where push goes: the own backend (AWS, optional), a
+  WebDAV folder, or a Telegram bot directly. See "Destinations" below.
 
 `status` shows the mode that applies and where each part comes from:
 
@@ -38,6 +38,69 @@ TCH INFO mode power battery (preset), direction push (setting), transport modem,
 A value the board cannot use is refused when it is set, e.g.
 `config set transport modem` on a board without a modem
 (`this board has no modem`).
+
+## Destinations
+
+Each destination remembers what it got in the camera's catalog on the SD
+card (a thumbnail: `kReported`, a photo or video file: `kVideoUploaded`), so
+switching the destination later does not send those items again.
+
+### Own backend (`backend`)
+
+`api_url` and `device_key`; the check-in, the Telegram Mini App and the bot
+of the backend (`backend/README.md`). Optional; it is not extended further
+(#150).
+
+### WebDAV (`webdav`)
+
+For a NAS or cloud in the home network (Nextcloud, Synology, QNAP, many
+routers): `webdav_url` (the folder, `https://` or `http://`), `webdav_user`,
+`webdav_password` (HTTP Basic; an app password where the server offers one).
+
+```
+config set destination webdav
+config set webdav_url https://nas.local/remote.php/dav/files/me/TrailCam
+config set webdav_user me
+config set webdav_password ...
+```
+
+Each sync creates `<camera-id>/thumb/` and `<camera-id>/media/` and copies new
+thumbnails, photos and videos (as MP4) with names from the camera's clock
+(`2026-11-08_15-04-05_<mediaId>.jpg`), plus `<camera-id>/camera.json` (battery,
+SD card). Over the home network the hub fetches **every** video from the
+camera for WebDAV, also in builds that otherwise fetch only requested ones;
+over the modem only those within the modem's size limit. `https://` checks
+the server certificate against the public CAs: a NAS with a self-signed
+certificate needs `http://` (unencrypted: only in a network you trust).
+
+### Telegram directly (`telegram`)
+
+Only on a board with a modem (decision in #150; at home use WebDAV or the web
+UI). Needs no server:
+
+1. Create a bot with @BotFather and set its token:
+   `config set telegram_token 123456789:AA...`, `config set destination telegram`.
+2. Send `/start` to the bot. At the next check-in the hub stores this chat as
+   the only one it talks to (`telegram_chat`; a group works too) and answers.
+
+At each check-in the hub reads the commands and button presses since the
+last one (`getUpdates`), then sends new thumbnails as photos (at most 20 per
+check-in, the rest follow) with a **Get video** button under videos, and the
+videos that were asked for (as MP4, up to the modem's size limit). Commands:
+`/status` (batteries, next read and check-in), `/scan` (read the cameras now),
+`/help`.
+
+Limits:
+
+- A sleeping hub answers at its next check-in only; the check-in interval is
+  capped at 12 hours with Telegram, since Telegram keeps updates for about a
+  day.
+- The token is stored on the hub; if the hub is stolen, revoke it with
+  @BotFather.
+- One bot per hub: a bot with a webhook (the backend's bot) cannot be read
+  with `getUpdates` (`409`).
+- Compared with the backend's bot there is no Mini App (gallery, camera
+  choice, plan card) and no warning when the hub stops reporting.
 
 ## Capabilities
 

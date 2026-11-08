@@ -100,8 +100,30 @@
               <select name="destination">
                 <option value="">Keep stored</option>
                 <option value="backend">Own backend (AWS)</option>
+                <option value="webdav">WebDAV folder (NAS, Nextcloud)</option>
+                <option value="telegram">Telegram bot directly (modem only)</option>
               </select>
               <small>Stored: <span id="ds-current-destination">–</span> · default: backend</small>
+            </label>
+            <label>WebDAV folder URL
+              <input name="webdav_url" type="url" placeholder="https://nas.local/remote.php/dav/files/me/TrailCam" spellcheck="false">
+              <small>Stored: <span id="ds-current-webdav_url">–</span> · http:// only in a network you trust</small>
+            </label>
+            <label>WebDAV user
+              <input name="webdav_user" spellcheck="false" maxlength="64">
+              <small>Stored: <span id="ds-current-webdav_user">–</span></small>
+            </label>
+            <label>WebDAV password
+              <input name="webdav_password" type="password" maxlength="128">
+              <small>Stored: <span id="ds-current-webdav_password">–</span> · an app password where the server offers one</small>
+            </label>
+            <label>Telegram bot token
+              <input name="telegram_token" type="password" placeholder="123456789:AA…" spellcheck="false">
+              <small>Stored: <span id="ds-current-telegram_token">–</span> · from @BotFather; then send /start to the bot</small>
+            </label>
+            <label>Telegram chat
+              <input name="telegram_chat" placeholder="set by /start" spellcheck="false" maxlength="20">
+              <small>Stored: <span id="ds-current-telegram_chat">–</span> · empty: the next chat that sends /start</small>
             </label>
             <label>Transport to the backend
               <select name="transport">

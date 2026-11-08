@@ -282,6 +282,12 @@ Effective effective()
     out.checkin_min = minutes_of(pick(&remote_checkin, &local.checkin_min,
                                       kBuiltInCheckin, &out.checkin_origin),
                                  CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN);
+    if (uplink && mode.destination == hub_config::Destination::telegram &&
+        (out.checkin_min == 0 ||
+         out.checkin_min > hub_config::kTelegramMaxCheckinMin)) {
+        // Telegram drops button presses and commands after about a day.
+        out.checkin_min = hub_config::kTelegramMaxCheckinMin;
+    }
     out.settings.checkin_min = out.checkin_min;
     out.settings.uplink = uplink;
     out.sleeps = hub_config::sleeps(mode, hub_config::capabilities());
