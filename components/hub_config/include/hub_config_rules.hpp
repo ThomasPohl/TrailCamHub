@@ -48,6 +48,10 @@ enum class Key {
     // it talks to (set by /start; empty: the next chat that sends /start).
     telegram_token,
     telegram_chat,
+    // Called after every sync (a health check service such as
+    // healthchecks.io: "<url>" after success, "<url>/fail" after a
+    // failure), so that it warns when the hub stops reporting.
+    health_url,
 };
 
 constexpr Key kAllKeys[] = {
@@ -76,6 +80,7 @@ struct Settings {
     std::string webdav_password;
     std::string telegram_token;
     std::string telegram_chat;
+    std::string health_url;
 };
 
 enum class Transport {

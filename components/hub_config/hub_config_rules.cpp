@@ -63,6 +63,8 @@ const char *key_name(Key key)
         return "telegram_token";
     case Key::telegram_chat:
         return "telegram_chat";
+    case Key::health_url:
+        return "health_url";
     }
     return "unknown";
 }
@@ -120,6 +122,8 @@ std::string &field(Settings &settings, Key key)
         return settings.telegram_token;
     case Key::telegram_chat:
         return settings.telegram_chat;
+    case Key::health_url:
+        return settings.health_url;
     case Key::device_key:
         break;
     }
@@ -278,6 +282,14 @@ std::string validate(Key key, const std::string &value)
         }
         return "";
     }
+    case Key::health_url:
+        if ((value.rfind("https://", 0) != 0 &&
+             value.rfind("http://", 0) != 0) ||
+            value.size() <= 8 || value.size() > 200 ||
+            has_control_chars(value) || value.find(' ') != std::string::npos) {
+            return "health check URL must start with https:// or http://";
+        }
+        return "";
     case Key::telegram_chat: {
         // A chat id: a user (positive) or a group (negative).
         std::size_t i = value.size() > 1 && value[0] == '-' ? 1 : 0;

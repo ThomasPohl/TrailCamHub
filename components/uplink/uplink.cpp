@@ -609,9 +609,22 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     return ESP_OK;
 }
 
-}  // namespace
+// Tells the health check service (setting health_url) how the sync went;
+// it warns the user when these calls stop.
+void ping_health_check(const hub_config::Settings &settings, bool ok)
+{
+    if (settings.health_url.empty()) {
+        return;
+    }
+    Request request;
+    request.url = settings.health_url + (ok ? "" : "/fail");
+    const HttpResult result = send(request);
+    if (result.error != ESP_OK || result.status >= 300) {
+        ESP_LOGW(TAG, "Health check: %s", describe(result).c_str());
+    }
+}
 
-esp_err_t run(const hub_config::Settings &settings, Report &report)
+esp_err_t run_destination(const hub_config::Settings &settings, Report &report)
 {
     const hub_config::Destination destination =
         hub_config::destination(settings);
@@ -630,6 +643,15 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
         ota::confirm_running();
         update_firmware(settings);
     }
+    return error;
+}
+
+}  // namespace
+
+esp_err_t run(const hub_config::Settings &settings, Report &report)
+{
+    const esp_err_t error = run_destination(settings, report);
+    ping_health_check(settings, error == ESP_OK);
     return error;
 }
 

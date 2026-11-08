@@ -1,4 +1,6 @@
-# Web UI over the dongle's own access point; empty unless enabled.
+# Web UI over the dongle's own access point, Ethernet or the home Wi-Fi;
+# empty unless enabled. mDNS (trailcamhub.local) comes from the component
+# registry (idf_component.yml).
 set(srcs)
 set(embed)
 if(CONFIG_WEB_UI_ENABLE)
@@ -13,4 +15,4 @@ idf_component_register(SRCS ${srcs}
                        PRIV_REQUIRES esp_event esp_http_server esp_netif
                                      esp_timer esp_wifi fatfs lwip nvs_flash
                                      schedule schedule_state sd_log sd_storage
-                                     mp4_mux time_sync)
+                                     mp4_mux time_sync espressif__mdns)

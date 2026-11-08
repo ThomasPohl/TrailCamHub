@@ -21,6 +21,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 #include "sdkconfig.h"
 
 #include "camera_ble.h"
@@ -70,6 +71,9 @@ struct QueuedEvent {
     int bat_percent;
     char ssid[MAX_SSID_LEN + 1];
     char password[MAX_PASSWORD_LEN + 1];
+    // Not for the FSM: join the home Wi-Fi again if the hub stays on it
+    // while idle (see join_home_while_idle()).
+    bool home_retry;
 };
 
 const char *TAG = "trailcamhub_session";
@@ -400,6 +404,66 @@ void on_modem_failed(const char *reason)
     on_wifi_failed(0);
 }
 
+// --- Staying on the home Wi-Fi while idle (web UI as a station, pull) ---
+
+// Joined (or joining) the home Wi-Fi while idle. Only the controller task.
+bool s_home_idle = false;
+TimerHandle_t s_home_retry_timer;
+// A home Wi-Fi that failed is joined again after this long.
+constexpr TickType_t kHomeRetryTicks = pdMS_TO_TICKS(2 * 60 * 1000);
+
+void on_home_retry_timer(TimerHandle_t timer)
+{
+    (void)timer;
+    QueuedEvent event = make_event(session::Event::wifi_disconnected);
+    event.home_retry = true;
+    post_event(event);
+}
+
+// The web UI is served on the home Wi-Fi: pull over the Wi-Fi, in a build
+// with the web UI on an access point (the Ethernet boards serve it there).
+bool stays_on_home_wifi(const hub_config::Settings &settings)
+{
+#if CONFIG_WEB_UI_ENABLE && !CONFIG_WEB_UI_OVER_ETHERNET
+    const hub_config::Mode mode = hub_config::mode(settings);
+    return mode.direction == hub_config::Direction::pull &&
+           mode.transport == hub_config::Transport::wifi &&
+           hub_config::validate(hub_config::Key::wifi_ssid, settings.wifi_ssid)
+               .empty();
+#else
+    (void)settings;
+    return false;
+#endif
+}
+
+void join_home_while_idle()
+{
+    hub_config::Settings settings;
+    if (hub_config::load(settings) != ESP_OK || !stays_on_home_wifi(settings)) {
+        s_home_idle = false;
+        return;
+    }
+    const esp_err_t error = camera_wifi_connect_home(
+        settings.wifi_ssid.c_str(), settings.wifi_password.c_str());
+    s_home_idle = error == ESP_OK;
+    if (s_home_idle) {
+        ESP_LOGI(TAG, "Staying on the home Wi-Fi while idle: web UI at "
+                      "http://trailcamhub.local");
+    } else if (s_home_retry_timer != nullptr) {
+        xTimerStart(s_home_retry_timer, 0);
+    }
+}
+
+// The camera Wi-Fi and BLE need the radio: leave the home network first.
+void leave_home_before_cycle()
+{
+    if (s_home_idle) {
+        s_home_idle = false;
+        xTimerStop(s_home_retry_timer, 0);
+        camera_wifi_disconnect();
+    }
+}
+
 #if CONFIG_ETH_UPLINK_ENABLE
 // Ethernet reports like the home Wi-Fi as well, once it has an address.
 void on_ethernet_ip(bool has_ip)
@@ -640,6 +704,21 @@ void controller_task(void *arg)
     QueuedEvent event;
     while (true) {
         xQueueReceive(s_events, &event, portMAX_DELAY);
+        if (event.home_retry) {
+            if (s_fsm.state() == session::State::idle) {
+                join_home_while_idle();
+            }
+            continue;
+        }
+        if (s_home_idle && s_fsm.state() == session::State::idle &&
+            (event.type == session::Event::wifi_failed ||
+             event.type == session::Event::wifi_disconnected)) {
+            // The home network went away; the web UI waits for it.
+            ESP_LOGW(TAG, "Home Wi-Fi lost while idle; joining again in 2 min");
+            s_home_idle = false;
+            xTimerStart(s_home_retry_timer, 0);
+            continue;
+        }
         if (event.type == session::Event::timeout &&
             event.timer_generation != s_timer_generation.load()) {
             continue;
@@ -732,7 +811,15 @@ void controller_task(void *arg)
                      (unsigned)(result.timer_ms / 1000));
         }
         s_state = result.next;
+        if (result.previous == session::State::idle &&
+            result.next != session::State::idle) {
+            leave_home_before_cycle();
+        }
         execute(result);
+        if (result.next == session::State::idle &&
+            result.previous != session::State::idle) {
+            join_home_while_idle();
+        }
         if (result.actions & session::kConnectCameraWifi) {
             wipe(s_password, sizeof(s_password));
         }
@@ -813,6 +900,10 @@ esp_err_t session_controller_start(void)
         ESP_LOGE(TAG, "Could not create session tasks");
         return ESP_ERR_NO_MEM;
     }
+    s_home_retry_timer = xTimerCreate("home_retry", kHomeRetryTicks, pdFALSE,
+                                      nullptr, on_home_retry_timer);
+    // Joins the home Wi-Fi now if the web UI is served there.
+    on_home_retry_timer(nullptr);
     ESP_LOGI(TAG,
              "Session controller idle; waiting for a scan request "
              "(up to %u cameras, %u attempts each)",

@@ -102,6 +102,39 @@ Limits:
 - Compared with the backend's bot there is no Mini App (gallery, camera
   choice, plan card) and no warning when the hub stops reporting.
 
+## Pull: the web UI
+
+With `direction pull` people fetch thumbnails and media from the hub's web UI
+(status, search, live log, files, videos as MP4). Where it is served:
+
+- **Ethernet** (ESP32-P4-NANO, ESP32-S3-ETH): at the DHCP address, with the
+  page password (boot log).
+- **Home Wi-Fi** (boards with the web UI on an access point, e.g. the
+  T-Dongle-C5, with `transport wifi` and `wifi_ssid` set): the hub stays
+  joined to the home network while idle and serves the page there with the
+  page password, which is the access point's WPA2 password (on the display).
+  For a camera read it leaves the home network (the radio joins the camera's
+  access point) and joins it again afterwards; a lost network is joined again
+  every two minutes. Needs mains power.
+- **Own access point** `TrailCamHub-XXXX` (http://10.42.0.1), as before; its
+  clients need no page password.
+
+Every board with the web UI also answers as **http://trailcamhub.local**
+(mDNS; one hub per network under this name).
+
+## Health check
+
+`health_url` is called after every sync: `<url>` after a successful one,
+`<url>/fail` after a failed one (the convention of healthchecks.io, which has
+a free plan; other services ignore the suffix). When the calls stop — the hub
+is broken, has no power or no network — the service warns by e-mail,
+Telegram or otherwise. This replaces the backend's warning without a server
+of one's own.
+
+```
+config set health_url https://hc-ping.com/<your-check-uuid>
+```
+
 ## Capabilities
 
 What a board can do comes from its build (Kconfig) and is listed per board in

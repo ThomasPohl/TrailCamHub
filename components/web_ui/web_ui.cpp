@@ -21,8 +21,11 @@
  *
  * POST requests need the header "X-TrailCamHub: 1", which app.js sends, and
  * an Origin (if any) that names this server; this stops other web pages from
- * sending them through the browser (CSRF). Over Ethernet every request also
- * needs HTTP Basic auth with the web UI password (any user name).
+ * sending them through the browser (CSRF). Over Ethernet and the home Wi-Fi
+ * (a pull hub stays on it while idle) every request also needs HTTP Basic
+ * auth with the web UI password (any user name); on the access point its
+ * WPA2 password, which is the same, protects the page. mDNS announces it as
+ * http://trailcamhub.local.
  */
 
 #include <dirent.h>
@@ -59,8 +62,9 @@
 #include "nvs.h"
 #include "sdkconfig.h"
 
-#if CONFIG_CAMERA_VIDEO_MP4_ON_REQUEST
 #include "lwip/sockets.h"
+#include "mdns.h"
+#if CONFIG_CAMERA_VIDEO_MP4_ON_REQUEST
 #include "mp4_mux.hpp"
 #endif
 #include "sd_card.h"
@@ -72,6 +76,8 @@
 
 // Until the camera channel is known.
 #define WEB_AP_DEFAULT_CHANNEL 1
+// 10.42.0.1, the access point's own address.
+#define WEB_AP_ADDRESS 0x0A2A0001u
 #define WEB_AP_MAX_CLIENTS 3
 #define WEB_PASSWORD_LENGTH 10
 #define WEB_FILE_CHUNK 4096
@@ -1179,20 +1185,44 @@ struct Route {
     void *user_ctx;
 };
 
-// Checks every request before its handler: the password over Ethernet, and
-// for POST the page's own header and origin (see the top of this file).
+// Clients of the hub's own access point know its WPA2 password already;
+// everyone else (Ethernet, the home Wi-Fi) needs the page password, which is
+// the same password.
+bool needs_password(httpd_req_t *req)
+{
+#if CONFIG_WEB_UI_OVER_ETHERNET
+    (void)req;
+    return true;
+#else
+    struct sockaddr_storage local = {};
+    socklen_t length = sizeof(local);
+    if (getsockname(httpd_req_to_sockfd(req),
+                    reinterpret_cast<struct sockaddr *>(&local),
+                    &length) != 0) {
+        return true;
+    }
+    if (local.ss_family != AF_INET) {
+        return true;
+    }
+    const struct sockaddr_in *in =
+        reinterpret_cast<const struct sockaddr_in *>(&local);
+    return in->sin_addr.s_addr != htonl(WEB_AP_ADDRESS);
+#endif
+}
+
+// Checks every request before its handler: the password where it is needed,
+// and for POST the page's own header and origin (see the top of this file).
 esp_err_t handle_guarded(httpd_req_t *req)
 {
     const Route *route = static_cast<const Route *>(req->user_ctx);
-#if CONFIG_WEB_UI_OVER_ETHERNET
-    if (!web::basic_auth_matches(request_header(req, "Authorization"),
+    if (needs_password(req) &&
+        !web::basic_auth_matches(request_header(req, "Authorization"),
                                  s_password)) {
         httpd_resp_set_status(req, "401 Unauthorized");
         httpd_resp_set_hdr(req, "WWW-Authenticate",
                            "Basic realm=\"TrailCamHub\", charset=\"UTF-8\"");
         return httpd_resp_sendstr(req, "Password required");
     }
-#endif
     if (route->method == HTTP_POST) {
         const std::string origin = request_header(req, "Origin");
         if (request_header(req, web::kRequestHeader) != "1" ||
@@ -1256,7 +1286,19 @@ esp_err_t web_ui_start(const web_ui_callbacks_t *callbacks)
     s_lock = xSemaphoreCreateMutex();
     ESP_RETURN_ON_FALSE(s_lock != NULL, ESP_ERR_NO_MEM, TAG, "no memory");
     ESP_RETURN_ON_ERROR(start_network(), TAG, "network");
-    return start_server();
+    ESP_RETURN_ON_ERROR(start_server(), TAG, "server");
+    // http://trailcamhub.local on every interface (Ethernet, the home Wi-Fi,
+    // the access point). Without it the page is still at its address.
+    esp_err_t error = mdns_init();
+    if (error == ESP_OK) {
+        mdns_hostname_set("trailcamhub");
+        mdns_instance_name_set("TrailCamHub");
+        mdns_service_add("TrailCamHub", "_http", "_tcp", 80, NULL, 0);
+        ESP_LOGI(TAG, "Web UI also at http://trailcamhub.local");
+    } else {
+        ESP_LOGW(TAG, "mDNS not started: %s", esp_err_to_name(error));
+    }
+    return ESP_OK;
 }
 
 #if CONFIG_WEB_UI_OVER_ETHERNET
