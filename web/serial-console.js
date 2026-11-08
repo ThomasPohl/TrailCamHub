@@ -73,16 +73,26 @@ function dispatchLines(text) {
   }
 }
 
+// Resolves when the read loop has stopped and released its reader. Only the
+// loop takes and releases the reader lock; disconnect() cancels the read and
+// waits for this, then closes the port.
+let readLoopDone = Promise.resolve();
+
 async function disconnect() {
   reading = false;
-  if (reader) {
-    await reader.cancel();
-    reader.releaseLock();
-    reader = undefined;
+  const activeReader = reader;
+  if (activeReader) {
+    try {
+      await activeReader.cancel();
+    } catch {
+      // The stream is already errored or closed; the loop ends either way.
+    }
   }
+  await readLoopDone;
   if (port) {
-    await port.close();
+    const closing = port;
     port = undefined;
+    await closing.close();
   }
   connectButton.disabled = !("serial" in navigator);
   disconnectButton.disabled = true;
@@ -90,51 +100,79 @@ async function disconnect() {
   window.dispatchEvent(new CustomEvent("serial-disconnected"));
 }
 
-async function connect() {
-  try {
-    port = await navigator.serial.requestPort();
-    await port.open({ baudRate: 115200 });
-    reading = true;
-    lineBuffer = "";
-    window.dispatchEvent(new CustomEvent("serial-reset"));
-    connectButton.disabled = true;
-    disconnectButton.disabled = false;
-    status.textContent = "Connected at 115200 baud";
-    window.dispatchEvent(new CustomEvent("serial-connected"));
-
-    const decoder = new TextDecoder();
-    while (port.readable && reading) {
-      reader = port.readable.getReader();
-      try {
-        while (reading) {
-          const { value, done } = await reader.read();
-          if (done) {
-            break;
-          }
-          const chunk = decoder.decode(value, { stream: true });
-          appendOutput(chunk);
-          dispatchLines(chunk);
+async function readLoop() {
+  const decoder = new TextDecoder();
+  while (port && port.readable && reading) {
+    reader = port.readable.getReader();
+    try {
+      while (reading) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
         }
-      } finally {
-        reader.releaseLock();
-        reader = undefined;
+        const chunk = decoder.decode(value, { stream: true });
+        appendOutput(chunk);
+        dispatchLines(chunk);
       }
+    } finally {
+      reader.releaseLock();
+      reader = undefined;
     }
-    if (reading) {
-      await disconnect();
-    }
+  }
+}
+
+// Text for a port that cannot be opened: usually the firmware installer (or
+// another tab or program) still holds it.
+function openErrorText(error) {
+  if (error.name === "InvalidStateError" || error.name === "NetworkError") {
+    return "The serial port is in use. Close the installer dialog (or the other program or tab using the port) and connect again.";
+  }
+  return `Serial connection failed: ${error.message}`;
+}
+
+async function connect() {
+  let selected;
+  try {
+    selected = await navigator.serial.requestPort();
   } catch (error) {
-    if (reading) {
-      try {
-        await disconnect();
-      } catch (cleanupError) {
-        status.textContent = `Serial connection failed: ${error.message}. Could not close the port: ${cleanupError.message}`;
-        return;
-      }
-      status.textContent = `Serial connection failed: ${error.message}`;
-    } else if (error.name !== "NotFoundError") {
+    if (error.name !== "NotFoundError") {
       status.textContent = `Serial connection failed: ${error.message}`;
     }
+    return;
+  }
+  try {
+    await selected.open({ baudRate: 115200 });
+  } catch (error) {
+    status.textContent = openErrorText(error);
+    return;
+  }
+  port = selected;
+  reading = true;
+  lineBuffer = "";
+  window.dispatchEvent(new CustomEvent("serial-reset"));
+  connectButton.disabled = true;
+  disconnectButton.disabled = false;
+  status.textContent = "Connected at 115200 baud";
+  window.dispatchEvent(new CustomEvent("serial-connected"));
+
+  let failure;
+  readLoopDone = readLoop().catch((error) => {
+    failure = error;
+  });
+  await readLoopDone;
+  if (!reading) {
+    // disconnect() stopped the loop and closes the port.
+    return;
+  }
+  // The device went away (unplugged, reset over USB) or the read failed.
+  try {
+    await disconnect();
+  } catch (cleanupError) {
+    status.textContent = `Serial connection lost${failure ? `: ${failure.message}` : ""}. Could not close the port: ${cleanupError.message}`;
+    return;
+  }
+  if (failure) {
+    status.textContent = `Serial connection lost: ${failure.message}`;
   }
 }
 
@@ -144,6 +182,41 @@ async function handleDisconnect() {
   } catch (error) {
     status.textContent = `Could not disconnect from serial port: ${error.message}`;
   }
+}
+
+// The firmware installer (ESP Web Tools) opens the port on its own. A click on
+// an install button while this console holds the port would make it fail, so
+// the console lets go of the port first and then passes the click on; the
+// browser still counts it as the user's gesture for the port picker.
+let passingInstallClick = false;
+for (const installButton of document.querySelectorAll(
+  "esp-web-install-button",
+)) {
+  installButton.addEventListener(
+    "click",
+    async (event) => {
+      if (passingInstallClick || !(port && reading)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      try {
+        await disconnect();
+      } catch (error) {
+        status.textContent = `Could not release the serial port for the installer: ${error.message}`;
+        return;
+      }
+      status.textContent =
+        "Disconnected for the installer. Connect again after the installation.";
+      passingInstallClick = true;
+      try {
+        event.target.click();
+      } finally {
+        passingInstallClick = false;
+      }
+    },
+    { capture: true },
+  );
 }
 
 if (!("serial" in navigator)) {
