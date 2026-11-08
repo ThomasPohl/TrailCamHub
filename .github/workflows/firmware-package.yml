@@ -112,12 +112,35 @@ jobs:
             sha256sum "trailcamhub-$BOARD"/* > "trailcamhub-$BOARD/SHA256SUMS"
             tar -czf "trailcamhub-$BOARD.tar.gz" "trailcamhub-$BOARD"
           )
+          # Symbols for crash backtraces and core dumps (idf.py coredump-info,
+          # addr2line); kept apart, as they are much larger than the images.
+          elf_dir="dist/trailcamhub-$BOARD-elf"
+          mkdir -p "$elf_dir"
+          cp build/trailcamhub_ble_poc.elf "$elf_dir/trailcamhub-$BOARD-dev.elf"
+          cp build-release/trailcamhub_ble_poc.elf "$elf_dir/trailcamhub-$BOARD-release.elf"
+          cp build/bootloader/bootloader.elf "$elf_dir/bootloader-$BOARD.elf"
+          cp "$package_dir/BUILD_INFO.txt" "$elf_dir/BUILD_INFO.txt"
+          (
+            cd dist
+            sha256sum "trailcamhub-$BOARD-elf"/* > "trailcamhub-$BOARD-elf/SHA256SUMS"
+            tar -czf "trailcamhub-$BOARD-elf.tar.gz" "trailcamhub-$BOARD-elf"
+          )
 
       - name: Upload deployment package
         uses: actions/upload-artifact@v7
         with:
           name: trailcamhub-${{ matrix.board }}
           path: dist/trailcamhub-${{ matrix.board }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      # Not named trailcamhub-*: the release and installer jobs take every
+      # artifact of that pattern as a firmware package.
+      - name: Upload ELF files
+        uses: actions/upload-artifact@v7
+        with:
+          name: elf-${{ matrix.board }}
+          path: dist/trailcamhub-${{ matrix.board }}-elf.tar.gz
           if-no-files-found: error
           retention-days: 30
 
@@ -138,6 +161,13 @@ jobs:
         with:
           pattern: trailcamhub-*
           path: artifacts
+          merge-multiple: true
+
+      - name: Download ELF files
+        uses: actions/download-artifact@v8
+        with:
+          pattern: elf-*
+          path: elf
           merge-multiple: true
 
       - name: Assemble release files and manifest
@@ -172,6 +202,8 @@ jobs:
           jq -n --arg version "$TAG" --argjson images "$manifest" \
             '{version: $version, images: $images}' > release/ota.json
           cat release/ota.json
+          # Symbols of every board, to decode crash reports of this version.
+          cp elf/trailcamhub-*-elf.tar.gz release/
           (cd release && sha256sum * > SHA256SUMS)
 
       - name: Create the release

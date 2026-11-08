@@ -35,3 +35,24 @@ After the camera returns Wi-Fi credentials over BLE, the firmware joins the came
 At boot the firmware logs the reset reason, the available PSRAM, and memory statistics, and mounts a FAT-formatted microSD card at `/sdcard` if one is inserted. The card is never formatted by the firmware. The partition table provides two 4 MB OTA slots and a core dump partition; OTA updates themselves are not implemented yet. The image requires the board's 16 MB flash and octal PSRAM; on hardware without PSRAM it stops during boot.
 
 The firmware logs status over its serial console. Use an authorized camera and review its status before leaving the device unattended.
+
+## Decoding a crash
+
+The ELF files that match the images are in a separate archive, `trailcamhub-<board>-elf.tar.gz`: attached to every GitHub release and kept for 30 days as the CI artifact `elf-<board>`. Take the archive of the exact version that crashed (the boot log names it, e.g. `Firmware v0.1.1 (esp32s3, dev)`) and the variant (`dev` or `release`).
+
+- Backtrace from the serial log:
+
+  ```sh
+  xtensa-esp32s3-elf-addr2line -pfiaC -e trailcamhub-esp32s3-dev.elf 0x4037fcc7 0x40384751 …
+  ```
+
+  (`llvm-symbolizer --obj=… 0x…` works without the ESP-IDF toolchain.)
+
+- Core dump stored in flash after a panic (the boot log says `Core dump from a previous crash is stored in flash`):
+
+  ```sh
+  esptool --chip esp32s3 --port PORT read-flash 0x820000 0x10000 coredump.bin
+  esp-coredump info_corefile --core coredump.bin --core-format raw trailcamhub-esp32s3-dev.elf
+  ```
+
+  With an ESP-IDF checkout of the same version, `idf.py -p PORT coredump-info` does the same.
