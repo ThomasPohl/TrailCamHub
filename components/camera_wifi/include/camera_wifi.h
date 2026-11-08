@@ -38,3 +38,12 @@ esp_err_t camera_wifi_connect_home(const char *ssid, const char *password);
 
 /* Leaves the current network without retrying. */
 esp_err_t camera_wifi_disconnect(void);
+
+/*
+ * On the home network: `true` turns modem sleep off for a large transfer
+ * (a video upload, a firmware download), `false` returns to the power save
+ * of the build (CONFIG_UPLINK_WIFI_POWER_SAVE). In modem sleep the station
+ * only wakes at DTIM beacons, which limits TCP to a few hundred kbit/s.
+ * Does nothing on the camera network, which never uses power save.
+ */
+void camera_wifi_set_full_power(bool on);

@@ -32,3 +32,8 @@ CONFIG_LWIP_UDP_RECVMBOX_SIZE=16
 
 # The thumbnails are on the SD card; no Base64 copy in the log.
 # CONFIG_CAMERA_THUMBNAIL_SERIAL_PREVIEW is not set
+
+# No PSRAM: back to the ESP-IDF TCP windows (the esp32s3 defaults raise them
+# to 32 KB for the PSRAM boards).
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=5760
+CONFIG_LWIP_TCP_WND_DEFAULT=5760

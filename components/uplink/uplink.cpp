@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include "camera_wifi.h"
 #include "device_info.hpp"
 #include "hub_battery.hpp"
 #include "hub_config.hpp"
@@ -180,10 +181,11 @@ HttpResult put_file(const std::string &url, const std::string &path)
 // of the transport.
 HttpResult put_mp4(const std::string &url, const std::string &camera_id,
                    std::int64_t media_id, bool over_modem, std::uint64_t &size,
-                   std::string &too_large)
+                   std::string &too_large, std::int64_t &sd_read_us)
 {
     HttpResult result;
     size = 0;
+    sd_read_us = 0;
     too_large.clear();
     mp4::FileSource video(
         camera::store::media_path(camera_id, media_id, "h264"));
@@ -217,14 +219,20 @@ HttpResult put_mp4(const std::string &url, const std::string &camera_id,
     }
     // Must match the content type the URL was signed with.
     esp_http_client_set_header(client, "Content-Type", "video/mp4");
+    // Modem sleep on the home Wi-Fi limits the upload to ~80 KB/s (#154).
+    if (!over_modem) {
+        camera_wifi_set_full_power(true);
+    }
     result.error = esp_http_client_open(client, (int)size);
     if (result.error == ESP_OK) {
         std::vector<std::uint8_t> chunk(kVideoChunk);
         std::uint64_t position = 0;
         bool ok = true;
         while (ok && position < size) {
+            const std::int64_t read_started_us = esp_timer_get_time();
             const std::int64_t n =
                 file.read(position, chunk.data(), chunk.size());
+            sd_read_us += esp_timer_get_time() - read_started_us;
             ok = n > 0 &&
                  esp_http_client_write(
                      client, reinterpret_cast<const char *>(chunk.data()),
@@ -235,6 +243,9 @@ HttpResult put_mp4(const std::string &url, const std::string &camera_id,
     }
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+    if (!over_modem) {
+        camera_wifi_set_full_power(false);
+    }
     return result;
 }
 
@@ -381,7 +392,14 @@ void update_firmware(const hub_config::Settings &settings)
         hub_config::uplink_transport(settings) == hub_config::Transport::modem;
     conditions.signal_dbm =
         conditions.over_modem ? modem_uplink::signal_dbm() : 0;
+    // A firmware image is ~1.7 MB: no modem sleep while it may download.
+    if (!conditions.over_modem) {
+        camera_wifi_set_full_power(true);
+    }
     ota::check_for_update(conditions);
+    if (!conditions.over_modem) {
+        camera_wifi_set_full_power(false);
+    }
 }
 
 // Answers a requestVideo command: uploads the video if it is on the SD card,
@@ -412,10 +430,11 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
     case VideoStep::upload: {
         std::uint64_t size = 0;
         std::string too_large;
+        std::int64_t sd_read_us = 0;
         const std::int64_t started_us = esp_timer_get_time();
         const HttpResult put =
             put_mp4(command.upload_url, cam_id, command.media_id, over_modem,
-                    size, too_large);
+                    size, too_large, sd_read_us);
         if (!too_large.empty()) {
             out.error = too_large;
             camera->catalog_changed |=
@@ -426,9 +445,16 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
         }
         if (put.error == ESP_OK && put.status >= 200 && put.status < 300) {
             const std::int64_t ms = (esp_timer_get_time() - started_us) / 1000;
-            ESP_LOGI(TAG, "Uploaded video %lld of %s: %llu KB in %lld ms",
-                     (long long)command.media_id, cam_id.c_str(),
-                     (unsigned long long)(size >> 10), (long long)ms);
+            // The SD share tells a slow card from a slow network (#154).
+            ESP_LOGI(
+                TAG,
+                "Uploaded video %lld of %s over %s: %llu KB in %lld ms "
+                "(%llu KB/s; reading the SD card %lld ms)",
+                (long long)command.media_id, cam_id.c_str(),
+                over_modem ? "the modem" : "Wi-Fi",
+                (unsigned long long)(size >> 10), (long long)ms,
+                (unsigned long long)(ms > 0 ? (size >> 10) * 1000 / ms : 0),
+                (long long)(sd_read_us / 1000));
             camera->catalog_changed |= camera->catalog.set_flag(
                 command.media_id, MediaCatalog::kVideoUploaded);
             report.videos_uploaded++;
