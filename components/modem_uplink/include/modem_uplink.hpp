@@ -35,7 +35,10 @@ struct Callbacks {
 bool available();
 
 // Creates the task. Call once, after the network stack and the default
-// event loop are up.
+// event loop are up. After a power-on or reset (not after a deep-sleep wake)
+// the task first puts the modem into flight mode: it starts with its radio
+// on and stays registered with the network otherwise, also when the
+// transport is the home Wi-Fi.
 esp_err_t init(const Callbacks &callbacks);
 
 // Starts bringing the uplink up; the result comes through the callbacks.
@@ -44,7 +47,8 @@ esp_err_t connect(const Settings &settings);
 // Takes the uplink down (also after a failed or cancelled connect()).
 void disconnect();
 
-// True from connect() until the matching disconnect() is done.
+// True from connect() until the matching disconnect() is done, and while
+// the start-up switch-off runs.
 bool active();
 
 // Signal strength measured during the last connect() in dBm; 0 if unknown.
