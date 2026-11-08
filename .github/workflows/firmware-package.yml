@@ -81,10 +81,10 @@ jobs:
           idf.py -B build-release merge-bin -o "trailcamhub-$BOARD-release.bin"
           ccache_report
 
-      # Pull requests use the cache of their branch and of main but do not
-      # add to it; the push of the same branch does.
+      # Saved by every run: a pull request run can only restore caches of its
+      # own merge ref and of main, not those of the push run of its branch.
       - name: Save compiler cache
-        if: always() && github.event_name != 'pull_request'
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: .ccache
@@ -273,7 +273,7 @@ jobs:
           ccache_report
 
       - name: Save compiler cache
-        if: always() && github.event_name != 'pull_request'
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: .ccache
