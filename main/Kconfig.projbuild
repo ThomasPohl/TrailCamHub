@@ -921,17 +921,69 @@ endmenu
 menu "Firmware updates"
 
 config OTA_AUTO_UPDATE
-    bool "Install newer releases offered at the check-in"
+    bool "Install newer releases from GitHub"
     default y
     help
-        The backend offers the newest GitHub release (tag vX.Y.Z) for this
-        board and build variant. A hub that runs an older release downloads
-        it over HTTPS into the other OTA slot, checks its size, SHA-256 and
-        version, and restarts into it. The new firmware is kept once a
-        check-in succeeds; a restart before that goes back to the old one,
-        and that version is not installed again automatically. Development
-        builds (a commit hash as version) are never replaced. See
-        docs/ota.md.
+        After a successful sync the hub reads the manifest of the newest
+        GitHub release (tag vX.Y.Z) at most once a day. A hub that runs an
+        older release downloads the image for its board and build variant
+        over HTTPS into the other OTA slot, checks its size, SHA-256 and
+        version, and restarts into it once the cycle is over. The new
+        firmware is kept once a check-in succeeds; a restart before that
+        goes back to the old one, and that version is not installed again
+        automatically. Development builds (a commit hash as version) are
+        never replaced. See docs/ota.md.
+
+config OTA_MANIFEST_URL
+    string "Manifest of the latest release"
+    depends on OTA_AUTO_UPDATE
+    default "https://github.com/ThomasPohl/TrailCamHub/releases/latest/download/ota.json"
+    help
+        ota.json of GitHub's "latest release" (written by the CI for every
+        vX.Y.Z tag; pre-releases are skipped). A fork can point to its own
+        releases.
+
+config OTA_CHECK_INTERVAL_H
+    int "Read the manifest at most every (hours)"
+    depends on OTA_AUTO_UPDATE
+    range 1 168
+    default 24
+    help
+        One read costs roughly 10-20 KB (TLS and GitHub's redirect), which
+        counts over the cellular modem. The console command "update" reads
+        it at the next sync regardless.
+
+config OTA_MIN_BATTERY_PERCENT
+    int "Install only at or above this hub battery (%)"
+    depends on OTA_AUTO_UPDATE
+    range 0 100
+    default 40
+    help
+        Unless the cell is being charged. Never in the low or critical
+        level of the schedule (HUB_BATTERY_LOW_PERCENT and
+        HUB_BATTERY_CRITICAL_PERCENT); without a battery measurement there
+        is no limit.
+
+config OTA_MODEM_MIN_SIGNAL_DBM
+    int "Over the modem: install only at or above this signal (dBm)"
+    depends on OTA_AUTO_UPDATE
+    range -113 -51
+    default -105
+    help
+        A weak signal makes a download of 1.5-2 MB slow and likely to
+        break off.
+
+config OTA_MAX_ATTEMPTS
+    int "Failed installs of one version before waiting"
+    depends on OTA_AUTO_UPDATE
+    range 1 20
+    default 3
+
+config OTA_RETRY_AFTER_H
+    int "Then wait this long before the next attempt (hours)"
+    depends on OTA_AUTO_UPDATE
+    range 1 168
+    default 24
 
 config HUB_BOARD_ID
     string "Board name of the firmware images"
