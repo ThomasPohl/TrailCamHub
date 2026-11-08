@@ -85,7 +85,7 @@ jobs:
 
       - name: Check the capabilities in boards.json
         shell: bash
-        run: .github/scripts/check-board-capabilities.sh "$BOARD" build/sdkconfig
+        run: .github/scripts/check-board-capabilities.sh "$BOARD" sdkconfig
 
       # Saved by every run: a pull request run can only restore caches of its
       # own merge ref and of main, not those of the push run of its branch.
