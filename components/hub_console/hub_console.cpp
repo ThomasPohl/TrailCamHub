@@ -16,6 +16,7 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
@@ -459,6 +460,15 @@ void execute(const hub_console::Command &command)
         // was read less than a day ago.
         ota::force_check();
         request_cycle(session_controller_request_upload(), "update");
+        break;
+    case CommandType::restart:
+        // Answered before the restart so that the installer knows it was
+        // understood; the USB console disappears for a moment.
+        reply("OK", "restarting");
+        reply("DONE", "");
+        fflush(stdout);
+        vTaskDelay(pdMS_TO_TICKS(200));
+        esp_restart();
         break;
     case CommandType::stop: {
         const esp_err_t error = session_controller_request_stop();

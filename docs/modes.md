@@ -29,6 +29,9 @@ time and stored on the hub (NVS), without another firmware image (concept:
 - **destination** is where push goes: the own backend (AWS, optional), a
   WebDAV folder, or a Telegram bot directly. See "Destinations" below.
 
+The web installer's setup assistant asks for the mode in plain words and sets
+these settings (and the transport's and destination's own settings) for you.
+
 `status` shows the mode that applies and where each part comes from:
 
 ```

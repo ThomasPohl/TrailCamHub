@@ -4,21 +4,160 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#18212b">
-    <title>TrailCamHub ESP32-S3 Installer</title>
+    <title>TrailCamHub Installer</title>
     <link rel="stylesheet" href="./styles.css">
     <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
     <script type="module" src="./serial-console.js"></script>
     <script src="./installer.js" defer></script>
     <script src="./protocol-view.js" defer></script>
     <script src="./device-setup.js" defer></script>
+    <script src="./wizard.js" defer></script>
+    <script src="./advanced.js" defer></script>
   </head>
   <body>
     <main>
       <header>
-        <p class="eyebrow">TrailCamHub · ESP32-S3</p>
-        <h1>Firmware installer</h1>
-        <p>Install the latest TrailCamHub BLE proof-of-concept firmware and inspect its serial logs.</p>
+        <p class="eyebrow">TrailCamHub</p>
+        <h1>Set up your hub</h1>
+        <p>Install the firmware, answer a few questions and check that everything works. Use a desktop Chrome or Edge and a USB data cable.</p>
       </header>
+
+      <section id="wizard" class="wz" aria-labelledby="wz-heading">
+        <h2 id="wz-heading" class="visually-hidden">Setup assistant</h2>
+        <ol class="wz-progress" aria-label="Steps">
+          <li data-step="1">Board</li>
+          <li data-step="2">Install</li>
+          <li data-step="3">Connect</li>
+          <li data-step="4">Questions</li>
+          <li data-step="5">Save</li>
+          <li data-step="6">Check</li>
+        </ol>
+
+        <div class="wz-step" data-step="1">
+          <h3>1 · Which board do you have?</h3>
+          <div id="wz-boards" class="wz-choices" role="radiogroup" aria-label="Board"><p class="note">Loading the board list…</p></div>
+          <div class="wz-nav">
+            <button class="primary-button" type="button" data-next disabled>Next</button>
+          </div>
+        </div>
+
+        <div class="wz-step" data-step="2" hidden>
+          <h3>2 · Install the firmware</h3>
+          <div id="wz-install-ok">
+            <p>Connect the board with a USB data cable, press <strong>Install</strong> and choose its serial port. Installing erases the hub's settings only if you tick that in the dialog.</p>
+            <esp-web-install-button id="install-wizard">
+              <button slot="activate" class="primary-button">Install</button>
+              <span slot="unsupported">Use a desktop Chromium-based browser that supports Web Serial, such as Chrome or Edge.</span>
+              <span slot="not-allowed">Open this page over HTTPS and allow serial-port access in your browser.</span>
+            </esp-web-install-button>
+            <p class="note">The current release build (<span id="wz-build">…</span>). Older and development builds are under "Advanced".</p>
+          </div>
+          <p id="wz-install-none" class="note" hidden>The web installer does not offer an image for this board yet. Flash the image <code id="wz-image"></code> from the <a href="https://github.com/ThomasPohl/TrailCamHub/releases/latest">latest release</a> with esptool, then continue.</p>
+          <div class="wz-nav">
+            <button class="secondary-button" type="button" data-back>Back</button>
+            <button class="primary-button" type="button" data-next>The firmware is installed</button>
+          </div>
+        </div>
+
+        <div class="wz-step" data-step="3" hidden>
+          <h3>3 · Connect to the hub</h3>
+          <p>After installing, wait a few seconds, then connect. A hub on battery sleeps most of the time: after a reset it stays awake for ten minutes.</p>
+          <div class="console-controls">
+            <button id="wz-connect" class="primary-button" type="button">Connect</button>
+            <button id="wz-reset" class="secondary-button" type="button" hidden>Reset the board</button>
+            <span id="wz-connect-status" role="status" aria-live="polite">Not connected</span>
+          </div>
+          <ul id="wz-hub" class="wz-facts" hidden></ul>
+          <div class="wz-nav">
+            <button class="secondary-button" type="button" data-back>Back</button>
+            <button class="primary-button" type="button" data-next disabled>Next</button>
+          </div>
+        </div>
+
+        <div class="wz-step" data-step="4" hidden>
+          <h3>4 · How will you use it?</h3>
+          <form id="wz-form" class="wz-form" autocomplete="off">
+            <fieldset id="wz-q-power">
+              <legend>Where will the hub run?</legend>
+              <label><input type="radio" name="power" value="battery"> Outdoors on battery (with solar), nobody nearby <small>sleeps between camera reads</small></label>
+              <label><input type="radio" name="power" value="mains"> On a USB power supply or PoE <small>always awake</small></label>
+            </fieldset>
+            <fieldset id="wz-q-goal">
+              <legend>How do you want to get the pictures?</legend>
+              <label data-needs="modem"><input type="radio" name="goal" value="telegram"> In Telegram on my phone <small>the hub sends them over its own SIM card; no server needed</small></label>
+              <label><input type="radio" name="goal" value="webdav"> Copied to a folder on my NAS or cloud <small>WebDAV: Nextcloud, Synology, QNAP, …</small></label>
+              <label data-needs="web_ui"><input type="radio" name="goal" value="pull"> I open the hub's web page <small>in the home network or on the hub's own Wi-Fi; needs mains power</small></label>
+              <label><input type="radio" name="goal" value="backend"> My own TrailCamHub backend <small>for people who run the AWS backend</small></label>
+            </fieldset>
+            <fieldset id="wz-q-transport">
+              <legend>How does the hub get online?</legend>
+              <label data-transport="wifi"><input type="radio" name="transport" value="wifi"> My home Wi-Fi</label>
+              <label data-transport="ethernet" data-needs="ethernet"><input type="radio" name="transport" value="ethernet"> A network cable (Ethernet)</label>
+              <label data-transport="modem" data-needs="modem"><input type="radio" name="transport" value="modem"> Mobile network (SIM card in the hub)</label>
+              <label data-transport="ap"><input type="radio" name="transport" value="ap"> Not at all: I connect to the hub's own Wi-Fi</label>
+            </fieldset>
+
+            <div class="wz-fields" data-for="wifi">
+              <label>Home Wi-Fi name <input name="wifi_ssid" maxlength="32" spellcheck="false"></label>
+              <label>Home Wi-Fi password <input name="wifi_password" type="password" maxlength="64"></label>
+            </div>
+            <div class="wz-fields" data-for="modem">
+              <label>APN of your mobile provider <input name="apn" placeholder="empty: the network's default" spellcheck="false" maxlength="63"></label>
+              <label>SIM PIN <input name="sim_pin" type="password" inputmode="numeric" maxlength="4" placeholder="empty: no PIN"></label>
+              <p class="note">Only 4-digit PINs. A PIN the card refuses is not tried again until you enter it again.</p>
+            </div>
+            <div class="wz-fields" data-for="webdav">
+              <label>Folder URL <input name="webdav_url" type="url" placeholder="https://nas.local/remote.php/dav/files/me/TrailCam" spellcheck="false"></label>
+              <label>User <input name="webdav_user" spellcheck="false" maxlength="64"></label>
+              <label>Password <input name="webdav_password" type="password" maxlength="128"></label>
+              <p class="note">Nextcloud: Settings → Files → WebDAV shows the URL; use an app password. A NAS with a self-signed certificate needs <code>http://</code> (only in a network you trust).</p>
+            </div>
+            <div class="wz-fields" data-for="telegram">
+              <label>Bot token <input name="telegram_token" type="password" placeholder="123456789:AA…" spellcheck="false"></label>
+              <p class="note">In Telegram, ask <strong>@BotFather</strong> for <code>/newbot</code> and paste the token here. After saving, send <code>/start</code> to your bot: the hub pairs with your chat at its next check-in.</p>
+            </div>
+            <div class="wz-fields" data-for="backend">
+              <label>Backend API URL <input name="api_url" type="url" placeholder="https://….lambda-url.eu-central-1.on.aws/" spellcheck="false"></label>
+              <label>Device key <input name="device_key" type="password" placeholder="&lt;hubId&gt;.&lt;secret&gt;" spellcheck="false"></label>
+            </div>
+            <div class="wz-fields" data-for="push">
+              <label>Health check URL (optional) <input name="health_url" type="url" placeholder="https://hc-ping.com/…" spellcheck="false"></label>
+              <p class="note">A free check at healthchecks.io warns you by e-mail when the hub stops reporting.</p>
+            </div>
+            <p id="wz-form-problem" class="wz-problem" role="alert"></p>
+          </form>
+          <div class="wz-nav">
+            <button class="secondary-button" type="button" data-back>Back</button>
+            <button id="wz-save" class="primary-button" type="button">Save to the hub</button>
+          </div>
+        </div>
+
+        <div class="wz-step" data-step="5" hidden>
+          <h3>5 · Saving</h3>
+          <ul id="wz-save-list" class="wz-checks" aria-live="polite"></ul>
+          <div class="wz-nav">
+            <button class="secondary-button" type="button" data-back>Back</button>
+            <button class="primary-button" type="button" data-next disabled>Check the hub</button>
+          </div>
+        </div>
+
+        <div class="wz-step" data-step="6" hidden>
+          <h3>6 · Check</h3>
+          <ul id="wz-checks" class="wz-checks" aria-live="polite"></ul>
+          <div class="console-controls">
+            <button id="wz-recheck" class="secondary-button" type="button">Check again</button>
+            <button id="wz-scan" class="primary-button" type="button">Search for the camera now</button>
+          </div>
+          <p class="note">Switch the camera on and keep it within a few metres for the first search. It takes up to a few minutes.</p>
+          <div id="wz-next" class="wz-next"></div>
+          <div class="wz-nav">
+            <button class="secondary-button" type="button" data-back>Back</button>
+          </div>
+        </div>
+      </section>
+
+      <details id="advanced" class="advanced">
+        <summary>Advanced: firmware builds, all settings, console, diagnostics, support package</summary>
 
       <section aria-labelledby="install-heading">
         <h2 id="install-heading">Install firmware</h2>
@@ -232,6 +371,24 @@
         <h2 id="manual-heading">Manual download</h2>
         <p>Download the merged ESP32-S3 image for the selected version — <a id="dl-dev" href="#">development (verbose)</a> or <a id="dl-release" href="#">release</a> — and verify it against the <a id="dl-sha" href="#">SHA-256 checksums</a>. Flash it at offset <code>0x0</code>.</p>
       </section>
+
+      <section id="tools" aria-labelledby="tools-heading">
+        <h2 id="tools-heading">Tools</h2>
+        <p>Use the connection of "Device setup" or the serial console.</p>
+        <div class="console-controls">
+          <button id="adv-reset" class="secondary-button" type="button">Reset the board</button>
+          <button id="adv-restart" class="secondary-button" type="button">Restart (console command)</button>
+          <button id="adv-support" class="primary-button" type="button">Download support package</button>
+          <span id="adv-status" role="status" aria-live="polite"></span>
+        </div>
+        <p class="note">The support package is a text file with the hub's status, its settings (secrets hidden), the newest log file from its SD card (if the build has the diagnostic commands) and this page's serial log. Read it before you share it: it contains your Wi-Fi name and camera IDs.</p>
+        <form id="adv-command" class="adv-command" autocomplete="off">
+          <label>Command <input name="line" placeholder="help" spellcheck="false"></label>
+          <button class="secondary-button" type="submit">Send</button>
+        </form>
+        <pre id="adv-answer" class="adv-answer" aria-live="polite"></pre>
+      </section>
+      </details>
 
       <footer>
         <a href="https://github.com/ThomasPohl/TrailCamHub">TrailCamHub on GitHub</a>

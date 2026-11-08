@@ -164,21 +164,14 @@ function openErrorText(error) {
   return `Serial connection failed: ${error.message}`;
 }
 
-async function connect() {
-  let selected;
-  try {
-    selected = await navigator.serial.requestPort();
-  } catch (error) {
-    if (error.name !== "NotFoundError") {
-      status.textContent = `Serial connection failed: ${error.message}`;
-    }
-    return;
-  }
+// Opens a port the user picked (or allowed before) and reads it in the
+// background; returns false if it could not be opened.
+async function openPort(selected) {
   try {
     await selected.open({ baudRate: 115200 });
   } catch (error) {
     status.textContent = openErrorText(error);
-    return;
+    return false;
   }
   port = selected;
   reading = true;
@@ -188,7 +181,11 @@ async function connect() {
   disconnectButton.disabled = false;
   status.textContent = "Connected at 115200 baud";
   window.dispatchEvent(new CustomEvent("serial-connected"));
+  void watchPort();
+  return true;
+}
 
+async function watchPort() {
   let failure;
   readLoopDone = readLoop().catch((error) => {
     failure = error;
@@ -208,6 +205,105 @@ async function connect() {
   if (failure) {
     status.textContent = `Serial connection lost: ${failure.message}`;
   }
+}
+
+async function connect() {
+  let selected;
+  try {
+    selected = await navigator.serial.requestPort();
+  } catch (error) {
+    if (error.name !== "NotFoundError") {
+      status.textContent = `Serial connection failed: ${error.message}`;
+    }
+    return false;
+  }
+  return openPort(selected);
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Connects again to a port this page was allowed to use, without the picker:
+// after a reset the USB-Serial-JTAG of the ESP32-S3/C5 comes back as a new
+// device. `info` (from getInfo()) picks the same kind of device.
+async function reconnect(info, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (port && reading) {
+      return true;
+    }
+    const ports = await navigator.serial.getPorts();
+    const match = ports.find((candidate) => {
+      const other = candidate.getInfo();
+      return !info || (other.usbVendorId === info.usbVendorId && other.usbProductId === info.usbProductId);
+    });
+    if (match && (await openPort(match))) {
+      return true;
+    }
+    await sleep(500);
+  }
+  return false;
+}
+
+// Resets the board over the serial lines like esptool's hard reset (RTS
+// pulls EN low while DTR stays high). Works with the USB-Serial-JTAG of the
+// S3/C5 and with USB-UART bridges that have the auto-reset circuit. Returns
+// the port's USB ids for reconnect().
+async function reset() {
+  if (!port) {
+    throw new Error("Serial port is not connected");
+  }
+  const info = port.getInfo();
+  await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+  await sleep(120);
+  await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+  return info;
+}
+
+// Commands with their answers: the hub ends each answer with "TCH DONE".
+// One at a time, so that answers do not mix.
+let commandChain = Promise.resolve();
+
+function command(line, timeoutMs = 10000) {
+  const run = () =>
+    new Promise((resolve, reject) => {
+      const lines = [];
+      let timer;
+      const onLine = (event) => {
+        const text = event.detail;
+        if (!text.startsWith("TCH ")) {
+          return;
+        }
+        if (text === "TCH DONE" || text.startsWith("TCH DONE ")) {
+          finish();
+          resolve(lines);
+          return;
+        }
+        lines.push(text.slice(4));
+      };
+      const finish = () => {
+        clearTimeout(timer);
+        window.removeEventListener("serial-line", onLine);
+      };
+      window.addEventListener("serial-line", onLine);
+      timer = setTimeout(() => {
+        finish();
+        const error = new Error(`No answer to '${line.split(" ")[0]}'`);
+        error.lines = lines;
+        reject(error);
+      }, timeoutMs);
+      sendLine(line).catch((error) => {
+        finish();
+        reject(error);
+      });
+    });
+  const result = commandChain.then(run, run);
+  commandChain = result.catch(() => {});
+  return result;
+}
+
+// The text in the console view (for the support package).
+function outputText() {
+  return output.textContent;
 }
 
 async function handleDisconnect() {
@@ -273,7 +369,11 @@ async function sendLine(line) {
 
 window.trailcamSerial = {
   connect,
+  reconnect,
+  reset,
+  command,
   sendLine,
+  outputText,
   isConnected: () => Boolean(port && reading),
 };
 

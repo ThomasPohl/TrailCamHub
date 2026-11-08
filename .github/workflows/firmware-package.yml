@@ -432,6 +432,8 @@ jobs:
           # Assemble the published site: page assets + all stored builds.
           mkdir -p site
           cp web/*.html web/*.css web/*.js site/
+          # The assistant's board list (docs/modes.md).
+          cp boards.json site/
           cp store/versions.json site/
           cp -r store/builds site/builds
           cp -r app/dist site/app
