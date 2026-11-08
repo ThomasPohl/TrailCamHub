@@ -307,20 +307,6 @@ std::string build_ack_json(const AckRequest &request)
     return out;
 }
 
-// 64 lowercase hex digits.
-static bool is_sha256_hex(const std::string &text)
-{
-    if (text.size() != 64) {
-        return false;
-    }
-    for (char c : text) {
-        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 bool parse_checkin_response(const std::string &json, CheckinResponse &out)
 {
     out = CheckinResponse{};
@@ -335,21 +321,6 @@ bool parse_checkin_response(const std::string &json, CheckinResponse &out)
                            out.checkin_interval_s) ||
             out.checkin_interval_s < 0) {
             out.checkin_interval_s = -1;
-        }
-    }
-
-    const std::string firmware = object_of(json, "firmware");
-    if (!firmware.empty()) {
-        FirmwareOffer &offer = out.firmware;
-        offer.present = json_find_string(firmware, "version", offer.version) &&
-                        json_find_string(firmware, "url", offer.url) &&
-                        offer.url.rfind("https://", 0) == 0 &&
-                        json_find_string(firmware, "sha256", offer.sha256) &&
-                        is_sha256_hex(offer.sha256) &&
-                        json_find_int(firmware, "size", offer.size) &&
-                        offer.size > 0;
-        if (!offer.present) {
-            offer = FirmwareOffer{};
         }
     }
 

@@ -33,6 +33,7 @@
 #include "command_parser.hpp"
 #include "diagnostics.hpp"
 #include "hub_battery.hpp"
+#include "ota_update.hpp"
 #include "hub_config.hpp"
 #include "schedule_state.hpp"
 #include "sd_card.h"
@@ -219,6 +220,8 @@ void print_details()
     reply("INFO", format_line("uptime %lld s",
                               (long long)(esp_timer_get_time() / 1000000)));
     print_battery();
+    reply("INFO", "firmware " + ota::running_version() + " (" + ota::board() +
+                      "-" + ota::variant() + "), " + ota::last_check_text());
     reply("INFO",
           format_line(
               "internal RAM %u KB free, %u KB minimum",
@@ -438,6 +441,12 @@ void execute(const hub_console::Command &command)
         break;
     case CommandType::upload:
         request_cycle(session_controller_request_upload(), "upload");
+        break;
+    case CommandType::update:
+        // The release manifest is read at the end of the sync, also if it
+        // was read less than a day ago.
+        ota::force_check();
+        request_cycle(session_controller_request_upload(), "update");
         break;
     case CommandType::stop: {
         const esp_err_t error = session_controller_request_stop();

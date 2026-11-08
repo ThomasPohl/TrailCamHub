@@ -18,8 +18,10 @@
 
 #include "device_info.hpp"
 #include "hub_battery.hpp"
+#include "hub_config.hpp"
 #include "media_catalog.hpp"
 #include "media_store.hpp"
+#include "modem_uplink.hpp"
 #include "mp4_file_source.hpp"
 #include "mp4_mux.hpp"
 #include "ota_policy.hpp"
@@ -353,31 +355,22 @@ void apply_checkin_result(CameraState &camera, const CameraCheckin &result)
     }
 }
 
-// Installs a firmware the backend offers, if this hub takes it, and
-// restarts into it.
-void update_firmware(const FirmwareOffer &offered)
+// Looks for a newer release on GitHub and installs it if the battery and the
+// uplink allow it; the scheduler restarts the hub after the cycle.
+void update_firmware(const hub_config::Settings &settings)
 {
-    const ota::Decision decision =
-        ota::decide(offered.version, ota::running_version(),
-                    ota::rolled_back_version(), ota::automatic());
-    if (decision != ota::Decision::install) {
-        ESP_LOGI(TAG, "Firmware %s offered, not installed: %s",
-                 offered.version.c_str(), ota::decision_text(decision));
-        return;
-    }
-    ota::Offer offer;
-    offer.version = offered.version;
-    offer.url = offered.url;
-    offer.sha256 = offered.sha256;
-    offer.size = offered.size;
-    std::string error;
-    if (ota::install(offer, error) != ESP_OK) {
-        // Tried again at the next check-in.
-        ESP_LOGE(TAG, "Firmware update to %s failed: %s",
-                 offered.version.c_str(), error.c_str());
-        return;
-    }
-    ota::restart();
+    // The battery as read between cycles: at rest, not under the modem's
+    // load.
+    const schedule::State state = schedule::state();
+    ota::Conditions conditions;
+    conditions.battery_percent = state.hub_battery;
+    conditions.charging = state.hub_charging;
+    conditions.power_level = (int)schedule::hub_level(state);
+    conditions.over_modem =
+        hub_config::uplink_transport(settings) == hub_config::Transport::modem;
+    conditions.signal_dbm =
+        conditions.over_modem ? modem_uplink::signal_dbm() : 0;
+    ota::check_for_update(conditions);
 }
 
 // Answers a requestVideo command: uploads the video if it is on the SD card,
@@ -622,9 +615,7 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
              report.thumbs_not_on_sd, report.videos_uploaded);
 
     // 5. A newer firmware, last, so this sync is complete before it.
-    if (response.firmware.present) {
-        update_firmware(response.firmware);
-    }
+    update_firmware(settings);
     return ESP_OK;
 }
 

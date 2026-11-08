@@ -2,7 +2,6 @@ import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { handleAdmin, isAdminEvent, type AdminEvent, type AdminResult } from './admin';
 import { handleRequest, type Deps } from './api';
-import { cachedManifest } from './firmware';
 import type { ApiRequest } from './http';
 import { S3MediaStorage } from './storage';
 import { DynamoStore } from './store/dynamo';
@@ -48,13 +47,11 @@ let deps: Deps | undefined;
 const now = () => Math.floor(Date.now() / 1000);
 
 function getDeps(): Deps {
-  const manifestUrl = process.env.FIRMWARE_MANIFEST_URL?.trim();
   deps ??= {
     store: new DynamoStore(requireEnv('TABLE_NAME')),
     storage: new S3MediaStorage(requireEnv('MEDIA_BUCKET')),
     botToken: () => botToken(),
     now,
-    firmwareManifest: manifestUrl ? cachedManifest(manifestUrl, now) : undefined,
     telegram: {
       api: new HttpTelegramApi(() => botToken()),
       appUrl: process.env.APP_URL?.trim() || undefined,

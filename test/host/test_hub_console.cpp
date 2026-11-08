@@ -11,6 +11,8 @@ TEST_CASE("simple commands")
 {
     CHECK(parse_command("scan\n").type == CommandType::scan);
     CHECK(parse_command("  upload \r\n").type == CommandType::upload);
+    CHECK(parse_command("update").type == CommandType::update);
+    CHECK(parse_command("update now").type == CommandType::invalid);
     CHECK(parse_command("status").type == CommandType::status);
     CHECK(parse_command("help").type == CommandType::help);
     CHECK(parse_command("tch scan").type == CommandType::scan);
