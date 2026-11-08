@@ -11,18 +11,51 @@ let reading = false;
 let lineBuffer = "";
 const encoder = new TextEncoder();
 
+// How close to the end (in pixels) still counts as "at the newest line".
+const FOLLOW_THRESHOLD = 24;
+// The view keeps about this much text; older chunks are dropped.
+const MAX_OUTPUT_CHARS = 500_000;
+let outputChars = 0;
+// appendOutput() keeps the position itself when old text is dropped; the
+// browser's scroll anchoring (not in every browser) would correct it a
+// second time.
+output.style.overflowAnchor = "none";
+
+// Each chunk is its own text node, so appending does not copy the whole log
+// and the oldest text can be dropped chunk by chunk.
+//
+// New output is followed only while the view is at the end. Scrolled up (to
+// read or search the log), the view stays where it is; scrolling back to the
+// end follows again.
 function appendOutput(text) {
-  output.textContent += text;
-  if (output.textContent.length > 100_000) {
-    output.textContent = output.textContent.slice(-80_000);
+  const following =
+    output.scrollHeight - output.scrollTop - output.clientHeight <=
+    FOLLOW_THRESHOLD;
+  output.append(text);
+  outputChars += text.length;
+  if (outputChars > MAX_OUTPUT_CHARS) {
+    // Dropping the oldest text moves everything up; keep the lines in view
+    // where they are.
+    // (Removing the text can clamp scrollTop, so it is taken first.)
+    const top = output.scrollTop;
+    const before = output.scrollHeight;
+    while (outputChars > MAX_OUTPUT_CHARS * 0.8 && output.firstChild) {
+      outputChars -= output.firstChild.textContent.length;
+      output.firstChild.remove();
+    }
+    if (!following) {
+      output.scrollTop = top - (before - output.scrollHeight);
+    }
   }
-  output.scrollTop = output.scrollHeight;
+  if (following) {
+    output.scrollTop = output.scrollHeight;
+  }
   updateOutputButtons();
 }
 
 // Clear and Copy only make sense while there is output to act on.
 function updateOutputButtons() {
-  const empty = output.textContent.length === 0;
+  const empty = outputChars === 0;
   clearButton.disabled = empty;
   copyButton.disabled = empty;
 }
@@ -32,6 +65,7 @@ function updateOutputButtons() {
 // left untouched.
 function clearOutput() {
   output.textContent = "";
+  outputChars = 0;
   updateOutputButtons();
 }
 
