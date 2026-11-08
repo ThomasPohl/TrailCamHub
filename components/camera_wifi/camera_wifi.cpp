@@ -32,6 +32,22 @@ static size_t s_target_ssid_len;
 static const char *s_target_label = "camera";
 static bool s_target_home;
 
+static void apply_power_save(bool full_power)
+{
+#if CONFIG_UPLINK_WIFI_POWER_SAVE
+    const wifi_ps_type_t power_save =
+        s_target_home && !full_power ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE;
+#else
+    (void)full_power;
+    const wifi_ps_type_t power_save = WIFI_PS_NONE;
+#endif
+    const esp_err_t error = esp_wifi_set_ps(power_save);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not set Wi-Fi power save (%d): %s",
+                 (int)power_save, esp_err_to_name(error));
+    }
+}
+
 static const char *wifi_disconnect_reason_name(uint8_t reason)
 {
     switch (reason) {
@@ -159,22 +175,20 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         // per second the TX buffers run out (sends fail with ENOMEM). BLE is
         // released during the session, so coexistence does not need it. The
         // backend sync over the home network does not need the speed, so it
-        // keeps modem sleep where the profile asks for it.
-#if CONFIG_UPLINK_WIFI_POWER_SAVE
-        const wifi_ps_type_t power_save =
-            s_target_home ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE;
-#else
-        const wifi_ps_type_t power_save = WIFI_PS_NONE;
-#endif
-        const esp_err_t ps_error = esp_wifi_set_ps(power_save);
-        if (ps_error != ESP_OK) {
-            ESP_LOGW(TAG, "Could not set Wi-Fi power save (%d): %s",
-                     (int)power_save, esp_err_to_name(ps_error));
-        }
+        // keeps modem sleep where the profile asks for it, except during a
+        // large transfer (camera_wifi_set_full_power()).
+        apply_power_save(false);
         if (s_wifi_connect_requested.load() &&
             s_callbacks.on_connected != NULL) {
             s_callbacks.on_connected(&event->ip_info.gw);
         }
+    }
+}
+
+void camera_wifi_set_full_power(bool on)
+{
+    if (s_target_home) {
+        apply_power_save(on);
     }
 }
 
