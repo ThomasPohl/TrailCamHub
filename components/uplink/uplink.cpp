@@ -17,8 +17,10 @@
 #include "esp_timer.h"
 
 #include "camera_wifi.h"
+#include "destinations.hpp"
 #include "device_info.hpp"
 #include "hub_battery.hpp"
+#include "http_util.hpp"
 #include "hub_config.hpp"
 #include "media_catalog.hpp"
 #include "media_store.hpp"
@@ -40,8 +42,6 @@ namespace
 {
 
 const char *TAG = "trailcamhub_uplink";
-constexpr int kTimeoutMs = 20000;
-constexpr int kMaxResponseBytes = 64 * 1024;
 constexpr size_t kUploadChunk = 4096;
 // Keep a check-in well below the backend's limits (16 cameras, 2000 media);
 // media not sent now go with the next sync.
@@ -64,48 +64,6 @@ constexpr std::uint64_t kMaxVideoBytesModem =
 #else
 constexpr std::uint64_t kMaxVideoBytesModem = kMaxVideoBytes;
 #endif
-
-struct HttpResult {
-    esp_err_t error = ESP_FAIL;
-    int status = 0;
-    std::string body;
-};
-
-esp_http_client_handle_t open_client(const std::string &url,
-                                     esp_http_client_method_t method)
-{
-    esp_http_client_config_t config = {};
-    config.url = url.c_str();
-    config.method = method;
-    config.timeout_ms = kTimeoutMs;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.buffer_size = 2048;
-    // Presigned S3 URLs are long; the request line must fit.
-    config.buffer_size_tx = 4096;
-    config.keep_alive_enable = false;
-    return esp_http_client_init(&config);
-}
-
-HttpResult read_response(esp_http_client_handle_t client)
-{
-    HttpResult result;
-    if (esp_http_client_fetch_headers(client) < 0) {
-        result.error = ESP_ERR_HTTP_FETCH_HEADER;
-        return result;
-    }
-    result.status = esp_http_client_get_status_code(client);
-    char buffer[512];
-    int read;
-    while ((read = esp_http_client_read(client, buffer, sizeof(buffer))) > 0) {
-        if (result.body.size() + (size_t)read > (size_t)kMaxResponseBytes) {
-            result.error = ESP_ERR_INVALID_SIZE;
-            return result;
-        }
-        result.body.append(buffer, read);
-    }
-    result.error = read < 0 ? ESP_FAIL : ESP_OK;
-    return result;
-}
 
 // POSTs a JSON body to the API with the device key.
 HttpResult post_json(const std::string &url, const std::string &device_key,
@@ -247,15 +205,6 @@ HttpResult put_mp4(const std::string &url, const std::string &camera_id,
         camera_wifi_set_full_power(false);
     }
     return result;
-}
-
-std::string describe(const HttpResult &result)
-{
-    if (result.error != ESP_OK) {
-        return esp_err_to_name(result.error);
-    }
-    return "HTTP " + std::to_string(result.status) + " " +
-           result.body.substr(0, 120);
 }
 
 void set_clock(std::int64_t unix_seconds)
@@ -488,7 +437,11 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
 
 }  // namespace
 
-esp_err_t run(const hub_config::Settings &settings, Report &report)
+namespace
+{
+
+// The sync with the own backend (check-in, thumbnails, commands, ack).
+esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
 {
     report = Report{};
     const std::string base = hub_config::api_base(settings.api_url);
@@ -654,6 +607,30 @@ esp_err_t run(const hub_config::Settings &settings, Report &report)
     // 5. A newer firmware, last, so this sync is complete before it.
     update_firmware(settings);
     return ESP_OK;
+}
+
+}  // namespace
+
+esp_err_t run(const hub_config::Settings &settings, Report &report)
+{
+    const hub_config::Destination destination =
+        hub_config::destination(settings);
+    if (destination == hub_config::Destination::backend) {
+        return run_backend(settings, report);
+    }
+    report = Report{};
+    const bool over_modem =
+        hub_config::uplink_transport(settings) == hub_config::Transport::modem;
+    const esp_err_t error = destination == hub_config::Destination::webdav
+                                ? push_webdav(settings, over_modem, report)
+                                : push_telegram(settings, over_modem, report);
+    if (error == ESP_OK) {
+        // The firmware reached its destination: a new one is kept. Then a
+        // newer firmware, last, as with the backend.
+        ota::confirm_running();
+        update_firmware(settings);
+    }
+    return error;
 }
 
 }  // namespace uplink

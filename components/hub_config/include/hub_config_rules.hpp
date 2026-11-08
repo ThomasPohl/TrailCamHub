@@ -38,14 +38,25 @@ enum class Key {
     // "push" (the hub sends to its destination) or "pull" (people fetch
     // from the hub's web UI).
     direction,
-    // Where push sends to: "backend" (more to come, see #150).
+    // Where push sends to: "backend", "webdav" or "telegram" (docs/modes.md).
     destination,
+    // WebDAV destination: folder URL (http:// or https://), user, password.
+    webdav_url,
+    webdav_user,
+    webdav_password,
+    // Telegram destination: the bot token from @BotFather, and the one chat
+    // it talks to (set by /start; empty: the next chat that sends /start).
+    telegram_token,
+    telegram_chat,
 };
 
 constexpr Key kAllKeys[] = {
-    Key::wifi_ssid,   Key::wifi_password, Key::api_url,   Key::device_key,
-    Key::camera_plan, Key::checkin_min,   Key::transport, Key::apn,
-    Key::sim_pin,     Key::power,         Key::direction, Key::destination};
+    Key::wifi_ssid,      Key::wifi_password, Key::api_url,
+    Key::device_key,     Key::camera_plan,   Key::checkin_min,
+    Key::transport,      Key::apn,           Key::sim_pin,
+    Key::power,          Key::direction,     Key::destination,
+    Key::webdav_url,     Key::webdav_user,   Key::webdav_password,
+    Key::telegram_token, Key::telegram_chat};
 
 struct Settings {
     std::string wifi_ssid;
@@ -60,6 +71,11 @@ struct Settings {
     std::string power;
     std::string direction;
     std::string destination;
+    std::string webdav_url;
+    std::string webdav_user;
+    std::string webdav_password;
+    std::string telegram_token;
+    std::string telegram_chat;
 };
 
 enum class Transport {
@@ -105,7 +121,7 @@ std::string api_base(const std::string &api_url);
 
 enum class Power { mains, battery };
 enum class Direction { push, pull };
-enum class Destination { backend };
+enum class Destination { backend, webdav, telegram };
 
 // What the build of this board can do.
 struct Capabilities {
@@ -163,9 +179,18 @@ bool checks_in(const Mode &mode);
 // if one is set, else the modem if it has one, else the Wi-Fi.
 Transport transport(const Settings &settings, const Capabilities &caps);
 
-// True if the hub has everything it needs to reach the backend over the
+// True if the hub has everything it needs to reach its destination over the
 // transport that applies on a board with `caps`.
 bool uplink_configured(const Settings &settings, const Capabilities &caps);
+
+// The destination's own settings are complete (backend URL and key, WebDAV
+// URL, Telegram token).
+bool destination_configured(const Settings &settings);
+Destination destination(const Settings &settings);
+
+// Longest check-in interval with Telegram directly: Telegram keeps updates
+// (button presses, commands) for about a day.
+constexpr std::uint32_t kTelegramMaxCheckinMin = 12 * 60;
 
 // Empty if `value` for `key` fits the board, else a short reason (e.g.
 // "this board has no modem"). For keys without such limits always empty.

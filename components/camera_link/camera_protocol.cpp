@@ -95,6 +95,18 @@ static const camera::artemis::MediaCatalog::VideoDownload kVideoDownload =
 #endif
 static const bool kDownloadVideos =
     kVideoDownload != camera::artemis::MediaCatalog::VideoDownload::none;
+// camera_protocol_set_all_videos().
+static std::atomic<bool> s_all_videos;
+
+static camera::artemis::MediaCatalog::VideoDownload video_download()
+{
+    if (s_all_videos.load() &&
+        kVideoDownload ==
+            camera::artemis::MediaCatalog::VideoDownload::requested) {
+        return camera::artemis::MediaCatalog::VideoDownload::missing;
+    }
+    return kVideoDownload;
+}
 // Videos fetched in one session (0: no limit); each takes about twice its
 // length.
 #ifdef CONFIG_CAMERA_VIDEO_MAX_PER_SESSION
@@ -456,8 +468,8 @@ static void request_current_download()
 // downloads, the session is closed right away.
 static void start_downloads()
 {
-    s_download_queue = s_catalog.download_queue(kDownloadPhotos, kVideoDownload,
-                                                CAMERA_VIDEO_MAX_PER_SESSION);
+    s_download_queue = s_catalog.download_queue(
+        kDownloadPhotos, video_download(), CAMERA_VIDEO_MAX_PER_SESSION);
     s_download_index = 0;
     s_download_stored = 0;
     s_stop_downloads = false;
@@ -1584,6 +1596,11 @@ int camera_protocol_last_battery_percent(void)
 void camera_protocol_init_storage(void)
 {
     camera::store::sd_writer_start();
+}
+
+void camera_protocol_set_all_videos(bool all_videos)
+{
+    s_all_videos = all_videos;
 }
 
 void camera_protocol_set_list_only(bool list_only)

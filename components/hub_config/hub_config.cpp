@@ -197,6 +197,26 @@ Mode mode(const Settings &settings)
     return resolve_mode(settings, capabilities(), preset());
 }
 
+std::string load_state(const char *key)
+{
+    Handle handle(NVS_READONLY);
+    std::string value;
+    if (handle.error() != ESP_OK ||
+        read_string(handle.get(), key, value) != ESP_OK) {
+        return "";
+    }
+    return value;
+}
+
+esp_err_t store_state(const char *key, const std::string &value)
+{
+    Handle handle(NVS_READWRITE);
+    ESP_RETURN_ON_ERROR(handle.error(), TAG, "Could not open settings");
+    ESP_RETURN_ON_ERROR(nvs_set_str(handle.get(), key, value.c_str()), TAG,
+                        "Could not store %s", key);
+    return nvs_commit(handle.get());
+}
+
 std::uint32_t refused_sim_pin()
 {
     Handle handle(NVS_READONLY);

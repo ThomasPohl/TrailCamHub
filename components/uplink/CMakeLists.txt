@@ -1,5 +1,6 @@
 idf_component_register(SRCS "uplink.cpp" "uplink_protocol.cpp"
-                            "video_request.cpp"
+                            "video_request.cpp" "http_util.cpp"
+                            "push_protocol.cpp" "destinations.cpp"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "."
                        REQUIRES hub_config

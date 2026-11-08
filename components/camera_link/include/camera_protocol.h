@@ -78,6 +78,15 @@ typedef void (*camera_protocol_progress_cb_t)(uint32_t done, uint32_t stored,
 void camera_protocol_set_list_only(bool list_only);
 
 /*
+ * In a build that downloads only requested videos
+ * (CONFIG_CAMERA_VIDEO_ON_REQUEST), `true` makes the following sessions fetch
+ * every missing video instead, e.g. for a WebDAV share in the home network.
+ * Without video downloads it has no effect. Set it before
+ * camera_protocol_run().
+ */
+void camera_protocol_set_all_videos(bool all_videos);
+
+/*
  * Receives the lines of a listing: "media <entry>" per file (see
  * format_media_item()), then "list done files=<n> pages=<n>",
  * "list truncated files=<n> pages=<n>" or "list failed <reason>". Without the

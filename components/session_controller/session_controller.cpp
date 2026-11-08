@@ -621,6 +621,12 @@ void load_settings_for_cycle()
     s_uplink_modem = transport == hub_config::Transport::modem;
     s_uplink_ethernet = transport == hub_config::Transport::ethernet;
     s_waiting_for_ethernet = false;
+    // A WebDAV share at home gets every video; over the modem only the ones
+    // asked for.
+    camera_protocol_set_all_videos(hub_config::uplink_ready(s_settings) &&
+                                   hub_config::destination(s_settings) ==
+                                       hub_config::Destination::webdav &&
+                                   transport != hub_config::Transport::modem);
 #if CONFIG_MODEM_UPLINK
     s_fsm.set_uplink_join_timeout_ms(
         s_uplink_modem ? CONFIG_MODEM_ATTACH_TIMEOUT_S * 1000u + 5000u : 0);

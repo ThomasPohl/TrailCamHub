@@ -36,6 +36,12 @@ Transport uplink_transport(const Settings &settings);
 // uplink_configured() for this build, and the mode pushes (checks in).
 bool uplink_ready(const Settings &settings);
 
+// Small values the hub keeps between cycles that are not settings (e.g. the
+// last Telegram update), in the same NVS namespace; erased by clear(). Keys
+// must not be setting names. Empty if not stored.
+std::string load_state(const char *key);
+esp_err_t store_state(const char *key, const std::string &value);
+
 // The capabilities and preset of this build (Kconfig), and the mode that
 // applies with `settings`.
 const Capabilities &capabilities();

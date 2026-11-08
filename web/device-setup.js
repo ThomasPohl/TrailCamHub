@@ -30,6 +30,11 @@
     power: panel.querySelector("#ds-current-power"),
     direction: panel.querySelector("#ds-current-direction"),
     destination: panel.querySelector("#ds-current-destination"),
+    webdav_url: panel.querySelector("#ds-current-webdav_url"),
+    webdav_user: panel.querySelector("#ds-current-webdav_user"),
+    webdav_password: panel.querySelector("#ds-current-webdav_password"),
+    telegram_token: panel.querySelector("#ds-current-telegram_token"),
+    telegram_chat: panel.querySelector("#ds-current-telegram_chat"),
     backend: panel.querySelector("#ds-current-backend"),
   };
   const scheduleList = panel.querySelector("#ds-schedule");
@@ -60,7 +65,7 @@
 
   // Remembered form values, so the settings need not be typed again on every
   // visit. Opt-out via the checkbox, which also deletes what is stored.
-  const FIELDS = ["wifi_ssid", "wifi_password", "power", "direction", "destination", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
+  const FIELDS = ["wifi_ssid", "wifi_password", "power", "direction", "destination", "webdav_url", "webdav_user", "webdav_password", "telegram_token", "telegram_chat", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
   const STORAGE_KEY = "trailcamhub.deviceSetup";
   const PREFERENCE_KEY = "trailcamhub.deviceSetup.remember";
   const rememberBox = panel.querySelector("#ds-remember");
@@ -213,6 +218,7 @@
     );
     // Passwords may legitimately contain spaces at the ends.
     values.wifi_password = form.elements.wifi_password.value;
+    values.webdav_password = form.elements.webdav_password.value;
     const problem = validate(values);
     if (problem) {
       formStatus.textContent = problem;
@@ -226,7 +232,7 @@
     formStatus.textContent = "Saving…";
     try {
       for (const [key, value] of entries) {
-        const secret = key === "wifi_password" || key === "device_key" || key === "sim_pin";
+        const secret = ["wifi_password", "device_key", "sim_pin", "webdav_password", "telegram_token"].includes(key);
         await send(`config set-hex ${key} ${toHex(value)}`, `config set ${key} ${secret ? "••••" : value}`);
       }
       await send("config show");
@@ -234,6 +240,8 @@
         form.elements.wifi_password.value = "";
         form.elements.device_key.value = "";
         form.elements.sim_pin.value = "";
+        form.elements.webdav_password.value = "";
+        form.elements.telegram_token.value = "";
       }
       formStatus.textContent = "Saved. Empty fields keep their stored value.";
     } catch {

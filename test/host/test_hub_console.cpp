@@ -458,3 +458,55 @@ TEST_CASE("transport: Ethernet first on boards that have it")
     empty.wifi_ssid = "Home";
     CHECK(transport(empty, modem_board) == Transport::wifi);
 }
+
+TEST_CASE("destinations: settings and what each needs")
+{
+    using namespace hub_config;
+    CHECK(validate(Key::destination, "webdav").empty());
+    CHECK(validate(Key::destination, "telegram").empty());
+    CHECK(validate(Key::webdav_url, "https://nas.local/dav/trailcam").empty());
+    CHECK(validate(Key::webdav_url, "http://192.168.1.5:5005/cam").empty());
+    CHECK_FALSE(validate(Key::webdav_url, "ftp://nas").empty());
+    CHECK(validate(Key::webdav_user, "thomas").empty());
+    CHECK_FALSE(validate(Key::webdav_user, "a:b").empty());
+    CHECK(validate(Key::telegram_token,
+                   "123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw")
+              .empty());
+    CHECK_FALSE(validate(Key::telegram_token, "123456789").empty());
+    CHECK_FALSE(validate(Key::telegram_token, "abc:AAHdqTcvCH1vGWJxfSeofSAs0K5")
+                    .empty());
+    CHECK(validate(Key::telegram_chat, "123456").empty());
+    CHECK(validate(Key::telegram_chat, "-100123456").empty());
+    CHECK_FALSE(validate(Key::telegram_chat, "-").empty());
+    CHECK_FALSE(validate(Key::telegram_chat, "@me").empty());
+    CHECK(display_value(Key::telegram_token,
+                        "123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw") ==
+          "123456789:*** (set)");
+    CHECK(display_value(Key::webdav_password, "x") == "(set)");
+    CHECK(is_secret(Key::telegram_token));
+
+    Capabilities modem;
+    modem.modem = true;
+    Capabilities wifi_only;
+    CHECK(capability_problem(Key::destination, "telegram", modem).empty());
+    CHECK_FALSE(
+        capability_problem(Key::destination, "telegram", wifi_only).empty());
+    CHECK(capability_problem(Key::destination, "webdav", wifi_only).empty());
+
+    Settings s;
+    s.destination = "webdav";
+    s.wifi_ssid = "Home";
+    CHECK(destination(s) == Destination::webdav);
+    CHECK_FALSE(destination_configured(s));
+    s.webdav_url = "https://nas.local/dav";
+    CHECK(destination_configured(s));
+    CHECK(uplink_configured(s, wifi_only));
+
+    Settings t;
+    t.destination = "telegram";
+    t.telegram_token = "123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw";
+    CHECK(destination_configured(t));
+    CHECK(uplink_configured(t, modem));  // no Wi-Fi: the modem
+    CHECK(std::string(destination_name(
+              resolve_mode(t, modem, Preset{}).destination)) == "telegram");
+}
