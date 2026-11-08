@@ -21,6 +21,8 @@ namespace
 
 const char *TAG = "trailcamhub_config";
 const char *kNamespace = "hub_config";
+// Not a setting: written by the modem uplink, cleared with sim_pin.
+const char *kRefusedPinKey = "pin_refused";
 
 class Handle
 {
@@ -106,6 +108,14 @@ esp_err_t set(Key key, const std::string &value, std::string *reason)
         error = ESP_OK;  // erasing a setting that was never stored
     }
     ESP_RETURN_ON_ERROR(error, TAG, "Could not store %s", key_name(key));
+    if (key == Key::sim_pin) {
+        // A new (or the same, entered again on purpose) PIN may be tried.
+        error = nvs_erase_key(handle.get(), kRefusedPinKey);
+        if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) {
+            ESP_LOGW(TAG, "Could not forget the refused SIM PIN: %s",
+                     esp_err_to_name(error));
+        }
+    }
     ESP_RETURN_ON_ERROR(nvs_commit(handle.get()), TAG, "Could not commit");
     ESP_LOGI(TAG, "Setting %s %s", key_name(key),
              value.empty() ? "erased" : "stored");
@@ -129,6 +139,26 @@ Transport uplink_transport(const Settings &settings)
 bool uplink_ready(const Settings &settings)
 {
     return uplink_configured(settings, modem_available());
+}
+
+std::uint32_t refused_sim_pin()
+{
+    Handle handle(NVS_READONLY);
+    std::uint32_t fingerprint = 0;
+    if (handle.error() != ESP_OK ||
+        nvs_get_u32(handle.get(), kRefusedPinKey, &fingerprint) != ESP_OK) {
+        return 0;
+    }
+    return fingerprint;
+}
+
+esp_err_t set_refused_sim_pin(std::uint32_t fingerprint)
+{
+    Handle handle(NVS_READWRITE);
+    ESP_RETURN_ON_ERROR(handle.error(), TAG, "Could not open settings");
+    ESP_RETURN_ON_ERROR(nvs_set_u32(handle.get(), kRefusedPinKey, fingerprint),
+                        TAG, "Could not store the refused SIM PIN");
+    return nvs_commit(handle.get());
 }
 
 esp_err_t clear()

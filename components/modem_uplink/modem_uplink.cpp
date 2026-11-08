@@ -10,6 +10,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
+#include <string>
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -26,6 +28,7 @@
 #include "esp_netif.h"
 #include "esp_netif_ppp.h"
 #include "esp_timer.h"
+#include "hub_config.hpp"
 #include "iot_usbh_cdc.h"
 #include "iot_usbh_modem.h"
 #include "modem_ids.h"
@@ -150,18 +153,93 @@ const char *wait_for_modem(const Deadline &deadline, at_handle_t &at,
     }
 }
 
+// Collects the whole answer of a command up to its final result code.
+bool collect_answer(at_handle_t at, const char *buffer)
+{
+    const std::size_t length = std::strlen(buffer);
+    const bool ok =
+        length >= 4 && std::strcmp(buffer + length - 4, "OK\r\n") == 0;
+    if (!ok && std::strstr(buffer, "ERROR") == nullptr) {
+        return false;
+    }
+    auto *answer = static_cast<std::string *>(modem_at_get_handle_line_ctx(at));
+    answer->assign(buffer);
+    return true;
+}
+
+// Sends `command`; ESP_OK with the answer if it ended in OK, ESP_FAIL if it
+// ended in an error, ESP_ERR_TIMEOUT without an answer.
+esp_err_t at_query(at_handle_t at, const char *command, std::string &answer)
+{
+    answer.clear();
+    const esp_err_t error =
+        modem_at_send_command(at, command, CONFIG_MODEM_COMMAND_TIMEOUT_DEFAULT,
+                              collect_answer, &answer);
+    if (error != ESP_OK) {
+        return error;
+    }
+    if (answer.empty()) {
+        return ESP_ERR_TIMEOUT;
+    }
+    return answer.find("ERROR") == std::string::npos ? ESP_OK : ESP_FAIL;
+}
+
+// PIN attempts the card has left (SIMCom AT+SPIC); -1 if unknown.
+int pin_attempts_left(at_handle_t at)
+{
+    std::string answer;
+    if (at_query(at, "AT+SPIC", answer) != ESP_OK) {
+        return -1;
+    }
+    return hub_config::parse_spic_pin_attempts(answer);
+}
+
+const char *enter_pin(at_handle_t at, const std::string &sim_pin)
+{
+    if (sim_pin.empty()) {
+        return "the SIM card needs a PIN (config set sim_pin ...)";
+    }
+    if (!hub_config::validate(hub_config::Key::sim_pin, sim_pin).empty()) {
+        // Stored by an older firmware, which allowed 4-8 digits.
+        return "sim_pin must be 4 digits; set it again";
+    }
+    const int attempts = pin_attempts_left(at);
+    if (attempts >= 0) {
+        ESP_LOGI(TAG, "SIM PIN attempts left: %d", attempts);
+    }
+    switch (hub_config::sim_pin_decision(hub_config::refused_sim_pin(), sim_pin,
+                                         attempts)) {
+    case hub_config::PinDecision::send:
+        break;
+    case hub_config::PinDecision::refused_before:
+        return "the SIM card refused this PIN before; set sim_pin again";
+    case hub_config::PinDecision::too_few_attempts:
+        return "only one PIN attempt left; unlock the SIM card in a phone";
+    }
+    const esp_err_t error = at_cmd_set_pin(at, sim_pin.c_str());
+    if (error == ESP_FAIL) {
+        // The card answered with an error: remembered, so that the next
+        // cycles do not use up the attempts and lock the card (PUK).
+        hub_config::set_refused_sim_pin(
+            hub_config::sim_pin_fingerprint(sim_pin));
+        return "the SIM card refused the PIN; set sim_pin again";
+    }
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "SIM PIN: %s", esp_err_to_name(error));
+        return "the SIM PIN could not be entered";
+    }
+    ESP_LOGI(TAG, "SIM PIN entered");
+    return nullptr;
+}
+
 const char *unlock_sim(const Deadline &deadline, at_handle_t at,
                        esp_modem_pin_state_t pin, const std::string &sim_pin)
 {
     if (pin == PIN_SIM_PIN) {
-        if (sim_pin.empty()) {
-            return "the SIM card needs a PIN (config set sim_pin ...)";
+        const char *problem = enter_pin(at, sim_pin);
+        if (problem != nullptr) {
+            return problem;
         }
-        // A wrong PIN is not tried again: three wrong ones lock the card.
-        if (at_cmd_set_pin(at, sim_pin.c_str()) != ESP_OK) {
-            return "the SIM card refused the PIN";
-        }
-        ESP_LOGI(TAG, "SIM PIN entered");
     }
     // The card takes a moment after the PIN or after the radio came on.
     while (true) {

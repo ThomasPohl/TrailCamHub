@@ -17,7 +17,7 @@ The Waveshare ESP32-S3-A7670E-4G has an A7670E LTE Cat-1 modem on the S3's **nat
 | ----------- | ---------------------------------------------------------- | --------------------------------------------------------- |
 | `transport` | `wifi`, `modem`                                            | the home Wi-Fi if `wifi_ssid` is set, otherwise the modem |
 | `apn`       | letters, digits, `.`, `-`, `_` (it goes into `AT+CGDCONT`) | the network's default                                     |
-| `sim_pin`   | 4–8 digits (stored like a password, never shown)           | none                                                      |
+| `sim_pin`   | 4 digits (stored like a password, never shown)             | none                                                      |
 
 ```
 config set transport modem
@@ -28,13 +28,22 @@ config show
 
 `config show` ends with `CONFIG backend configured, over modem` (or `incomplete`). The web installer has the same three fields. With the modem only `api_url` and `device_key` are needed for a sync.
 
+## SIM PIN
+
+Three wrong PINs lock a SIM card until the PUK is entered, and a hub that tried the same wrong PIN in every cycle would do that on its own within a few hours. So:
+
+- A PIN the card refuses is remembered in NVS (as a fingerprint) and **not sent again**, also not in later cycles or after a deep sleep. The cycle ends with `the SIM card refused this PIN before; set sim_pin again`, and `config show` says so.
+- `config set sim_pin …` (console or installer) forgets it, also when the same PIN is entered again on purpose; `config clear` too.
+- Before sending a PIN the hub reads the attempts left (`AT+SPIC`) and never sends one with fewer than two left: the card then has to be unlocked in a phone.
+- Only 4-digit PINs: the modem driver (`at_cmd_set_pin`) sends nothing else. A card with a longer PIN needs a 4-digit one set in a phone, or no PIN.
+
 ## One sync
 
 The session state machine is unchanged: `UPLINK_JOIN` brings the uplink up, `UPLINK` syncs as before, and the end of the cycle takes it down. With the modem (`modem_uplink` component, driver `espressif/iot_usbh_modem` from esp-iot-solution):
 
 1. Power on (GPIO, if set), USB host and modem driver installed.
 2. Wait until the modem answers AT commands over USB.
-3. Radio on (`AT+CFUN=1`), SIM PIN entered if the card asks for it. A wrong PIN is not tried again (three wrong ones lock the card).
+3. Radio on (`AT+CFUN=1`), SIM PIN entered if the card asks for it (see below).
 4. Wait for the network registration (home network or roaming).
 5. Signal strength and operator are logged, the data call is made (PPP); with an APN the PDP context is set first.
 6. The PPP interface gets an IP address and becomes the default route; the sync runs.

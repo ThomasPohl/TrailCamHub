@@ -265,6 +265,12 @@ void print_settings()
           hub_config::uplink_ready(settings)
               ? std::string("backend configured, over ") + transport
               : std::string("backend incomplete (") + transport + ")");
+    if (hub_config::modem_available() && !settings.sim_pin.empty() &&
+        hub_config::refused_sim_pin() ==
+            hub_config::sim_pin_fingerprint(settings.sim_pin)) {
+        reply("INFO", "the SIM card refused sim_pin; it is not sent again "
+                      "until sim_pin is set again");
+    }
 }
 
 // "in 1234 s (2026-11-02 15:20)", "in 1234 s" without a clock, or "never".

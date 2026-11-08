@@ -138,9 +138,11 @@ TEST_CASE("setting validation")
     CHECK_FALSE(validate(Key::apn, std::string(64, 'a')).empty());
 
     CHECK(validate(Key::sim_pin, "1234").empty());
-    CHECK(validate(Key::sim_pin, "12345678").empty());
+    CHECK(validate(Key::sim_pin, "0000").empty());
+    // The modem driver sends 4-digit PINs only.
+    CHECK_FALSE(validate(Key::sim_pin, "12345").empty());
+    CHECK_FALSE(validate(Key::sim_pin, "12345678").empty());
     CHECK_FALSE(validate(Key::sim_pin, "123").empty());
-    CHECK_FALSE(validate(Key::sim_pin, "123456789").empty());
     CHECK_FALSE(validate(Key::sim_pin, "12a4").empty());
 }
 
@@ -286,4 +288,40 @@ TEST_CASE("sdbench sizes")
     CHECK(parse_command("sdbench 0").type == CommandType::invalid);
     CHECK(parse_command("sdbench 1024 65").type == CommandType::invalid);
     CHECK(parse_command("sdbench 1024 16 1").type == CommandType::invalid);
+}
+
+TEST_CASE("a refused SIM PIN is not sent again")
+{
+    using hub_config::PinDecision;
+    using hub_config::sim_pin_decision;
+    using hub_config::sim_pin_fingerprint;
+    const std::uint32_t refused = sim_pin_fingerprint("1234");
+    CHECK(refused != 0);
+    CHECK(sim_pin_fingerprint("1234") == refused);
+    CHECK(sim_pin_fingerprint("4321") != refused);
+
+    // Nothing refused yet, attempts unknown or enough.
+    CHECK(sim_pin_decision(0, "1234", -1) == PinDecision::send);
+    CHECK(sim_pin_decision(0, "1234", 3) == PinDecision::send);
+    CHECK(sim_pin_decision(0, "1234", 2) == PinDecision::send);
+    // The same PIN again: not sent, whatever the attempts.
+    CHECK(sim_pin_decision(refused, "1234", 3) == PinDecision::refused_before);
+    CHECK(sim_pin_decision(refused, "1234", -1) == PinDecision::refused_before);
+    // A new PIN is tried.
+    CHECK(sim_pin_decision(refused, "4321", 2) == PinDecision::send);
+    // One attempt left: a wrong PIN would lock the card.
+    CHECK(sim_pin_decision(0, "1234", 1) == PinDecision::too_few_attempts);
+    CHECK(sim_pin_decision(refused, "4321", 0) ==
+          PinDecision::too_few_attempts);
+}
+
+TEST_CASE("PIN attempts from AT+SPIC")
+{
+    using hub_config::parse_spic_pin_attempts;
+    CHECK(parse_spic_pin_attempts("+SPIC: 3,10,3,10") == 3);
+    CHECK(parse_spic_pin_attempts("\r\n+SPIC: 1,10,0,10\r\n") == 1);
+    CHECK(parse_spic_pin_attempts("+SPIC:0,10,3,10") == 0);
+    CHECK(parse_spic_pin_attempts("OK") == -1);
+    CHECK(parse_spic_pin_attempts("+SPIC: ,10") == -1);
+    CHECK(parse_spic_pin_attempts("+CPIN: READY") == -1);
 }
