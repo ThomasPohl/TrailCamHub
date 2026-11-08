@@ -329,7 +329,8 @@ Mode resolve_mode(const Settings &settings, const Capabilities &caps,
     Mode mode;
     mode.power = preset.power;
     if (settings.power == "mains" || settings.power == "battery") {
-        mode.power = settings.power == "battery" ? Power::battery : Power::mains;
+        mode.power =
+            settings.power == "battery" ? Power::battery : Power::mains;
         mode.power_origin = ModeOrigin::setting;
     }
     mode.direction = preset.direction;

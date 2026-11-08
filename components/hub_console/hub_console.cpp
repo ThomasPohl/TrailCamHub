@@ -313,8 +313,7 @@ void print_schedule()
               "), transport " + hub_config::transport_name(mode.transport) +
               ", destination " +
               hub_config::destination_name(mode.destination) + "; " +
-              (effective.sleeps ? "deep sleep between cycles"
-                                : "stays awake"));
+              (effective.sleeps ? "deep sleep between cycles" : "stays awake"));
     reply("INFO", "camera plan " + effective.camera_plan + " (" +
                       schedule::origin_name(effective.camera_plan_origin) +
                       ")");

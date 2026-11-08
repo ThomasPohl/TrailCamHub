@@ -42,9 +42,9 @@ enum class Key {
 };
 
 constexpr Key kAllKeys[] = {
-    Key::wifi_ssid, Key::wifi_password, Key::api_url,   Key::device_key,
-    Key::camera_plan, Key::checkin_min, Key::transport, Key::apn,
-    Key::sim_pin,   Key::power,         Key::direction, Key::destination};
+    Key::wifi_ssid,   Key::wifi_password, Key::api_url,   Key::device_key,
+    Key::camera_plan, Key::checkin_min,   Key::transport, Key::apn,
+    Key::sim_pin,     Key::power,         Key::direction, Key::destination};
 
 struct Settings {
     std::string wifi_ssid;
@@ -113,8 +113,8 @@ struct Capabilities {
     bool psram = false;
     bool display = false;
     bool button = false;
-    bool web_ui = false;         // pull needs it
-    bool deep_sleep = false;     // battery power uses it
+    bool web_ui = false;      // pull needs it
+    bool deep_sleep = false;  // battery power uses it
 };
 
 // The board's defaults for the settings left empty.
