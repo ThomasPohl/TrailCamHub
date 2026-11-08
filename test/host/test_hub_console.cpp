@@ -420,3 +420,41 @@ TEST_CASE("mode settings are validated")
     CHECK_FALSE(validate(Key::destination, "ftp").empty());
     CHECK(hub_config::display_value(Key::power, "") == "(default)");
 }
+
+TEST_CASE("transport: Ethernet first on boards that have it")
+{
+    using namespace hub_config;
+    Capabilities wired;
+    wired.ethernet = true;
+    Settings settings;
+    CHECK(transport(settings, wired) == Transport::ethernet);
+    settings.wifi_ssid = "Home";
+    CHECK(transport(settings, wired) == Transport::ethernet);
+    settings.transport = "wifi";
+    CHECK(transport(settings, wired) == Transport::wifi);
+    // A transport the board lacks falls back.
+    settings.transport = "modem";
+    CHECK(transport(settings, wired) == Transport::ethernet);
+    CHECK(std::string(transport_name(Transport::ethernet)) == "ethernet");
+
+    // Over Ethernet only the backend settings are needed.
+    Settings backend;
+    backend.api_url = "https://example.com/";
+    backend.device_key = "hub1.abcdefghijklmnopqr";
+    CHECK(uplink_configured(backend, wired));
+    Capabilities wifi_only;
+    CHECK_FALSE(uplink_configured(backend, wifi_only));
+
+    CHECK(validate(Key::transport, "ethernet").empty());
+    CHECK(capability_problem(Key::transport, "ethernet", wifi_only) ==
+          "this board has no Ethernet");
+    CHECK(capability_problem(Key::transport, "ethernet", wired).empty());
+
+    // Boards without Ethernet keep the old rule.
+    Capabilities modem_board;
+    modem_board.modem = true;
+    Settings empty;
+    CHECK(transport(empty, modem_board) == Transport::modem);
+    empty.wifi_ssid = "Home";
+    CHECK(transport(empty, modem_board) == Transport::wifi);
+}
