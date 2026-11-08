@@ -546,6 +546,22 @@ describe('wake-up schedule (app → hub, hub → app)', () => {
     });
   });
 
+  it('keeps a known reason for a stretched schedule and drops others', async () => {
+    const { deps, hubKey, store } = await setup();
+    const checkin = (stretch: unknown) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', hubKey, {
+          cameras: [],
+          schedule: { ...report, stretch },
+        }),
+        deps,
+      );
+    await checkin('hubBatteryLow');
+    expect((await store.getHub(HUB_ID))?.schedule?.stretch).toBe('hubBatteryLow');
+    await checkin('solarFlare');
+    expect((await store.getHub(HUB_ID))?.schedule?.stretch).toBeUndefined();
+  });
+
   it('sends a schedule set in the app with every check-in', async () => {
     const { deps, hubKey } = await setup();
     const set = await handleRequest(

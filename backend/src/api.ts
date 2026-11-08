@@ -27,6 +27,7 @@ import type {
   MediaRecord,
   ScheduleConfig,
   ScheduleOrigin,
+  ScheduleStretch,
   SdCardState,
 } from './model';
 import { ID_PATTERN, isMediaId } from './model';
@@ -340,6 +341,12 @@ function plannedTime(value: unknown, now: number): number | undefined {
     : undefined;
 }
 
+const STRETCHES: readonly ScheduleStretch[] = [
+  'hubBatteryCritical',
+  'hubBatteryLow',
+  'cameraBatteryLow',
+];
+
 /** The hub's schedule report; anything malformed is dropped, not rejected. */
 function sanitizeSchedule(raw: unknown, now: number): HubSchedule | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
@@ -357,6 +364,9 @@ function sanitizeSchedule(raw: unknown, now: number): HubSchedule | undefined {
     nextCameraReadAt: plannedTime(r.nextCameraReadAt, now),
     nextCheckinAt: plannedTime(r.nextCheckinAt, now),
     sleeps: r.sleeps === true,
+    stretch: STRETCHES.includes(r.stretch as ScheduleStretch)
+      ? (r.stretch as ScheduleStretch)
+      : undefined,
   };
 }
 

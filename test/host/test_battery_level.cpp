@@ -96,3 +96,23 @@ TEST_CASE("Voltage to percent along the Li-ion curve")
         CHECK(voltage_to_percent(3700, 4200, 3300) == -1);
     }
 }
+
+TEST_CASE("MAX17048 charge rate and charging")
+{
+    CHECK(crate_to_millipercent_per_hour(0) == 0);
+    CHECK(crate_to_millipercent_per_hour(5) == 1040);
+    CHECK(crate_to_millipercent_per_hour(0xFFFB) == -1040);  // -5
+    CHECK(is_charging(crate_to_millipercent_per_hour(3)));
+    CHECK_FALSE(is_charging(crate_to_millipercent_per_hour(2)));
+    CHECK_FALSE(is_charging(crate_to_millipercent_per_hour(0xFFF0)));
+}
+
+TEST_CASE("the modem needs enough cell voltage")
+{
+    CHECK(modem_allowed(3400, 3400));
+    CHECK(modem_allowed(3950, 3400));
+    CHECK_FALSE(modem_allowed(3399, 3400));
+    // Unknown voltage or no limit: allowed.
+    CHECK(modem_allowed(-1, 3400));
+    CHECK(modem_allowed(3000, 0));
+}

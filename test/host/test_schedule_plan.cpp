@@ -278,6 +278,142 @@ TEST_CASE("a camera with a low battery is read less often")
     CHECK(next_times(settings, state, at(0, 1), kLocal).camera == at(1));
 }
 
+namespace
+{
+
+PowerSettings power_settings_for_tests()
+{
+    PowerSettings power;
+    power.low_percent = 30;
+    power.critical_percent = 10;
+    power.critical_mv = 3500;
+    power.hysteresis_percent = 5;
+    power.hysteresis_mv = 50;
+    power.low_camera_factor = 3;
+    power.low_checkin_factor = 2;
+    power.critical_checkin_min = 720;
+    return power;
+}
+
+}  // namespace
+
+TEST_CASE("the hub battery level follows its thresholds with hysteresis")
+{
+    const PowerSettings power = power_settings_for_tests();
+    const PowerLevel normal = PowerLevel::normal;
+    const PowerLevel low = PowerLevel::low;
+    const PowerLevel critical = PowerLevel::critical;
+
+    CHECK(power_level(power, 80, 4000, normal) == normal);
+    CHECK(power_level(power, 30, 3800, normal) == normal);
+    CHECK(power_level(power, 29, 3800, normal) == low);
+    // Low is left only at 35 %.
+    CHECK(power_level(power, 32, 3800, low) == low);
+    CHECK(power_level(power, 35, 3800, low) == normal);
+
+    CHECK(power_level(power, 9, 3700, low) == critical);
+    // A low voltage is critical whatever the percentage.
+    CHECK(power_level(power, 60, 3499, normal) == critical);
+    // Critical is left at 15 % and 3550 mV, then into low.
+    CHECK(power_level(power, 14, 3700, critical) == critical);
+    CHECK(power_level(power, 20, 3520, critical) == critical);
+    CHECK(power_level(power, 15, 3550, critical) == low);
+    CHECK(power_level(power, 40, 3600, critical) == normal);
+
+    // Unknown battery: normal; one known value counts alone.
+    CHECK(power_level(power, -1, -1, critical) == normal);
+    CHECK(power_level(power, -1, 3400, normal) == critical);
+    CHECK(power_level(power, 20, -1, normal) == low);
+
+    // Thresholds off.
+    PowerSettings off;
+    CHECK(power_level(off, 1, 3000, normal) == normal);
+}
+
+TEST_CASE("a low hub battery stretches camera reads and check-ins")
+{
+    Settings settings = settings_with("*=60", 30);
+    settings.power = power_settings_for_tests();
+    State state = initial_state();
+    state.last_camera = at(0);
+    state.last_checkin = at(0);
+
+    Times times = next_times(settings, state, at(0, 1), kLocal);
+    CHECK(times.camera == at(1));
+    CHECK(times.checkin == at(0, 30));
+    CHECK(stretch(settings, state) == Stretch::none);
+
+    CHECK(set_hub_battery(state, settings.power, 25, 3700, false));
+    CHECK(hub_level(state) == PowerLevel::low);
+    times = next_times(settings, state, at(0, 1), kLocal);
+    CHECK(times.camera == at(3));
+    CHECK(times.checkin == at(1));
+    CHECK(stretch(settings, state) == Stretch::hub_battery_low);
+    CHECK(std::string(stretch_name(stretch(settings, state))) ==
+          "hubBatteryLow");
+
+    // Both batteries low: the factors multiply, the hub is named.
+    state.camera_battery = 10;
+    CHECK(camera_factor(settings, state) == 9);
+    CHECK(stretch(settings, state) == Stretch::hub_battery_low);
+    state.camera_battery = -1;
+
+    // While the cell charges the low level does not stretch.
+    CHECK_FALSE(set_hub_battery(state, settings.power, 25, 3700, true));
+    CHECK(hub_level(state) == PowerLevel::low);
+    times = next_times(settings, state, at(0, 1), kLocal);
+    CHECK(times.camera == at(1));
+    CHECK(times.checkin == at(0, 30));
+    CHECK(stretch(settings, state) == Stretch::none);
+}
+
+TEST_CASE("a critical hub battery stops camera reads and checks in rarely")
+{
+    Settings settings = settings_with("*=60", 30);
+    settings.power = power_settings_for_tests();
+    State state = initial_state();
+    state.last_camera = at(0);
+    state.last_checkin = at(0);
+    state.checkin_failures = 3;
+
+    CHECK(set_hub_battery(state, settings.power, 8, 3600, true));
+    CHECK(hub_level(state) == PowerLevel::critical);
+    Times times = next_times(settings, state, at(0, 1), kLocal);
+    CHECK(times.camera == kNever);
+    // 12 h, no back-off on top; also while charging.
+    CHECK(times.checkin == at(12));
+    CHECK(stretch(settings, state) == Stretch::hub_battery_critical);
+    CHECK(std::string(stretch_name(stretch(settings, state))) ==
+          "hubBatteryCritical");
+
+    // A read asked for by the backend waits until the level is left.
+    state.camera_requested = true;
+    CHECK(next_times(settings, state, at(0, 1), kLocal).camera == kNever);
+    CHECK(set_hub_battery(state, settings.power, 50, 3900, false));
+    CHECK(next_times(settings, state, at(0, 1), kLocal).camera == at(0, 1));
+
+    // The first check-in after a power-on is due at once.
+    State fresh = initial_state();
+    set_hub_battery(fresh, settings.power, 5, 3400, false);
+    CHECK(next_times(settings, fresh, at(0), kLocal).checkin == at(0));
+
+    // A normal check-in interval above the critical one is kept.
+    settings.checkin_min = 1440;
+    set_hub_battery(state, settings.power, 5, 3400, false);
+    CHECK(next_times(settings, state, at(0, 1), kLocal).checkin == at(24));
+}
+
+TEST_CASE("an unknown hub battery changes nothing")
+{
+    Settings settings = settings_with("*=60", 30);
+    settings.power = power_settings_for_tests();
+    State state = initial_state();
+    CHECK(hub_level(state) == PowerLevel::normal);
+    CHECK_FALSE(set_hub_battery(state, settings.power, -1, -1, false));
+    CHECK(stretch(settings, state) == Stretch::none);
+    CHECK(std::string(stretch_name(Stretch::none)).empty());
+}
+
 TEST_CASE("a requested read is due at once, also with reads off")
 {
     Settings settings = settings_with("off", 30);

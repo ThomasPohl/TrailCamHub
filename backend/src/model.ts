@@ -19,6 +19,12 @@ export type CommandState = 'queued' | 'delivered' | 'done' | 'failed';
 /** Where the hub got a schedule setting from. */
 export type ScheduleOrigin = 'built-in' | 'local' | 'remote';
 
+/**
+ * Why the hub stretches its schedule: its own battery is critical (no camera
+ * reads, rare check-ins) or low, or a camera's battery is low.
+ */
+export type ScheduleStretch = 'hubBatteryCritical' | 'hubBatteryLow' | 'cameraBatteryLow';
+
 /** The hub's wake-up schedule as it reports it with every check-in. */
 export interface HubSchedule {
   /** Camera read plan in effect, e.g. "05:00-09:00=30,*=120" or "off". */
@@ -32,6 +38,8 @@ export interface HubSchedule {
   nextCheckinAt?: number;
   /** The hub sleeps between cycles: commands wait for its next check-in. */
   sleeps: boolean;
+  /** Why the schedule is stretched; absent if it is not. */
+  stretch?: ScheduleStretch;
 }
 
 /**

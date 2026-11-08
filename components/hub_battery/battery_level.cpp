@@ -77,4 +77,19 @@ int voltage_to_percent(int millivolts, int empty_mv, int full_mv)
     return 100;
 }
 
+int crate_to_millipercent_per_hour(std::uint16_t raw)
+{
+    return (int)(std::int16_t)raw * 208;
+}
+
+bool is_charging(int millipercent_per_hour)
+{
+    return millipercent_per_hour >= 500;
+}
+
+bool modem_allowed(int millivolts, int min_mv)
+{
+    return millivolts < 0 || min_mv <= 0 || millivolts >= min_mv;
+}
+
 }  // namespace hub_battery

@@ -7,6 +7,7 @@
 #include "hub_battery.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 
 #include "esp_log.h"
@@ -125,6 +126,11 @@ bool read_gauge(Reading &out)
     }
     out.millivolts = millivolts;
     out.gauge_percent = soc_to_percent(soc);
+    std::uint16_t crate = 0;
+    if (read_register(kRegCrate, crate)) {
+        out.rate_millipercent_per_hour = crate_to_millipercent_per_hour(crate);
+        out.charging = is_charging(out.rate_millipercent_per_hour);
+    }
 #if CONFIG_HUB_BATTERY_PERCENT_FROM_VOLTAGE
     out.percent = voltage_to_percent(millivolts, CONFIG_HUB_BATTERY_EMPTY_MV,
                                      CONFIG_HUB_BATTERY_FULL_MV);
@@ -180,6 +186,21 @@ int percent()
     return read(reading) ? reading.percent : -1;
 }
 
+bool modem_allowed(int &millivolts)
+{
+    millivolts = -1;
+#if CONFIG_HUB_BATTERY_MAX17048
+    Reading reading;
+    if (read(reading)) {
+        millivolts = reading.millivolts;
+    }
+    return hub_battery::modem_allowed(millivolts,
+                                      CONFIG_HUB_BATTERY_MODEM_MIN_MV);
+#else
+    return true;
+#endif
+}
+
 void log_reading(const char *stage)
 {
     if (!supported()) {
@@ -187,8 +208,12 @@ void log_reading(const char *stage)
     }
     Reading reading;
     if (read(reading)) {
-        ESP_LOGI(TAG, "Battery [%s]: %d mV, %d %% (gauge %d %%)", stage,
-                 reading.millivolts, reading.percent, reading.gauge_percent);
+        const int rate = std::abs(reading.rate_millipercent_per_hour) / 100;
+        ESP_LOGI(
+            TAG, "Battery [%s]: %d mV, %d %% (gauge %d %%, %c%d.%d %%/h%s)",
+            stage, reading.millivolts, reading.percent, reading.gauge_percent,
+            reading.rate_millipercent_per_hour < 0 ? '-' : '+', rate / 10,
+            rate % 10, reading.charging ? ", charging" : "");
     } else {
         ESP_LOGI(TAG, "Battery [%s]: unknown", stage);
     }

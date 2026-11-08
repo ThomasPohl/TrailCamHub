@@ -14,6 +14,7 @@ constexpr std::uint8_t kMax17048Address = 0x36;
 constexpr std::uint8_t kRegVcell = 0x02;
 constexpr std::uint8_t kRegSoc = 0x04;
 constexpr std::uint8_t kRegVersion = 0x08;
+constexpr std::uint8_t kRegCrate = 0x16;
 
 // VERSION reads 0x001X on the MAX17048/MAX17049.
 bool is_max17048_version(std::uint16_t version);
@@ -24,6 +25,19 @@ int vcell_to_millivolts(std::uint16_t raw);
 // SOC: 1/256 % per bit, rounded and clamped to 0..100. The gauge reports
 // slightly above 100 % on a full cell.
 int soc_to_percent(std::uint16_t raw);
+
+// CRATE: change of the state of charge, 0.208 %/h per bit (signed). In
+// thousandths of a percent per hour.
+int crate_to_millipercent_per_hour(std::uint16_t raw);
+
+// The cell is being charged: the charge rises by at least 0.5 %/h. Smaller
+// rates are noise of the gauge's estimate.
+bool is_charging(int millipercent_per_hour);
+
+// The modem may be switched on: its current peaks (up to ~2 A) would pull a
+// cell below `min_mv` into a brownout. An unknown voltage (-1) or a limit of
+// 0 allows it.
+bool modem_allowed(int millivolts, int min_mv);
 
 // A single Li-ion cell (or the gauge reading one) lies in this range; outside
 // it the reading is not trusted (no cell, bus error).
