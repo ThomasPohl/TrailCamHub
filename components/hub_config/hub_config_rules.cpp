@@ -179,8 +179,8 @@ std::string validate(Key key, const std::string &value)
         return "";
     }
     case Key::transport:
-        if (value != "wifi" && value != "modem") {
-            return "transport must be wifi or modem";
+        if (value != "wifi" && value != "modem" && value != "ethernet") {
+            return "transport must be wifi, ethernet or modem";
         }
         return "";
     case Key::apn:
@@ -240,6 +240,39 @@ std::string display_value(Key key, const std::string &value)
     return value;
 }
 
+Transport transport(const Settings &settings, const Capabilities &caps)
+{
+    if (settings.transport == "ethernet" && caps.ethernet) {
+        return Transport::ethernet;
+    }
+    if (settings.transport == "modem" && caps.modem) {
+        return Transport::modem;
+    }
+    if (settings.transport == "wifi") {
+        return Transport::wifi;
+    }
+    if (caps.ethernet) {
+        return Transport::ethernet;
+    }
+    if (!settings.wifi_ssid.empty() || !caps.modem) {
+        return Transport::wifi;
+    }
+    return Transport::modem;
+}
+
+bool uplink_configured(const Settings &settings, const Capabilities &caps)
+{
+    if (!validate(Key::api_url, settings.api_url).empty() ||
+        !validate(Key::device_key, settings.device_key).empty()) {
+        return false;
+    }
+    if (transport(settings, caps) != Transport::wifi) {
+        return true;
+    }
+    return validate(Key::wifi_ssid, settings.wifi_ssid).empty() &&
+           validate(Key::wifi_password, settings.wifi_password).empty();
+}
+
 Transport transport(const Settings &settings, bool modem_available)
 {
     if (!modem_available || settings.transport == "wifi") {
@@ -253,7 +286,15 @@ Transport transport(const Settings &settings, bool modem_available)
 
 const char *transport_name(Transport transport)
 {
-    return transport == Transport::modem ? "modem" : "wifi";
+    switch (transport) {
+    case Transport::modem:
+        return "modem";
+    case Transport::ethernet:
+        return "ethernet";
+    case Transport::wifi:
+        break;
+    }
+    return "wifi";
 }
 
 bool uplink_configured(const Settings &settings, bool modem_available)
@@ -345,7 +386,7 @@ Mode resolve_mode(const Settings &settings, const Capabilities &caps,
         // Nothing to pull from.
         mode.direction = Direction::push;
     }
-    mode.transport = transport(settings, caps.modem);
+    mode.transport = transport(settings, caps);
     mode.destination = Destination::backend;
     return mode;
 }
@@ -399,6 +440,9 @@ std::string capability_problem(Key key, const std::string &value,
 {
     if (key == Key::transport && value == "modem" && !caps.modem) {
         return "this board has no modem";
+    }
+    if (key == Key::transport && value == "ethernet" && !caps.ethernet) {
+        return "this board has no Ethernet";
     }
     if (key == Key::direction && value == "pull" && !caps.web_ui) {
         return "pull needs the web UI, which this build does not have";

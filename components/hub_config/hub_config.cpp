@@ -136,13 +136,13 @@ bool modem_available()
 
 Transport uplink_transport(const Settings &settings)
 {
-    return transport(settings, modem_available());
+    return transport(settings, capabilities());
 }
 
 bool uplink_ready(const Settings &settings)
 {
     return checks_in(mode(settings)) &&
-           uplink_configured(settings, modem_available());
+           uplink_configured(settings, capabilities());
 }
 
 const Capabilities &capabilities()

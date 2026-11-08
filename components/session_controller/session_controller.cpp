@@ -26,6 +26,7 @@
 #include "camera_ble.h"
 #include "camera_protocol.h"
 #include "camera_wifi.h"
+#include "ethernet_uplink.h"
 #include "hub_config.hpp"
 #include "hub_battery.hpp"
 #include "modem_uplink.hpp"
@@ -102,6 +103,9 @@ esp_ip4_addr_t s_gateway;
 hub_config::Settings s_settings;
 // The cycle's uplink goes over the modem, not the home Wi-Fi.
 bool s_uplink_modem = false;
+// The cycle's uplink goes over Ethernet: waiting for its address.
+std::atomic<bool> s_uplink_ethernet{false};
+std::atomic<bool> s_waiting_for_ethernet{false};
 
 // The camera being read: its BLE name, and its id and battery once its
 // session ended. Only touched by the controller task.
@@ -396,6 +400,17 @@ void on_modem_failed(const char *reason)
     on_wifi_failed(0);
 }
 
+#if CONFIG_ETH_UPLINK_ENABLE
+// Ethernet reports like the home Wi-Fi as well, once it has an address.
+void on_ethernet_ip(bool has_ip)
+{
+    if (has_ip && s_waiting_for_ethernet.exchange(false)) {
+        const esp_ip4_addr_t none = {};
+        on_wifi_connected(&none);
+    }
+}
+#endif
+
 void on_timer(void *arg)
 {
     (void)arg;
@@ -440,7 +455,9 @@ void uplink_task(void *arg)
     while (true) {
         xQueueReceive(s_uplink_requests, &request, portMAX_DELAY);
         diagnostics_log_memory(s_uplink_modem ? "uplink connected (modem)"
-                                              : "uplink connected (Wi-Fi)");
+                               : s_uplink_ethernet
+                                   ? "uplink connected (Ethernet)"
+                                   : "uplink connected (Wi-Fi)");
         uplink::Report report;
         QueuedEvent event = make_event(session::Event::uplink_done);
         event.error = uplink::run(s_settings, report);
@@ -522,6 +539,25 @@ void execute(const session::Result &result)
                      "skipped",
                      cell_mv);
             on_wifi_failed(0);
+        } else if (s_uplink_ethernet) {
+#if CONFIG_ETH_UPLINK_ENABLE
+            // The interface is up from boot; the join timeout covers a
+            // cable that is plugged in late or a slow DHCP server.
+            if (ethernet_uplink_has_ip()) {
+                const esp_ip4_addr_t none = {};
+                on_wifi_connected(&none);
+            } else {
+                ESP_LOGI(TAG, "Waiting for an Ethernet address");
+                s_waiting_for_ethernet = true;
+                if (ethernet_uplink_has_ip() &&
+                    s_waiting_for_ethernet.exchange(false)) {
+                    const esp_ip4_addr_t none = {};
+                    on_wifi_connected(&none);
+                }
+            }
+#else
+            on_wifi_failed(0);
+#endif
         } else if (s_uplink_modem) {
             modem_uplink::Settings modem;
             modem.apn = s_settings.apn;
@@ -578,9 +614,13 @@ void load_settings_for_cycle()
     // Modem sleep on the home Wi-Fi only on battery power.
     camera_wifi_set_home_power_save(
         hub_config::wifi_power_save(hub_config::mode(s_settings)));
-    // Over the modem or the home Wi-Fi; attaching the modem takes longer.
-    s_uplink_modem = hub_config::uplink_transport(s_settings) ==
-                     hub_config::Transport::modem;
+    // Over the modem, Ethernet or the home Wi-Fi; attaching the modem takes
+    // longer.
+    const hub_config::Transport transport =
+        hub_config::uplink_transport(s_settings);
+    s_uplink_modem = transport == hub_config::Transport::modem;
+    s_uplink_ethernet = transport == hub_config::Transport::ethernet;
+    s_waiting_for_ethernet = false;
 #if CONFIG_MODEM_UPLINK
     s_fsm.set_uplink_join_timeout_ms(
         s_uplink_modem ? CONFIG_MODEM_ATTACH_TIMEOUT_S * 1000u + 5000u : 0);
@@ -651,12 +691,14 @@ void controller_task(void *arg)
         const char *event_name = session::to_string(event.type);
         if (result.previous == session::State::uplink_join &&
             event.type == session::Event::wifi_connected) {
-            event_name = s_uplink_modem ? "uplink connected (modem)"
-                                        : "uplink connected (Wi-Fi)";
+            event_name = s_uplink_modem      ? "uplink connected (modem)"
+                         : s_uplink_ethernet ? "uplink connected (Ethernet)"
+                                             : "uplink connected (Wi-Fi)";
         } else if (result.previous == session::State::uplink_join &&
                    event.type == session::Event::wifi_failed) {
-            event_name = s_uplink_modem ? "uplink failed (modem)"
-                                        : "uplink failed (Wi-Fi)";
+            event_name = s_uplink_modem      ? "uplink failed (modem)"
+                         : s_uplink_ethernet ? "uplink failed (Ethernet)"
+                                             : "uplink failed (Wi-Fi)";
         }
         if (result.next != result.previous) {
             ESP_LOGI(TAG, "Session state %s -> %s (%s)",
@@ -744,6 +786,9 @@ esp_err_t session_controller_init(void)
     };
     ESP_RETURN_ON_ERROR(modem_uplink::init(modem_callbacks), TAG,
                         "Could not initialize the modem uplink");
+#if CONFIG_ETH_UPLINK_ENABLE
+    ethernet_uplink_set_ip_callback(on_ethernet_ip);
+#endif
     diagnostics_log_memory("Wi-Fi initialized");
     return ESP_OK;
 }

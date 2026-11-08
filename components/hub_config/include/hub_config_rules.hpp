@@ -22,8 +22,9 @@ enum class Key {
     // Backend check-in interval in minutes ("0": none on schedule); empty:
     // the default of the build.
     checkin_min,
-    // How the hub reaches the backend: "wifi" or "modem"; empty: the home
-    // Wi-Fi if one is set, otherwise the modem (see transport()).
+    // How the hub reaches its destination: "wifi", "ethernet" or "modem";
+    // empty: Ethernet on a board that has it, else the home Wi-Fi if one is
+    // set, otherwise the modem (see transport()).
     transport,
     // APN of the SIM card's provider for the modem; empty: the one the
     // network suggests.
@@ -62,8 +63,9 @@ struct Settings {
 };
 
 enum class Transport {
-    wifi,   // the home Wi-Fi
-    modem,  // the cellular modem (PPP)
+    wifi,      // the home Wi-Fi
+    modem,     // the cellular modem (PPP)
+    ethernet,  // wired Ethernet (P4, W5500)
 };
 
 // Name used on the serial console and as the NVS key (max. 15 characters).
@@ -155,6 +157,15 @@ bool wifi_power_save(const Mode &mode);
 bool reads_on_schedule(const Mode &mode, bool uplink);
 // check-ins with the destination.
 bool checks_in(const Mode &mode);
+
+// How the hub reaches its destination on a board with `caps`: a stored
+// transport the board has, else Ethernet if it has it, else the home Wi-Fi
+// if one is set, else the modem if it has one, else the Wi-Fi.
+Transport transport(const Settings &settings, const Capabilities &caps);
+
+// True if the hub has everything it needs to reach the backend over the
+// transport that applies on a board with `caps`.
+bool uplink_configured(const Settings &settings, const Capabilities &caps);
 
 // Empty if `value` for `key` fits the board, else a short reason (e.g.
 // "this board has no modem"). For keys without such limits always empty.
