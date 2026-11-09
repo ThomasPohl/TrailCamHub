@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "coprocessor_version.hpp"
 #include "esp_app_desc.h"
 #include "esp_app_format.h"
 #include "esp_hosted.h"
@@ -161,7 +162,19 @@ esp_err_t coprocessor_update_run(void)
         return error;
     }
 
-    if (version_known && strcmp(running_version, image_version) == 0) {
+    // Compared as numbers: the descriptor may say "v2.6.1" or
+    // "2.6.1-3-gabc" where the C6 reports 2.6.1 (#62).
+    coprocessor::Version expected;
+    if (!coprocessor::parse_version(image_version, expected) &&
+        !coprocessor::parse_version(COPROCESSOR_FW_VERSION, expected)) {
+        ESP_LOGE(TAG, "No version number in the embedded C6 image (%s)",
+                 image_version);
+        nvs_close(nvs);
+        return ESP_ERR_INVALID_VERSION;
+    }
+    const coprocessor::Version reported{running.major1, running.minor1,
+                                        running.patch1};
+    if (version_known && reported == expected) {
         ESP_LOGI(TAG, "C6 runs ESP-Hosted %s, matching the host",
                  running_version);
         nvs_erase_all(nvs);
