@@ -136,6 +136,14 @@ static const bool kDiscardVideoData = false;
 #ifndef CONFIG_CAMERA_SESSION_IDLE_TIMEOUT_S
 #define CONFIG_CAMERA_SESSION_IDLE_TIMEOUT_S 60
 #endif
+#if CONFIG_CAMERA_DOWNLOAD_PHOTOS || CONFIG_CAMERA_DOWNLOAD_VIDEOS
+// Otherwise the session closes before a stalled download is given up and the
+// next item requested (#106).
+static_assert(CONFIG_CAMERA_SESSION_IDLE_TIMEOUT_S >
+                  CONFIG_CAMERA_DOWNLOAD_STALL_TIMEOUT_S,
+              "CAMERA_SESSION_IDLE_TIMEOUT_S must be above "
+              "CAMERA_DOWNLOAD_STALL_TIMEOUT_S");
+#endif
 
 static const char *TAG = "trailcamhub_protocol";
 using camera::link::from_camera;
@@ -1259,7 +1267,7 @@ static esp_err_t run_artemis_session(int socket_fd,
                                      const struct sockaddr_in *camera_address,
                                      int64_t discovery_started_us)
 {
-    camera::ArtemisHeartbeatPayload heartbeat;
+    camera::artemis::Heartbeat heartbeat;
     uint16_t heartbeat_index = 0;
     bool heartbeat_pending = false;
     s_ack_socket = socket_fd;
@@ -1338,15 +1346,17 @@ static esp_err_t run_artemis_session(int socket_fd,
         if (!s_bulk_active && !heartbeat_pending &&
             (last_heartbeat_us == 0 ||
              now_us - last_heartbeat_us >= heartbeat_interval_us)) {
-            const uint8_t *body = heartbeat.next_command();
-            if (s_session.send_data(body, heartbeat.size(), now_us,
+            // The session copies the packet (for retransmissions).
+            const std::vector<uint8_t> body = heartbeat.next(s_command_cipher);
+            if (!body.empty() &&
+                s_session.send_data(body.data(), body.size(), now_us,
                                     "ARTEMIS heartbeat", &heartbeat_index)) {
                 heartbeat_pending = true;
                 last_heartbeat_us = now_us;
                 s_video.note_heartbeat();
                 ESP_LOGI(TAG,
                          "ARTEMIS heartbeat command %u, index %u awaiting ACK",
-                         heartbeat.command_count(), heartbeat_index);
+                         heartbeat.count(), heartbeat_index);
             } else if (!s_session.transport_failed()) {
                 if (s_session.outstanding_count() <
                     camera::pppp::Session::kMaxOutstanding) {

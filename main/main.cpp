@@ -26,6 +26,7 @@
 #include "coprocessor_update.h"
 #include "dongle_ui.h"
 #include "ethernet_uplink.h"
+#include "hub_config.hpp"
 #include "hub_console.h"
 #include "ota_update.hpp"
 #include "schedule_state.hpp"
@@ -63,8 +64,8 @@ static void on_session_status(const session_status_t *status, void *context)
         phase = DONGLE_UI_CONNECTING;
         break;
     case SESSION_FRONT_END_CONNECTED:
-    // The display has no screen of its own for the backend sync yet.
     case SESSION_FRONT_END_UPLOADING:
+        // The display has no screen of its own for the backend sync yet.
         phase = DONGLE_UI_CONNECTED;
         break;
     case SESSION_FRONT_END_RETRY_WAIT:
@@ -230,8 +231,16 @@ extern "C" void app_main(void)
         .on_search = on_search_request,
         .on_stop = on_stop_request,
     };
+    {
+        // A password set by the user replaces the generated one (#101).
+        hub_config::Settings settings;
+        if (hub_config::load(settings) == ESP_OK) {
+            web_ui_set_password(settings.web_password.c_str());
+        }
+    }
     s_web_ready = web_ui_start(&web_callbacks) == ESP_OK;
     if (s_web_ready) {
+        hub_console_set_web_access(web_ui_url, web_ui_password);
         // A running access point leaves the BLE connection setup on the
         // ESP32-C5 no air time once it has run for a while (camera
         // connections timed out), so it is closed for the few seconds until

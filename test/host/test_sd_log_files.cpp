@@ -17,6 +17,10 @@ TEST_CASE("file_number parses log file names and rejects others")
     CHECK(sdlog::file_number("log-00042.TXT") == 0);
     CHECK(sdlog::file_number("log-00042") == 0);
     CHECK(sdlog::file_number("log-+42.txt") == 0);
+    // The same on the host and the ESP32 (#106).
+    CHECK(sdlog::file_number("log-4294967295.txt") == 4294967295u);
+    CHECK(sdlog::file_number("log-4294967296.txt") == 0);
+    CHECK(sdlog::file_number("log-99999999999999999999999.txt") == 0);
     CHECK(sdlog::file_number("log- 42.txt") == 0);
     CHECK(sdlog::file_number("log-4a.txt") == 0);
     CHECK(sdlog::file_number("LOG-00042.txt") == 0);

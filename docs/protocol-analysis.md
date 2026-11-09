@@ -58,6 +58,14 @@ The heartbeat plaintext `{"cmdId":525}` encrypts to the Base64 block
 Identical plaintext → identical ciphertext → on two different devices, which is only
 possible with a shared static key.
 
+Decrypted completely, that block is `{"cmdId":525}\0` followed by the two stale bytes
+`35 0a` ("5\n"): the app pads with whatever is in its buffer, and PayloadLen (25) counts
+the NUL. The hub builds the heartbeat like every other command since #53 (zero padding,
+PayloadLen without the NUL), which the camera accepts for login, device info and media
+list as well. The app's heartbeat sequence is `0x00010000 + n`, `n` starting at 1 in each
+session and counting new heartbeats (retransmissions keep it); all captures of
+`trailcam-automation` show this (up to `0x1002e`), and the hub does the same.
+
 ### 2.3 Verification against real captures
 Decrypting the captured TC100 login exchange with the command-channel parameters above
 yields clean JSON, for example:

@@ -52,6 +52,10 @@ enum class Key {
     // healthchecks.io: "<url>" after success, "<url>/fail" after a
     // failure), so that it warns when the hub stops reporting.
     health_url,
+    // Password of the web UI (and of its access point): 8-63 printable
+    // characters; empty: generated at the first start (#101). Applies after
+    // a restart.
+    web_password,
 };
 
 constexpr Key kAllKeys[] = {
@@ -60,7 +64,13 @@ constexpr Key kAllKeys[] = {
     Key::transport,      Key::apn,           Key::sim_pin,
     Key::power,          Key::direction,     Key::destination,
     Key::webdav_url,     Key::webdav_user,   Key::webdav_password,
-    Key::telegram_token, Key::telegram_chat};
+    Key::telegram_token, Key::telegram_chat, Key::health_url,
+    Key::web_password};
+// Every key must be in kAllKeys (loading, "config set" and "config show" go
+// through it); the last enumerator is the last key.
+static_assert(sizeof(kAllKeys) / sizeof(kAllKeys[0]) ==
+                  static_cast<std::size_t>(Key::web_password) + 1,
+              "kAllKeys must list every Key");
 
 struct Settings {
     std::string wifi_ssid;
@@ -81,6 +91,7 @@ struct Settings {
     std::string telegram_token;
     std::string telegram_chat;
     std::string health_url;
+    std::string web_password;
 };
 
 enum class Transport {

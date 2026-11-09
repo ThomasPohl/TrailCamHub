@@ -111,7 +111,7 @@ With `direction pull` people fetch thumbnails and media from the hub's web UI
 (status, search, live log, files, videos as MP4). Where it is served:
 
 - **Ethernet** (ESP32-P4-NANO, ESP32-S3-ETH): at the DHCP address, with the
-  page password (boot log).
+  page password (boot log and `status`; `config set web_password …` sets one, after a restart).
 - **Home Wi-Fi** (boards with the web UI on an access point, e.g. the
   T-Dongle-C5, with `transport wifi` and `wifi_ssid` set): the hub stays
   joined to the home network while idle and serves the page there with the

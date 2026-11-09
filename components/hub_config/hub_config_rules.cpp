@@ -65,6 +65,8 @@ const char *key_name(Key key)
         return "telegram_chat";
     case Key::health_url:
         return "health_url";
+    case Key::web_password:
+        return "web_password";
     }
     return "unknown";
 }
@@ -84,7 +86,7 @@ bool is_secret(Key key)
 {
     return key == Key::wifi_password || key == Key::device_key ||
            key == Key::sim_pin || key == Key::webdav_password ||
-           key == Key::telegram_token;
+           key == Key::telegram_token || key == Key::web_password;
 }
 
 std::string &field(Settings &settings, Key key)
@@ -124,6 +126,8 @@ std::string &field(Settings &settings, Key key)
         return settings.telegram_chat;
     case Key::health_url:
         return settings.health_url;
+    case Key::web_password:
+        return settings.web_password;
     case Key::device_key:
         break;
     }
@@ -290,6 +294,18 @@ std::string validate(Key key, const std::string &value)
             return "health check URL must start with https:// or http://";
         }
         return "";
+    case Key::web_password:
+        // Also the WPA2 passphrase of the access point: 8-63 printable ASCII.
+        if (value.size() < 8 || value.size() > 63) {
+            return "web UI password must have 8 to 63 characters";
+        }
+        for (char c : value) {
+            if (c < 0x20 || c > 0x7e) {
+                return "web UI password may only contain printable ASCII "
+                       "characters";
+            }
+        }
+        return "";
     case Key::telegram_chat: {
         // A chat id: a user (positive) or a group (negative).
         std::size_t i = value.size() > 1 && value[0] == '-' ? 1 : 0;
@@ -314,12 +330,13 @@ std::string display_value(Key key, const std::string &value)
         return key == Key::camera_plan || key == Key::checkin_min ||
                        key == Key::transport || key == Key::apn ||
                        key == Key::power || key == Key::direction ||
-                       key == Key::destination || key == Key::telegram_chat
+                       key == Key::destination || key == Key::telegram_chat ||
+                       key == Key::web_password
                    ? "(default)"
                    : "(not set)";
     }
     if (key == Key::wifi_password || key == Key::sim_pin ||
-        key == Key::webdav_password) {
+        key == Key::webdav_password || key == Key::web_password) {
         return "(set)";
     }
     if (key == Key::telegram_token) {

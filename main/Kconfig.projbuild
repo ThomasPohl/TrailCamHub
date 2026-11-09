@@ -113,17 +113,6 @@ config CAMERA_THUMBNAIL_SERIAL_PREVIEW
         About 33 KB of log per session; boards with a web UI can show the
         thumbnails from the SD card instead.
 
-config CAMERA_SESSION_IDLE_TIMEOUT_S
-    int "Close the camera session after this many seconds without progress"
-    range 30 600
-    default 60
-    help
-        The camera session is closed when the camera neither answered a
-        request nor sent new media data for this long; its heartbeat answers
-        and repeated or stray media frames do not count. This ends a session that waits for an answer that never
-        comes, so the camera does not keep its Wi-Fi on until its battery is
-        empty. Keep it above the download stall timeout.
-
 config CAMERA_MEDIA_LIST_MAX_PAGES
     int "Media-list pages read per camera session"
     range 1 1000
@@ -159,6 +148,18 @@ config CAMERA_SEND_PRELOGIN
         ("ACK") after discovery on its own (docs/udp-protocol.md, #51).
         Switch this off to test a session without it; the hub then only
         waits for that DATA packet.
+
+config CAMERA_SESSION_IDLE_TIMEOUT_S
+    int "Close the camera session after this many seconds without progress"
+    range 30 600
+    default 60
+    help
+        The camera session is closed when the camera neither answered a
+        request nor sent new media data for this long; its heartbeat answers
+        and repeated or stray media frames do not count. This ends a session
+        that waits for an answer that never comes, so the camera does not keep
+        its Wi-Fi on until its battery is empty. With media downloads it must
+        be above the download stall timeout (checked when building).
 
 config SESSION_BLE_ACTIVATION_TIMEOUT_S
     int "Camera BLE activation timeout (seconds)"

@@ -523,3 +523,28 @@ TEST_CASE("health check URL")
     CHECK_FALSE(validate(Key::health_url, "https://a b").empty());
     CHECK(hub_config::display_value(Key::health_url, "") == "(not set)");
 }
+
+TEST_CASE("web UI password setting")
+{
+    using hub_config::Key;
+    using hub_config::validate;
+    CHECK(validate(Key::web_password, "abcdefgh").empty());
+    CHECK(validate(Key::web_password, "with space ok!").empty());
+    CHECK(validate(Key::web_password, std::string(63, 'x')).empty());
+    CHECK_FALSE(validate(Key::web_password, "short").empty());
+    CHECK_FALSE(validate(Key::web_password, std::string(64, 'x')).empty());
+    CHECK_FALSE(validate(Key::web_password, "tab\there!").empty());
+    CHECK(hub_config::is_secret(Key::web_password));
+    CHECK(hub_config::display_value(Key::web_password, "secret123") == "(set)");
+    CHECK(hub_config::display_value(Key::web_password, "") == "(default)");
+}
+
+TEST_CASE("every setting can be named")
+{
+    for (const char *name :
+         {"health_url", "web_password", "telegram_chat", "wifi_ssid"}) {
+        hub_config::Key key;
+        CHECK_MESSAGE(hub_config::key_from_name(name, key), name);
+        CHECK(std::string(hub_config::key_name(key)) == name);
+    }
+}

@@ -1,6 +1,7 @@
 #include "log_files.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -27,9 +28,13 @@ unsigned file_number(const char *name)
     if (*digits < '0' || *digits > '9') {
         return 0;
     }
+    // unsigned long long has 64 bits on the host and on the ESP32, so both
+    // reject the same names (#106); ERANGE beyond that.
     char *end = nullptr;
-    const unsigned long number = std::strtoul(digits, &end, 10);
-    if (std::strcmp(end, kSuffix) != 0 || number > 0xffffffffUL) {
+    errno = 0;
+    const unsigned long long number = std::strtoull(digits, &end, 10);
+    if (errno == ERANGE || std::strcmp(end, kSuffix) != 0 ||
+        number > 0xffffffffULL) {
         return 0;
     }
     return static_cast<unsigned>(number);
