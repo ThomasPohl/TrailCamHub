@@ -52,6 +52,7 @@ add_executable(host_tests
     test_artemis_reassembler.cpp
     test_battery_level.cpp
     test_media_list.cpp
+    test_media_list_flow.cpp
     test_media_transfer.cpp
     test_bulk_reassembler.cpp
     test_bulk_stream.cpp
@@ -92,6 +93,7 @@ add_executable(host_tests
     ${link_dir}/artemis_message.cpp
     ${link_dir}/artemis_reassembler.cpp
     ${link_dir}/media_list.cpp
+    ${link_dir}/media_list_flow.cpp
     ${link_dir}/media_transfer.cpp
     ${link_dir}/bulk_reassembler.cpp
     ${link_dir}/bulk_stream.cpp
