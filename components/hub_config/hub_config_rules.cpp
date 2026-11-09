@@ -67,6 +67,10 @@ const char *key_name(Key key)
         return "health_url";
     case Key::web_password:
         return "web_password";
+    case Key::camera_user:
+        return "camera_user";
+    case Key::camera_password:
+        return "camera_password";
     }
     return "unknown";
 }
@@ -86,7 +90,8 @@ bool is_secret(Key key)
 {
     return key == Key::wifi_password || key == Key::device_key ||
            key == Key::sim_pin || key == Key::webdav_password ||
-           key == Key::telegram_token || key == Key::web_password;
+           key == Key::telegram_token || key == Key::web_password ||
+           key == Key::camera_password;
 }
 
 std::string &field(Settings &settings, Key key)
@@ -128,6 +133,10 @@ std::string &field(Settings &settings, Key key)
         return settings.health_url;
     case Key::web_password:
         return settings.web_password;
+    case Key::camera_user:
+        return settings.camera_user;
+    case Key::camera_password:
+        return settings.camera_password;
     case Key::device_key:
         break;
     }
@@ -306,6 +315,15 @@ std::string validate(Key key, const std::string &value)
             }
         }
         return "";
+    case Key::camera_user:
+    case Key::camera_password:
+        // Sent in the login JSON; the app's limits are unknown.
+        if (value.size() > 32 || has_control_chars(value)) {
+            return std::string(key == Key::camera_user ? "camera user"
+                                                       : "camera password") +
+                   " must be up to 32 characters";
+        }
+        return "";
     case Key::telegram_chat: {
         // A chat id: a user (positive) or a group (negative).
         std::size_t i = value.size() > 1 && value[0] == '-' ? 1 : 0;
@@ -331,12 +349,14 @@ std::string display_value(Key key, const std::string &value)
                        key == Key::transport || key == Key::apn ||
                        key == Key::power || key == Key::direction ||
                        key == Key::destination || key == Key::telegram_chat ||
-                       key == Key::web_password
+                       key == Key::web_password || key == Key::camera_user ||
+                       key == Key::camera_password
                    ? "(default)"
                    : "(not set)";
     }
     if (key == Key::wifi_password || key == Key::sim_pin ||
-        key == Key::webdav_password || key == Key::web_password) {
+        key == Key::webdav_password || key == Key::web_password ||
+        key == Key::camera_password) {
         return "(set)";
     }
     if (key == Key::telegram_token) {

@@ -87,6 +87,13 @@ void camera_protocol_set_list_only(bool list_only);
 void camera_protocol_set_all_videos(bool all_videos);
 
 /*
+ * The camera login for the following sessions (settings camera_user and
+ * camera_password, #52); NULL or "" for either takes the factory default
+ * admin/admin. Set it before camera_protocol_run().
+ */
+void camera_protocol_set_login(const char *user, const char *password);
+
+/*
  * Receives the lines of a listing: "media <entry>" per file (see
  * format_media_item()), then "list done files=<n> pages=<n>",
  * "list truncated files=<n> pages=<n>" or "list failed <reason>". Without the

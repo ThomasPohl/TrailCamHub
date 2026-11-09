@@ -56,6 +56,11 @@ enum class Key {
     // characters; empty: generated at the first start (#101). Applies after
     // a restart.
     web_password,
+    // Login of the cameras (one for all); empty: admin/admin, the factory
+    // login. Only needed if the password was changed in the TrailCam Go app
+    // (#52).
+    camera_user,
+    camera_password,
 };
 
 constexpr Key kAllKeys[] = {
@@ -65,11 +70,11 @@ constexpr Key kAllKeys[] = {
     Key::power,          Key::direction,     Key::destination,
     Key::webdav_url,     Key::webdav_user,   Key::webdav_password,
     Key::telegram_token, Key::telegram_chat, Key::health_url,
-    Key::web_password};
+    Key::web_password,   Key::camera_user,   Key::camera_password};
 // Every key must be in kAllKeys (loading, "config set" and "config show" go
 // through it); the last enumerator is the last key.
 static_assert(sizeof(kAllKeys) / sizeof(kAllKeys[0]) ==
-                  static_cast<std::size_t>(Key::web_password) + 1,
+                  static_cast<std::size_t>(Key::camera_password) + 1,
               "kAllKeys must list every Key");
 
 struct Settings {
@@ -92,6 +97,8 @@ struct Settings {
     std::string telegram_chat;
     std::string health_url;
     std::string web_password;
+    std::string camera_user;
+    std::string camera_password;
 };
 
 enum class Transport {

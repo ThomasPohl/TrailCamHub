@@ -6,6 +6,7 @@
 // only.
 
 #include <cstdint>
+#include <string>
 
 #include "esp_err.h"
 #include "esp_netif_ip_addr.h"
@@ -45,6 +46,7 @@ esp_err_t exchange_prelogin(int socket_fd,
 // Magic packets.
 esp_err_t send_login(int socket_fd, const struct sockaddr_in &camera_address,
                      camera::pppp::Session &session,
-                     const camera::artemis::Aes128 &cipher);
+                     const camera::artemis::Aes128 &cipher,
+                     const std::string &user, const std::string &password);
 
 }  // namespace camera::link
