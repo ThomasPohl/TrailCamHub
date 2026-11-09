@@ -39,6 +39,7 @@
 #include "camera_udp_packets.hpp"
 #include "mbedtls/base64.h"
 #include "media_list.hpp"
+#include "media_list_flow.hpp"
 #include "media_transfer.hpp"
 #include "pppp_session.hpp"
 #include "sd_writer.hpp"
@@ -195,16 +196,14 @@ static std::atomic<uint32_t> s_stored_items;
 // files reported so far.
 static std::atomic<bool> s_list_only;
 static camera_protocol_list_cb_t s_list_callback;
-static int64_t s_list_page;
+static camera::link::ListingFlow s_listing;
+// s_listing.files(), for other tasks.
 static std::atomic<uint32_t> s_list_files;
 // The listing ended with "list failed ...".
 static bool s_list_failed;
-// Scan: the media-list page being read (merged page by page into s_catalog)
-// and the items of the pages read so far.
-static int64_t s_scan_page;
-static uint32_t s_scan_photos;
-static uint32_t s_scan_videos;
-static uint32_t s_scan_added;
+// Scan: the media list, merged page by page into s_catalog.
+static camera::link::ScanListFlow
+    s_scan_list(CONFIG_CAMERA_MEDIA_LIST_MAX_PAGES);
 // Last time the camera answered a request or sent bulk data. Heartbeats do
 // not count: the camera answers them even when nothing else happens.
 static int64_t s_last_progress_us;
@@ -938,9 +937,14 @@ static void finish_list(const std::string &line)
 
 // Records in camera.json what the first media-list page said about the
 // camera's SD card, so the check-in can report it.
-static void record_sd_card(const camera::artemis::MediaList &list, bool ok)
+static void record_sd_card(const camera::artemis::MediaList &list,
+                           camera::link::SdReport report)
 {
     using camera::artemis::SdCard;
+    if (report == camera::link::SdReport::none) {
+        return;
+    }
+    const bool ok = report == camera::link::SdReport::present;
     std::string error;
     if (!ok) {
         error = list.error_msg.empty()
@@ -955,7 +959,7 @@ static void record_sd_card(const camera::artemis::MediaList &list, bool ok)
     }
 }
 
-// Ends a listing that failed.
+// Ends a listing that failed before it got an answer.
 static void fail_list(const std::string &reason)
 {
     s_list_failed = true;
@@ -965,7 +969,7 @@ static void fail_list(const std::string &reason)
 static void request_list_page()
 {
     const std::string fields =
-        camera::artemis::media_list_request_fields(s_list_page);
+        camera::artemis::media_list_request_fields(s_listing.page());
     if (!send_artemis_command(768, fields.c_str(), "ARTEMIS GetMediaList")) {
         fail_list("could not send the request");
     }
@@ -973,42 +977,25 @@ static void request_list_page()
 
 static void handle_list_page(const std::string &json)
 {
-    camera::artemis::MediaList list;
-    const bool parsed = camera::artemis::parse_media_list(json, list);
-    if (camera::artemis::media_list_failed(list)) {
-        // Also without a mediaFiles array: the camera named the error.
+    using camera::link::ListingFlow;
+    const ListingFlow::Step step = s_listing.on_page(json);
+    if (step.camera_error) {
         s_media_list_error = true;
-        if (s_list_page == 0) {
-            record_sd_card(list, false);
+    }
+    record_sd_card(step.list, step.sd);
+    s_list_files = s_listing.files();
+    for (size_t i = 0; i < step.lines.size(); ++i) {
+        const bool last = i + 1 == step.lines.size();
+        if (last && step.next != ListingFlow::Next::request_page) {
+            if (step.next == ListingFlow::Next::failed) {
+                s_list_failed = true;
+            }
+            finish_list(step.lines[i]);
+        } else {
+            report_list_line(step.lines[i]);
         }
-        fail_list("getMediaListRet=" + std::to_string(list.list_ret) +
-                  (list.error_msg.empty() ? "" : " " + list.error_msg));
-        return;
     }
-    if (!parsed) {
-        fail_list("no mediaFiles array");
-        return;
-    }
-    if (s_list_page == 0) {
-        record_sd_card(list, true);
-    }
-    if (list.page_no != s_list_page) {
-        fail_list("asked for page " + std::to_string(s_list_page) + ", got " +
-                  std::to_string(list.page_no));
-        return;
-    }
-    for (const camera::artemis::MediaItem &item : list.files) {
-        report_list_line("media " + camera::artemis::format_media_item(item));
-        ++s_list_files;
-    }
-    ++s_list_page;
-    const std::string counts = " files=" + std::to_string(s_list_files.load()) +
-                               " pages=" + std::to_string(s_list_page);
-    if (!camera::artemis::media_list_has_more(list)) {
-        finish_list("list done" + counts);
-    } else if (s_list_page >= camera::artemis::kMediaListMaxPages) {
-        finish_list("list truncated" + counts);
-    } else {
+    if (step.next == ListingFlow::Next::request_page) {
         request_list_page();
     }
 }
@@ -1018,10 +1005,10 @@ static void handle_list_page(const std::string &json)
 static void request_scan_page()
 {
     const std::string fields =
-        camera::artemis::media_list_request_fields(s_scan_page);
+        camera::artemis::media_list_request_fields(s_scan_list.page());
     if (!send_artemis_command(768, fields.c_str(), "ARTEMIS GetMediaList")) {
         ESP_LOGE(TAG, "Could not request media-list page %lld",
-                 (long long)s_scan_page);
+                 (long long)s_scan_list.page());
         s_end_session = true;
     }
 }
@@ -1036,8 +1023,9 @@ static void finish_scan_list(bool complete)
     ESP_LOGI(TAG,
              "Media list parsed: %u items (%u photos, %u videos), %lld "
              "page(s)",
-             (unsigned)(s_scan_photos + s_scan_videos), (unsigned)s_scan_photos,
-             (unsigned)s_scan_videos, (long long)s_scan_page);
+             (unsigned)(s_scan_list.photos() + s_scan_list.videos()),
+             (unsigned)s_scan_list.photos(), (unsigned)s_scan_list.videos(),
+             (long long)s_scan_list.page());
     if (complete) {
         const size_t gone = s_catalog.mark_unlisted_requests_unavailable();
         if (gone > 0) {
@@ -1053,69 +1041,60 @@ static void finish_scan_list(bool complete)
     s_thumb_emitted = false;
     ESP_LOGI(TAG, "Catalog %s: %u items (%u new), %u thumbnails to fetch",
              s_camera_id.c_str(), (unsigned)s_catalog.size(),
-             (unsigned)s_scan_added, (unsigned)s_thumb_queue.size());
+             (unsigned)s_scan_list.added(), (unsigned)s_thumb_queue.size());
     request_current_thumbnail();
 }
 
-// One page of the media list. The camera does not report a total, so the
-// list ends with a short (or empty) page; each page is merged on its own, so
-// only one page is held in RAM.
+// One page of the media list of a scan (see ScanListFlow).
 static void handle_scan_page(const std::string &json)
 {
-    camera::artemis::MediaList list;
-    const bool parsed = camera::artemis::parse_media_list(json, list);
-    if (!parsed || camera::artemis::media_list_failed(list)) {
-        ESP_LOGE(TAG,
-                 "Media list page %lld failed (getMediaListRet %lld, "
-                 "errorMsg '%s'%s)",
-                 (long long)s_scan_page, (long long)list.list_ret,
-                 list.error_msg.c_str(), parsed ? "" : ", no mediaFiles array");
-        if (s_scan_page == 0) {
-            // Nothing to fetch: no thumbnail or download would be queued, so
-            // the session would idle on heartbeats. Leave the catalog as is.
-            ESP_LOGE(TAG, "Ending the camera session");
-            s_media_list_error =
-                parsed && camera::artemis::media_list_failed(list);
-            if (camera::artemis::media_list_failed(list)) {
-                record_sd_card(list, false);
-            }
-            s_end_session = true;
-        } else {
-            // Work with the pages read so far.
-            finish_scan_list(false);
+    using camera::link::ScanListFlow;
+    const int64_t page = s_scan_list.page();
+    const ScanListFlow::Step step = s_scan_list.on_page(json, s_catalog);
+    record_sd_card(step.list, step.sd);
+    switch (step.next) {
+    case ScanListFlow::Next::end_session:
+    case ScanListFlow::Next::partial:
+        if (step.unparsed || step.camera_error) {
+            ESP_LOGE(TAG,
+                     "Media list page %lld failed (getMediaListRet %lld, "
+                     "errorMsg '%s'%s)",
+                     (long long)page, (long long)step.list.list_ret,
+                     step.list.error_msg.c_str(),
+                     step.unparsed ? ", no mediaFiles array" : "");
         }
-        return;
-    }
-    if (list.page_no != s_scan_page) {
-        // A late answer to an earlier request; the answer to this one follows.
-        ESP_LOGW(TAG, "Ignoring media-list page %lld (expected %lld)",
-                 (long long)list.page_no, (long long)s_scan_page);
-        return;
-    }
-
-    if (s_scan_page == 0) {
-        record_sd_card(list, true);
-    }
-    for (const auto &item : list.files) {
-        if (item.file_type == 0)
-            ++s_scan_photos;
-        else
-            ++s_scan_videos;
-    }
-    const size_t added = s_catalog.merge_page(list);
-    s_scan_added += (uint32_t)added;
-    ESP_LOGI(TAG, "Media list page %lld: %u items (%u new), cnt %lld",
-             (long long)s_scan_page, (unsigned)list.files.size(),
-             (unsigned)added, (long long)list.count);
-    ++s_scan_page;
-    if (!camera::artemis::media_list_has_more(list)) {
-        finish_scan_list(true);
-    } else if (s_scan_page >= CONFIG_CAMERA_MEDIA_LIST_MAX_PAGES) {
-        ESP_LOGW(TAG,
-                 "Media list has more than %d pages; older files are not "
-                 "read in this session",
-                 CONFIG_CAMERA_MEDIA_LIST_MAX_PAGES);
+        if (step.next == ScanListFlow::Next::end_session) {
+            // Nothing to fetch: no thumbnail or download would be queued, so
+            // the session would idle on heartbeats.
+            ESP_LOGE(TAG, "Ending the camera session");
+            s_media_list_error = !step.unparsed && step.camera_error;
+            s_end_session = true;
+            return;
+        }
+        if (step.page_limit) {
+            ESP_LOGI(TAG, "Media list page %lld: %u items (%u new), cnt %lld",
+                     (long long)page, (unsigned)step.list.files.size(),
+                     (unsigned)step.added, (long long)step.list.count);
+            ESP_LOGW(TAG,
+                     "Media list has more than %d pages; older files are not "
+                     "read in this session",
+                     CONFIG_CAMERA_MEDIA_LIST_MAX_PAGES);
+        }
         finish_scan_list(false);
+        return;
+    case ScanListFlow::Next::ignore:
+        ESP_LOGW(TAG, "Ignoring media-list page %lld (expected %lld)",
+                 (long long)step.list.page_no, (long long)page);
+        return;
+    case ScanListFlow::Next::complete:
+    case ScanListFlow::Next::request_page:
+        break;
+    }
+    ESP_LOGI(TAG, "Media list page %lld: %u items (%u new), cnt %lld",
+             (long long)page, (unsigned)step.list.files.size(),
+             (unsigned)step.added, (long long)step.list.count);
+    if (step.next == ScanListFlow::Next::complete) {
+        finish_scan_list(true);
     } else {
         request_scan_page();
     }
@@ -1252,7 +1231,7 @@ static void process_artemis_response(const SessionEvent &event)
         }
         s_media_requested = true;
         if (s_list_only.load()) {
-            s_list_page = 0;
+            s_listing.reset();
             s_list_files = 0;
             request_list_page();
             return;
@@ -1263,10 +1242,7 @@ static void process_artemis_response(const SessionEvent &event)
                  (unsigned)s_catalog.size());
 
         s_catalog.begin_listing();
-        s_scan_page = 0;
-        s_scan_photos = 0;
-        s_scan_videos = 0;
-        s_scan_added = 0;
+        s_scan_list.reset();
         request_scan_page();
     }
 }
@@ -1297,7 +1273,7 @@ static esp_err_t run_artemis_session(int socket_fd,
     s_thumb_queue.clear();
     s_thumb_index = 0;
     s_thumb_emitted = false;
-    s_scan_page = 0;
+    s_scan_list.reset();
     s_work_done = false;
     s_end_session = false;
     s_last_progress_us = esp_timer_get_time();
