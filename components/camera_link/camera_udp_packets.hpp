@@ -56,6 +56,12 @@ class CameraDiscoveryRequest final : public UdpRequest
     std::size_t size() const override;
 
   private:
+    // The CS2/PPPP device ID LBCS-000000-CCCJJ (prefix, serial, check
+    // code). The same 24 bytes in every discovery of pwnb0t/trailcam-
+    // automation (app and script, 96 requests), and the camera sends its own
+    // 0x41/0x43 packets with this ID: it is the camera's ID, and a MAXDONE
+    // camera there and our TC100 have the same one, so it is a fixed ID of
+    // this camera family, not a per-unit serial (#51).
     // clang-format off
     static constexpr std::array<std::uint8_t, kSize> kBytes = {
         0xf1, 0x41, 0x00, 0x14, 0x4c, 0x42, 0x43, 0x53,

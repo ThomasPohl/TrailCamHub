@@ -11,6 +11,13 @@ namespace camera
 namespace
 {
 
+// The first 28 bytes of the TrailCam Go app's 0xF9 packet to the CS2 P2P
+// servers (119.23.219.190, 47.52.46.203, 121.43.173.0, UDP 32100), copied by
+// pi_trailcam. In the 27 such packets of pwnb0t/trailcam-automation the first
+// 23 bytes are always these; the last five differ per app session (four
+// variants; this one in 15 packets). The app never sends 0xF9 to the camera,
+// and the bytes do not decrypt with the PRE_LOGIN or the command key: they
+// are the app's server login, not something the camera checks (#51).
 // clang-format off
 const std::uint8_t kPreLoginHeader[kPreLoginHeaderSize] = {
     0x0c, 0xcb, 0x9a, 0x2b, 0x5f, 0x95, 0x1e, 0xb6,

@@ -199,14 +199,21 @@ esp_err_t exchange_prelogin(int socket_fd,
 
     transport.set_destination(socket_fd, camera_address);
     session.reset();
+#if CONFIG_CAMERA_SEND_PRELOGIN
     error = send_udp_request(socket_fd, &camera_address,
                              "AES-encrypted PRE_LOGIN", request);
     if (error != ESP_OK) {
         return error;
     }
+#else
+    ESP_LOGI(TAG, "PRE_LOGIN not sent (CONFIG_CAMERA_SEND_PRELOGIN off); "
+                  "waiting for the camera's first DATA packet");
+#endif
     int64_t sent_at_us = esp_timer_get_time();
 
-    // Wait for the camera's first DATA packet, which confirms PRE_LOGIN.
+    // Wait for the camera's first DATA packet. The app's captures show it
+    // after discovery without a PRE_LOGIN (#51), so it does not necessarily
+    // confirm the PRE_LOGIN.
     int64_t response_deadline_us =
         sent_at_us + CAMERA_PRELOGIN_RECEIVE_TIMEOUT_MS * 1000;
     while (!stop_requested()) {
