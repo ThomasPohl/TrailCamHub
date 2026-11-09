@@ -114,6 +114,8 @@ web_ui_callbacks_t s_callbacks;
 httpd_handle_t s_server;
 char s_ssid[33];
 char s_password[65];
+// web_ui_set_password(); empty: none.
+char s_user_password[65];
 char s_url[32];
 #if !CONFIG_WEB_UI_OVER_ETHERNET
 // Kept to open the access point again after web_ui_suspend_access_point().
@@ -161,6 +163,11 @@ bool generated_password_valid(const char *password)
 // alphabet is replaced, because it may not be readable on the display.
 void load_password()
 {
+    if (strlen(s_user_password) >= 8) {
+        snprintf(s_password, sizeof(s_password), "%s", s_user_password);
+        ESP_LOGI(TAG, "Using the web UI password from the settings");
+        return;
+    }
     if (strlen(WEB_CONFIGURED_PASSWORD) >= 8) {
         snprintf(s_password, sizeof(s_password), "%s", WEB_CONFIGURED_PASSWORD);
         return;
@@ -1277,6 +1284,16 @@ esp_err_t start_server()
 }
 
 }  // namespace
+
+void web_ui_set_password(const char *password)
+{
+    const size_t length = password == NULL ? 0 : strlen(password);
+    if (length >= 8 && length < sizeof(s_user_password)) {
+        snprintf(s_user_password, sizeof(s_user_password), "%s", password);
+    } else {
+        s_user_password[0] = '\0';
+    }
+}
 
 esp_err_t web_ui_start(const web_ui_callbacks_t *callbacks)
 {

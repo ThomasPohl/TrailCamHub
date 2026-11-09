@@ -84,6 +84,9 @@ int64_t s_retry_deadline_us;
 uint32_t s_media_done;
 uint32_t s_media_stored;
 uint32_t s_media_total;
+// hub_console_set_web_access(); set once before the console starts.
+const char *(*s_web_url)(void);
+const char *(*s_web_password)(void);
 
 #if CONFIG_HUB_CONSOLE_DIAGNOSTICS
 // True while a cycle uses the SD card: the camera session writes it, the
@@ -350,11 +353,25 @@ void print_schedule()
     }
 }
 
+// Address and password of the web UI (#101).
+void print_web_access()
+{
+    if (s_web_url == nullptr || s_web_password == nullptr) {
+        return;
+    }
+    const std::string url = s_web_url();
+    reply("INFO",
+          "web UI " +
+              (url.empty() ? std::string("waits for an address") : url) +
+              " and http://trailcamhub.local, password " + s_web_password());
+}
+
 void print_status()
 {
     reply("STATE", session_controller_state_name());
     print_settings();
     print_details();
+    print_web_access();
     print_schedule();
 }
 
@@ -388,7 +405,10 @@ void set_setting(const hub_console::Command &command)
     const esp_err_t error = hub_config::set(key, command.value, &reason);
     if (error == ESP_OK) {
         reply("OK", std::string(hub_config::key_name(key)) +
-                        (command.value.empty() ? " erased" : " stored"));
+                        (command.value.empty() ? " erased" : " stored") +
+                        (key == hub_config::Key::web_password
+                             ? "; applies after 'restart'"
+                             : ""));
     } else if (error == ESP_ERR_INVALID_ARG) {
         reply("ERR", reason);
     } else {
@@ -630,4 +650,11 @@ void hub_console_set_media_progress(uint32_t done, uint32_t stored,
     s_media_stored = stored;
     s_media_total = total;
     xSemaphoreGive(s_lock);
+}
+
+void hub_console_set_web_access(const char *(*url)(void),
+                                const char *(*password)(void))
+{
+    s_web_url = url;
+    s_web_password = password;
 }

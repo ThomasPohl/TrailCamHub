@@ -52,6 +52,10 @@ enum class Key {
     // healthchecks.io: "<url>" after success, "<url>/fail" after a
     // failure), so that it warns when the hub stops reporting.
     health_url,
+    // Password of the web UI (and of its access point): 8-63 printable
+    // characters; empty: generated at the first start (#101). Applies after
+    // a restart.
+    web_password,
 };
 
 constexpr Key kAllKeys[] = {
@@ -81,6 +85,7 @@ struct Settings {
     std::string telegram_token;
     std::string telegram_chat;
     std::string health_url;
+    std::string web_password;
 };
 
 enum class Transport {

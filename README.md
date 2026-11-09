@@ -174,7 +174,7 @@ The console UART accepts one command per line; replies and progress are lines st
 | `upload` | Sync the data already on the SD card with the backend |
 | `stop` | End the running scan; a running backend sync finishes |
 | `config show` | List settings |
-| `config set <key> <value>` / `config set-hex <key> <hex>` | Store a setting (`wifi_ssid`, `wifi_password`, `api_url`, `device_key`, `camera_plan`, `checkin_min`) |
+| `config set <key> <value>` / `config set-hex <key> <hex>` | Store a setting (all keys: `help`; modes and destinations: [`docs/modes.md`](docs/modes.md)) |
 | `config unset <key>` / `config clear` | Erase one or all settings |
 
 The settings live in NVS on the hub. The web installer's **Device setup** panel uses exactly these commands.
