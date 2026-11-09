@@ -1,4 +1,5 @@
 #include <atomic>
+#include <mutex>
 #include <stdbool.h>
 #include <errno.h>
 #include <stdio.h>
@@ -21,6 +22,7 @@
 
 #include "artemis_crypto.hpp"
 #include "artemis_json.hpp"
+#include "artemis_login.hpp"
 #include "camera_clock.hpp"
 #include "artemis_message.hpp"
 #include "artemis_reassembler.hpp"
@@ -97,6 +99,10 @@ static const bool kDownloadVideos =
     kVideoDownload != camera::artemis::MediaCatalog::VideoDownload::none;
 // camera_protocol_set_all_videos().
 static std::atomic<bool> s_all_videos;
+// camera_protocol_set_login(); set before a session, read during it.
+static std::mutex s_login_lock;
+static std::string s_login_user = camera::artemis::kDefaultUser;
+static std::string s_login_password = camera::artemis::kDefaultPassword;
 
 static camera::artemis::MediaCatalog::VideoDownload video_download()
 {
@@ -1159,7 +1165,12 @@ static void process_artemis_response(const SessionEvent &event)
             ESP_LOGI(TAG, "ARTEMIS login succeeded; token %lld",
                      (long long)token);
         } else {
+            std::string error_msg;
+            json_find_string(message.json, "errorMsg", error_msg);
             ESP_LOGW(TAG, "ARTEMIS login rejected: %s", message.json.c_str());
+            ESP_LOGW(TAG, "%s",
+                     camera::artemis::login_rejected_hint(result, error_msg)
+                         .c_str());
         }
         return;
     }
@@ -1529,8 +1540,15 @@ static esp_err_t connect_and_run_session(const esp_ip4_addr_t &gateway)
         socket_fd, camera_address, s_transport, s_session, discovery_started_us,
         &data_source, &confirmed);
     if (error == ESP_OK && confirmed) {
+        std::string user;
+        std::string password;
+        {
+            std::lock_guard<std::mutex> lock(s_login_lock);
+            user = s_login_user;
+            password = s_login_password;
+        }
         error = camera::link::send_login(socket_fd, data_source, s_session,
-                                         s_command_cipher);
+                                         s_command_cipher, user, password);
         if (error == ESP_OK) {
             error = wait_for_artemis_packets(socket_fd, &data_source,
                                              discovery_started_us);
@@ -1606,6 +1624,16 @@ int camera_protocol_last_battery_percent(void)
 void camera_protocol_init_storage(void)
 {
     camera::store::sd_writer_start();
+}
+
+void camera_protocol_set_login(const char *user, const char *password)
+{
+    std::lock_guard<std::mutex> lock(s_login_lock);
+    s_login_user =
+        user != NULL && user[0] != '\0' ? user : camera::artemis::kDefaultUser;
+    s_login_password = password != NULL && password[0] != '\0'
+                           ? password
+                           : camera::artemis::kDefaultPassword;
 }
 
 void camera_protocol_set_all_videos(bool all_videos)

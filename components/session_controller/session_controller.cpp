@@ -685,6 +685,9 @@ void load_settings_for_cycle()
     s_uplink_modem = transport == hub_config::Transport::modem;
     s_uplink_ethernet = transport == hub_config::Transport::ethernet;
     s_waiting_for_ethernet = false;
+    // The camera login; empty settings: admin/admin (#52).
+    camera_protocol_set_login(s_settings.camera_user.c_str(),
+                              s_settings.camera_password.c_str());
     // A WebDAV share at home gets every video; over the modem only the ones
     // asked for.
     camera_protocol_set_all_videos(hub_config::uplink_ready(s_settings) &&

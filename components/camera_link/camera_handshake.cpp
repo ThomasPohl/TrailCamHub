@@ -274,7 +274,8 @@ esp_err_t exchange_prelogin(int socket_fd,
 
 esp_err_t send_login(int socket_fd, const struct sockaddr_in &camera_address,
                      camera::pppp::Session &session,
-                     const camera::artemis::Aes128 &cipher)
+                     const camera::artemis::Aes128 &cipher,
+                     const std::string &user, const std::string &password)
 {
     // The hello is the login (cmdId 0). The camera sets its clock from the
     // time in it, so it carries the current wall clock when the device has a
@@ -295,7 +296,8 @@ esp_err_t send_login(int socket_fd, const struct sockaddr_in &camera_address,
                       "keeps its own clock");
     }
     const std::vector<uint8_t> hello = camera::artemis::build_request(
-        cipher, 1, camera::artemis::build_login_json(camera_time));
+        cipher, 1,
+        camera::artemis::build_login_json(camera_time, user, password));
     uint16_t hello_index = 0;
     if (hello.empty() ||
         !session.send_data(hello.data(), hello.size(), esp_timer_get_time(),

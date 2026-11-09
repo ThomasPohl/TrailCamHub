@@ -24,15 +24,28 @@ bool LoginSession::send_json(std::uint32_t app_sequence,
     return session_.send_data(msg.data(), msg.size(), now_us, context);
 }
 
-std::string build_login_json(std::int64_t camera_time)
+std::string build_login_json(std::int64_t camera_time, const std::string &user,
+                             const std::string &password)
 {
-    std::string json =
-        "{\"cmdId\":0,\"usrName\":\"admin\",\"password\":\"admin\","
-        "\"needVideo\":0,\"needAudio\":0,";
+    std::string json = "{\"cmdId\":0,\"usrName\":" + json_quote(user) +
+                       ",\"password\":" + json_quote(password) +
+                       ",\"needVideo\":0,\"needAudio\":0,";
     if (camera_time > 0) {
         json += "\"utcTime\":" + std::to_string(camera_time) + ",";
     }
     return json + "\"supportHeartBeat\":true}";
+}
+
+std::string login_rejected_hint(std::int64_t result,
+                                const std::string &error_msg)
+{
+    std::string hint = "camera login rejected (result " +
+                       std::to_string(static_cast<long long>(result));
+    if (!error_msg.empty()) {
+        hint += ", \"" + error_msg + "\"";
+    }
+    return hint + "); if its password was changed in the TrailCam Go app, " +
+           "set camera_user/camera_password (default admin/admin)";
 }
 
 bool LoginSession::start(std::uint32_t utc_time, std::int64_t now_us)

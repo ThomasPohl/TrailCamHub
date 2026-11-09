@@ -130,6 +130,18 @@ TEST_CASE("login JSON: with the camera time, and without one")
     CHECK(camera::artemis::build_login_json(-5) == without);
 }
 
+TEST_CASE("login JSON: another user and password, escaped")
+{
+    CHECK(camera::artemis::build_login_json(0, "hunter", "p\"w\\1") ==
+          "{\"cmdId\":0,\"usrName\":\"hunter\",\"password\":\"p\\\"w\\\\1\","
+          "\"needVideo\":0,\"needAudio\":0,\"supportHeartBeat\":true}");
+    const std::string hint = camera::artemis::login_rejected_hint(-3, "");
+    CHECK(hint.find("result -3") != std::string::npos);
+    CHECK(hint.find("camera_password") != std::string::npos);
+    CHECK(camera::artemis::login_rejected_hint(1, "Wrong password")
+              .find("\"Wrong password\"") != std::string::npos);
+}
+
 TEST_CASE("login request: same login as the block that was hard-coded before")
 {
     // The firmware used to send this captured login, which sets the camera

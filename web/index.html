@@ -260,6 +260,14 @@
               <input name="telegram_token" type="password" placeholder="123456789:AA…" spellcheck="false">
               <small>Stored: <span id="ds-current-telegram_token">–</span> · from @BotFather; then send /start to the bot</small>
             </label>
+            <label>Camera user
+              <input name="camera_user" maxlength="32" spellcheck="false" placeholder="admin">
+              <small>Stored: <span id="ds-current-camera_user">–</span> · only if the camera's login was changed in the TrailCam Go app</small>
+            </label>
+            <label>Camera password
+              <input name="camera_password" type="password" maxlength="32" placeholder="admin">
+              <small>Stored: <span id="ds-current-camera_password">–</span> · default admin; one login for all cameras</small>
+            </label>
             <label>Web UI password
               <input name="web_password" type="password" minlength="8" maxlength="63" spellcheck="false">
               <small>Stored: <span id="ds-current-web_password">–</span> · 8–63 characters, also the hub's Wi-Fi password; applies after a restart. <code>status</code> shows the current one.</small>

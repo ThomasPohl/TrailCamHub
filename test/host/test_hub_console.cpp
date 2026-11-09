@@ -539,10 +539,24 @@ TEST_CASE("web UI password setting")
     CHECK(hub_config::display_value(Key::web_password, "") == "(default)");
 }
 
+TEST_CASE("camera login settings")
+{
+    using hub_config::Key;
+    using hub_config::validate;
+    CHECK(validate(Key::camera_user, "admin").empty());
+    CHECK(validate(Key::camera_password, "my pass!").empty());
+    CHECK_FALSE(validate(Key::camera_password, std::string(33, 'x')).empty());
+    CHECK_FALSE(validate(Key::camera_user, "a\nb").empty());
+    CHECK(hub_config::is_secret(Key::camera_password));
+    CHECK_FALSE(hub_config::is_secret(Key::camera_user));
+    CHECK(hub_config::display_value(Key::camera_password, "x") == "(set)");
+    CHECK(hub_config::display_value(Key::camera_user, "") == "(default)");
+}
+
 TEST_CASE("every setting can be named")
 {
-    for (const char *name :
-         {"health_url", "web_password", "telegram_chat", "wifi_ssid"}) {
+    for (const char *name : {"health_url", "web_password", "telegram_chat",
+                             "wifi_ssid", "camera_user", "camera_password"}) {
         hub_config::Key key;
         CHECK_MESSAGE(hub_config::key_from_name(name, key), name);
         CHECK(std::string(hub_config::key_name(key)) == name);

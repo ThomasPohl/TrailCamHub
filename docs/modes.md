@@ -138,6 +138,20 @@ of one's own.
 config set health_url https://hc-ping.com/<your-check-uuid>
 ```
 
+## Camera login
+
+The hub logs in to the cameras with the factory login `admin`/`admin`. The
+TrailCam Go app can change the camera's password (command 514); then set the
+new one on the hub, one login for all its cameras:
+
+```
+config set camera_password <new password>
+config set camera_user <user>        # only if that changed too
+```
+
+A rejected login is logged as `camera login rejected (result …); if its
+password was changed in the TrailCam Go app, set camera_user/camera_password`.
+
 ## Capabilities
 
 What a board can do comes from its build (Kconfig) and is listed per board in

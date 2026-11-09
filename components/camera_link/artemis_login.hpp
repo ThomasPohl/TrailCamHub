@@ -18,10 +18,23 @@
 namespace camera::artemis
 {
 
+// The camera's factory login; the TrailCam Go app can change the password
+// (cmdId 514), then the hub needs the new one (#52).
+constexpr const char *kDefaultUser = "admin";
+constexpr const char *kDefaultPassword = "admin";
+
 // The login request (cmdId 0). The camera sets its clock from "utcTime"
 // (see camera_wall_clock() for what to put there); a `camera_time` of 0 or
-// less leaves the field out, and the camera keeps the clock it has.
-std::string build_login_json(std::int64_t camera_time);
+// less leaves the field out, and the camera keeps the clock it has. `user`
+// and `password` are escaped for JSON.
+std::string build_login_json(std::int64_t camera_time,
+                             const std::string &user = kDefaultUser,
+                             const std::string &password = kDefaultPassword);
+
+// A short hint for a rejected login (the camera's "result" and the answer's
+// "errorMsg", if any), naming the settings that hold the login.
+std::string login_rejected_hint(std::int64_t result,
+                                const std::string &error_msg);
 
 class LoginSession
 {
