@@ -136,6 +136,14 @@ static const bool kDiscardVideoData = false;
 #ifndef CONFIG_CAMERA_SESSION_IDLE_TIMEOUT_S
 #define CONFIG_CAMERA_SESSION_IDLE_TIMEOUT_S 60
 #endif
+#if CONFIG_CAMERA_DOWNLOAD_PHOTOS || CONFIG_CAMERA_DOWNLOAD_VIDEOS
+// Otherwise the session closes before a stalled download is given up and the
+// next item requested (#106).
+static_assert(CONFIG_CAMERA_SESSION_IDLE_TIMEOUT_S >
+                  CONFIG_CAMERA_DOWNLOAD_STALL_TIMEOUT_S,
+              "CAMERA_SESSION_IDLE_TIMEOUT_S must be above "
+              "CAMERA_DOWNLOAD_STALL_TIMEOUT_S");
+#endif
 
 static const char *TAG = "trailcamhub_protocol";
 using camera::link::from_camera;

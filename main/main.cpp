@@ -63,8 +63,8 @@ static void on_session_status(const session_status_t *status, void *context)
         phase = DONGLE_UI_CONNECTING;
         break;
     case SESSION_FRONT_END_CONNECTED:
-    // The display has no screen of its own for the backend sync yet.
     case SESSION_FRONT_END_UPLOADING:
+        // The display has no screen of its own for the backend sync yet.
         phase = DONGLE_UI_CONNECTED;
         break;
     case SESSION_FRONT_END_RETRY_WAIT:
