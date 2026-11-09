@@ -282,28 +282,4 @@ bool ArtemisMagicRequest::build(Stage stage)
     return false;
 }
 
-ArtemisHeartbeatPayload::ArtemisHeartbeatPayload()
-{
-    std::memcpy(bytes_.data(), kPrefix.data(), kPrefix.size());
-    std::memcpy(bytes_.data() + kPrefix.size() + 1, kSuffix.data(),
-                kSuffix.size());
-}
-
-const std::uint8_t *ArtemisHeartbeatPayload::next_command()
-{
-    command_count_ = static_cast<std::uint8_t>((command_count_ + 1) % 255);
-    bytes_[kPrefix.size()] = command_count_;
-    return bytes_.data();
-}
-
-std::size_t ArtemisHeartbeatPayload::size() const
-{
-    return bytes_.size();
-}
-
-std::uint8_t ArtemisHeartbeatPayload::command_count() const
-{
-    return command_count_;
-}
-
 }  // namespace camera
