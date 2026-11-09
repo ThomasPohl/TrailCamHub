@@ -35,9 +35,11 @@ set(schedule_dir ${repo_root}/components/schedule)
 set(sd_log_dir ${repo_root}/components/sd_log)
 set(ota_dir ${repo_root}/components/ota_update)
 set(battery_dir ${repo_root}/components/hub_battery)
+set(copro_dir ${repo_root}/components/coprocessor_update)
 
 add_executable(host_tests
     test_main.cpp
+    test_coprocessor_version.cpp
     test_ble_advertising.cpp
     test_ble_wifi_response.cpp
     test_button_detector.cpp
@@ -123,6 +125,7 @@ add_executable(host_tests
     ${schedule_dir}/schedule_plan.cpp
     ${sd_log_dir}/log_files.cpp
     ${ota_dir}/ota_policy.cpp
+    ${copro_dir}/coprocessor_version.cpp
     ${battery_dir}/battery_level.cpp)
 target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} ${time_dir}
                                               ${session_dir} ${ui_dir}
@@ -130,7 +133,8 @@ target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} 
                                               ${config_dir}/include
                                               ${console_dir} ${uplink_dir}
                                               ${wifi_dir} ${schedule_dir}
-                                              ${sd_log_dir} ${ota_dir}/include ${battery_dir})
+                                              ${sd_log_dir} ${ota_dir}/include ${battery_dir}
+                                              ${copro_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
 target_compile_options(host_tests PRIVATE -Wall -Wextra -Werror)
 

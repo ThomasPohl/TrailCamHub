@@ -3,7 +3,7 @@
 # the application, so host and co-processor run the same ESP-Hosted release.
 set(srcs)
 if(CONFIG_COPROCESSOR_UPDATE_ENABLE)
-    list(APPEND srcs "coprocessor_update.cpp")
+    list(APPEND srcs "coprocessor_update.cpp" "coprocessor_version.cpp")
 endif()
 
 idf_component_register(SRCS ${srcs}
@@ -21,6 +21,10 @@ if(CONFIG_COPROCESSOR_UPDATE_ENABLE)
         message(FATAL_ERROR "No firmware version in ${version_header}")
     endif()
     set(fw_version "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.${CMAKE_MATCH_3}")
+    # The version the C6 reports after the update (#62); used if the image's
+    # descriptor has no "x.y.z" in it.
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+                               "COPROCESSOR_FW_VERSION=\"${fw_version}\"")
 
     # The component manager rejects changes inside managed components, so the
     # co-processor project is built from a copy.
