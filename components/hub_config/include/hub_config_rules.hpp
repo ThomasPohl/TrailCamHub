@@ -64,7 +64,13 @@ constexpr Key kAllKeys[] = {
     Key::transport,      Key::apn,           Key::sim_pin,
     Key::power,          Key::direction,     Key::destination,
     Key::webdav_url,     Key::webdav_user,   Key::webdav_password,
-    Key::telegram_token, Key::telegram_chat};
+    Key::telegram_token, Key::telegram_chat, Key::health_url,
+    Key::web_password};
+// Every key must be in kAllKeys (loading, "config set" and "config show" go
+// through it); the last enumerator is the last key.
+static_assert(sizeof(kAllKeys) / sizeof(kAllKeys[0]) ==
+                  static_cast<std::size_t>(Key::web_password) + 1,
+              "kAllKeys must list every Key");
 
 struct Settings {
     std::string wifi_ssid;

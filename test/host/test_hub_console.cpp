@@ -538,3 +538,13 @@ TEST_CASE("web UI password setting")
     CHECK(hub_config::display_value(Key::web_password, "secret123") == "(set)");
     CHECK(hub_config::display_value(Key::web_password, "") == "(default)");
 }
+
+TEST_CASE("every setting can be named")
+{
+    for (const char *name :
+         {"health_url", "web_password", "telegram_chat", "wifi_ssid"}) {
+        hub_config::Key key;
+        CHECK_MESSAGE(hub_config::key_from_name(name, key), name);
+        CHECK(std::string(hub_config::key_name(key)) == name);
+    }
+}
