@@ -70,6 +70,24 @@ F1 41 00 14 4C 42 43 53 00 00 00 00 00 00 00 00 43 43 43 4A 4A 00 00 00
             └ "LBCS"                             └ "CCCJJ"
 ```
 
+**Origin of the constants (#51).** Checked against all 23 pcaps of
+[pwnb0t/trailcam-automation](https://github.com/pwnb0t/trailcam-automation)
+(TrailCam Go app 2.5.6 and a Python script, a MAXDONE camera of the same family):
+
+- **Device ID.** The probe is byte-for-byte the same in all 96 discovery requests. It is
+  the CS2/PPPP device ID `LBCS-000000-CCCJJ`, and the camera itself sends `0x41` and
+  `0x43` packets carrying the same ID to the phone. The MAXDONE camera and our TC100
+  have the same ID, so it is a fixed ID of this camera family, not a serial number.
+- **PRE_LOGIN (`0xF9`).** The app sends no `0xF9` to the camera at all. It sends one
+  `0xF9` of 84 bytes to each of three CS2 P2P servers (`119.23.219.190`,
+  `47.52.46.203`, `121.43.173.0`, UDP port 32100); its first 23 bytes are always
+  `0c cb 9a 2b … c9 d1 aa`, the next five differ per app session. The hub's 28-byte
+  "static header" is the start of one of these server packets, taken over by
+  pi_trailcam. In the captures the camera sends its first DATA packet (`F1 D0 00 07
+  D1 00 00 00 "ACK"`) about 0.3–0.5 s after discovery on its own, without any
+  PRE_LOGIN. The hub still sends PRE_LOGIN by default, because that is the flow verified
+  on hardware; `CONFIG_CAMERA_SEND_PRELOGIN` switches it off for a test.
+
 ---
 
 ## 3. Reliability layer
@@ -208,7 +226,7 @@ idle → ble_activation → wifi_join → session → (backoff → …)
 Within the UDP session (**verified on hardware**):
 
 ```
-Discovery (LBCS) → PRE_LOGIN (0xF9) → camera "ACK" DATA → ARTEMIS login (cmdId 0)
+Discovery (LBCS) → PRE_LOGIN (0xF9, probably not needed, §2.3) → camera "ACK" DATA → ARTEMIS login (cmdId 0)
 → Magic1/Magic2 → heartbeats → login response (token)
 → [settle: wait for a heartbeat ACK] → device info (512) → media list (768)
 ```

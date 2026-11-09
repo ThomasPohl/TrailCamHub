@@ -13,8 +13,8 @@ namespace camera
 
 constexpr std::size_t kPreLoginNonceSize = 8;
 constexpr std::size_t kAesBlockSize = 16;
-// Bytes in front of the ciphertext. Taken from captures; their meaning is
-// unknown (see #51).
+// Bytes in front of the ciphertext: the start of the app's 0xF9 packet to
+// the CS2 P2P servers (see camera_prelogin.cpp and #51).
 constexpr std::size_t kPreLoginHeaderSize = 28;
 // Largest payload build_prelogin_body() writes: the header and the encrypted
 // plaintext of at most 96 bytes.
