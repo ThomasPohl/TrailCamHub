@@ -46,6 +46,7 @@ add_executable(host_tests
     test_gatt_profile.cpp
     test_hex_payload.cpp
     test_artemis_crypto.cpp
+    test_artemis_json.cpp
     test_artemis_login.cpp
     test_camera_clock.cpp
     test_artemis_message.cpp
