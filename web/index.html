@@ -260,6 +260,10 @@
               <input name="telegram_token" type="password" placeholder="123456789:AA…" spellcheck="false">
               <small>Stored: <span id="ds-current-telegram_token">–</span> · from @BotFather; then send /start to the bot</small>
             </label>
+            <label>Web UI password
+              <input name="web_password" type="password" minlength="8" maxlength="63" spellcheck="false">
+              <small>Stored: <span id="ds-current-web_password">–</span> · 8–63 characters, also the hub's Wi-Fi password; applies after a restart. <code>status</code> shows the current one.</small>
+            </label>
             <label>Health check URL
               <input name="health_url" type="url" placeholder="https://hc-ping.com/…" spellcheck="false">
               <small>Stored: <span id="ds-current-health_url">–</span> · called after every sync; the service warns you when the calls stop</small>

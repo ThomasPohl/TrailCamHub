@@ -37,3 +37,12 @@ void hub_console_list_event(const char *line);
 /* Reports the media download progress for the status command. */
 void hub_console_set_media_progress(uint32_t done, uint32_t stored,
                                     uint32_t total);
+
+/*
+ * Where the web UI is and its password, for "status" (#101): the console is
+ * local (USB), so it may show the password, which otherwise only the boot
+ * log (and the dongles' display) shows. Getters, because the address over
+ * Ethernet arrives later; NULL: no web UI.
+ */
+void hub_console_set_web_access(const char *(*url)(void),
+                                const char *(*password)(void));

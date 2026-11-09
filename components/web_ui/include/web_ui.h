@@ -33,6 +33,13 @@ typedef struct {
 esp_err_t web_ui_start(const web_ui_callbacks_t *callbacks);
 
 /*
+ * A password set by the user (setting web_password, 8-63 printable
+ * characters) that replaces the configured or generated one. Call before
+ * web_ui_start(); NULL or "" keeps those.
+ */
+void web_ui_set_password(const char *password);
+
+/*
  * Closes the access point (true) and opens it again (false), for example
  * while a BLE connection is set up: on the ESP32-C5 a running access point
  * left the BLE connection setup no air time after it had run for a while.
