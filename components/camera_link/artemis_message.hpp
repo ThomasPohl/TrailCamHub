@@ -33,6 +33,30 @@ std::vector<std::uint8_t> build_request(const Aes128 &cipher,
                                         std::uint32_t app_sequence,
                                         const std::string &json);
 
+// Heartbeat (cmdId 525). The TrailCam Go app numbers heartbeats in a range of
+// their own: application sequence 0x00010000 + a counter that starts at 1 in
+// each session and counts each new heartbeat (retransmissions keep it). Seen
+// in all captures of pwnb0t/trailcam-automation (up to 0x1002e); the app
+// counts the NUL in PayloadLen and leaves stale bytes after it in the padding,
+// which the camera does not need (our other commands send neither).
+constexpr std::uint32_t kHeartbeatSequenceBase = 0x00010000;
+constexpr const char *kHeartbeatJson = "{\"cmdId\":525}";
+
+class Heartbeat
+{
+  public:
+    // The next heartbeat request; the counter wraps from 0xffff to 1.
+    std::vector<std::uint8_t> next(const Aes128 &cipher);
+    // Counter of the last heartbeat built (0 before the first).
+    std::uint16_t count() const
+    {
+        return count_;
+    }
+
+  private:
+    std::uint16_t count_ = 0;
+};
+
 // Parses an ARTEMIS message carried in an RUDP DATA payload. Returns false if
 // the signature or length fields are invalid or the body cannot be decoded.
 bool parse(const Aes128 &cipher, const std::uint8_t *bytes, std::size_t size,

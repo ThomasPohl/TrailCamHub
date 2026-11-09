@@ -140,24 +140,6 @@ TEST_CASE("Magic packets keep their bytes")
                                                        0x00, 0x00});
 }
 
-TEST_CASE("heartbeat payload matches the captured heartbeat")
-{
-    ArtemisHeartbeatPayload heartbeat;
-    const std::uint8_t *payload = heartbeat.next_command();
-    CHECK(heartbeat.command_count() == 2);
-    const std::vector<std::uint8_t> expected = {
-        0x41, 0x52, 0x54, 0x45, 0x4d, 0x49, 0x53, 0x00, 0x02, 0x00, 0x00, 0x00,
-        0x02, 0x00, 0x01, 0x00, 0x19, 0x00, 0x00, 0x00, 0x4d, 0x7a, 0x6c, 0x42,
-        0x33, 0x36, 0x58, 0x2f, 0x49, 0x56, 0x6f, 0x38, 0x5a, 0x7a, 0x49, 0x35,
-        0x72, 0x47, 0x39, 0x6a, 0x31, 0x77, 0x3d, 0x3d, 0x00,
-    };
-    REQUIRE(heartbeat.size() == expected.size());
-    CHECK(std::vector<std::uint8_t>(payload, payload + heartbeat.size()) ==
-          expected);
-    heartbeat.next_command();
-    CHECK(heartbeat.command_count() == 3);
-}
-
 TEST_CASE("PRE_LOGIN and ARTEMIS command framing")
 {
     std::uint8_t body[76] = {};

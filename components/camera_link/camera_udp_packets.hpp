@@ -181,34 +181,4 @@ class ArtemisMagicRequest final : public ArtemisRudpPacket
     bool build(Stage stage);
 };
 
-class ArtemisHeartbeatPayload
-{
-  public:
-    static constexpr std::size_t kSize = 45;
-
-    ArtemisHeartbeatPayload();
-    const std::uint8_t *next_command();
-    std::size_t size() const;
-    std::uint8_t command_count() const;
-
-  private:
-    // clang-format off
-    static constexpr std::array<std::uint8_t, 12> kPrefix = {
-        0x41, 0x52, 0x54, 0x45, 0x4d, 0x49, 0x53, 0x00,
-        0x02, 0x00, 0x00, 0x00,
-    };
-    // clang-format on
-    // clang-format off
-    static constexpr std::array<std::uint8_t, 32> kSuffix = {
-        0x00, 0x01, 0x00, 0x19, 0x00, 0x00, 0x00, 0x4d,
-        0x7a, 0x6c, 0x42, 0x33, 0x36, 0x58, 0x2f, 0x49,
-        0x56, 0x6f, 0x38, 0x5a, 0x7a, 0x49, 0x35, 0x72,
-        0x47, 0x39, 0x6a, 0x31, 0x77, 0x3d, 0x3d, 0x00,
-    };
-    // clang-format on
-
-    std::array<std::uint8_t, kSize> bytes_{};
-    std::uint8_t command_count_{1};
-};
-
 }  // namespace camera

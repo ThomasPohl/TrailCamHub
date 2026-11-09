@@ -35,6 +35,13 @@ std::vector<std::uint8_t> build_request(const Aes128 &cipher,
                                      request.data() + request.size());
 }
 
+std::vector<std::uint8_t> Heartbeat::next(const Aes128 &cipher)
+{
+    count_ = static_cast<std::uint16_t>(count_ == 0xffff ? 1 : count_ + 1);
+    return build_request(cipher, kHeartbeatSequenceBase + count_,
+                         kHeartbeatJson);
+}
+
 bool parse(const Aes128 &cipher, const std::uint8_t *bytes, std::size_t size,
            Message &out)
 {
