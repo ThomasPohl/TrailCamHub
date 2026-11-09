@@ -39,4 +39,17 @@ std::string json_quote(const std::string &text);
 std::string json_set_string(const std::string &json, const std::string &key,
                             const std::string &value);
 
+// True for a field name whose value must never be logged, stored or sent on:
+// the camera's screen unlock code (secureCode0 ... secureCode3; the switch
+// secureCodeOnOff is not secret) and anything named like a password
+// ("password", "pwd", "newPwd", ...), compared without case.
+bool json_is_secret_key(const std::string &key);
+
+// Returns `json` with the value of every secret field (json_is_secret_key) at
+// any nesting depth replaced by "***", so that a camera answer can be logged.
+// Strings, numbers, objects and arrays are all replaced. Everything else is
+// copied unchanged; text that is not valid JSON is copied up to the point
+// where it stops being readable.
+std::string json_redact(const std::string &json);
+
 }  // namespace camera::artemis

@@ -1,5 +1,6 @@
 #include "artemis_json.hpp"
 
+#include <algorithm>
 #include <cctype>
 
 namespace camera::artemis
@@ -166,6 +167,114 @@ std::string json_set_string(const std::string &json, const std::string &key,
                             const std::string &value)
 {
     return set_field(json, key, "\"" + key + "\":" + json_quote(value));
+}
+
+bool json_is_secret_key(const std::string &key)
+{
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](char c) {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    });
+    if (lower.rfind("securecode", 0) == 0) {
+        return lower != "securecodeonoff";
+    }
+    return lower.find("password") != std::string::npos ||
+           lower.find("pwd") != std::string::npos;
+}
+
+namespace
+{
+
+// Index just past the string literal that starts with the quote at `pos`, or
+// json.size() if it is not terminated.
+std::size_t skip_string(const std::string &json, std::size_t pos)
+{
+    for (++pos; pos < json.size(); ++pos) {
+        if (json[pos] == '\\') {
+            ++pos;
+        } else if (json[pos] == '"') {
+            return pos + 1;
+        }
+    }
+    return json.size();
+}
+
+// Index just past the JSON value that starts at `pos` (after whitespace).
+std::size_t skip_value(const std::string &json, std::size_t pos)
+{
+    if (pos >= json.size()) {
+        return pos;
+    }
+    if (json[pos] == '"') {
+        return skip_string(json, pos);
+    }
+    if (json[pos] == '{' || json[pos] == '[') {
+        int depth = 0;
+        while (pos < json.size()) {
+            const char c = json[pos];
+            if (c == '"') {
+                pos = skip_string(json, pos);
+                continue;
+            }
+            if (c == '{' || c == '[') {
+                ++depth;
+            } else if (c == '}' || c == ']') {
+                if (--depth == 0) {
+                    return pos + 1;
+                }
+            }
+            ++pos;
+        }
+        return pos;
+    }
+    while (pos < json.size() && json[pos] != ',' && json[pos] != '}' &&
+           json[pos] != ']' &&
+           !std::isspace(static_cast<unsigned char>(json[pos]))) {
+        ++pos;
+    }
+    return pos;
+}
+
+}  // namespace
+
+std::string json_redact(const std::string &json)
+{
+    std::string out;
+    out.reserve(json.size());
+    std::size_t pos = 0;
+    while (pos < json.size()) {
+        if (json[pos] != '"') {
+            out += json[pos++];
+            continue;
+        }
+        const std::size_t end = skip_string(json, pos);
+        out.append(json, pos, end - pos);
+        std::size_t after = end;
+        while (after < json.size() &&
+               std::isspace(static_cast<unsigned char>(json[after]))) {
+            ++after;
+        }
+        const bool is_key = after < json.size() && json[after] == ':';
+        if (!is_key || end - pos < 2 ||
+            !json_is_secret_key(json.substr(pos + 1, end - pos - 2))) {
+            pos = end;
+            continue;
+        }
+        // A secret key: copy up to and including ':' and any whitespace,
+        // then replace the value.
+        std::size_t value = after + 1;
+        while (value < json.size() &&
+               std::isspace(static_cast<unsigned char>(json[value]))) {
+            ++value;
+        }
+        out.append(json, end, value - end);
+        const std::size_t value_end = skip_value(json, value);
+        if (value_end > value) {
+            out += "\"***\"";
+        }
+        pos = value_end;
+    }
+    return out;
 }
 
 }  // namespace camera::artemis

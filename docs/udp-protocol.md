@@ -176,6 +176,13 @@ fragmented — see §5.6) with device identity and state: `devId`, `fwVerName`, 
 `subModelName`, `productId`, `batPercent`, `sdTotalMB`, `sdFreeMB`, a `capability` object,
 `result:0`, etc.
 
+The response also carries the camera's screen unlock code in cleartext
+(`secureCodeOnOff`, `secureCode0` … `secureCode3`). The firmware never logs it:
+`json_redact()` replaces those values (and anything named like a password) with
+`"***"` before a camera answer is logged, and answers longer than 200 bytes are
+logged in full only at DEBUG. These fields are not stored in `camera.json` and not
+sent to any destination.
+
 ### 5.4 Media list (cmdId 768)
 Request — the paging parameters are **required**, or the camera does not answer:
 ```json

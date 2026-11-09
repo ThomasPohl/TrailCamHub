@@ -98,6 +98,10 @@ static const camera::artemis::MediaCatalog::VideoDownload kVideoDownload =
 #endif
 static const bool kDownloadVideos =
     kVideoDownload != camera::artemis::MediaCatalog::VideoDownload::none;
+// Camera answers up to this length are logged in full at INFO (after
+// json_redact); longer ones only by size, and in full at DEBUG. With the log
+// prefix this still fits a line of the SD log (SD_LOG_LINE_MAX, 256 bytes).
+static constexpr size_t kResponseLogInfoMax = 200;
 // camera_protocol_set_all_videos().
 static std::atomic<bool> s_all_videos;
 // camera_protocol_set_login(); set before a session, read during it.
@@ -1146,7 +1150,8 @@ static void process_artemis_response(const SessionEvent &event)
         } else {
             std::string error_msg;
             json_find_string(message.json, "errorMsg", error_msg);
-            ESP_LOGW(TAG, "ARTEMIS login rejected: %s", message.json.c_str());
+            ESP_LOGW(TAG, "ARTEMIS login rejected: %s",
+                     json_redact(message.json).c_str());
             ESP_LOGW(TAG, "%s",
                      camera::artemis::login_rejected_hint(result, error_msg)
                          .c_str());
@@ -1154,8 +1159,20 @@ static void process_artemis_response(const SessionEvent &event)
         return;
     }
 
-    ESP_LOGI(TAG, "ARTEMIS response cmdId %lld: %s", (long long)cmd_id,
-             message.json.c_str());
+    // Never log a camera answer as it is: the device info (512) carries the
+    // screen unlock code. Long answers (512, 768) go to DEBUG in full.
+    {
+        const std::string redacted = json_redact(message.json);
+        if (redacted.size() <= kResponseLogInfoMax) {
+            ESP_LOGI(TAG, "ARTEMIS response cmdId %lld: %s", (long long)cmd_id,
+                     redacted.c_str());
+        } else {
+            ESP_LOGI(TAG, "ARTEMIS response cmdId %lld: %u bytes",
+                     (long long)cmd_id, (unsigned)redacted.size());
+            ESP_LOGD(TAG, "ARTEMIS response cmdId %lld: %s", (long long)cmd_id,
+                     redacted.c_str());
+        }
+    }
     if (cmd_id != 525) {
         s_last_progress_us = esp_timer_get_time();
     }
