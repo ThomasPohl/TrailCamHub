@@ -83,6 +83,17 @@ The rollback needs a bootloader built with this option. An update over the air d
 
 `CONFIG_HUB_BOARD_ID` names the board of the images (set from the board options), `CONFIG_HUB_BUILD_VARIANT` the variant (`dev`; `sdkconfig.defaults.release` sets `release`). An update keeps both, so a release hub stays on release images.
 
+## Active hubs badge
+
+Hubs read `ota.json` at most once per 24 hours, and GitHub counts every
+download of a release asset. The **Badges** workflow
+(`.github/workflows/badges.yml`) samples the summed `ota.json` download count
+of all releases once a day and shows its growth per day as "active hubs
+(est.)" in the README. It is an estimate: hubs without automatic updates (dev
+builds, `CONFIG_OTA_AUTO_UPDATE` off) are not counted, while the `update`
+console command and people opening the file in a browser count as well. No
+data about the hubs is collected.
+
 ## Not covered yet
 
 - Reporting updates and failed checks to the backend and the app (#149, backend-only for now).

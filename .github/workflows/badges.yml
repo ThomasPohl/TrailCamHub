@@ -1,0 +1,74 @@
+name: Badges
+
+# Updates the README badges that shields.io cannot read from GitHub directly
+# (.github/scripts/badges.sh): supported boards, host tests, firmware size of
+# the latest release and an estimate of active hubs. The results are
+# shields.io endpoint files on the orphan branch `badges`; the README reads
+# them through raw.githubusercontent.com.
+#
+# Runs daily (the active-hub estimate needs regular samples), after pushes to
+# main and on demand. A release created by the Firmware Package workflow does
+# not trigger other workflows, so its firmware size appears with the next
+# daily run.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: badges
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update badge data
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          path: repo
+
+      - name: Check out badges branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          repo_url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$repo_url" badges >/dev/null 2>&1; then
+            git clone --quiet --branch badges --single-branch --depth 1 "$repo_url" out
+          else
+            mkdir out
+            git -C out init -q
+            git -C out checkout -q --orphan badges
+            git -C out remote add origin "$repo_url"
+          fi
+
+      - name: Compute badges
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: repo/.github/scripts/badges.sh repo out
+
+      - name: Push badges branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C out config user.name "github-actions[bot]"
+          git -C out config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C out add -A
+          if git -C out commit -q -m "Update badges"; then
+            git -C out push -q origin badges
+          else
+            echo "Badges unchanged"
+          fi

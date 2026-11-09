@@ -1,5 +1,25 @@
 # TrailCamHub
 
+<!-- Badge data that GitHub does not expose comes from .github/workflows/badges.yml. -->
+[![Firmware](https://github.com/ThomasPohl/TrailCamHub/actions/workflows/firmware-package.yml/badge.svg?branch=main)](https://github.com/ThomasPohl/TrailCamHub/actions/workflows/firmware-package.yml?query=branch%3Amain)
+[![App](https://github.com/ThomasPohl/TrailCamHub/actions/workflows/app.yml/badge.svg?branch=main)](https://github.com/ThomasPohl/TrailCamHub/actions/workflows/app.yml?query=branch%3Amain)
+[![Backend](https://github.com/ThomasPohl/TrailCamHub/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/ThomasPohl/TrailCamHub/actions/workflows/backend.yml?query=branch%3Amain)
+[![Host tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FThomasPohl%2FTrailCamHub%2Fbadges%2Fhost-tests.json)](test/host)
+[![Firmware size](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FThomasPohl%2FTrailCamHub%2Fbadges%2Ffirmware-size.json)](partitions.csv)
+[![Boards](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FThomasPohl%2FTrailCamHub%2Fbadges%2Fboards.json)](docs/modes.md)
+
+[![Release](https://img.shields.io/github/v/release/ThomasPohl/TrailCamHub?sort=semver)](https://github.com/ThomasPohl/TrailCamHub/releases/latest)
+[![Release date](https://img.shields.io/github/release-date/ThomasPohl/TrailCamHub)](https://github.com/ThomasPohl/TrailCamHub/releases/latest)
+[![Web installer](https://img.shields.io/badge/web_installer-flash_in_the_browser-blue)](https://thomaspohl.github.io/TrailCamHub/)
+[![License](https://img.shields.io/github/license/ThomasPohl/TrailCamHub)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/ThomasPohl/TrailCamHub)](https://github.com/ThomasPohl/TrailCamHub/commits/main)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/ThomasPohl/TrailCamHub)](https://github.com/ThomasPohl/TrailCamHub/pulse)
+
+[![Active hubs](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FThomasPohl%2FTrailCamHub%2Fbadges%2Factive-hubs.json)](docs/ota.md)
+[![Release downloads](https://img.shields.io/github/downloads/ThomasPohl/TrailCamHub/total?label=release%20downloads)](https://github.com/ThomasPohl/TrailCamHub/releases)
+[![Stars](https://img.shields.io/github/stars/ThomasPohl/TrailCamHub)](https://github.com/ThomasPohl/TrailCamHub/stargazers)
+[![Forks](https://img.shields.io/github/forks/ThomasPohl/TrailCamHub)](https://github.com/ThomasPohl/TrailCamHub/forks)
+
 An open-source trail camera bridge: an ESP32-S3 with an A7670E 4G modem is intended to retrieve media from supported trail cameras and transfer it to a configurable cloud storage service.
 
 > **Status:** Concept / early draft. Hardware support, camera compatibility, wireless interoperability, and cloud integration have not yet been verified.
