@@ -124,3 +124,10 @@ export function videoStateLabel(state: VideoState): string {
 export function canRequestVideo(item: Pick<MediaItem, 'fileType' | 'videoState'>): boolean {
   return item.fileType === 2 && (item.videoState === 'none' || item.videoState === 'failed');
 }
+
+/** " · charging" / " · solar charging" while the camera charges; else empty. */
+export function chargingText(camera: { isCharging?: boolean; isSolarCharging?: boolean }): string {
+  if (camera.isSolarCharging) return ' · solar charging';
+  if (camera.isCharging) return ' · charging';
+  return '';
+}

@@ -32,6 +32,8 @@ const DEMO_CAMERAS: Array<Camera & { firstNum: number; minutesAgo: number }> = [
     sdFreeMB: 28_412,
     sdTotalMB: 30_436,
     sdCard: 'ok',
+    temperature: 14,
+    isSolarCharging: true,
     lastSeen: 0,
     firstNum: 36,
     minutesAgo: 17,

@@ -460,8 +460,12 @@ std::string status_text(const std::vector<CameraFiles> &cameras)
         camera::artemis::DeviceInfo info;
         std::int64_t read_at = 0;
         if (camera::store::load_camera_info(camera.id, info, read_at)) {
-            text += "\nCamera " + camera.id + ": battery " +
-                    std::to_string(info.bat_percent) + " %, " +
+            const std::string state =
+                camera::artemis::device_state_summary(info);
+            // The camera's own name is often a default ("0000"), so the
+            // directory id names it.
+            text += "\nCamera " + camera.id + ": " +
+                    (state.empty() ? "" : state + ", ") +
                     std::to_string(camera.catalog.size()) + " recordings";
         }
     }

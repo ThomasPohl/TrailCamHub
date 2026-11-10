@@ -29,6 +29,18 @@ export interface Camera {
   sdCard: 'ok' | 'missing' | 'unknown';
   /** The camera's message for a missing card, e.g. "Memory card not exist". */
   sdError?: string;
+  /** Temperature the camera measured at the hub's last read, °C. */
+  temperature?: number;
+  /** The camera's battery was charging at the hub's last read. */
+  isCharging?: boolean;
+  /** ...from a solar panel. */
+  isSolarCharging?: boolean;
+  /** The camera's code for its battery type (meaning not documented). */
+  batType?: number;
+  /** Version of the camera's BLE module. */
+  bleVersion?: string;
+  /** The name set on the camera itself (often a default such as "0000"). */
+  cameraName?: string;
   /** Battery of the TrailCamHub module itself, in percent; absent if unknown. */
   hubBatPercent?: number;
   /** When the hub last read the camera, Unix seconds. */

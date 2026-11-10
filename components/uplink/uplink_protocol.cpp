@@ -239,6 +239,26 @@ std::string build_checkin_json(const CheckinRequest &request)
                 out += ",\"sdError\":\"" + json_escape(c.sd_error) + "\"";
             }
         }
+        if (c.temperature_c) {
+            out += ",\"temperature\":" + std::to_string(*c.temperature_c);
+        }
+        if (c.charging) {
+            out += std::string(",\"isCharging\":") +
+                   (*c.charging ? "true" : "false");
+        }
+        if (c.solar_charging) {
+            out += std::string(",\"isSolarCharging\":") +
+                   (*c.solar_charging ? "true" : "false");
+        }
+        if (c.bat_type) {
+            out += ",\"batType\":" + std::to_string(*c.bat_type);
+        }
+        if (!c.ble_version.empty()) {
+            out += ",\"bleVersion\":\"" + json_escape(c.ble_version) + "\"";
+        }
+        if (!c.camera_name.empty()) {
+            out += ",\"cameraName\":\"" + json_escape(c.camera_name) + "\"";
+        }
         out += ",\"media\":[";
         bool first = true;
         for (const MediaRef &m : c.media) {

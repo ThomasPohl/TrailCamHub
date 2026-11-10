@@ -13,7 +13,19 @@ export type HubTelemetry = Partial<Pick<HubRecord, 'firmware' | 'batPercent' | '
 export type CameraTelemetry = Partial<
   Pick<
     CameraRecord,
-    'model' | 'firmware' | 'batPercent' | 'sdFreeMB' | 'sdTotalMB' | 'sdCard' | 'sdError'
+    | 'model'
+    | 'firmware'
+    | 'batPercent'
+    | 'sdFreeMB'
+    | 'sdTotalMB'
+    | 'sdCard'
+    | 'sdError'
+    | 'temperature'
+    | 'isCharging'
+    | 'isSolarCharging'
+    | 'batType'
+    | 'bleVersion'
+    | 'cameraName'
   >
 >;
 

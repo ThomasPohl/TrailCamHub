@@ -170,6 +170,12 @@ function toCamera(
     sdTotalMB: record.sdTotalMB,
     sdCard: record.sdCard ?? 'unknown',
     sdError: record.sdCard === 'missing' && record.sdError ? record.sdError : undefined,
+    temperature: record.temperature,
+    isCharging: record.isCharging,
+    isSolarCharging: record.isSolarCharging,
+    batType: record.batType,
+    bleVersion: record.bleVersion,
+    cameraName: record.cameraName,
     hubBatPercent: hub?.batPercent,
     lastSeen: record.lastSeen,
     hubLastSeen: hub?.lastSeen ?? 0,
@@ -300,6 +306,10 @@ function commandResult(c: CommandRecord): CommandResult {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -453,6 +463,12 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
         sdFreeMB: optionalNumber(report.sdFreeMB),
         sdTotalMB: optionalNumber(report.sdTotalMB),
         ...sdCardTelemetry(report),
+        temperature: optionalNumber(report.temperature),
+        isCharging: optionalBoolean(report.isCharging),
+        isSolarCharging: optionalBoolean(report.isSolarCharging),
+        batType: optionalNumber(report.batType),
+        bleVersion: optionalString(report.bleVersion),
+        cameraName: optionalString(report.cameraName),
       },
       readTime(report.readAt, now),
     );

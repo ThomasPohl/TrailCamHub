@@ -6,6 +6,7 @@
 // uplink.cpp.
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,13 @@ struct CameraReport {
     // (unknown); with "missing" the camera's error message, if any.
     std::string sd_card;
     std::string sd_error;
+    // The camera's state at the read; unset/empty = unknown, left out.
+    std::optional<std::int64_t> temperature_c;
+    std::optional<bool> charging;
+    std::optional<bool> solar_charging;
+    std::optional<std::int64_t> bat_type;
+    std::string ble_version;
+    std::string camera_name;
     // Media the backend does not know yet (delta).
     std::vector<MediaRef> media;
 };

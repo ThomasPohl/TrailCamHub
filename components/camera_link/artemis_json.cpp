@@ -40,6 +40,32 @@ bool json_find_int(const std::string &json, const std::string &key,
     return true;
 }
 
+bool json_find_bool(const std::string &json, const std::string &key, bool &out,
+                    std::size_t from)
+{
+    const std::string needle = "\"" + key + "\"";
+    std::size_t pos = json.find(needle, from);
+    if (pos == std::string::npos)
+        return false;
+    pos += needle.size();
+    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t'))
+        ++pos;
+    if (pos >= json.size() || json[pos] != ':')
+        return false;
+    ++pos;
+    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t'))
+        ++pos;
+    if (json.compare(pos, 4, "true") == 0) {
+        out = true;
+        return true;
+    }
+    if (json.compare(pos, 5, "false") == 0) {
+        out = false;
+        return true;
+    }
+    return false;
+}
+
 bool json_find_string(const std::string &json, const std::string &key,
                       std::string &out, std::size_t from)
 {

@@ -1,5 +1,5 @@
 import type { Camera } from '../api/types';
-import { batteryLevel, formatRelative, formatStorage, storageLevel } from '../format';
+import { batteryLevel, chargingText, formatRelative, formatStorage, storageLevel } from '../format';
 
 interface Props {
   camera: Camera;
@@ -34,7 +34,7 @@ export function StatusCard({ camera, now }: Props) {
       <dl className="metrics">
         <Metric
           label="Camera battery"
-          value={`${camera.batPercent} %`}
+          value={`${camera.batPercent} %${chargingText(camera)}`}
           level={batteryLevel(camera.batPercent)}
         />
         {camera.hubBatPercent !== undefined && (
@@ -48,6 +48,9 @@ export function StatusCard({ camera, now }: Props) {
           <Metric label="SD card" value="Missing" level="critical" />
         ) : (
           <Metric label="SD free" value={formatStorage(camera.sdFreeMB)} level={storage} />
+        )}
+        {camera.temperature !== undefined && (
+          <Metric label="Temperature" value={`${camera.temperature} °C`} />
         )}
       </dl>
     </section>

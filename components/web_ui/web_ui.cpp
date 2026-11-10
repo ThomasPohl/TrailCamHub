@@ -71,6 +71,7 @@
 #include "sd_log.h"
 #include "schedule_state.hpp"
 #include "time_sync.h"
+#include "device_info.hpp"
 #include "web_paths.hpp"
 #include "web_ui.h"
 
@@ -439,6 +440,9 @@ struct CameraEntry {
     long long last_sync =
         0;  // Unix seconds; -1: synced, time unknown; 0: never
     long long read_at = 0;
+    std::string model;
+    std::string firmware;
+    std::string state;  // device_state_summary(): battery, charging, °C
 };
 std::vector<CameraEntry> s_cameras;
 int64_t s_cameras_us;
@@ -464,13 +468,28 @@ void refresh_cameras(int64_t now_us)
         if (file == NULL) {
             continue;
         }
-        char text[512];
-        const size_t length = fread(text, 1, sizeof(text) - 1, file);
+        // The whole file, bounded: the hub writes a few hundred bytes.
+        constexpr size_t kMaxCameraJson = 4096;
+        std::string json;
+        char buffer[512];
+        size_t length = 0;
+        while (json.size() < kMaxCameraJson &&
+               (length = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+            json.append(buffer, length);
+        }
+        const bool too_long = json.size() >= kMaxCameraJson;
         fclose(file);
-        const std::string json(text, length);
         CameraEntry camera;
         camera.dir = entry->d_name;
-        web::json_string(json, "devId", camera.id);
+        camera::artemis::DeviceInfo info;
+        if (!too_long && camera::artemis::parse_device_info(json, info)) {
+            camera.id = info.dev_id;
+            camera.model = info.model_name;
+            camera.firmware = info.fw_version;
+            camera.state = camera::artemis::device_state_summary(info);
+        } else {
+            web::json_string(json, "devId", camera.id);
+        }
         web::json_int(json, "lastSyncAt", camera.last_sync);
         web::json_int(json, "readAt", camera.read_at);
         s_cameras.push_back(camera);
@@ -570,6 +589,12 @@ esp_err_t handle_status(httpd_req_t *req)
         web::append_json_string(json, s_cameras[i].dir);
         json += ",\"id\":";
         web::append_json_string(json, s_cameras[i].id);
+        json += ",\"model\":";
+        web::append_json_string(json, s_cameras[i].model);
+        json += ",\"firmware\":";
+        web::append_json_string(json, s_cameras[i].firmware);
+        json += ",\"state\":";
+        web::append_json_string(json, s_cameras[i].state);
         char times[72];
         snprintf(times, sizeof(times), ",\"last_sync\":%lld,\"read_at\":%lld}",
                  s_cameras[i].last_sync, s_cameras[i].read_at);

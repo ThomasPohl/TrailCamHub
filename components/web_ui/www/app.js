@@ -139,6 +139,7 @@ async function refreshStatus() {
 
 // directory of a camera on the card -> time of its last sync
 let cameraSync = {};
+let cameraState = {};
 
 function ago(seconds) {
   if (seconds < 90) return "just now";
@@ -157,11 +158,18 @@ function syncText(t) {
 }
 
 function showSync(s) {
-  const before = JSON.stringify(cameraSync);
+  const before = JSON.stringify([cameraSync, cameraState]);
   cameraSync = {};
-  for (const camera of s.cameras || []) cameraSync[camera.dir] = camera.last_sync;
+  cameraState = {};
+  for (const camera of s.cameras || []) {
+    cameraSync[camera.dir] = camera.last_sync;
+    // "PH970S 2.3.6.5 · battery 78 %, charging, 22 °C"
+    cameraState[camera.dir] = [[camera.model, camera.firmware].filter(Boolean).join(" "), camera.state]
+      .filter(Boolean)
+      .join(" · ");
+  }
   // The camera directories in the root of the card show their last sync.
-  if (currentPath === "" && JSON.stringify(cameraSync) !== before) renderList();
+  if (currentPath === "" && JSON.stringify([cameraSync, cameraState]) !== before) renderList();
   const cameras = s.cameras || [];
   // The most recent sync of any camera; with several cameras, say which.
   let latest = null;
@@ -337,7 +345,7 @@ function fileRow(path, entry, thumbDir) {
         " · " + new Date(entry.mtime * 1000).toLocaleString()));
     }
   } else if (path === "" && full in cameraSync) {
-    meta.append("synced: " + syncText(cameraSync[full]));
+    meta.append("synced: " + syncText(cameraSync[full]) + (cameraState[full] ? " · " + cameraState[full] : ""));
   }
 
   row.append(icon, name, meta);

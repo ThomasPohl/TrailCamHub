@@ -221,3 +221,27 @@ TEST_CASE("check-in body carries the state of the camera's SD card")
           "\"media\":[]},"
           "{\"camId\":\"A1B2C3D4E5F6\",\"sdCard\":\"ok\",\"media\":[]}]}");
 }
+
+TEST_CASE("check-in body carries the camera's state when it is known")
+{
+    CheckinRequest request;
+    CameraReport camera;
+    camera.cam_id = "C61E0DE00CFB";
+    camera.temperature_c = -3;
+    camera.charging = false;
+    camera.solar_charging = true;
+    camera.bat_type = 2;
+    camera.ble_version = "3.9.4";
+    camera.camera_name = "Wald \"Nord\"";
+    CameraReport unknown;
+    unknown.cam_id = "A1B2C3D4E5F6";
+    request.cameras = {camera, unknown};
+
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"\",\"cameras\":["
+          "{\"camId\":\"C61E0DE00CFB\",\"temperature\":-3,"
+          "\"isCharging\":false,\"isSolarCharging\":true,\"batType\":2,"
+          "\"bleVersion\":\"3.9.4\",\"cameraName\":\"Wald \\\"Nord\\\"\","
+          "\"media\":[]},"
+          "{\"camId\":\"A1B2C3D4E5F6\",\"media\":[]}]}");
+}
