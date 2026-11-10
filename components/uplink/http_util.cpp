@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "esp_crt_bundle.h"
+#include "esp_log.h"
 #include "esp_timer.h"
 #include "sdkconfig.h"
 
@@ -17,6 +18,34 @@ namespace
 constexpr int kTimeoutMs = 20000;
 constexpr int kMaxResponseBytes = 64 * 1024;
 constexpr std::size_t kChunk = 16 * 1024;
+
+// Switches the log of ESP-IDF's HTTP client off while it exists and restores
+// the level it had. The level is global, so a request in another task is
+// quiet meanwhile too; the destinations run one at a time in the uplink task.
+class QuietClientLog
+{
+  public:
+    explicit QuietClientLog(bool active) : active_(active)
+    {
+        if (active_) {
+            previous_ = esp_log_level_get(kTag);
+            esp_log_level_set(kTag, ESP_LOG_NONE);
+        }
+    }
+    ~QuietClientLog()
+    {
+        if (active_) {
+            esp_log_level_set(kTag, previous_);
+        }
+    }
+    QuietClientLog(const QuietClientLog &) = delete;
+    QuietClientLog &operator=(const QuietClientLog &) = delete;
+
+  private:
+    static constexpr const char *kTag = "HTTP_CLIENT";  // esp_http_client.c
+    bool active_;
+    esp_log_level_t previous_ = ESP_LOG_INFO;
+};
 
 }  // namespace
 
@@ -68,6 +97,7 @@ std::string describe(const HttpResult &result)
 HttpResult send(const Request &request, std::int64_t *read_us)
 {
     HttpResult result;
+    const QuietClientLog quiet(request.secret_url);
     esp_http_client_handle_t client = open_client(request.url, request.method);
     if (client == nullptr) {
         result.error = ESP_ERR_NO_MEM;

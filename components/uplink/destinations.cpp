@@ -374,6 +374,7 @@ class Telegram
     {
         Request r;
         r.url = api_ + method;
+        r.secret_url = true;  // the bot token is part of the URL
         r.method = HTTP_METHOD_POST;
         r.headers.push_back({"Content-Type", "application/json"});
         r.body = string_body(json);
@@ -409,6 +410,7 @@ class Telegram
         const std::string tail = push::multipart_tail(kBoundary);
         Request r;
         r.url = api_ + method;
+        r.secret_url = true;  // the bot token is part of the URL
         r.method = HTTP_METHOD_POST;
         r.headers.push_back(
             {"Content-Type",
@@ -510,6 +512,7 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
         std::strtoll(hub_config::load_state(kOffsetKey).c_str(), nullptr, 10);
     Request poll;
     poll.url = bot.updates_url(offset);
+    poll.secret_url = true;
     const HttpResult polled = send(poll);
     std::vector<push::Update> updates;
     if (!success(polled) || !push::parse_updates(polled.body, updates)) {
