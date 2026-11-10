@@ -83,6 +83,18 @@ export interface CameraRecord {
   sdCard?: SdCardState;
   /** The camera's error message for a missing card; empty when the card is fine. */
   sdError?: string;
+  /** Temperature the camera measured at the read, °C. */
+  temperature?: number;
+  /** The camera's battery was charging at the read. */
+  isCharging?: boolean;
+  /** ...from a solar panel. */
+  isSolarCharging?: boolean;
+  /** The camera's code for its battery type (meaning not documented). */
+  batType?: number;
+  /** Version of the camera's BLE module. */
+  bleVersion?: string;
+  /** The name set on the camera itself (often a default such as "0000"). */
+  cameraName?: string;
   /** When the hub last read the camera, Unix seconds. */
   lastSeen: number;
 }
@@ -155,6 +167,18 @@ export interface Camera {
   sdCard: SdCardState | 'unknown';
   /** The camera's error message when the card is missing. */
   sdError?: string;
+  /** Temperature the camera measured at the read, °C. */
+  temperature?: number;
+  /** The camera's battery was charging at the read. */
+  isCharging?: boolean;
+  /** ...from a solar panel. */
+  isSolarCharging?: boolean;
+  /** The camera's code for its battery type (meaning not documented). */
+  batType?: number;
+  /** Version of the camera's BLE module. */
+  bleVersion?: string;
+  /** The name set on the camera itself (often a default such as "0000"). */
+  cameraName?: string;
   hubBatPercent?: number;
   lastSeen: number;
   /** Last check-in of the hub, Unix seconds; 0 = never. */
@@ -208,6 +232,18 @@ export interface CameraReport {
   sdCard?: string;
   /** With `missing`: the camera's error message, e.g. "Memory card not exist". */
   sdError?: string;
+  /** Temperature the camera measured at the read, °C. */
+  temperature?: number;
+  /** The camera's battery was charging at the read. */
+  isCharging?: boolean;
+  /** ...from a solar panel. */
+  isSolarCharging?: boolean;
+  /** The camera's code for its battery type (meaning not documented). */
+  batType?: number;
+  /** Version of the camera's BLE module. */
+  bleVersion?: string;
+  /** The name set on the camera itself (often a default such as "0000"). */
+  cameraName?: string;
   /**
    * Media not reported before (delta). The backend only adds entries, so
    * sending an item again is harmless.

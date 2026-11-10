@@ -1222,11 +1222,14 @@ static void process_artemis_response(const SessionEvent &event)
             if (info.bat_percent >= 0 && info.bat_percent <= 100) {
                 s_last_battery_percent = (int)info.bat_percent;
             }
+            // Only allowlisted fields (DeviceInfo), never the raw answer.
             ESP_LOGI(TAG,
-                     "Camera '%s' model '%s' fw '%s' battery %lld%% "
+                     "Camera '%s' model '%s' fw '%s' BLE '%s' name '%s': %s; "
                      "SD free %lld MB",
                      s_camera_id.c_str(), info.model_name.c_str(),
-                     info.fw_version.c_str(), (long long)info.bat_percent,
+                     info.fw_version.c_str(), info.ble_version.c_str(),
+                     info.camera_name.c_str(),
+                     device_state_summary(info).c_str(),
                      (long long)info.sd_free_mb);
             // A device without a clock takes the time of the camera: the
             // best it has, replaced by any better source later.

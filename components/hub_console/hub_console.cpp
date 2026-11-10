@@ -33,7 +33,9 @@
 
 #include "command_parser.hpp"
 #include "diagnostics.hpp"
+#include "device_info.hpp"
 #include "hub_battery.hpp"
+#include "media_store.hpp"
 #include "ota_update.hpp"
 #include "hub_config.hpp"
 #include "schedule_state.hpp"
@@ -199,6 +201,33 @@ void print_battery()
     }
 }
 
+// One line per camera on the SD card, as it was at its last read:
+// "camera F4_C1_56_06_A1_F0 TC100 2.3.0.3 BLE 3.9.4: battery 78 %, 22 °C".
+void print_cameras()
+{
+    for (const std::string &id : camera::store::list_cameras()) {
+        camera::artemis::DeviceInfo info;
+        std::int64_t read_at = 0;
+        if (!camera::store::load_camera_info(id, info, read_at)) {
+            continue;
+        }
+        std::string line = "camera " + id;
+        for (const std::string *part : {&info.model_name, &info.fw_version}) {
+            if (!part->empty()) {
+                line += " " + *part;
+            }
+        }
+        if (!info.ble_version.empty()) {
+            line += " BLE " + info.ble_version;
+        }
+        const std::string state = camera::artemis::device_state_summary(info);
+        if (!state.empty()) {
+            line += ": " + state;
+        }
+        reply("INFO", line);
+    }
+}
+
 // The cycle's phase, the download progress, the battery, the memory and the SD
 // card.
 void print_details()
@@ -221,6 +250,7 @@ void print_details()
                       (unsigned long)s_media_done, (unsigned long)s_media_total,
                       (unsigned long)s_media_stored));
     xSemaphoreGive(s_lock);
+    print_cameras();
     reply("INFO", format_line("uptime %lld s",
                               (long long)(esp_timer_get_time() / 1000000)));
     print_battery();

@@ -102,6 +102,11 @@ request (and TLS handshake) however many cameras there are — important over LT
      card); with `missing` also `sdError`, the camera's message (e.g.
      `Memory card not exist`). Absent if the hub does not know; the stored state is then
      kept. `sdFreeMB`/`sdTotalMB` come from the device info (cmdId 512).
+   - Optional camera state from the device info, each absent when unknown (the
+     stored value is then kept): `temperature` (°C), `isCharging`,
+     `isSolarCharging` (booleans), `batType` (the camera's code), `bleVersion`
+     and `cameraName` (the name set on the camera). The hub reads only these
+     fields of the device info (an allowlist), so nothing else reaches the backend.
    - Limits per request: 16 cameras, 2000 media entries.
 
    The response has one entry per reported camera, plus every other camera of the

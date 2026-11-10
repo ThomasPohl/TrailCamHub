@@ -12,7 +12,7 @@ idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "."
                        EMBED_TXTFILES ${embed}
-                       PRIV_REQUIRES esp_event esp_http_server esp_netif
+                       PRIV_REQUIRES camera_link esp_event esp_http_server esp_netif
                                      esp_timer esp_wifi fatfs lwip nvs_flash
                                      schedule schedule_state sd_log sd_storage
                                      mp4_mux time_sync espressif__mdns)

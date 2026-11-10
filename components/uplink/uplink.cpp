@@ -263,6 +263,12 @@ void collect_cameras(CheckinRequest &request, std::vector<CameraState> &cameras)
         report.sd_total_mb = info.sd_total_mb;
         report.sd_card = camera::artemis::sd_card_name(info.sd_card);
         report.sd_error = info.sd_error;
+        report.temperature_c = info.temperature_c;
+        report.charging = info.charging;
+        report.solar_charging = info.solar_charging;
+        report.bat_type = info.bat_type;
+        report.ble_version = info.ble_version;
+        report.camera_name = info.camera_name;
         const std::size_t limit = media_budget < kMaxMediaPerCamera
                                       ? media_budget
                                       : kMaxMediaPerCamera;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   batteryLevel,
+  chargingText,
   storageLevel,
   canRequestVideo,
   formatCameraTime,
@@ -123,5 +124,14 @@ describe('formatUpcoming', () => {
     expect(formatUpcoming(1_000 + 103 * 60, 1_000, 'en-GB')).toMatch(/^in 1 h 43 min /);
     expect(formatUpcoming(1_000 + 30, 1_000)).toBe('due now');
     expect(formatUpcoming(500, 1_000)).toBe('due now');
+  });
+});
+
+describe('chargingText', () => {
+  it('names solar charging first and is empty otherwise', () => {
+    expect(chargingText({})).toBe('');
+    expect(chargingText({ isCharging: false, isSolarCharging: false })).toBe('');
+    expect(chargingText({ isCharging: true })).toBe(' · charging');
+    expect(chargingText({ isCharging: true, isSolarCharging: true })).toBe(' · solar charging');
   });
 });

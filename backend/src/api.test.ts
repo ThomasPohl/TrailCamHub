@@ -291,6 +291,42 @@ describe("the camera's SD card", () => {
   });
 });
 
+describe("the camera's state", () => {
+  it('is stored from the check-in and shown in the app API', async () => {
+    const { deps, hubKey } = await setup();
+    const report = (fields: Record<string, unknown>) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', hubKey, { cameras: [{ camId: CAM_ID, ...fields }] }),
+        deps,
+      );
+    const read = async () =>
+      body<Camera[]>(await handleRequest(appRequest('GET', '/v1/cameras'), deps)).find(
+        (c) => c.camId === CAM_ID,
+      );
+
+    await report({
+      temperature: -3,
+      isCharging: false,
+      isSolarCharging: true,
+      batType: 2,
+      bleVersion: '3.9.4',
+      cameraName: '0000',
+    });
+    expect(await read()).toMatchObject({
+      temperature: -3,
+      isCharging: false,
+      isSolarCharging: true,
+      batType: 2,
+      bleVersion: '3.9.4',
+      cameraName: '0000',
+    });
+
+    // Wrong types are ignored and keep the values known.
+    await report({ temperature: '20', isCharging: 1, bleVersion: 'x'.repeat(65) });
+    expect(await read()).toMatchObject({ temperature: -3, isCharging: false, bleVersion: '3.9.4' });
+  });
+});
+
 describe('app API', () => {
   it('requires valid Telegram init data', async () => {
     const { deps } = await setup();

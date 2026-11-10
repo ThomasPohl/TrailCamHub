@@ -124,3 +124,80 @@ TEST_CASE("json_set_string replaces string and number values or appends")
     // json_set_int now also replaces a string value.
     CHECK(json_set_int("{\"a\":\"x\",\"b\":1}", "a", 5) == "{\"a\":5,\"b\":1}");
 }
+
+TEST_CASE("parse_device_info reads the allowlisted status fields only")
+{
+    // Shape of a real 512 answer (PH970S firmware 2.3.6.5), shortened.
+    const std::string json =
+        "{\"devId\":\"C6:1E:0D:00:00:01\",\"fwVerName\":\"2.3.6.5\","
+        "\"bleVerName\":\"3.9.4\",\"bleVerCode\":394,\"modelName\":\"PH970S\","
+        "\"cameraNameOnOff\":0,\"cameraName\":\"0000\",\"batPercent\":100,"
+        "\"emergencyBatPercent\":200,\"batType\":2,\"curBatType\":2,"
+        "\"isCharging\":false,\"isSolarCharging\":true,\"temperature\":-4,"
+        "\"secureCodeOnOff\":1,\"secureCode0\":1,\"secureCode1\":2,"
+        "\"sdTotalMB\":29998,\"sdFreeMB\":20617,"
+        "\"capability\":{\"platform\":\"T23ZN\"},\"result\":0,\"cmdId\":512}";
+    DeviceInfo info;
+    REQUIRE(parse_device_info(json, info));
+    CHECK(info.ble_version == "3.9.4");
+    CHECK(info.camera_name == "0000");
+    CHECK(info.bat_type == 2);
+    CHECK(info.charging == false);
+    CHECK(info.solar_charging == true);
+    CHECK(info.temperature_c == -4);
+
+    // Only allowlisted fields are written back: no secrets, nothing unknown.
+    const std::string stored = serialize_device_info(info);
+    CHECK(stored.find("secureCode") == std::string::npos);
+    CHECK(stored.find("curBatType") == std::string::npos);
+    CHECK(stored.find("capability") == std::string::npos);
+    CHECK(stored.find("emergencyBatPercent") == std::string::npos);
+
+    DeviceInfo parsed;
+    REQUIRE(parse_device_info(stored, parsed));
+    CHECK(parsed.ble_version == "3.9.4");
+    CHECK(parsed.camera_name == "0000");
+    CHECK(parsed.bat_type == 2);
+    CHECK(parsed.charging == false);
+    CHECK(parsed.solar_charging == true);
+    CHECK(parsed.temperature_c == -4);
+}
+
+TEST_CASE("status fields stay unknown when the camera does not report them")
+{
+    DeviceInfo info;
+    REQUIRE(parse_device_info("{\"devId\":\"x\",\"isCharging\":1}", info));
+    CHECK_FALSE(info.charging.has_value());  // not a JSON boolean
+    CHECK_FALSE(info.temperature_c.has_value());
+    CHECK_FALSE(info.bat_type.has_value());
+    const std::string stored = serialize_device_info(info);
+    CHECK(stored.find("isCharging") == std::string::npos);
+    CHECK(stored.find("temperature") == std::string::npos);
+}
+
+TEST_CASE("device_state_summary lists the known state")
+{
+    DeviceInfo info;
+    CHECK(device_state_summary(info).empty());
+    info.bat_percent = 78;
+    CHECK(device_state_summary(info) == "battery 78 %");
+    info.charging = true;
+    info.temperature_c = 22;
+    CHECK(device_state_summary(info) == "battery 78 %, charging, 22 °C");
+    info.charging = false;
+    info.solar_charging = true;
+    CHECK(device_state_summary(info) ==
+          "battery 78 %, charging (solar), 22 °C");
+}
+
+TEST_CASE("json_find_bool reads true and false only")
+{
+    bool b = true;
+    REQUIRE(json_find_bool("{\"a\":false,\"b\": true}", "a", b));
+    CHECK_FALSE(b);
+    REQUIRE(json_find_bool("{\"a\":false,\"b\": true}", "b", b));
+    CHECK(b);
+    CHECK_FALSE(json_find_bool("{\"a\":\"true\"}", "a", b));
+    CHECK_FALSE(json_find_bool("{\"a\":0}", "a", b));
+    CHECK_FALSE(json_find_bool("{\"x\":true}", "a", b));
+}
