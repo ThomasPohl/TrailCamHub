@@ -61,6 +61,11 @@ enum class Key {
     // (#52).
     camera_user,
     camera_password,
+    // Which videos the hub fetches from the camera for WebDAV (#201):
+    // "home" (every video over the home Wi-Fi or Ethernet, none over the
+    // modem), "all" (also over the modem, up to its size limit) or "none";
+    // empty: home.
+    webdav_videos,
 };
 
 constexpr Key kAllKeys[] = {
@@ -70,11 +75,12 @@ constexpr Key kAllKeys[] = {
     Key::power,          Key::direction,     Key::destination,
     Key::webdav_url,     Key::webdav_user,   Key::webdav_password,
     Key::telegram_token, Key::telegram_chat, Key::health_url,
-    Key::web_password,   Key::camera_user,   Key::camera_password};
+    Key::web_password,   Key::camera_user,   Key::camera_password,
+    Key::webdav_videos};
 // Every key must be in kAllKeys (loading, "config set" and "config show" go
 // through it); the last enumerator is the last key.
 static_assert(sizeof(kAllKeys) / sizeof(kAllKeys[0]) ==
-                  static_cast<std::size_t>(Key::camera_password) + 1,
+                  static_cast<std::size_t>(Key::webdav_videos) + 1,
               "kAllKeys must list every Key");
 
 struct Settings {
@@ -99,6 +105,7 @@ struct Settings {
     std::string web_password;
     std::string camera_user;
     std::string camera_password;
+    std::string webdav_videos;
 };
 
 enum class Transport {
@@ -210,6 +217,11 @@ bool uplink_configured(const Settings &settings, const Capabilities &caps);
 // URL, Telegram token).
 bool destination_configured(const Settings &settings);
 Destination destination(const Settings &settings);
+
+// True if the hub fetches every missing video from the camera for the
+// WebDAV destination over `transport` (setting webdav_videos), not only the
+// requested ones. False for other destinations.
+bool webdav_fetches_videos(const Settings &settings, Transport transport);
 
 // Longest check-in interval with Telegram directly: Telegram keeps updates
 // (button presses, commands) for about a day.

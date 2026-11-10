@@ -256,6 +256,15 @@
               <input name="webdav_password" type="password" maxlength="128">
               <small>Stored: <span id="ds-current-webdav_password">–</span> · an app password where the server offers one</small>
             </label>
+            <label>WebDAV videos
+              <select name="webdav_videos">
+                <option value="">Keep stored</option>
+                <option value="home">Over the home network only</option>
+                <option value="all">Also over the modem (mobile data)</option>
+                <option value="none">None (photos and thumbnails only)</option>
+              </select>
+              <small>Stored: <span id="ds-current-webdav_videos">–</span> · default: home network only</small>
+            </label>
             <label>Telegram bot token
               <input name="telegram_token" type="password" placeholder="123456789:AA…" spellcheck="false">
               <small>Stored: <span id="ds-current-telegram_token">–</span> · from @BotFather; then send /start to the bot</small>

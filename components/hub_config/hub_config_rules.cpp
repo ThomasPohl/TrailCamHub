@@ -65,6 +65,8 @@ const char *key_name(Key key)
         return "telegram_chat";
     case Key::health_url:
         return "health_url";
+    case Key::webdav_videos:
+        return "webdav_videos";
     case Key::web_password:
         return "web_password";
     case Key::camera_user:
@@ -137,6 +139,8 @@ std::string &field(Settings &settings, Key key)
         return settings.camera_user;
     case Key::camera_password:
         return settings.camera_password;
+    case Key::webdav_videos:
+        return settings.webdav_videos;
     case Key::device_key:
         break;
     }
@@ -256,6 +260,10 @@ std::string validate(Key key, const std::string &value)
         return value == "backend" || value == "webdav" || value == "telegram"
                    ? ""
                    : "destination must be backend, webdav or telegram";
+    case Key::webdav_videos:
+        return value == "home" || value == "all" || value == "none"
+                   ? ""
+                   : "webdav_videos must be home, all or none";
     case Key::webdav_url:
         if ((value.rfind("https://", 0) != 0 &&
              value.rfind("http://", 0) != 0) ||
@@ -350,7 +358,7 @@ std::string display_value(Key key, const std::string &value)
                        key == Key::power || key == Key::direction ||
                        key == Key::destination || key == Key::telegram_chat ||
                        key == Key::web_password || key == Key::camera_user ||
-                       key == Key::camera_password
+                       key == Key::camera_password || key == Key::webdav_videos
                    ? "(default)"
                    : "(not set)";
     }
@@ -399,6 +407,15 @@ Destination destination(const Settings &settings)
         return Destination::telegram;
     }
     return Destination::backend;
+}
+
+bool webdav_fetches_videos(const Settings &settings, Transport transport)
+{
+    if (destination(settings) != Destination::webdav ||
+        settings.webdav_videos == "none") {
+        return false;
+    }
+    return settings.webdav_videos == "all" || transport != Transport::modem;
 }
 
 bool destination_configured(const Settings &settings)
