@@ -14,7 +14,8 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Garden' })).toBeInTheDocument();
     const status = screen.getByRole('region', { name: 'Status of Garden' });
-    expect(within(status).getByText('78 %')).toBeInTheDocument();
+    expect(within(status).getByText('78 % · solar charging')).toBeInTheDocument();
+    expect(within(status).getByText('14 °C')).toBeInTheDocument();
     expect(within(status).getByText('Seen 17 min ago')).toBeInTheDocument();
     expect(screen.getByRole('note')).toHaveTextContent('Demo mode');
     expect(await screen.findAllByRole('img', { name: /Recording 100_/ })).toHaveLength(12);
