@@ -426,6 +426,12 @@ Times next_times(const Settings &settings, const State &state, std::int64_t now,
                 factor *= settings.power.low_checkin_factor;
             }
             interval_min = stretched(settings.checkin_min, factor);
+            if (settings.checkin_max_min > 0 &&
+                interval_min > settings.checkin_max_min) {
+                interval_min = settings.checkin_max_min > settings.checkin_min
+                                   ? settings.checkin_max_min
+                                   : settings.checkin_min;
+            }
         }
         if (state.last_checkin == kNever) {
             times.checkin = now;
