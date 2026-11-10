@@ -257,6 +257,9 @@ Command parse_command(const std::string &line)
     if (word == "restart") {
         return simple(CommandType::restart);
     }
+    if (word == "ping") {
+        return simple(CommandType::ping);
+    }
     return invalid("unknown command '" + word + "' (try 'help')");
 }
 
@@ -273,6 +276,7 @@ const char *help_text()
            "stop                       end the running scan\n"
            "restart                    restart the hub (like the reset "
            "button)\n"
+           "ping                       keep the hub awake a while longer\n"
            "heap [blocks]              internal RAM by capability and "
            "region\n"
            "ls [path]                  list a directory of the SD card\n"

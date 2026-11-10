@@ -361,10 +361,12 @@ jobs:
           if [[ -f package-lock.json ]]; then npm ci; else npm install --no-audit --no-fund; fi
           VITE_APP_VERSION="${GITHUB_SHA:0:7}" npm run build
 
-      - name: Download firmware package
+      # Every board's package; boards.json says which the installer offers.
+      - name: Download firmware packages
         uses: actions/download-artifact@v8
         with:
-          name: trailcamhub-esp32s3
+          pattern: trailcamhub-*
+          merge-multiple: true
           path: artifact
 
       - name: Accumulate build and assemble site
@@ -373,8 +375,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tar -xzf artifact/trailcamhub-esp32s3.tar.gz -C artifact
-          pkg=artifact/trailcamhub-esp32s3
+          for archive in artifact/trailcamhub-*.tar.gz; do
+            tar -xzf "$archive" -C artifact
+          done
           repo_url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           # Restore the persistent build store (an orphan branch) or start one.
@@ -387,31 +390,62 @@ jobs:
             echo '{"builds":[]}' > store/versions.json
           fi
 
-          # Add this build under a unique id.
+          # Add this build under a unique id: builds/<id>/<board>/ holds the
+          # merged images and the ESP Web Tools manifests of each board with
+          # "installer": true in boards.json.
           id="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
           dir="store/builds/$id"
-          mkdir -p "$dir"
-          cp "$pkg/trailcamhub-esp32s3-dev.bin" "$dir/"
-          cp "$pkg/trailcamhub-esp32s3-release.bin" "$dir/"
-          for variant in dev release; do
-            jq --arg v "$id" \
-              '.version=$v | .builds[0].parts[0].path=("./trailcamhub-esp32s3-'"$variant"'.bin")' \
-              "web/manifest-$variant.json" > "$dir/manifest-$variant.json"
+          boards='{}'
+          for board in $(jq -r '.boards[] | select(.installer) | .id' boards.json); do
+            pkg="artifact/trailcamhub-$board"
+            if [[ ! -f "$pkg/trailcamhub-$board-release.bin" ]]; then
+              echo "::warning::No firmware package for $board; the installer leaves it out"
+              continue
+            fi
+            name="$(jq -r --arg b "$board" '.boards[] | select(.id == $b) | .name' boards.json)"
+            target="$(jq -r --arg b "$board" '.boards[] | select(.id == $b) | .target' boards.json)"
+            case "$target" in
+              esp32s3) chip="ESP32-S3" ;;
+              esp32c5) chip="ESP32-C5" ;;
+              esp32p4) chip="ESP32-P4" ;;
+              *) echo "::error::No ESP Web Tools chip family for target $target"; exit 1 ;;
+            esac
+            mkdir -p "$dir/$board"
+            for variant in dev release; do
+              cp "$pkg/trailcamhub-$board-$variant.bin" "$dir/$board/"
+              label="$([[ $variant == dev ]] && echo 'Dev — verbose logs' || echo 'Release')"
+              jq -n --arg name "TrailCamHub $name ($label)" --arg version "$id" \
+                --arg chip "$chip" --arg path "./trailcamhub-$board-$variant.bin" \
+                '{name: $name, version: $version,
+                  builds: [{chipFamily: $chip, parts: [{path: $path, offset: 0}]}]}' \
+                > "$dir/$board/manifest-$variant.json"
+            done
+            (cd "$dir/$board" && sha256sum "trailcamhub-$board-dev.bin" \
+              "trailcamhub-$board-release.bin" > SHA256SUMS)
+            base="builds/$id/$board"
+            boards="$(jq --arg b "$board" --arg base "$base" \
+              '.[$b] = {dev: ($base + "/manifest-dev.json"),
+                        release: ($base + "/manifest-release.json"),
+                        devBin: ($base + "/trailcamhub-" + $b + "-dev.bin"),
+                        releaseBin: ($base + "/trailcamhub-" + $b + "-release.bin")}' \
+              <<<"$boards")"
           done
-          (cd "$dir" && sha256sum trailcamhub-esp32s3-dev.bin \
-            trailcamhub-esp32s3-release.bin > SHA256SUMS)
+          if [[ "$(jq 'length' <<<"$boards")" -eq 0 ]]; then
+            echo "::error::No board image for the installer"
+            exit 1
+          fi
 
-          # Prepend to the version index and keep the newest 20 builds.
+          # Prepend to the version index and keep the newest 10 builds (all
+          # boards together are about 20 MB per build; the Pages site has a
+          # 1 GB limit).
           date_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           message="$(git log -1 --pretty=%s "$GITHUB_SHA" 2>/dev/null || echo '')"
           jq --arg id "$id" --arg date "$date_iso" --arg commit "${GITHUB_SHA:0:7}" \
              --arg branch "${GITHUB_REF_NAME:-}" --arg message "$message" \
+             --argjson boards "$boards" \
              '.builds = ([{id:$id,date:$date,commit:$commit,branch:$branch,message:$message,
-                           dev:("builds/"+$id+"/manifest-dev.json"),
-                           release:("builds/"+$id+"/manifest-release.json"),
-                           devBin:("builds/"+$id+"/trailcamhub-esp32s3-dev.bin"),
-                           releaseBin:("builds/"+$id+"/trailcamhub-esp32s3-release.bin")}]
-                          + .builds) | .builds = (.builds | .[0:20])' \
+                           boards:$boards}]
+                          + .builds) | .builds = (.builds | .[0:10])' \
              store/versions.json > store/versions.json.tmp
           mv store/versions.json.tmp store/versions.json
           keep="$(jq -r '.builds[].id' store/versions.json)"

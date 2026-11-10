@@ -34,6 +34,7 @@ enum class CommandType {
     update,
     stop,
     restart,
+    ping,  // only keeps the hub awake (the installer sends it while connected)
     heap,
     ls,
     cat,

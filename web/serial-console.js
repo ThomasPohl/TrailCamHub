@@ -354,6 +354,9 @@ if (!("serial" in navigator)) {
   status.textContent = "Web Serial is not supported by this browser.";
 }
 
+// When the last line was sent to the hub (Date.now()).
+let lastSentAt = 0;
+
 // Sends one command line to the device (used by the device setup panel).
 async function sendLine(line) {
   if (!port || !port.writable) {
@@ -362,10 +365,22 @@ async function sendLine(line) {
   const writer = port.writable.getWriter();
   try {
     await writer.write(encoder.encode(`${line}\n`));
+    lastSentAt = Date.now();
   } finally {
     writer.releaseLock();
   }
 }
+
+// Every command keeps a hub on battery awake for a few minutes
+// (CONFIG_POWER_AWAKE_AFTER_ACTIVITY_MIN, 5 by default), so while this page
+// is connected it sends "ping" after two quiet minutes. Firmware without
+// "ping" answers with an error, which keeps it awake just the same.
+const KEEP_AWAKE_MS = 2 * 60 * 1000;
+setInterval(() => {
+  if (port && reading && Date.now() - lastSentAt >= KEEP_AWAKE_MS) {
+    command("ping", 5000).catch(() => {});
+  }
+}, 30 * 1000);
 
 window.trailcamSerial = {
   connect,

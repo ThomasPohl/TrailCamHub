@@ -162,15 +162,18 @@
       <section aria-labelledby="install-heading">
         <h2 id="install-heading">Install firmware</h2>
         <ol>
-          <li>Connect your ESP32-S3 board to this computer with a USB data cable.</li>
-          <li>Choose a build version and variant below, then select the board's serial port when your browser asks.</li>
+          <li>Connect your board to this computer with a USB data cable.</li>
+          <li>Choose the board, a build version and a variant below, then select the board's serial port when your browser asks.</li>
           <li>Confirm the installation in the browser dialog.</li>
         </ol>
 
         <div class="version-picker">
+          <label for="installer-board">Board</label>
+          <select id="installer-board"><option value="esp32s3">Waveshare ESP32-S3-A7670E-4G</option></select>
           <label for="version">Build version</label>
           <select id="version"><option>Loading…</option></select>
           <p id="build-info" class="note">&nbsp;</p>
+          <p id="build-missing" class="note" hidden>This build has no image for the chosen board (builds before the per-board installer have only the ESP32-S3-A7670E-4G). Choose a newer build.</p>
         </div>
 
         <div class="build-choice">
@@ -195,7 +198,7 @@
           </div>
         </div>
 
-        <p class="note">Each build is the CI firmware for the ESP32-S3 at that commit. The firmware activates and talks to a camera only where those connections are authorized.</p>
+        <p class="note">Each build is the CI firmware for the chosen board at that commit. The firmware activates and talks to a camera only where those connections are authorized.</p>
       </section>
 
       <section id="device-setup" aria-labelledby="setup-heading">
@@ -381,7 +384,7 @@
 
       <section aria-labelledby="manual-heading">
         <h2 id="manual-heading">Manual download</h2>
-        <p>Download the merged ESP32-S3 image for the selected version — <a id="dl-dev" href="#">development (verbose)</a> or <a id="dl-release" href="#">release</a> — and verify it against the <a id="dl-sha" href="#">SHA-256 checksums</a>. Flash it at offset <code>0x0</code>.</p>
+        <p>Download the merged image of the chosen board and version — <a id="dl-dev" href="#">development (verbose)</a> or <a id="dl-release" href="#">release</a> — and verify it against the <a id="dl-sha" href="#">SHA-256 checksums</a>. Flash it at offset <code>0x0</code>.</p>
       </section>
 
       <section id="tools" aria-labelledby="tools-heading">
