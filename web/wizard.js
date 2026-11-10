@@ -126,11 +126,22 @@
     for (const input of root.querySelectorAll('input[name="board"]')) {
       input.checked = input.value === id;
     }
-    const installable = Boolean(state.board?.installer);
-    $("#wz-install-ok").hidden = !installable;
-    $("#wz-install-none").hidden = installable;
+    if (state.board) {
+      window.trailcamInstaller?.setBoard(state.board.id);
+    }
+    showInstallable();
     $("#wz-image").textContent = state.board ? `trailcamhub-${state.board.id}-release.bin` : "";
   }
+
+  // The install button only for a board the chosen build has an image of.
+  function showInstallable() {
+    const installer = window.trailcamInstaller;
+    const installable =
+      Boolean(state.board?.installer) && (!installer || installer.hasImage(state.board.id));
+    $("#wz-install-ok").hidden = !installable;
+    $("#wz-install-none").hidden = installable;
+  }
+  window.trailcamInstaller?.onChange(showInstallable);
 
   fetch("./boards.json", { cache: "no-store" })
     .then((response) => (response.ok ? response.json() : Promise.reject()))

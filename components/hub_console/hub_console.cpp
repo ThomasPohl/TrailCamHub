@@ -511,6 +511,10 @@ void execute(const hub_console::Command &command)
         ota::force_check();
         request_cycle(session_controller_request_upload(), "update");
         break;
+    case CommandType::ping:
+        // Every command keeps the hub awake (note_activity() above).
+        reply("OK", "awake");
+        break;
     case CommandType::restart:
         // Answered before the restart so that the installer knows it was
         // understood; the USB console disappears for a moment.

@@ -33,7 +33,7 @@
         "power": "mains",
         "direction": "pull"
       },
-      "installer": false,
+      "installer": true,
       "notes": "USB stick with display and button; no PSRAM, so videos are limited."
     },
     {
@@ -52,7 +52,7 @@
         "power": "mains",
         "direction": "pull"
       },
-      "installer": false,
+      "installer": true,
       "notes": "USB stick with display, button and a web UI on its own access point."
     },
     {
@@ -69,7 +69,7 @@
         "power": "mains",
         "direction": "pull"
       },
-      "installer": false,
+      "installer": true,
       "notes": "Ethernet; Wi-Fi and BLE through the ESP32-C6 co-processor; web UI over Ethernet."
     },
     {
@@ -87,7 +87,7 @@
         "power": "mains",
         "direction": "pull"
       },
-      "installer": false,
+      "installer": true,
       "notes": "W5500 Ethernet (optional PoE module), microSD in SPI mode, web UI over Ethernet; mains or PoE power."
     }
   ]

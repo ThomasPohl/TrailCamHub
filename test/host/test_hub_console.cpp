@@ -224,6 +224,7 @@ TEST_CASE("stop and the diagnostic commands")
 {
     CHECK(parse_command("stop").type == CommandType::stop);
     CHECK(parse_command("restart").type == CommandType::restart);
+    CHECK(parse_command("ping").type == CommandType::ping);
     CHECK(parse_command("restart now").type == CommandType::invalid);
     CHECK(parse_command("stop now").type == CommandType::invalid);
 
