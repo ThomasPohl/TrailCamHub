@@ -688,12 +688,12 @@ void load_settings_for_cycle()
     // The camera login; empty settings: admin/admin (#52).
     camera_protocol_set_login(s_settings.camera_user.c_str(),
                               s_settings.camera_password.c_str());
-    // A WebDAV share at home gets every video; over the modem only the ones
-    // asked for.
-    camera_protocol_set_all_videos(hub_config::uplink_ready(s_settings) &&
-                                   hub_config::destination(s_settings) ==
-                                       hub_config::Destination::webdav &&
-                                   transport != hub_config::Transport::modem);
+    // WebDAV cannot ask for a video: the hub fetches them all, by default
+    // only over the home network (setting webdav_videos, #201). Videos over
+    // the modem's size limit are fetched but not uploaded.
+    camera_protocol_set_all_videos(
+        hub_config::uplink_ready(s_settings) &&
+        hub_config::webdav_fetches_videos(s_settings, transport));
 #if CONFIG_MODEM_UPLINK
     s_fsm.set_uplink_join_timeout_ms(
         s_uplink_modem ? CONFIG_MODEM_ATTACH_TIMEOUT_S * 1000u + 5000u : 0);

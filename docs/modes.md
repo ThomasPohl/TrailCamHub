@@ -71,8 +71,11 @@ Each sync creates `<camera-id>/thumb/` and `<camera-id>/media/` and copies new
 thumbnails, photos and videos (as MP4) with names from the camera's clock
 (`2026-11-08_15-04-05_<mediaId>.jpg`), plus `<camera-id>/camera.json` (battery,
 SD card). Over the home network the hub fetches **every** video from the
-camera for WebDAV, also in builds that otherwise fetch only requested ones;
-over the modem only those within the modem's size limit. `https://` checks
+camera for WebDAV, also in builds that otherwise fetch only requested ones
+(WebDAV has no way to ask for one). Over the modem it fetches none by
+default; `config set webdav_videos all` fetches them there too (videos above
+the modem's size limit are fetched but not uploaded), `none` never fetches
+videos for WebDAV, `home` is the default. `https://` checks
 the server certificate against the public CAs: a NAS with a self-signed
 certificate needs `http://` (unencrypted: only in a network you trust).
 

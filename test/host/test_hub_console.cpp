@@ -562,3 +562,33 @@ TEST_CASE("every setting can be named")
         CHECK(std::string(hub_config::key_name(key)) == name);
     }
 }
+
+TEST_CASE("webdav_videos decides which videos WebDAV gets")
+{
+    using hub_config::Key;
+    using hub_config::Transport;
+    using hub_config::validate;
+    CHECK(validate(Key::webdav_videos, "home").empty());
+    CHECK(validate(Key::webdav_videos, "all").empty());
+    CHECK(validate(Key::webdav_videos, "none").empty());
+    CHECK_FALSE(validate(Key::webdav_videos, "some").empty());
+    CHECK(hub_config::display_value(Key::webdav_videos, "") == "(default)");
+    Key key;
+    REQUIRE(hub_config::key_from_name("webdav_videos", key));
+    CHECK(key == Key::webdav_videos);
+
+    hub_config::Settings settings;
+    settings.destination = "webdav";
+    // Default (home): every video at home, none over the modem.
+    CHECK(hub_config::webdav_fetches_videos(settings, Transport::wifi));
+    CHECK(hub_config::webdav_fetches_videos(settings, Transport::ethernet));
+    CHECK_FALSE(hub_config::webdav_fetches_videos(settings, Transport::modem));
+    settings.webdav_videos = "all";
+    CHECK(hub_config::webdav_fetches_videos(settings, Transport::modem));
+    settings.webdav_videos = "none";
+    CHECK_FALSE(hub_config::webdav_fetches_videos(settings, Transport::wifi));
+    // Only for WebDAV.
+    settings.webdav_videos = "all";
+    settings.destination = "telegram";
+    CHECK_FALSE(hub_config::webdav_fetches_videos(settings, Transport::wifi));
+}

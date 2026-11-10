@@ -33,6 +33,7 @@
     webdav_url: panel.querySelector("#ds-current-webdav_url"),
     webdav_user: panel.querySelector("#ds-current-webdav_user"),
     webdav_password: panel.querySelector("#ds-current-webdav_password"),
+    webdav_videos: panel.querySelector("#ds-current-webdav_videos"),
     telegram_token: panel.querySelector("#ds-current-telegram_token"),
     telegram_chat: panel.querySelector("#ds-current-telegram_chat"),
     health_url: panel.querySelector("#ds-current-health_url"),
@@ -69,7 +70,7 @@
 
   // Remembered form values, so the settings need not be typed again on every
   // visit. Opt-out via the checkbox, which also deletes what is stored.
-  const FIELDS = ["wifi_ssid", "wifi_password", "power", "direction", "destination", "webdav_url", "webdav_user", "webdav_password", "telegram_token", "telegram_chat", "health_url", "web_password", "camera_user", "camera_password", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
+  const FIELDS = ["wifi_ssid", "wifi_password", "power", "direction", "destination", "webdav_url", "webdav_user", "webdav_password", "webdav_videos", "telegram_token", "telegram_chat", "health_url", "web_password", "camera_user", "camera_password", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
   const STORAGE_KEY = "trailcamhub.deviceSetup";
   const PREFERENCE_KEY = "trailcamhub.deviceSetup.remember";
   const rememberBox = panel.querySelector("#ds-remember");
