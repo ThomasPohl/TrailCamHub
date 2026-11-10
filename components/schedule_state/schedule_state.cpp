@@ -289,6 +289,10 @@ Effective effective()
         out.checkin_min = hub_config::kTelegramMaxCheckinMin;
     }
     out.settings.checkin_min = out.checkin_min;
+    if (uplink && mode.destination == hub_config::Destination::telegram) {
+        // Also after back-off and a low hub battery (#200).
+        out.settings.checkin_max_min = hub_config::kTelegramMaxCheckinMin;
+    }
     out.settings.uplink = uplink;
     out.sleeps = hub_config::sleeps(mode, hub_config::capabilities());
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;

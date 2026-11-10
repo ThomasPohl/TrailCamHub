@@ -529,3 +529,27 @@ TEST_CASE("settings come from the backend, the hub or the build")
     CHECK(origin == Origin::built_in);
     CHECK(std::string(origin_name(Origin::remote)) == "remote");
 }
+
+TEST_CASE("checkin_max_min bounds the back-off of check-ins (Telegram)")
+{
+    Settings settings = settings_with("*=60", 240);
+    State state = initial_state();
+    state.last_camera = at(0);
+    state.last_checkin = at(0);
+    state.checkin_failures = 3;  // 4 h x 8 = 32 h, kMaxStretchedMin: 24 h
+
+    CHECK(next_times(settings, state, at(0, 1), kLocal).checkin == at(24));
+
+    settings.checkin_max_min = 12 * 60;
+    CHECK(next_times(settings, state, at(0, 1), kLocal).checkin == at(12));
+
+    // Without failures the interval itself applies.
+    state.checkin_failures = 0;
+    CHECK(next_times(settings, state, at(0, 1), kLocal).checkin == at(4));
+
+    // A critical hub battery is not bounded by it.
+    settings.power = power_settings_for_tests();
+    settings.power.critical_checkin_min = 24 * 60;
+    CHECK(set_hub_battery(state, settings.power, 8, 3600, false));
+    CHECK(next_times(settings, state, at(0, 1), kLocal).checkin == at(24));
+}
