@@ -44,6 +44,11 @@ struct Request {
     // HTTP Basic authentication if `user` is not empty.
     std::string user;
     std::string password;
+    // The URL carries a secret (the Telegram bot token is part of the path):
+    // ESP-IDF's HTTP client logs the URL on some errors ("Error parse url
+    // ...", redirects), so its log is switched off for this request. Our own
+    // messages never contain the URL.
+    bool secret_url = false;
     std::uint64_t body_size = 0;
     BodyReader body;  // may be empty with body_size 0
 };
