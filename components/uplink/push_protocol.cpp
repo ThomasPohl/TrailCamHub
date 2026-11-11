@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <ctime>
 
+#include "uplink_protocol.hpp"
+
 namespace uplink
 {
 namespace push
@@ -73,31 +75,10 @@ std::int64_t to_int(const std::string &raw)
     return raw.empty() ? 0 : std::strtoll(raw.c_str(), nullptr, 10);
 }
 
+// A JSON string with its quotes.
 std::string json_string(const std::string &text)
 {
-    std::string out = "\"";
-    for (unsigned char c : text) {
-        switch (c) {
-        case '"':
-            out += "\\\"";
-            break;
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\n':
-            out += "\\n";
-            break;
-        default:
-            if (c < 0x20) {
-                char escaped[8];
-                std::snprintf(escaped, sizeof(escaped), "\\u%04x", c);
-                out += escaped;
-            } else {
-                out += (char)c;
-            }
-        }
-    }
-    return out + "\"";
+    return "\"" + json_escape(text) + "\"";
 }
 
 }  // namespace
