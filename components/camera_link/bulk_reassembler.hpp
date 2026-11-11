@@ -1,7 +1,7 @@
 #pragma once
 
-// Reassembles a large media record streamed on the camera's bulk data channel
-// (D0/D1 subtype 0x03 photo, 0x04 thumbnail). Each DRW frame carries up to
+// Reassembles a small media record (a thumbnail) streamed on the camera's bulk
+// data channel (D0/D1 subtype 0x04) in RAM. Each DRW frame carries up to
 // 1024 payload bytes tagged with a 16-bit sequence; frame N holds record bytes
 // [N*1024, N*1024+size). The record itself is one ARTEMIS record: the 20-byte
 // header (ver/typ/len, little-endian) followed by `len` payload bytes (a
@@ -18,8 +18,11 @@ class BulkReassembler
 {
   public:
     static constexpr std::size_t kFramePayload = 1024;
-    // Guard against a corrupt length field claiming an absurd record size.
-    static constexpr std::size_t kMaxRecordSize = 8u * 1024u * 1024u;
+    // The whole record is kept in RAM and a failed allocation restarts the
+    // hub (C++ exceptions are off), so a length field must not be able to
+    // claim more than the hub can hold. Thumbnails are a few 10 KB; photos
+    // and videos are streamed to the SD card instead (bulk_stream.hpp).
+    static constexpr std::size_t kMaxRecordSize = 256u * 1024u;
 
     enum class Status {
         incomplete,  // more frames needed

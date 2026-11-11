@@ -159,6 +159,29 @@ TEST_CASE("BulkReassembler reports why a record was rejected")
           BulkReassembler::Status::invalid);
     CHECK(b.invalid_reason() == BulkReassembler::InvalidReason::bad_length);
 
+    // The largest record that is kept in RAM, and one byte more.
+    const auto header_with_len = [&](std::uint32_t len) {
+        std::vector<std::uint8_t> h(kFrame, 0);
+        std::copy(sig, sig + 8, h.begin());
+        h[16] = static_cast<std::uint8_t>(len);
+        h[17] = static_cast<std::uint8_t>(len >> 8);
+        h[18] = static_cast<std::uint8_t>(len >> 16);
+        h[19] = static_cast<std::uint8_t>(len >> 24);
+        return h;
+    };
+    const std::uint32_t max_len =
+        static_cast<std::uint32_t>(BulkReassembler::kMaxRecordSize) - 20;
+    BulkReassembler fits;
+    const std::vector<std::uint8_t> fits_header = header_with_len(max_len);
+    CHECK(fits.feed(0, fits_header.data(), fits_header.size()) ==
+          BulkReassembler::Status::incomplete);
+    BulkReassembler too_large;
+    const std::vector<std::uint8_t> large_header = header_with_len(max_len + 1);
+    CHECK(too_large.feed(0, large_header.data(), large_header.size()) ==
+          BulkReassembler::Status::invalid);
+    CHECK(too_large.invalid_reason() ==
+          BulkReassembler::InvalidReason::bad_length);
+
     CHECK(std::string(BulkReassembler::reason_name(
               BulkReassembler::InvalidReason::bad_signature)) ==
           "bad signature");
