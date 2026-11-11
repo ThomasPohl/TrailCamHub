@@ -59,8 +59,9 @@ schedules) sits in separate files and is covered by the host tests in
 
 ## Session state machine
 
-Components do not call each other directly. They report events through
-callbacks to the session controller, which runs them in one task:
+The radio components (`camera_ble`, `camera_wifi`, `camera_link`) and the
+uplink do not call each other. They report events through callbacks to the
+session controller, which runs them in one task:
 
 ```mermaid
 stateDiagram-v2
@@ -111,7 +112,54 @@ Each camera keeps its data in `/sdcard/<camera-id>/`: `camera.json` (device
 info), `catalog.csv` (which media are known and synced) and `thumb/`, plus
 `media/` for photos and videos. A sync covers every camera on the card, so one
 hub can serve several cameras. How a file is identified across camera SD
-changes is in [media-identity.md](media-identity.md).
+changes is in [media-identity.md](media-identity.md); the file formats are in
+[sd-layout.md](sd-layout.md).
+
+## Tasks and who owns what
+
+| Task | Stack | Runs | Owns |
+|---|---|---|---|
+| `session_ctrl` | 6 KB | the state machine, from one event queue | FSM, cycle settings, the published status (under a lock) |
+| `camera_session` | 8 KB | one camera session per request (`camera_protocol_run()`) | all state of `camera_link` during a session; the camera's directory on the SD card |
+| `uplink` | 12 KB (TLS) | one sync per request (`uplink::run()`) | the catalogs of all cameras during the sync |
+| `scheduler` | 6 KB | requests cycles on the plan, enters deep sleep | the schedule state (RTC memory) |
+| `hub_console` | 6 KB | serial commands | nothing shared; calls the request interface |
+| `sd_log` | 4 KB | writes the log ring buffer to the card | the log files |
+| `sd_writer` | 4 KB | writes downloads to the card (PSRAM boards only) | the open media file |
+| `modem` | 4 KB | modem power, registration, PPP | the modem driver |
+| `dongle_ui` | 4 KB | display and button | the frame buffer |
+| HTTP server | 6 KB | web UI requests | reads the SD card; no session state |
+
+Rules that keep this safe:
+
+- The controller never runs a camera session and a sync at the same time, so
+  only one task writes a camera's catalog ([sd-layout.md](sd-layout.md)).
+- Other tasks reach the session only through
+  `session_controller_request_*()` and the status listeners. What a session
+  reports back (`camera_protocol_stored_items()` and similar) is atomic or
+  copied under a lock.
+- Callbacks run in the task that reports the event; a front end copies what
+  it needs and returns.
+
+## Memory
+
+C++ exceptions are off: an allocation that fails restarts the hub. Buffers
+that scale with the data are therefore bounded, and the large ones exist
+only with PSRAM. Sizes from the code:
+
+| Buffer | With PSRAM | Without | When |
+|---|---|---|---|
+| Video reorder window | 256 frames × 1472 B = 377 KB | 8 frames = 12 KB | video download |
+| SD writer ring buffer | 4 MB | none (direct writes) | downloads |
+| Thumbnail record | bounded by `BulkReassembler::kMaxRecordSize` | same | one thumbnail at a time |
+| Catalog | 48 B per recording | same | session, sync (all cameras) |
+| Log ring buffer | 64 KB (`SD_LOG_BUFFER_KB`) | same | always |
+| Display frame buffer | 160 × 80 × 2 B = 26 KB | same | T-Dongles |
+
+Photos and videos are streamed to the card and never held whole in RAM.
+Boards without PSRAM (T-Dongle-S3, WROOM-32D) fetch thumbnails only by
+default. The free and minimum heap are logged at fixed stages and with
+**Memory log interval**; the console command `heap` (development builds) shows them.
 
 ## BLE activation
 
