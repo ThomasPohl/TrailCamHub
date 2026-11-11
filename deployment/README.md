@@ -30,7 +30,7 @@ The merged image includes the bootloader, partition table, initial OTA data, and
 
 The default CI build scans for a camera advertising the name `TC100_ED3B` or service UUID `0x8801` and connects only to that camera. It sends ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) only if the camera's service `0x8801` has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. The payload can be changed or disabled in `menuconfig`. Use this firmware only with a camera you are authorized to access.
 
-After the camera returns Wi-Fi credentials over BLE, the firmware joins the camera's access point and runs the experimental UDP discovery, PRE_LOGIN, and ARTEMIS exchange described in the project README. It decrypts the login response, logs the session token, and requests the media list (cmdId 768), logging the decrypted response. Media downloads are not implemented yet.
+After the camera returns Wi-Fi credentials over BLE, the firmware joins the camera's access point and runs the experimental UDP discovery, PRE_LOGIN, and ARTEMIS exchange described in `docs/architecture.md` of the repository. It decrypts the login response, logs the session token, and requests the media list (cmdId 768), logging the decrypted response. Media downloads are not implemented yet.
 
 At boot the firmware logs the reset reason, the available PSRAM, and memory statistics, and mounts a FAT-formatted microSD card at `/sdcard` if one is inserted. The card is never formatted by the firmware. The partition table provides two 4 MB OTA slots and a core dump partition; OTA updates themselves are not implemented yet. The image requires the board's 16 MB flash and octal PSRAM; on hardware without PSRAM it stops during boot.
 
