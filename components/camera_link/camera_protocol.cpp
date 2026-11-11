@@ -31,6 +31,7 @@
 #include "time_sync.h"
 #include "camera_protocol.h"
 #include "camera_udp_transport.h"
+#include "catalog_file.hpp"
 #include "bulk_reassembler.hpp"
 #include "bulk_stream.hpp"
 #include "device_info.hpp"
@@ -184,6 +185,11 @@ static std::string s_camera_id;
 // size, because other tasks read it after the session.
 static char s_last_camera_id[48];
 static camera::artemis::MediaCatalog s_catalog;
+// Storing a thumbnail does not rewrite the catalog each time: it is saved
+// after this many thumbnails or seconds, when the thumbnails are complete and
+// when the session ends. Thumbnails stored after the last save are fetched
+// again if the power fails.
+static camera::store::SaveThrottle s_catalog_saves(16, 10 * 1000 * 1000);
 static std::vector<camera::artemis::CatalogEntry> s_thumb_queue;
 static size_t s_thumb_index;
 static bool s_thumb_emitted;
@@ -248,6 +254,22 @@ static camera_protocol_progress_cb_t s_progress_callback;
 // Set when writing a video failed: no further downloads.
 static bool s_stop_downloads;
 
+// Writes the catalog of the session's camera with every change so far.
+static void save_session_catalog()
+{
+    camera::store::save_catalog(s_camera_id, s_catalog);
+    s_catalog_saves.saved();
+}
+
+// Writes the catalog if thumbnails were stored since the last save.
+static void flush_catalog()
+{
+    if (s_catalog_saves.pending() && !s_camera_id.empty()) {
+        save_session_catalog();
+    }
+    s_catalog_saves.saved();
+}
+
 static bool send_artemis_command(uint32_t cmd_id, const char *extra_fields,
                                  const char *context);
 static void queue_bulk_ack(int socket_fd,
@@ -280,7 +302,7 @@ static camera::link::PlaybackDownload s_video(
          if (stored) {
              s_catalog.set_flag(e.media_id,
                                 camera::artemis::MediaCatalog::kFileDownloaded);
-             camera::store::save_catalog(s_camera_id, s_catalog);
+             save_session_catalog();
              ++s_download_stored;
              ++s_stored_items;
          }
@@ -324,6 +346,7 @@ static bool request_current_thumbnail()
                  (unsigned)s_catalog.count_with_flag(
                      camera::artemis::MediaCatalog::kThumbPresent),
                  (unsigned)s_catalog.size());
+        flush_catalog();
         start_downloads();
         return false;
     }
@@ -538,7 +561,7 @@ static void finish_current_download(bool stored, bool stop_all)
                  (long long)elapsed_ms,
                  (unsigned long long)(elapsed_ms > 0 ? bytes / elapsed_ms : 0));
         s_catalog.set_flag(e.media_id, MediaCatalog::kFileDownloaded);
-        camera::store::save_catalog(s_camera_id, s_catalog);
+        save_session_catalog();
         ++s_download_stored;
         ++s_stored_items;
     } else {
@@ -557,7 +580,7 @@ static void finish_current_download(bool stored, bool stop_all)
             ESP_LOGW(TAG, "Requested video %lld: %u of %u attempts failed",
                      (long long)e.media_id, (unsigned)attempts,
                      (unsigned)MediaCatalog::kMaxVideoAttempts);
-            camera::store::save_catalog(s_camera_id, s_catalog);
+            save_session_catalog();
         }
     }
     s_download_stream.reset();
@@ -895,7 +918,9 @@ static bool handle_bulk_frame(int socket_fd,
                                                    jpeg_size,
                                                    entry->media_time)) {
                     s_catalog.set_flag(media_id, MediaCatalog::kThumbPresent);
-                    camera::store::save_catalog(s_camera_id, s_catalog);
+                    if (s_catalog_saves.note_change(esp_timer_get_time())) {
+                        save_session_catalog();
+                    }
                     ++s_stored_items;
                 } else {
                     ESP_LOGW(TAG, "Could not store thumbnail dir %lld num %lld",
@@ -1039,7 +1064,7 @@ static void finish_scan_list(bool complete)
                      (unsigned)gone);
         }
     }
-    camera::store::save_catalog(s_camera_id, s_catalog);
+    save_session_catalog();
     s_thumb_queue = s_catalog.missing_thumbnails();
     s_thumb_index = 0;
     s_thumb_emitted = false;
@@ -1570,6 +1595,9 @@ esp_err_t camera_protocol_run(const esp_ip4_addr_t *gateway)
     camera::store::sd_writer_begin_session();
     const esp_err_t error = connect_and_run_session(*gateway);
     camera::store::sd_writer_end_session();
+    // A session that ended early (stop, timeout, camera closed) may have
+    // stored thumbnails since the last save.
+    flush_catalog();
     // All requested work is done: record the sync with the camera.
     if (s_work_done && !s_camera_id.empty() &&
         !camera::store::mark_camera_synced(s_camera_id, (int64_t)time(NULL))) {
