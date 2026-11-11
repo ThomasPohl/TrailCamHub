@@ -42,9 +42,12 @@ and only on a board you may modify.
 The **Firmware Package** workflow builds every board in `boards.json` with
 `"installer": true` (ESP32, ESP32-S3, ESP32-C5 and ESP32-P4 targets) and
 publishes the merged images with manifests and checksums after each push to
-`main`; a manual *Run workflow* publishes a branch build. Pull requests build
-the packages but never publish. The installer therefore shows the latest
-`main`, not a pinned release; releases are on the
+`main` and for each tag `vX.Y.Z` (once its release is published); a manual
+*Run workflow* publishes a branch build. Pull requests build the packages but
+never publish. The installer preselects the latest build, which is usually
+`main`; a tag build is listed by its version (`v0.1.0 (ebc98a1) —
+2026-11-08`), and the newest release is marked. The site keeps the newest 5
+releases and the newest 10 other builds. All releases are on the
 [releases page](https://github.com/ThomasPohl/TrailCamHub/releases), and the
 hub updates itself from there ([ota.md](ota.md)).
 

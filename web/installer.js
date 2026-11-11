@@ -38,6 +38,31 @@
     return id === "esp32s3" ? build : null;
   }
 
+  // The release tag of a build ("v0.1.0"), or "". Builds published by hand
+  // from a tag before "version" existed have the tag in "branch".
+  function versionOf(build) {
+    var name = build.version || build.branch || "";
+    return /^v\d+\.\d+\.\d+/.test(name) ? name : "";
+  }
+
+  // "v0.1.0 (ebc98a1) — 2026-11-08" for a tag build, otherwise date and
+  // commit. The newest build and the newest release (a tag without a suffix)
+  // are marked.
+  function labelOf(build, index, latestRelease) {
+    var version = versionOf(build);
+    var label = version
+      ? version + " (" + build.commit + ") — " + String(build.date).slice(0, 10)
+      : build.date + " (" + build.commit + ")";
+    var marks = [];
+    if (index === 0) {
+      marks.push("latest");
+    }
+    if (build === latestRelease) {
+      marks.push("latest release");
+    }
+    return marks.length ? label + " — " + marks.join(", ") : label;
+  }
+
   function setManifest(button, path) {
     if (!button) {
       return;
@@ -142,12 +167,13 @@
         info.textContent = "Run the Firmware Package workflow to publish a build.";
         return;
       }
+      var latestRelease = builds.find(function (build) {
+        return /^v\d+\.\d+\.\d+$/.test(versionOf(build));
+      });
       builds.forEach(function (build, index) {
         var option = document.createElement("option");
         option.value = String(index);
-        option.textContent =
-          build.date + " (" + build.commit + ")" +
-          (index === 0 ? " — latest" : "");
+        option.textContent = labelOf(build, index, latestRelease);
         select.appendChild(option);
       });
       select.addEventListener("change", function () {

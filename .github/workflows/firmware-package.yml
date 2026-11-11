@@ -357,13 +357,18 @@ jobs:
 
   deploy-installer:
     name: Deploy web installer
-    # Publishes on every push to main, and on a manual "Run workflow" dispatch
-    # from any branch (Actions tab) so a branch build can be put on the public
-    # installer without merging. Pull requests never deploy.
+    # Publishes on every push to main, on every tag vX.Y.Z (after its release
+    # is published), and on a manual "Run workflow" dispatch from any branch
+    # (Actions tab) so a branch build can be put on the public installer
+    # without merging. Pull requests never deploy.
+    # `release` only runs for tags, so "skipped" must not skip this job.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    needs: build
+      !cancelled() && needs.build.result == 'success' &&
+      (needs.release.result == 'success' || needs.release.result == 'skipped') &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))))
+    needs: [build, release]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -373,14 +378,18 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # Deploys run one after the other. A newer deploy must not cancel a
+    # running one: a release is often tagged right after the merge to main,
+    # and cancelling either run would drop its build from the installer.
     concurrency:
       group: github-pages
-      cancel-in-progress: true
+      cancel-in-progress: false
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
       - name: Configure GitHub Pages
+        id: pages
         uses: actions/configure-pages@v6
 
       - name: Set up Node.js
@@ -408,6 +417,7 @@ jobs:
           path: artifact
 
       - name: Accumulate build and assemble site
+        id: store
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -434,6 +444,7 @@ jobs:
           # merged images and the ESP Web Tools manifests of each board with
           # "installer": true in boards.json.
           id="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
           dir="store/builds/$id"
           boards='{}'
           for board in $(jq -r '.boards[] | select(.installer) | .id' boards.json); do
@@ -476,17 +487,30 @@ jobs:
             exit 1
           fi
 
-          # Prepend to the version index and keep the newest 10 builds (all
-          # boards together are about 20 MB per build; the Pages site has a
-          # 1 GB limit).
+          # Prepend to the version index. A build of a tag carries the tag as
+          # its "version" (the installer lists it by that name). Keep the
+          # newest 5 releases (vX.Y.Z without a suffix) and the newest 10
+          # other builds, so that a release stays installable while main
+          # moves on (all boards together are about 20 MB per build; the
+          # Pages site has a 1 GB limit). Builds published by hand from a tag
+          # before "version" existed have the tag in "branch".
           date_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           message="$(git log -1 --pretty=%s "$GITHUB_SHA" 2>/dev/null || echo '')"
+          version=""
+          if [[ "${GITHUB_REF_TYPE:-}" == tag && "${GITHUB_REF_NAME:-}" == v* ]]; then
+            version="$GITHUB_REF_NAME"
+          fi
           jq --arg id "$id" --arg date "$date_iso" --arg commit "${GITHUB_SHA:0:7}" \
              --arg branch "${GITHUB_REF_NAME:-}" --arg message "$message" \
-             --argjson boards "$boards" \
-             '.builds = ([{id:$id,date:$date,commit:$commit,branch:$branch,message:$message,
-                           boards:$boards}]
-                          + .builds) | .builds = (.builds | .[0:10])' \
+             --arg version "$version" --argjson boards "$boards" \
+             'def release: (.version // .branch // "") | test("^v[0-9]+[.][0-9]+[.][0-9]+$");
+              ([{id:$id,date:$date,commit:$commit,branch:$branch,message:$message,
+                 boards:$boards}
+                | if $version != "" then .version = $version else . end]
+               + .builds) as $all
+              | (([$all[] | select(release)] | .[0:5])
+                 + ([$all[] | select(release | not)] | .[0:10]) | map(.id)) as $keep
+              | .builds = [$all[] | select(.id as $i | $keep | index($i))]' \
              store/versions.json > store/versions.json.tmp
           mv store/versions.json.tmp store/versions.json
           keep="$(jq -r '.builds[].id' store/versions.json)"
@@ -526,10 +550,91 @@ jobs:
           cp -r app/dist site/app
 
       - name: Upload GitHub Pages artifact
+        id: pages-artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
+      # Same API calls as actions/deploy-pages, but with a build version that
+      # is unique per run. The action uses the commit SHA, and Pages then
+      # keeps the site it already has for that commit: a second deploy of a
+      # published commit (a tag on a commit of main, a re-run) reported
+      # success without going live (#161).
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/github-script@v8
+        env:
+          ARTIFACT_ID: ${{ steps.pages-artifact.outputs.artifact_id }}
+        with:
+          script: |
+            const version = `${context.sha}-${context.runId}-${process.env.GITHUB_RUN_ATTEMPT}`;
+            const { data: created } = await github.request(
+              'POST /repos/{owner}/{repo}/pages/deployments',
+              {
+                ...context.repo,
+                artifact_id: Number(process.env.ARTIFACT_ID),
+                pages_build_version: version,
+                oidc_token: await core.getIDToken(),
+              },
+            );
+            const id = created.id || created.status_url?.split('/')?.pop() || version;
+            core.info(`Created deployment ${id}`);
+            core.setOutput('page_url', created.page_url);
+
+            const failed = [
+              'deployment_failed',
+              'deployment_content_failed',
+              'deployment_cancelled',
+              'deployment_lost',
+            ];
+            const deadline = Date.now() + 10 * 60 * 1000;
+            let errors = 0;
+            while (Date.now() < deadline && errors < 10) {
+              await new Promise((resolve) => setTimeout(resolve, 5000));
+              let status;
+              try {
+                ({ data: { status } } = await github.request(
+                  'GET /repos/{owner}/{repo}/pages/deployments/{id}',
+                  { ...context.repo, id },
+                ));
+              } catch (error) {
+                errors += 1;
+                core.warning(`Could not read the deployment status: ${error.message}`);
+                continue;
+              }
+              core.info(`Deployment status: ${status}`);
+              if (status === 'succeed') {
+                return;
+              }
+              if (failed.includes(status)) {
+                core.setFailed(`Pages deployment failed: ${status}`);
+                return;
+              }
+            }
+            await github
+              .request('POST /repos/{owner}/{repo}/pages/deployments/{id}/cancel', {
+                ...context.repo,
+                id,
+              })
+              .catch(() => {});
+            core.setFailed('Pages deployment did not finish in time');
+
+      # "Success" above is what Pages reports; make sure the build is really
+      # on the public site.
+      - name: Check that the build is live
+        shell: bash
+        env:
+          BUILD_ID: ${{ steps.store.outputs.id }}
+          BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            if curl -fsS "$BASE_URL/versions.json?run=$GITHUB_RUN_ID-$attempt" \
+                | jq -e --arg id "$BUILD_ID" 'any(.builds[]; .id == $id)' >/dev/null; then
+              echo "Build $BUILD_ID is live at $BASE_URL"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Build $BUILD_ID is not in $BASE_URL/versions.json after the deploy"
+          exit 1
