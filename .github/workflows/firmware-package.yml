@@ -419,8 +419,10 @@ jobs:
           repo_url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           # Restore the persistent build store (an orphan branch) or start one.
+          store_head=""
           if git ls-remote --exit-code --heads "$repo_url" installer-builds >/dev/null 2>&1; then
             git clone --quiet --branch installer-builds --single-branch --depth 1 "$repo_url" store
+            store_head="$(git -C store rev-parse HEAD)"
           else
             mkdir store
             git -C store init -q
@@ -493,14 +495,26 @@ jobs:
             grep -qx "$bid" <<<"$keep" || rm -rf "$d"
           done
 
-          # Commit and push the store.
+          # Publish the store as a single commit without a parent and replace
+          # the branch with it (#207). A normal commit would keep the pruned
+          # images in the branch history, about 20 MB more per deploy. This
+          # bot-only branch is the one exception to "no force pushes"
+          # (CLAUDE.md). The lease makes the push fail instead of dropping a
+          # build if the branch moved since it was cloned.
           git -C store config user.name "github-actions[bot]"
           git -C store config user.email "github-actions[bot]@users.noreply.github.com"
           git -C store remote set-url origin "$repo_url" 2>/dev/null \
             || git -C store remote add origin "$repo_url"
           git -C store add -A
-          git -C store commit -q -m "installer build $id" || echo "nothing to commit"
-          git -C store push -q origin installer-builds
+          store_commit="$(git -C store commit-tree "$(git -C store write-tree)" \
+            -m "installer build $id")"
+          if [[ -n "$store_head" ]]; then
+            git -C store push -q \
+              --force-with-lease="refs/heads/installer-builds:$store_head" \
+              origin "$store_commit:refs/heads/installer-builds"
+          else
+            git -C store push -q origin "$store_commit:refs/heads/installer-builds"
+          fi
 
           # Assemble the published site: page assets + all stored builds.
           mkdir -p site
