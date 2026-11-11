@@ -71,6 +71,10 @@ cmake --build build-host --parallel
 ctest --test-dir build-host --output-on-failure
 ```
 
+CI runs them a second time with AddressSanitizer and
+UndefinedBehaviorSanitizer (`-DHOST_TESTS_SANITIZE=ON` in a build directory
+of its own); a finding fails the run.
+
 Files covered by host tests must not include ESP-IDF headers. New parsing or
 protocol logic belongs in such files, with a test in `test/host`.
 
@@ -113,7 +117,7 @@ ignored by Git; keep `build/` for incremental builds instead of running
 
 | Workflow | What it does |
 |---|---|
-| **Firmware Package** | builds every board (development and release), the camera mock, runs the host tests and the clang-format check, reports size per component (on PRs compared with the target branch, warning below 10 % free), publishes the installer from `main` and releases from tags |
+| **Firmware Package** | builds every board (development and release), the camera mock, runs the host tests (also with ASan/UBSan) and the clang-format check, reports size per component (on PRs compared with the target branch, warning below 10 % free), publishes the installer from `main` and releases from tags |
 | **App** | lints, tests and builds the Telegram Mini App |
 | **Backend** | tests and deploys the optional AWS backend |
 | **Badges** | updates the README badges |

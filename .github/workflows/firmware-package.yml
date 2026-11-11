@@ -256,6 +256,16 @@ jobs:
           .github/scripts/run-annotated.sh "Host test build" cmake --build build-host --parallel
           .github/scripts/run-annotated.sh "Host tests" ctest --test-dir build-host --output-on-failure
 
+      - name: Build and run host tests with sanitizers
+        shell: bash
+        env:
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: |
+          set -euo pipefail
+          cmake -S test/host -B build-host-sanitize -DCMAKE_BUILD_TYPE=Debug -DHOST_TESTS_SANITIZE=ON
+          .github/scripts/run-annotated.sh "Host test build (sanitizers)" cmake --build build-host-sanitize --parallel
+          .github/scripts/run-annotated.sh "Host tests (sanitizers)" ctest --test-dir build-host-sanitize --output-on-failure
+
       - name: Check the dongle screenshots
         shell: bash
         run: |
