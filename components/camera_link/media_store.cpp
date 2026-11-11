@@ -13,6 +13,7 @@
 
 #include "artemis_json.hpp"
 #include "camera_clock.hpp"
+#include "catalog_file.hpp"
 #include "esp_log.h"
 #include "media_files.hpp"
 #include "sd_card.h"
@@ -205,6 +206,9 @@ bool load_catalog(const std::string &camera_id,
                   camera::artemis::MediaCatalog &out)
 {
     const std::string path = camera_dir(camera_id) + "/catalog.csv";
+    if (recover_replaced_file(path)) {
+        ESP_LOGW(TAG, "Recovered %s from an interrupted save", path.c_str());
+    }
     std::string text;
     if (!read_file(path, text)) {
         // No file yet is a normal first run: start with an empty catalog.
@@ -235,13 +239,12 @@ bool save_catalog(const std::string &camera_id,
     if (!ensure_dir(dir))
         return false;
     const std::string path = dir + "/catalog.csv";
-    const std::string tmp = path + ".tmp";
     const std::string text = catalog.serialize();
-    if (!write_file(tmp, text.data(), text.size()))
+    if (!write_file(replacement_path(path), text.data(), text.size()))
         return false;
-    // Replace atomically; remove any stale target first (FAT rename quirk).
-    remove(path.c_str());
-    if (rename(tmp.c_str(), path.c_str()) != 0) {
+    // A power loss from here on leaves the complete temporary file, which
+    // load_catalog() takes over (catalog_file.hpp).
+    if (!replace_file(path)) {
         ESP_LOGW(TAG, "rename %s failed: errno %d", path.c_str(), errno);
         return false;
     }

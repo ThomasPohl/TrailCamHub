@@ -62,11 +62,13 @@ inline const char *media_extension(const std::uint8_t *head, std::size_t size)
 // Loads the catalog for `camera_id`. A missing file is treated as an empty
 // catalog and still returns true; false means the SD card or file could not be
 // read, or the file was not a valid catalog. A catalog before v3 has its files
-// renamed from dir/num to the mediaId and is saved as v3 right away.
+// renamed from dir/num to the mediaId and is saved as v3 right away. A save
+// that a power loss interrupted is completed first (catalog_file.hpp).
 bool load_catalog(const std::string &camera_id,
                   camera::artemis::MediaCatalog &out);
 
-// Writes the catalog atomically (temp file + rename). Returns false on error.
+// Writes the catalog through a temporary file, so that a complete catalog is
+// on the card at any time. Returns false on error.
 bool save_catalog(const std::string &camera_id,
                   const camera::artemis::MediaCatalog &catalog);
 

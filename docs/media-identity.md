@@ -65,6 +65,16 @@ Checked on hardware by the maintainer (November 2026):
   `mediaId` and repeated `mediaId`s are dropped. Older firmware does not read
   v3 and starts with an empty catalog.
 
+- The catalog is saved through `catalog.csv.tmp` (written, then
+  `catalog.csv` removed, then renamed; FAT cannot rename onto a file). If the
+  power fails in between, the next load finishes the rename, so a complete
+  catalog is always on the card (`catalog_file.cpp`). A `.tmp` next to a
+  `catalog.csv` is an interrupted write and is ignored.
+- While thumbnails are fetched the catalog is saved every 16 thumbnails or
+  10 seconds, when they are complete and when the session ends, not after
+  each one. Thumbnails stored after the last save are fetched again if the
+  power fails; downloads and video requests are saved at once.
+
 ## Hub SD files
 
 - `/sdcard/<camera-id>/thumb/<mediaId>.jpg` and
