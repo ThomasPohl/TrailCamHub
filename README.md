@@ -191,6 +191,10 @@ ctest --test-dir build-host --output-on-failure
 
 Code in these hardware-independent files must not include ESP-IDF headers. New parsing or protocol logic should be placed in such files and covered by a test in `test/host`.
 
+#### Camera mock
+
+For bench tests without the real camera, an ESP32-WROOM can play the TC100: [`tools/camera_mock/`](tools/camera_mock/README.md) is a separate ESP-IDF project (target `esp32`) that advertises like the camera, opens its access point and answers discovery, login, device info and the media list with responses replayed from real captures. The hub runs a full `camlist` cycle against it.
+
 #### Build profiles
 
 The firmware has two build profiles:
