@@ -36,6 +36,7 @@ set(sd_log_dir ${repo_root}/components/sd_log)
 set(ota_dir ${repo_root}/components/ota_update)
 set(battery_dir ${repo_root}/components/hub_battery)
 set(copro_dir ${repo_root}/components/coprocessor_update)
+set(mock_dir ${repo_root}/tools/camera_mock/core)
 
 add_executable(host_tests
     test_main.cpp
@@ -43,6 +44,7 @@ add_executable(host_tests
     test_ble_advertising.cpp
     test_ble_wifi_response.cpp
     test_button_detector.cpp
+    test_camera_mock.cpp
     test_gatt_profile.cpp
     test_hex_payload.cpp
     test_artemis_crypto.cpp
@@ -129,7 +131,11 @@ add_executable(host_tests
     ${sd_log_dir}/log_files.cpp
     ${ota_dir}/ota_policy.cpp
     ${copro_dir}/coprocessor_version.cpp
-    ${battery_dir}/battery_level.cpp)
+    ${battery_dir}/battery_level.cpp
+    ${mock_dir}/ble_frames.cpp
+    ${mock_dir}/capture_fixtures.cpp
+    ${mock_dir}/mock_camera.cpp
+    ${mock_dir}/mock_wire.cpp)
 target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} ${time_dir}
                                               ${session_dir} ${ui_dir}
                                               ${web_dir}
@@ -137,7 +143,7 @@ target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} 
                                               ${console_dir} ${uplink_dir}
                                               ${wifi_dir} ${schedule_dir}
                                               ${sd_log_dir} ${ota_dir}/include ${battery_dir}
-                                              ${copro_dir})
+                                              ${copro_dir} ${mock_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
 target_compile_options(host_tests PRIVATE -Wall -Wextra -Werror)
 

@@ -267,6 +267,34 @@ jobs:
           git diff --exit-code -- docs/images/dongle ||
             { echo "::error::Run tools/dongle_screens and commit the images"; exit 1; }
 
+  camera-mock:
+    name: Build camera mock (ESP32)
+    # The bench stand-in for the camera (tools/camera_mock, #122). Only
+    # compiled; its protocol logic runs in the host tests.
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.5.6
+    env:
+      IDF_PATH: /opt/esp/idf
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Build
+        shell: bash
+        run: |
+          source "$IDF_PATH/export.sh"
+          .github/scripts/run-annotated.sh "Camera mock build" \
+            idf.py -C tools/camera_mock -B "$PWD/build-camera-mock" -D IDF_TARGET=esp32 build
+          idf.py -C tools/camera_mock -B "$PWD/build-camera-mock" merge-bin -o camera-mock.bin
+
+      - name: Upload image
+        uses: actions/upload-artifact@v7
+        with:
+          name: camera-mock-esp32
+          path: build-camera-mock/camera-mock.bin
+          if-no-files-found: error
+          retention-days: 30
+
   size-report:
     name: Release size report
     runs-on: ubuntu-latest

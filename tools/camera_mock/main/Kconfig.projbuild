@@ -1,0 +1,23 @@
+menu "Camera mock"
+
+config CAMERA_MOCK_AP_PASSWORD
+    string "Wi-Fi password of the mock's access point"
+    default "12345678"
+    help
+        WPA2 password (8-63 characters) that the mock hands out over BLE,
+        like the camera's 8-digit password.
+
+config CAMERA_MOCK_AP_CHANNEL
+    int "Wi-Fi channel of the access point"
+    range 1 13
+    default 6
+
+config CAMERA_MOCK_AP_ALWAYS_ON
+    bool "Start the access point at boot"
+    default n
+    help
+        The camera turns its Wi-Fi on only after the BLE wake-up. With this
+        option the mock's access point is up from the start (the hub still
+        has to read the credentials over BLE).
+
+endmenu
