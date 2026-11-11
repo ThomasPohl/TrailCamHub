@@ -147,6 +147,18 @@ target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} 
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
 target_compile_options(host_tests PRIVATE -Wall -Wextra -Werror)
 
+# -DHOST_TESTS_SANITIZE=ON runs the tests with AddressSanitizer and
+# UndefinedBehaviorSanitizer; any finding fails the test run. The parsers
+# under test read bytes from the camera, so out-of-bounds reads matter.
+option(HOST_TESTS_SANITIZE "Build the host tests with ASan and UBSan" OFF)
+if(HOST_TESTS_SANITIZE)
+    set(sanitize_flags -fsanitize=address,undefined
+                       -fno-sanitize-recover=undefined
+                       -fno-omit-frame-pointer)
+    target_compile_options(host_tests PRIVATE ${sanitize_flags})
+    target_link_options(host_tests PRIVATE ${sanitize_flags})
+endif()
+
 # Builds an MP4 from files of a video download, for checking it with ffmpeg
 # or a player (not part of the tests): mp4_tool video.h264 audio.aac out.mp4
 add_executable(mp4_tool mp4_tool.cpp ${mp4_dir}/mp4_mux.cpp)
