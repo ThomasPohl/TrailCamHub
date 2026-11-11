@@ -180,6 +180,7 @@ What a board can do comes from its build (Kconfig) and is listed per board in
 | LilyGO T-Dongle-C5             | PSRAM, display, button, web UI, deep sleep| mains + pull    |
 | Waveshare ESP32-P4-NANO        | Ethernet (IP101), PSRAM, web UI           | mains + pull    |
 | Waveshare ESP32-S3-ETH         | Ethernet (W5500), PSRAM, web UI, deep sleep | mains + pull  |
+| ESP32-WROOM-32D + SPI microSD  | deep sleep                                | mains + pull¹   |
 
 ¹ Without a web UI the direction is push; with no destination set it reads only on request.
 
@@ -190,4 +191,32 @@ MISO 12, CS 14, INT 10, RST 9), microSD in SPI mode on SPI2 (SCK 7, MOSI 6,
 MISO 5, CS 4), console on the native USB-C port. Ethernet is the transport;
 the web UI is served on the Ethernet address with a password (both in the
 boot log). Power from USB-C or the optional PoE module: the preset is mains.
+
+### ESP32-WROOM-32D with an SPI microSD reader
+
+Image `wroom32d` (`sdkconfig.defaults.wroom32d`, target `esp32`, #77). A
+low-cost classic ESP32 dev board (4 MB flash, no PSRAM) with an external
+microSD breakout in SPI mode:
+
+| Breakout | GPIO | Kconfig                   |
+| -------- | ---- | ------------------------- |
+| SCK      | 18   | `CONFIG_SD_CARD_CLK_GPIO` |
+| MOSI     | 23   | `CONFIG_SD_CARD_CMD_GPIO` |
+| MISO     | 19   | `CONFIG_SD_CARD_D0_GPIO`  |
+| CS       | 5    | `CONFIG_SD_CARD_CS_GPIO`  |
+| VCC      | 5 V (VIN) or 3.3 V, see below | |
+| GND      | GND  | |
+
+The common blue breakout with an AMS1117 regulator and a 74LVC125A level
+shifter ("4.5–5.5 V") must be powered from **5 V** (VIN/USB), not from
+3.3 V; its signal lines work with the ESP32's 3.3 V. A breakout without a
+regulator takes 3.3 V. GPIO5 is a strapping pin and must be high at boot,
+which the breakout's pull-up on CS ensures. SDHC cards up to 32 GB, FAT32.
+
+The console is UART0 through the board's USB-to-UART bridge. The 4 MB flash
+holds two 1.875 MB OTA slots (`partitions-4mb.csv`). Without PSRAM the hub
+reads thumbnails only: no videos (their reorder window needs PSRAM), no
+photos and no web UI by default. The regulator and USB bridge of a dev board
+keep drawing current in deep sleep, so the preset is mains; with no web UI
+the direction is push over the home Wi-Fi.
 

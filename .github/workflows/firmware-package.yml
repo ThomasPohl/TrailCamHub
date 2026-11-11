@@ -405,6 +405,7 @@ jobs:
             name="$(jq -r --arg b "$board" '.boards[] | select(.id == $b) | .name' boards.json)"
             target="$(jq -r --arg b "$board" '.boards[] | select(.id == $b) | .target' boards.json)"
             case "$target" in
+              esp32) chip="ESP32" ;;
               esp32s3) chip="ESP32-S3" ;;
               esp32c5) chip="ESP32-C5" ;;
               esp32p4) chip="ESP32-P4" ;;

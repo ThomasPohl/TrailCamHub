@@ -1,0 +1,48 @@
+# Board: ESP32-WROOM-32D dev board (classic ESP32, 4 MB flash, no PSRAM)
+# with an external microSD breakout in SPI mode (#77). Build with the esp32
+# target and
+#   SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.wroom32d"
+# so that these settings override the common defaults.
+
+CONFIG_BOARD_ESP32_WROOM32D=y
+
+# 4 MB flash: two 1.875 MB OTA slots instead of the 4 MB slots of the
+# 16 MB boards (partitions-4mb.csv).
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-4mb.csv"
+
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# No PSRAM: keep everything in internal RAM.
+# CONFIG_SPIRAM is not set
+# CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP is not set
+# CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC is not set
+# CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL is not set
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_INTERNAL=y
+
+# BLE only: the controller's Bluetooth Classic memory is given back to the
+# heap at the first BLE start (camera_ble).
+CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
+
+# The ESP32 has an EMAC, but this board has no Ethernet PHY.
+# CONFIG_ETH_UPLINK_ENABLE is not set
+
+# Console: UART0 through the board's USB-to-UART bridge (the ESP-IDF
+# default on the ESP32).
+
+# microSD breakout in SPI mode. The classic ESP32 has an SDMMC host, so SPI
+# mode must be chosen explicitly. VSPI pins (routed to SPI2 through the GPIO
+# matrix): SCK GPIO18, MOSI GPIO23, MISO GPIO19, CS GPIO5. GPIO5 is a
+# strapping pin and must be high at boot (the breakout's pull-up).
+CONFIG_SD_CARD_SPI_MODE=y
+CONFIG_SD_CARD_CLK_GPIO=18
+CONFIG_SD_CARD_CMD_GPIO=23
+CONFIG_SD_CARD_D0_GPIO=19
+CONFIG_SD_CARD_CS_GPIO=5
+
+# Queue more camera frames while an SD card write blocks the session task
+# (default 6); frames that still do not fit are resent by the camera.
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=16
+
+# Photos, videos (need PSRAM) and the web UI stay off (Kconfig defaults):
+# thumbnails to the SD card and the sync over the home Wi-Fi.

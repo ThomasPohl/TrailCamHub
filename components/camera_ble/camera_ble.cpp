@@ -22,6 +22,9 @@
 #if CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE
 #include "esp_hosted.h"
 #endif
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BTDM_CTRL_MODE_BLE_ONLY
+#include "esp_bt.h"
+#endif
 
 #include "ble_advertising.hpp"
 #include "camera_ble.h"
@@ -626,10 +629,33 @@ static void stop_remote_controller(void)
 }
 #endif
 
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BTDM_CTRL_MODE_BLE_ONLY
+// The classic ESP32's controller keeps RAM for Bluetooth Classic as well.
+// The hub only uses BLE, so that RAM goes back to the heap before the first
+// start (ESP32-WROOM-32D without PSRAM, #77). The release cannot be undone
+// and needs an idle controller, hence once, before nimble_port_init().
+static void release_classic_bt_memory(void)
+{
+    static bool released;
+    if (released) {
+        return;
+    }
+    released = true;
+    esp_err_t error = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not release the Bluetooth Classic memory: %s",
+                 esp_err_to_name(error));
+    }
+}
+#endif
+
 static esp_err_t start_stack(void)
 {
 #if CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE
     start_remote_controller();
+#endif
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BTDM_CTRL_MODE_BLE_ONLY
+    release_classic_bt_memory();
 #endif
     esp_err_t error = nimble_port_init();
     if (error != ESP_OK) {
