@@ -120,7 +120,7 @@ runs their own. The optional AWS backend with a Telegram Mini App is in
 | [Modes](docs/modes.md) | power, push/pull, transport, destinations; per-board notes |
 | [Power and schedule](docs/power-and-schedule.md) | camera read plan, check-ins, deep sleep |
 | [Web installer and console](docs/installer.md) | flashing, setup assistant, serial commands |
-| [Architecture](docs/architecture.md) | components, session state machine, BLE and camera session |
+| [Architecture](docs/architecture.md) · [files on the SD card](docs/sd-layout.md) · [decisions](docs/decisions.md) | components, tasks, memory, session state machine; catalog and file formats; why things are the way they are |
 | [Development](docs/development.md) | build, profiles, host tests, dev container, CI, camera mock |
 | [UDP protocol](docs/udp-protocol.md) · [protocol analysis](docs/protocol-analysis.md) | how the camera talks |
 | [Video download](docs/video-download.md) · [OTA updates](docs/ota.md) · [4G modem](docs/modem.md) | single features |
