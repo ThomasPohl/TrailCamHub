@@ -532,6 +532,7 @@ jobs:
           git -C store add -A
           store_commit="$(git -C store commit-tree "$(git -C store write-tree)" \
             -m "installer build $id")"
+          echo "commit=$store_commit" >> "$GITHUB_OUTPUT"
           if [[ -n "$store_head" ]]; then
             git -C store push -q \
               --force-with-lease="refs/heads/installer-builds:$store_head" \
@@ -556,18 +557,20 @@ jobs:
           path: site
 
       # Same API calls as actions/deploy-pages, but with a build version that
-      # is unique per run. The action uses the commit SHA, and Pages then
-      # keeps the site it already has for that commit: a second deploy of a
-      # published commit (a tag on a commit of main, a re-run) reported
-      # success without going live (#161).
+      # is unique per deploy: the commit of the build store. The action uses
+      # GITHUB_SHA, and Pages then keeps the site it already has for that
+      # commit: a second deploy of a published commit (a tag on a commit of
+      # main, a re-run) reported success without going live (#161). Pages
+      # answers 404 to a build version that is not a commit of the repository.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/github-script@v8
         env:
           ARTIFACT_ID: ${{ steps.pages-artifact.outputs.artifact_id }}
+          BUILD_VERSION: ${{ steps.store.outputs.commit }}
         with:
           script: |
-            const version = `${context.sha}-${context.runId}-${process.env.GITHUB_RUN_ATTEMPT}`;
+            const version = process.env.BUILD_VERSION;
             const { data: created } = await github.request(
               'POST /repos/{owner}/{repo}/pages/deployments',
               {
