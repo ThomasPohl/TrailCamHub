@@ -44,6 +44,7 @@
 #include "media_transfer.hpp"
 #include "pppp_session.hpp"
 #include "sd_writer.hpp"
+#include "thumbnail_queue.hpp"
 #include "playback_download.hpp"
 #include "sdkconfig.h"
 
@@ -190,8 +191,7 @@ static camera::artemis::MediaCatalog s_catalog;
 // when the session ends. Thumbnails stored after the last save are fetched
 // again if the power fails.
 static camera::store::SaveThrottle s_catalog_saves(16, 10 * 1000 * 1000);
-static std::vector<camera::artemis::CatalogEntry> s_thumb_queue;
-static size_t s_thumb_index;
+static camera::link::ThumbnailQueue s_thumbnails;
 static bool s_thumb_emitted;
 static bool s_work_done;
 // The session cannot do its work (e.g. the camera has no SD card): close it
@@ -233,7 +233,6 @@ static bool s_bulk_next_seq_valid;
 // Last frame of the record being received, and how often the current
 // thumbnail was requested again after it stalled.
 static int64_t s_bulk_last_frame_us;
-static unsigned s_thumb_retries;
 
 // Media download state, reset at the start of each session. A download is
 // active from its request (cmdId 1285) until its record is complete or it is
@@ -341,7 +340,7 @@ static void start_downloads();
 // advances the queue. Returns false when the queue is exhausted.
 static bool request_current_thumbnail()
 {
-    if (s_thumb_index >= s_thumb_queue.size()) {
+    if (s_thumbnails.current() == nullptr) {
         ESP_LOGI(TAG, "Thumbnails complete: %u stored of %u catalog items",
                  (unsigned)s_catalog.count_with_flag(
                      camera::artemis::MediaCatalog::kThumbPresent),
@@ -350,11 +349,7 @@ static bool request_current_thumbnail()
         start_downloads();
         return false;
     }
-    const camera::artemis::CatalogEntry &e = s_thumb_queue[s_thumb_index];
-    const std::string extra =
-        ",\"thumbnailReqs\":[{\"fileType\":" + std::to_string(e.file_type) +
-        ",\"dirNum\":" + std::to_string(e.dir_num) +
-        ",\"mediaNum\":" + std::to_string(e.media_num) + "}]";
+    const std::string extra = s_thumbnails.request_fields();
     return send_artemis_command(772, extra.c_str(), "ARTEMIS GetThumbnail");
 }
 
@@ -696,15 +691,10 @@ static void check_thumbnail_stall(int64_t now_us)
     ESP_LOGW(TAG, "Thumbnail stalled at %u of %u frames; %s",
              (unsigned)s_bulk.received_frames(),
              (unsigned)s_bulk.total_frames(),
-             s_thumb_retries == 0 ? "requesting it again" : "skipping it");
+             s_thumbnails.retrying() ? "skipping it" : "requesting it again");
     s_bulk.reset();
     s_bulk_active = false;
-    if (s_thumb_retries == 0) {
-        s_thumb_retries = 1;
-    } else {
-        s_thumb_retries = 0;
-        ++s_thumb_index;
-    }
+    s_thumbnails.on_stall();
     request_current_thumbnail();
 }
 
@@ -940,8 +930,7 @@ static bool handle_bulk_frame(int socket_fd,
         s_bulk_active = false;
 
         if (subtype == 0x04) {
-            ++s_thumb_index;
-            s_thumb_retries = 0;
+            s_thumbnails.advance();
             request_current_thumbnail();
         }
     }
@@ -1065,12 +1054,11 @@ static void finish_scan_list(bool complete)
         }
     }
     save_session_catalog();
-    s_thumb_queue = s_catalog.missing_thumbnails();
-    s_thumb_index = 0;
+    s_thumbnails.start(s_catalog.missing_thumbnails());
     s_thumb_emitted = false;
     ESP_LOGI(TAG, "Catalog %s: %u items (%u new), %u thumbnails to fetch",
              s_camera_id.c_str(), (unsigned)s_catalog.size(),
-             (unsigned)s_scan_list.added(), (unsigned)s_thumb_queue.size());
+             (unsigned)s_scan_list.added(), (unsigned)s_thumbnails.size());
     request_current_thumbnail();
 }
 
@@ -1315,8 +1303,7 @@ static esp_err_t run_artemis_session(int socket_fd,
     s_next_command_seq = 2;
     s_camera_id.clear();
     s_catalog.clear();
-    s_thumb_queue.clear();
-    s_thumb_index = 0;
+    s_thumbnails.release();
     s_thumb_emitted = false;
     s_scan_list.reset();
     s_work_done = false;
@@ -1327,7 +1314,6 @@ static esp_err_t run_artemis_session(int socket_fd,
     s_bulk_ack_pending = 0;
     s_bulk_active = false;
     s_bulk_next_seq_valid = false;
-    s_thumb_retries = 0;
     s_download_queue.clear();
     s_download_index = 0;
     s_download_active = false;
@@ -1538,7 +1524,7 @@ static void release_session_memory(void)
     s_response = camera::artemis::Reassembler();
     s_bulk = camera::artemis::BulkReassembler();
     s_catalog = camera::artemis::MediaCatalog();
-    std::vector<camera::artemis::CatalogEntry>().swap(s_thumb_queue);
+    s_thumbnails.release();
     std::vector<camera::artemis::CatalogEntry>().swap(s_download_queue);
     std::string().swap(s_camera_id);
 }
