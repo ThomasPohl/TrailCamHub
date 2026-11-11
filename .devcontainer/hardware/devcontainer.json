@@ -37,6 +37,12 @@
   },
   "mounts": [
     "source=/dev,target=/dev/host,type=bind",
+    // The bind mount is recursive: hide the host's terminals, shared memory
+    // and message queues under it (they matter with rootful Docker, #113).
+    // Docker orders mounts by depth, so these come after /dev/host.
+    "target=/dev/host/pts,type=tmpfs",
+    "target=/dev/host/shm,type=tmpfs",
+    "target=/dev/host/mqueue,type=tmpfs",
     "source=trailcamhub-cache,target=/root/.cache,type=volume",
     "source=trailcamhub-claude,target=/root/.claude,type=volume"
   ],

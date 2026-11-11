@@ -30,10 +30,21 @@ permissions decide (see the host setup below).
 
 With **rootful Docker** the container's `root` is the host's `root`. The
 device cgroup rules then keep disks closed, but the container can open every
-serial device of the host, whatever its owner and mode, and also the host's
-terminals in `/dev/host/pts`, because Docker's defaults allow terminals (major
-136). Claude Code runs in this container; keep that in mind before you use the
-configuration with rootful Docker.
+serial device of the host, whatever its owner and mode. Claude Code runs in
+this container; keep that in mind before you use the configuration with
+rootful Docker.
+
+The bind mount of `/dev` is recursive, so the host's terminals
+(`/dev/host/pts`, allowed by Docker's defaults, major 136), shared memory
+(`/dev/host/shm`, a tmpfs, which no device rule covers) and POSIX message
+queues (`/dev/host/mqueue`) would be visible as well. Empty tmpfs mounts hide
+all three (`mounts` in `devcontainer.json`). Check after a rebuild, with
+rootless and with rootful Docker:
+
+```bash
+ls -A /dev/host/pts /dev/host/shm /dev/host/mqueue   # all empty
+esptool.py --port /dev/ttyACM0 read_mac              # serial still works
+```
 
 ## Host setup (Linux)
 
