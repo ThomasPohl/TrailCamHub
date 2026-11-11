@@ -29,6 +29,9 @@ The clone stays shallow. Then:
 
 - No force pushes to `main` or to any shared branch; no rebase or amend of
   pushed commits. Fix mistakes with new commits.
+- One exception: `installer-builds` is written only by the `deploy-installer`
+  job, which replaces it with a single parentless commit on every deploy
+  (#207). Do not push to it by hand.
 - No modified timestamps (no `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE`, no
   `--date`).
 - Take over PRs from forks with a merge commit. Conflicts between fork PRs are
