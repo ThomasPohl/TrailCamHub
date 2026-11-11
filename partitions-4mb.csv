@@ -1,0 +1,12 @@
+# Partition table for 4 MB flash (ESP32-WROOM-32D, #77).
+# Two 1.875 MB application slots for OTA updates, a core dump partition and
+# 64 KB NVS, as in partitions.csv for 16 MB but with smaller slots. The last
+# 64 KB stay unallocated. Media files are stored on the SD card.
+#
+# Name,     Type, SubType,  Offset,   Size
+nvs,        data, nvs,      0x9000,   0x10000
+otadata,    data, ota,      0x19000,  0x2000
+phy_init,   data, phy,      0x1b000,  0x1000
+ota_0,      app,  ota_0,    0x20000,  0x1e0000
+ota_1,      app,  ota_1,    0x200000, 0x1e0000
+coredump,   data, coredump, 0x3e0000, 0x10000

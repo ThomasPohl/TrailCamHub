@@ -89,6 +89,21 @@
       },
       "installer": true,
       "notes": "W5500 Ethernet (optional PoE module), microSD in SPI mode, web UI over Ethernet; mains or PoE power."
+    },
+    {
+      "id": "wroom32d",
+      "name": "ESP32-WROOM-32D + SPI microSD",
+      "target": "esp32",
+      "defaults": "sdkconfig.defaults.wroom32d",
+      "capabilities": [
+        "deep_sleep"
+      ],
+      "preset": {
+        "power": "mains",
+        "direction": "pull"
+      },
+      "installer": true,
+      "notes": "Low-cost classic ESP32 dev board with an external microSD reader on SPI (power the reader from 5 V); 4 MB flash, no PSRAM: thumbnails only, no videos or web UI; mains power."
     }
   ]
 }

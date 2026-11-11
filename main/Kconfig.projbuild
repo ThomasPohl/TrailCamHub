@@ -2,7 +2,7 @@ menu "TrailCamHub PoC"
 
 choice HUB_PROFILE
     prompt "Preset mode"
-    default HUB_PROFILE_ON_SITE if BOARD_TDONGLE || IDF_TARGET_ESP32P4 || BOARD_S3_ETH
+    default HUB_PROFILE_ON_SITE if BOARD_TDONGLE || IDF_TARGET_ESP32P4 || BOARD_S3_ETH || BOARD_ESP32_WROOM32D
     default HUB_PROFILE_AUTONOMOUS
     help
         The board's build sets what the hub can do (modem, Ethernet, battery
@@ -59,6 +59,16 @@ config BOARD_S3_ETH
         Ethernet over the board's W5500, microSD in SPI mode, console on the
         native USB port; no modem and no battery gauge. Selected by
         sdkconfig.defaults.s3-eth.
+
+config BOARD_ESP32_WROOM32D
+    bool "ESP32-WROOM-32D with an SPI microSD reader"
+    depends on IDF_TARGET_ESP32
+    default n
+    help
+        Classic ESP32 dev board (4 MB flash, no PSRAM) with an external
+        microSD breakout in SPI mode; console on UART0 through the board's
+        USB-to-UART bridge. Mains power only. Selected by
+        sdkconfig.defaults.wroom32d (#77).
 
 config BOARD_TDONGLE
     bool
@@ -843,7 +853,9 @@ menu "Ethernet uplink"
 
 config ETH_UPLINK_ENABLE
     bool "Use wired Ethernet as the uplink"
-    default y if SOC_EMAC_SUPPORTED || BOARD_S3_ETH
+    # Not SOC_EMAC_SUPPORTED: the classic ESP32 has an EMAC as well, but
+    # the ESP32-WROOM-32D board has no PHY.
+    default y if IDF_TARGET_ESP32P4 || BOARD_S3_ETH
     default n
     help
         Start the board's Ethernet at boot and obtain an address over DHCP.
@@ -854,7 +866,7 @@ config ETH_UPLINK_ENABLE
 choice ETH_UPLINK_CHIP
     prompt "Ethernet hardware"
     depends on ETH_UPLINK_ENABLE
-    default ETH_UPLINK_IP101 if SOC_EMAC_SUPPORTED
+    default ETH_UPLINK_IP101 if IDF_TARGET_ESP32P4
     default ETH_UPLINK_W5500
 
 config ETH_UPLINK_IP101
@@ -1082,6 +1094,7 @@ config HUB_BOARD_ID
     default "tdongle-c5" if BOARD_TDONGLE_C5
     default "esp32p4" if IDF_TARGET_ESP32P4
     default "s3-eth" if BOARD_S3_ETH
+    default "wroom32d" if BOARD_ESP32_WROOM32D
     default "esp32s3"
     help
         Names the image of a release that fits this board (the board names
