@@ -27,6 +27,14 @@ CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
 # The ESP32 has an EMAC, but this board has no Ethernet PHY.
 # CONFIG_ETH_UPLINK_ENABLE is not set
 
+# The classic ESP32 has 128 KB of IRAM; with Wi-Fi, the BLE controller and
+# NimBLE the default build overflowed it by 16 KB. Move the Wi-Fi fast paths
+# and the FreeRTOS functions to flash (a little less Wi-Fi throughput; the
+# hub only reads thumbnails on this board).
+# CONFIG_ESP_WIFI_IRAM_OPT is not set
+# CONFIG_ESP_WIFI_RX_IRAM_OPT is not set
+CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH=y
+
 # Console: UART0 through the board's USB-to-UART bridge (the ESP-IDF
 # default on the ESP32).
 
