@@ -78,6 +78,16 @@ typedef void (*camera_protocol_progress_cb_t)(uint32_t done, uint32_t stored,
 void camera_protocol_set_list_only(bool list_only);
 
 /*
+ * Makes the following sessions short ones for the queued actions
+ * (camera_actions.hpp): device info, the actions, and for a deletion the media
+ * list, then CLOSE. No thumbnail or file is fetched, and no listing is
+ * reported. Without it a session runs the queued actions first (a photo is in
+ * the list that follows) and then does its usual work. Set it before
+ * camera_protocol_run().
+ */
+void camera_protocol_set_actions_only(bool actions_only);
+
+/*
  * In a build that downloads only requested videos
  * (CONFIG_CAMERA_VIDEO_ON_REQUEST), `true` makes the following sessions fetch
  * every missing video instead, e.g. for a WebDAV share in the home network.

@@ -1,7 +1,7 @@
 # Files on the SD card
 
 What the hub writes to its microSD card (mounted at `/sdcard`), and the
-formats of the files other tools may read. The hub never formats the card.
+formats of the files other tools may read. The hub never formats its own card (it can format the *camera's* on request, see [camera-actions.md](camera-actions.md)).
 
 ```
 /sdcard/
@@ -14,6 +14,8 @@ formats of the files other tools may read. The hub never formats the card.
     media/<mediaId>[.<ext>].part  download in progress
     video_stats.csv       one line per video download
     trace_<mediaId>.csv   only with CONFIG_CAMERA_VIDEO_TRACE
+  actions.csv             queue of camera actions (photo, video, delete, format)
+  actions.csv.tmp         only while the queue is being saved
   logs/log-NNNNN.txt      rotating log (sd_log)
 ```
 
@@ -75,6 +77,32 @@ sizes, temperature, charging state, …), plus fields the hub adds:
 | `readAt` | when the device info was read (Unix seconds, 0 = clock not set) |
 | `lastSyncAt` | when a session last completed all its work; -1 = completed with an unset clock; absent = never |
 | `sdCard`, `sdError` | state of the camera's card from the media list |
+
+## `actions.csv`
+
+The queue of [camera actions](camera-actions.md), replaced through
+`actions.csv.tmp` like the catalog. Line 1 is `v1,<next id>`; then one line
+per action, newest last:
+
+```
+id,type,mediaId,source,state,created,finished,notified,key,reason
+7,delete,2653775860,console,done,1794500000,1794500123,1,,
+8,photo,0,telegram,failed,1794500100,1794500140,0,tg:4711,the camera answered snapRet -2
+```
+
+| Column | Meaning |
+|---|---|
+| `type` | `photo`, `video-start`, `video-stop`, `delete`, `format` |
+| `mediaId` | only for `delete`, else 0 |
+| `source` | `console`, `web`, `telegram`, `backend` |
+| `state` | `pending`, `running` (sent, no answer yet), `done`, `failed` |
+| `created`, `finished` | Unix seconds, 0 = clock not set |
+| `notified` | 1 once the front end that asked was told the result |
+| `key` | from the front end, recognises a command that arrives twice; `[A-Za-z0-9:_-]` |
+| `reason` | why it failed; no commas |
+
+At most 32 lines; the oldest finished one goes first. A `running` line found
+at start-up ends as `failed` and is not repeated.
 
 ## Who writes
 

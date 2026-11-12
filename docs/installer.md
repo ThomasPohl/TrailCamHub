@@ -76,6 +76,9 @@ exactly these commands.
 | `status` | State, settings (secrets hidden), schedule (next camera read and check-in), web UI address |
 | `scan` | Read the camera, then deliver to the destination if one is set |
 | `camlist` | List all media on the camera (`TCH EVENT media type=… dir=… num=… id=… time=…`, then `TCH EVENT list done files=… pages=…`); fetches and syncs nothing and does not count as a read for the schedule |
+| `photo`, `video start`, `video stop` | Ask the camera to take a photo or start/stop a video ([camera-actions.md](camera-actions.md)) |
+| `delete <mediaId>`, `format` | Delete one recording or erase the camera's card; each asks for a code first (`… confirm <code>`) |
+| `actions` | The queue of camera actions with the results |
 | `upload` | Deliver what is already on the SD card |
 | `stop` | End the running scan; a running sync finishes |
 | `ping` | Keep a hub on battery awake (the installer sends it while open) |

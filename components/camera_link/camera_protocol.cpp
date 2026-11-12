@@ -22,6 +22,8 @@
 
 #include "artemis_crypto.hpp"
 #include "artemis_json.hpp"
+#include "camera_action.hpp"
+#include "camera_actions.hpp"
 #include "artemis_login.hpp"
 #include "camera_clock.hpp"
 #include "artemis_message.hpp"
@@ -205,6 +207,21 @@ static std::atomic<uint32_t> s_stored_items;
 // Listing only (camera_protocol_set_list_only()): the page being read and the
 // files reported so far.
 static std::atomic<bool> s_list_only;
+// A short session for the queued actions: device info, the actions (and, for a
+// deletion, the media list), then CLOSE; no thumbnail or file is fetched.
+static std::atomic<bool> s_actions_only;
+// The camera's device info of this session, for checking an action.
+static camera::artemis::DeviceInfo s_device_info;
+// The action whose answer the session waits for (see send_next_action()).
+static bool s_action_active;
+static uint32_t s_action_id;
+static camera::action::Action s_action;
+static int64_t s_action_sent_us;
+// The media list of this session is complete (or as far as it was read), so a
+// deletion may look its file up.
+static bool s_list_ready;
+// The camera answers an action within a second or two; 518 took 0.9 s.
+static constexpr int64_t kActionAnswerTimeoutUs = 15 * 1000 * 1000;
 static camera_protocol_list_cb_t s_list_callback;
 static camera::link::ListingFlow s_listing;
 // s_listing.files(), for other tasks.
@@ -1020,6 +1037,131 @@ static void handle_list_page(const std::string &json)
 
 // --- Media list of a scan ---
 
+// --- Queued actions (#194) -------------------------------------------------
+//
+// The actions of camera_actions run in the session in this order: right after
+// the device info those that need no media list (photo, video, format), so
+// that a new photo is in the list that follows; then the media list; then,
+// with the fresh list, the deletions (each file is looked up by its mediaId
+// right before the command, see docs/camera-media-delete.md); then the
+// thumbnails and downloads. A short session (actions only) ends after the last
+// action, and skips the list if no deletion waits.
+
+static void request_scan_page();
+static void begin_thumbnails();
+
+static void begin_listing_phase()
+{
+    if (s_actions_only.load() &&
+        !camera::action::service::pending_needs_list()) {
+        ESP_LOGI(TAG, "The queued actions need no media list; done");
+        s_work_done = true;
+        return;
+    }
+    s_catalog.begin_listing();
+    s_scan_list.reset();
+    request_scan_page();
+}
+
+static void after_list_actions()
+{
+    if (s_actions_only.load()) {
+        s_work_done = true;
+        return;
+    }
+    begin_thumbnails();
+}
+
+// Sends the next waiting action the session can run now and waits for its
+// answer; actions the camera cannot do are failed on the way. False if there
+// is none to wait for.
+static bool send_next_action()
+{
+    namespace act = camera::action;
+    while (!s_action_active) {
+        act::service::Job job;
+        if (!act::service::take_next(s_list_ready, job)) {
+            return false;
+        }
+        const char *name = act::type_name(job.action.type);
+        std::string problem = act::check_camera(job.action.type, s_device_info);
+        std::optional<act::Target> target;
+        if (problem.empty() && act::needs_media_list(job.action.type)) {
+            target = act::find_target(s_catalog, job.action.media_id);
+            if (!target) {
+                problem = "the camera does not list this file any more";
+            }
+        }
+        if (!problem.empty()) {
+            act::service::finish(job.id, act::failure(problem));
+            continue;
+        }
+        const std::string fields = act::request_fields(job.action, target);
+        ESP_LOGI(TAG, "Running action %u: %s", (unsigned)job.id, name);
+        if (!send_artemis_command(act::cmd_id(job.action.type), fields.c_str(),
+                                  name)) {
+            act::service::finish(
+                job.id,
+                act::failure("the command could not be sent to the camera"));
+            continue;
+        }
+        s_action_active = true;
+        s_action_id = job.id;
+        s_action = job.action;
+        s_action_sent_us = esp_timer_get_time();
+    }
+    return true;
+}
+
+// The session goes on with what follows the actions: the list, or the
+// thumbnails.
+static void advance_after_actions()
+{
+    if (s_action_active || send_next_action()) {
+        return;
+    }
+    if (s_list_ready) {
+        after_list_actions();
+    } else {
+        begin_listing_phase();
+    }
+}
+
+static void handle_action_response(const std::string &json)
+{
+    namespace act = camera::action;
+    const act::Outcome outcome = act::interpret(s_action.type, json);
+    s_action_active = false;
+    act::service::finish(s_action_id, outcome);
+    if (outcome.done && s_action.type == act::Type::delete_media) {
+        // Gone from the card: no thumbnail or download is wanted for it, and
+        // its dir/num may belong to a new recording soon.
+        if (camera::artemis::CatalogEntry *entry =
+                s_catalog.find(s_action.media_id)) {
+            entry->listed = false;
+        }
+        save_session_catalog();
+    }
+    advance_after_actions();
+}
+
+// An action the camera does not answer must not hold the session: it may or
+// may not have been done, so the person is told that.
+static void check_action_timeout(int64_t now_us)
+{
+    if (!s_action_active ||
+        now_us - s_action_sent_us <= kActionAnswerTimeoutUs) {
+        return;
+    }
+    ESP_LOGW(TAG, "No answer to action %u within 15 s", (unsigned)s_action_id);
+    s_action_active = false;
+    camera::action::service::finish(
+        s_action_id,
+        camera::action::failure(
+            "the camera did not answer within 15 s; it may have been done"));
+    advance_after_actions();
+}
+
 static void request_scan_page()
 {
     const std::string fields =
@@ -1054,6 +1196,18 @@ static void finish_scan_list(bool complete)
         }
     }
     save_session_catalog();
+    // The deletions run now, with the fresh list; then the thumbnails.
+    s_list_ready = true;
+    if (send_next_action()) {
+        return;
+    }
+    after_list_actions();
+}
+
+// Fetches the thumbnail of every listed item we do not have one for yet
+// (newest first), then the downloads.
+static void begin_thumbnails()
+{
     s_thumbnails.start(s_catalog.missing_thumbnails());
     s_thumb_emitted = false;
     ESP_LOGI(TAG, "Catalog %s: %u items (%u new), %u thumbnails to fetch",
@@ -1190,6 +1344,16 @@ static void process_artemis_response(const SessionEvent &event)
         s_last_progress_us = esp_timer_get_time();
     }
 
+    // The answer to the action the session waits for.
+    if (s_action_active) {
+        const std::optional<camera::action::Type> type =
+            camera::action::type_of_cmd(cmd_id);
+        if (type && *type == s_action.type) {
+            handle_action_response(message.json);
+            return;
+        }
+    }
+
     // The camera answers the playback request with the video's size, then
     // streams it. When it refuses the app's fileType, try the media list's.
     if (cmd_id == 769 && s_video.active()) {
@@ -1229,6 +1393,7 @@ static void process_artemis_response(const SessionEvent &event)
     if (cmd_id == 512 && s_logged_in && !s_media_requested) {
         DeviceInfo info;
         if (parse_device_info(message.json, info)) {
+            s_device_info = info;
             s_camera_id = info.dev_id;
             snprintf(s_last_camera_id, sizeof(s_last_camera_id), "%s",
                      camera::store::sanitize_camera_id(info.dev_id).c_str());
@@ -1274,9 +1439,13 @@ static void process_artemis_response(const SessionEvent &event)
         ESP_LOGI(TAG, "Loaded catalog: %u known items",
                  (unsigned)s_catalog.size());
 
-        s_catalog.begin_listing();
-        s_scan_list.reset();
-        request_scan_page();
+        s_list_ready = false;
+        // Queued actions go first, so that a new photo is in the list that
+        // follows; the list is requested when they are answered.
+        if (send_next_action()) {
+            return;
+        }
+        begin_listing_phase();
     }
 }
 
@@ -1319,6 +1488,9 @@ static esp_err_t run_artemis_session(int socket_fd,
     s_download_active = false;
     s_download_stream.reset();
     s_video.begin_session();
+    s_device_info = camera::artemis::DeviceInfo{};
+    s_action_active = false;
+    s_list_ready = false;
     ESP_LOGI(TAG, "Starting ARTEMIS heartbeat loop");
 
     while (!stop_requested()) {
@@ -1352,6 +1524,7 @@ static esp_err_t run_artemis_session(int socket_fd,
         }
         check_download_stall(now_us);
         check_thumbnail_stall(now_us);
+        check_action_timeout(now_us);
         // A video download may use its own interval: the camera streamed about
         // two video frames per heartbeat, as if it were held back by them.
         heartbeat_interval_us =
@@ -1581,6 +1754,10 @@ esp_err_t camera_protocol_run(const esp_ip4_addr_t *gateway)
     camera::store::sd_writer_begin_session();
     const esp_err_t error = connect_and_run_session(*gateway);
     camera::store::sd_writer_end_session();
+    // An action sent and not answered is not repeated: the person asks again.
+    s_action_active = false;
+    camera::action::service::abandon_running(
+        "the camera session ended before the camera answered");
     // A session that ended early (stop, timeout, camera closed) may have
     // stored thumbnails since the last save.
     flush_catalog();
@@ -1649,6 +1826,11 @@ void camera_protocol_set_login(const char *user, const char *password)
 void camera_protocol_set_all_videos(bool all_videos)
 {
     s_all_videos = all_videos;
+}
+
+void camera_protocol_set_actions_only(bool actions_only)
+{
+    s_actions_only = actions_only;
 }
 
 void camera_protocol_set_list_only(bool list_only)

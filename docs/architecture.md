@@ -135,7 +135,9 @@ Rules that keep this safe:
 - The controller never runs a camera session and a sync at the same time, so
   only one task writes a camera's catalog ([sd-layout.md](sd-layout.md)).
 - Other tasks reach the session only through
-  `session_controller_request_*()` and the status listeners. What a session
+  `session_controller_request_*()`, the status listeners and the action queue
+  ([camera-actions.md](camera-actions.md); `camera_actions` guards it with a
+  mutex and keeps it on the SD card). What a session
   reports back (`camera_protocol_stored_items()` and similar) is atomic or
   copied under a lock.
 - Callbacks run in the task that reports the event; a front end copies what
