@@ -5,9 +5,12 @@
 // the hub uses (updates, buttons, multipart bodies). Host-testable.
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "action_queue.hpp"
 
 namespace uplink
 {
@@ -47,6 +50,16 @@ bool api_ok(const std::string &json);
 
 // The command of a message ("/scan@MyBot now" -> "/scan"); empty if none.
 std::string command_of(const std::string &text);
+
+// The camera action a chat command asks for: /photo, /video_start and
+// /video_stop. nullopt for any other command. Deleting and formatting are
+// never asked for in a chat (camera::action::allowed()).
+std::optional<camera::action::Type>
+action_of_command(const std::string &command);
+
+// What the chat is told once an action is finished, e.g. "Photo taken." or
+// "Photo failed: the camera answered snapRet -2."
+std::string action_result_text(const camera::action::Entry &entry);
 
 // Button data for "get the video" (at most 64 bytes, as Telegram allows).
 std::string video_button(const std::string &camera_id, std::int64_t media_id);

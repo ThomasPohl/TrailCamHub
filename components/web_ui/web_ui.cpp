@@ -631,6 +631,64 @@ esp_err_t handle_search(httpd_req_t *req)
     return send_json(req, "{\"ok\":true}");
 }
 
+// A short word from the query string, only letters, digits and "-", empty if
+// it is missing or has anything else.
+std::string query_word(httpd_req_t *req, const char *key)
+{
+    const size_t length = httpd_req_get_url_query_len(req);
+    if (length == 0) {
+        return "";
+    }
+    std::string query(length + 1, '\0');
+    char value[24];
+    if (httpd_req_get_url_query_str(req, &query[0], query.size()) != ESP_OK ||
+        httpd_query_key_value(query.c_str(), key, value, sizeof(value)) !=
+            ESP_OK) {
+        return "";
+    }
+    std::string word;
+    for (const char *c = value; *c != '\0'; ++c) {
+        const bool plain =
+            (*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '-';
+        if (!plain) {
+            return "";
+        }
+        word += *c;
+    }
+    return word;
+}
+
+// POST /api/action?type=photo|video-start|video-stop|delete|format
+//                 [&id=<mediaId>][&code=<code>]
+esp_err_t handle_action(httpd_req_t *req)
+{
+    if (s_callbacks.on_action == NULL) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no actions");
+    }
+    const std::string type = query_word(req, "type");
+    if (type.empty()) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad type");
+    }
+    char out[256];
+    out[0] = '\0';
+    s_callbacks.on_action(type.c_str(), query_int64(req, "id", 0),
+                          query_word(req, "code").c_str(), out, sizeof(out));
+    return send_json(req, out[0] != '\0' ? out : "{\"ok\":false}");
+}
+
+// GET /api/actions: the queue, oldest first.
+esp_err_t handle_actions(httpd_req_t *req)
+{
+    if (s_callbacks.on_actions == NULL) {
+        return send_json(req, "{\"actions\":[]}");
+    }
+    // On the heap: the server task has a small stack.
+    std::string out(3072, '\0');
+    s_callbacks.on_actions(&out[0], out.size());
+    out.resize(strlen(out.c_str()));
+    return send_json(req, out.empty() ? "{\"actions\":[]}" : out);
+}
+
 esp_err_t handle_stop(httpd_req_t *req)
 {
     if (s_callbacks.on_stop != NULL) {
@@ -1277,7 +1335,7 @@ esp_err_t start_server()
     config.lru_purge_enable = true;
     config.max_open_sockets = 5;
     config.stack_size = 6144;
-    config.max_uri_handlers = 14;
+    config.max_uri_handlers = 17;
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "HTTP server");
 
     static const Route kRoutes[] = {
@@ -1290,6 +1348,8 @@ esp_err_t start_server()
         {"/api/status", HTTP_GET, handle_status, NULL},
         {"/api/search", HTTP_POST, handle_search, NULL},
         {"/api/stop", HTTP_POST, handle_stop, NULL},
+        {"/api/action", HTTP_POST, handle_action, NULL},
+        {"/api/actions", HTTP_GET, handle_actions, NULL},
         {"/api/time", HTTP_POST, handle_time, NULL},
         {"/api/files", HTTP_GET, handle_files, NULL},
         {"/api/log", HTTP_GET, handle_log, NULL},

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -24,6 +25,18 @@
 typedef struct {
     void (*on_search)(void);
     void (*on_stop)(void);
+    /*
+     * A camera action asked for on the page (POST /api/action): `type` is
+     * "photo", "video-start", "video-stop", "delete" or "format", `media_id`
+     * is for a delete, `code` is empty for the first step of a delete or
+     * format and the code it returned for the second. Writes the JSON answer
+     * into `out` (at most `size` bytes with the terminating NUL). May be NULL:
+     * the page then offers no actions.
+     */
+    void (*on_action)(const char *type, long long media_id, const char *code,
+                      char *out, size_t size);
+    /* Writes the JSON list of the queued actions into `out`. */
+    void (*on_actions)(char *out, size_t size);
 } web_ui_callbacks_t;
 
 /*

@@ -83,6 +83,20 @@ const char *state_name(State state)
     return "unknown";
 }
 
+std::string describe(const Entry &entry)
+{
+    std::string text = type_name(entry.action.type);
+    if (entry.action.media_id > 0) {
+        text +=
+            " " + std::to_string(static_cast<long long>(entry.action.media_id));
+    }
+    text += std::string(": ") + state_name(entry.state);
+    if (!entry.reason.empty()) {
+        text += ": " + entry.reason;
+    }
+    return text;
+}
+
 std::string sanitize_key(const std::string &key)
 {
     std::string out;

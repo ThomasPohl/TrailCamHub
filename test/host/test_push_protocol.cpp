@@ -66,6 +66,41 @@ TEST_CASE("push: Telegram updates")
     CHECK_FALSE(parse_updates(R"({"ok":false,"error_code":409})", updates));
 }
 
+TEST_CASE("push: chat commands for camera actions")
+{
+    using camera::action::Type;
+    CHECK(action_of_command("/photo") == Type::photo);
+    CHECK(action_of_command("/video_start") == Type::video_start);
+    CHECK(action_of_command("/video_stop") == Type::video_stop);
+    // Deleting and formatting are never asked for in a chat.
+    CHECK_FALSE(action_of_command("/delete").has_value());
+    CHECK_FALSE(action_of_command("/format").has_value());
+    CHECK_FALSE(action_of_command("/scan").has_value());
+    CHECK_FALSE(action_of_command("").has_value());
+}
+
+TEST_CASE("push: the chat is told how an action ended")
+{
+    using camera::action::Action;
+    using camera::action::Entry;
+    using camera::action::State;
+    using camera::action::Type;
+    Entry entry;
+    entry.action = Action{Type::photo, 0};
+    entry.state = State::done;
+    CHECK(action_result_text(entry).find("Photo taken") != std::string::npos);
+    entry.state = State::failed;
+    entry.reason = "the camera answered snapRet -2";
+    CHECK(action_result_text(entry) ==
+          "Photo failed: the camera answered snapRet -2.");
+    entry.action.type = Type::video_start;
+    entry.reason.clear();
+    CHECK(action_result_text(entry) == "Video start failed: unknown reason.");
+    entry.action.type = Type::video_stop;
+    entry.state = State::done;
+    CHECK(action_result_text(entry).find("stopped") != std::string::npos);
+}
+
 TEST_CASE("push: commands and buttons")
 {
     CHECK(command_of("/scan") == "/scan");

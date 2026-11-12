@@ -129,6 +129,10 @@ class ActionQueue
     std::uint32_t next_id_ = 1;
 };
 
+// One line for people: "photo: done", "delete 123: failed: <reason>",
+// "format: pending". Used by every front end, so they word it alike.
+std::string describe(const Entry &entry);
+
 // Cleans a key: only letters, digits and ":_-" stay, cut to kMaxKeyLength.
 std::string sanitize_key(const std::string &key);
 
