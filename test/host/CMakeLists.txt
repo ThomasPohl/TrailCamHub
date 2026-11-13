@@ -60,6 +60,7 @@ add_executable(host_tests
     test_bulk_reassembler.cpp
     test_bulk_stream.cpp
     test_device_info.cpp
+    test_camera_action.cpp
     test_catalog_file.cpp
     test_media_catalog.cpp
     test_media_files.cpp
@@ -111,6 +112,8 @@ add_executable(host_tests
     ${link_dir}/playback_stream.cpp
     ${link_dir}/device_info.cpp
     ${link_dir}/catalog_file.cpp
+    ${link_dir}/camera_action.cpp
+    ${link_dir}/action_confirm.cpp
     ${link_dir}/media_catalog.cpp
     ${link_dir}/media_files.cpp
     ${link_dir}/camera_prelogin.cpp
