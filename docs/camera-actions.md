@@ -98,6 +98,22 @@ is queued once when the front end gives a key such as `tg:<update id>`.
 | `format` / `format confirm <code>` | erase the camera's SD card |
 | `actions` | the queue with the results: `action 3 delete 2653775860 failed: …` |
 
+## Web UI and Telegram
+
+- **Web UI:** the card *Camera actions* has buttons for photo and video, a
+  field for the `mediaId` (the file names under `media/` and `thumb/` are the
+  `mediaId`) and *Delete recording* and *Erase camera SD card*, which ask for
+  confirmation before they go on (`POST /api/action?type=…`, then the same
+  request with `&code=` from the first answer). It lists the last actions
+  with their results (`GET /api/actions`). The console and the page share
+  `session_actions::request()`: checks, confirmation, queue, session.
+- **Telegram:** `/photo`, `/video_start`, `/video_stop`. The update id is the
+  key, so a command that `getUpdates` delivers again is queued once. The hub
+  requests a camera read at once; at the check-in after it, the chat is told
+  how each action ended (once). Deleting and formatting are not available in
+  a chat. The backend's commands (`CommandType`) are not extended: the
+  backend is not extended any more (#150).
+
 ## Hardware test points
 
 Not tested on a camera yet (CI compiles only):
@@ -110,5 +126,11 @@ Not tested on a camera yet (CI compiles only):
   camera does not list this file any more".
 - `format confirm`: the list is empty afterwards; a wrong or late code is
   refused.
+- Web UI: each button; the confirmation for delete and format; the list
+  under the buttons shows `done` or `failed: …` after the session.
+- Telegram `/photo` over the modem: the read starts, the photo arrives with
+  the thumbnails of that check-in, and "Photo taken" with the result; the same
+  command delivered twice (restart before the offset is saved) takes one
+  photo.
 - Power off the hub right after sending (`running` in `actions.csv`): after
   the restart the action is `failed`, not repeated.

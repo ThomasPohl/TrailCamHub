@@ -42,6 +42,7 @@
 #include "hub_config.hpp"
 #include "schedule_state.hpp"
 #include "sd_card.h"
+#include "session_actions.hpp"
 #include "session_controller.h"
 
 #define CONSOLE_TASK_STACK 6144
@@ -430,17 +431,8 @@ void request_cycle(esp_err_t error, const char *what)
 
 std::string action_line(const camera::action::Entry &entry)
 {
-    using namespace camera::action;
-    std::string line = format_line("action %u %s", (unsigned)entry.id,
-                                   type_name(entry.action.type));
-    if (entry.action.media_id > 0) {
-        line += " " + std::to_string((long long)entry.action.media_id);
-    }
-    line += std::string(" ") + state_name(entry.state);
-    if (!entry.reason.empty()) {
-        line += ": " + entry.reason;
-    }
-    return line;
+    return format_line("action %u ", (unsigned)entry.id) +
+           camera::action::describe(entry);
 }
 
 void print_actions()
@@ -455,60 +447,26 @@ void print_actions()
     }
 }
 
-// Queues the action and starts the session that runs it: a photo is followed
-// by a normal scan (so that it is read and pushed), everything else by a
-// short session. While a cycle is running the action waits for the next one.
-void run_action(const hub_console::Command &command,
-                const camera::action::Action &action)
+// The same path as the web UI (session_actions): checks, confirmation, queue,
+// and the session that runs it. A photo is followed by a normal scan (so that
+// the picture is read and pushed), everything else by a short session.
+void run_action(const char *type, const hub_console::Command &command)
 {
-    using namespace camera::action;
-    if (needs_confirmation(action.type)) {
-        const std::string subject =
-            action.type == Type::delete_media
-                ? "delete " + std::to_string((long long)action.media_id)
-                : std::string(type_name(action.type));
-        if (!command.confirm) {
-            const std::string code = service::request_confirmation(subject);
-            reply("OK", std::string(action.type == Type::format_sd
-                                        ? "this erases the camera's SD card"
-                                        : "this cannot be undone") +
-                            "; within a minute send '" + subject + " confirm " +
-                            code + "'");
-            return;
-        }
-        const ConfirmGate::Result checked =
-            service::confirm(subject, command.code);
-        if (checked != ConfirmGate::Result::confirmed) {
-            reply("ERR", confirm_result_text(checked));
-            return;
-        }
-    }
-    const ActionQueue::AddResult added =
-        service::submit(action, Source::console, "");
-    switch (added.kind) {
-    case ActionQueue::AddResult::Kind::added:
-        reply("OK", format_line("queued action %u", (unsigned)added.id));
-        break;
-    case ActionQueue::AddResult::Kind::duplicate:
+    const session_actions::Reply reply_of = session_actions::request(
+        session_actions::From::console, type, command.media_id,
+        command.confirm ? command.code : "");
+    if (reply_of.needs_code) {
         reply("OK",
-              format_line("already queued as action %u", (unsigned)added.id));
-        break;
-    case ActionQueue::AddResult::Kind::full:
-        reply("ERR", "too many actions are waiting; see 'actions'");
-        return;
-    default:
-        reply("ERR", added.reason);
-        return;
-    }
-    const esp_err_t error = action.type == Type::photo
-                                ? session_controller_request_scan()
-                                : session_controller_request_actions();
-    if (error == ESP_ERR_INVALID_STATE) {
-        reply("OK", "it runs in the next camera session");
-    } else if (error != ESP_OK) {
-        reply("ERR", std::string("session failed: ") + esp_err_to_name(error));
+              reply_of.text + "; within a minute send '" + type +
+                  (command.media_id > 0 ? " " + std::to_string(command.media_id)
+                                        : std::string()) +
+                  " confirm " + reply_of.code + "'");
+    } else if (reply_of.ok) {
+        reply("OK", format_line("action %u: ", reply_of.id) + reply_of.text +
+                        (reply_of.session_started ? "; results with 'actions'"
+                                                  : std::string()));
     } else {
-        reply("OK", "session started; results with 'actions'");
+        reply("ERR", reply_of.text);
     }
 }
 
@@ -591,25 +549,19 @@ void execute(const hub_console::Command &command)
         request_cycle(session_controller_request_list(), "camlist");
         break;
     case CommandType::photo:
-        run_action(command,
-                   camera::action::Action{camera::action::Type::photo, 0});
+        run_action("photo", command);
         break;
     case CommandType::video_start:
-        run_action(command, camera::action::Action{
-                                camera::action::Type::video_start, 0});
+        run_action("video-start", command);
         break;
     case CommandType::video_stop:
-        run_action(command,
-                   camera::action::Action{camera::action::Type::video_stop, 0});
+        run_action("video-stop", command);
         break;
     case CommandType::delete_media:
-        run_action(command,
-                   camera::action::Action{camera::action::Type::delete_media,
-                                          command.media_id});
+        run_action("delete", command);
         break;
     case CommandType::format_sd:
-        run_action(command,
-                   camera::action::Action{camera::action::Type::format_sd, 0});
+        run_action("format", command);
         break;
     case CommandType::actions:
         print_actions();

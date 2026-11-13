@@ -284,6 +284,51 @@ std::string command_of(const std::string &text)
     return text.substr(0, end);
 }
 
+std::optional<camera::action::Type>
+action_of_command(const std::string &command)
+{
+    if (command == "/photo") {
+        return camera::action::Type::photo;
+    }
+    if (command == "/video_start") {
+        return camera::action::Type::video_start;
+    }
+    if (command == "/video_stop") {
+        return camera::action::Type::video_stop;
+    }
+    return std::nullopt;
+}
+
+std::string action_result_text(const camera::action::Entry &entry)
+{
+    using camera::action::State;
+    using camera::action::Type;
+    const char *done = "Done.";
+    const char *name = "Action";
+    switch (entry.action.type) {
+    case Type::photo:
+        name = "Photo";
+        done = "Photo taken; it follows with the next pictures.";
+        break;
+    case Type::video_start:
+        name = "Video start";
+        done = "Video recording started; /video_stop ends it.";
+        break;
+    case Type::video_stop:
+        name = "Video stop";
+        done = "Video recording stopped.";
+        break;
+    case Type::delete_media:
+    case Type::format_sd:
+        break;
+    }
+    if (entry.state == State::done) {
+        return done;
+    }
+    return std::string(name) + " failed: " +
+           (entry.reason.empty() ? "unknown reason" : entry.reason) + ".";
+}
+
 std::string video_button(const std::string &camera_id, std::int64_t media_id)
 {
     std::string data = "v:" + std::to_string((long long)media_id) + ":";

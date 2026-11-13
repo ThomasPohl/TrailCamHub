@@ -217,6 +217,19 @@ TEST_CASE("results are reported once to the front end that asked")
     CHECK_FALSE(queue.mark_notified(99));
 }
 
+TEST_CASE("an entry is described the same way everywhere")
+{
+    ActionQueue queue;
+    queue.add(kPhoto, Source::console, "", 1);
+    queue.add(del(2653775860LL), Source::console, "", 1);
+    CHECK(describe(*queue.find(1)) == "photo: pending");
+    queue.finish(1, ok(), 2);
+    CHECK(describe(*queue.find(1)) == "photo: done");
+    queue.finish(2, failure("the camera has no such file"), 2);
+    CHECK(describe(*queue.find(2)) ==
+          "delete 2653775860: failed: the camera has no such file");
+}
+
 TEST_CASE("keys are cleaned")
 {
     CHECK(sanitize_key("tg:42_x-1") == "tg:42_x-1");
