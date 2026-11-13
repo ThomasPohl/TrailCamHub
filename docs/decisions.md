@@ -4,6 +4,16 @@ Design decisions that shape the code, newest first, each with its reason so
 that it can be revisited. Details are in the linked issues and pages. Add an
 entry when a decision changes how new code should be written.
 
+## 2026-11-12 — Camera actions go through one queue, and a lost action is not repeated
+
+Photo, video, delete and format are described once (`camera_action`) and run
+from a queue on the SD card, whichever front end asked; the front ends only
+translate their input and show the result. Success is the command's own
+field, never `result`. An action that was sent and not answered ends as
+failed and the person asks again: a repeated delete could remove a newer
+recording that took the number. Formatting and deleting are never remote and
+need a two-step code. ([camera-actions.md](camera-actions.md), #135, #194)
+
 ## 2026-11-11 — One camera per hub on boards without PSRAM, a few hundred recordings per camera
 
 The catalog of a camera is held in RAM and the sync loads every camera on

@@ -21,6 +21,7 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
+#include "camera_actions.hpp"
 #include "camera_ble.h"
 #include "camera_protocol.h"
 #include "coprocessor_update.h"
@@ -186,6 +187,8 @@ extern "C" void app_main(void)
         ESP_LOGW(TAG, "Continuing without SD card");
     } else {
         camera_protocol_init_storage();
+        // The queue of camera actions lives on the card too.
+        camera::action::service::init();
     }
 #if CONFIG_SD_LOG_ENABLE
     if (sd_log_ready) {

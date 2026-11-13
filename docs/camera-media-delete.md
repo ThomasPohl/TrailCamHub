@@ -1,6 +1,6 @@
 # Deleting media on the camera
 
-Status: tested on hardware on 2026-11-04 with one camera (TC100, firmware 2.2.5.9, 122 GB card). **Not implemented in the firmware**: `camera_link` sends none of these commands. The command IDs come from [`pwnb0t/trailcam-automation`](https://github.com/pwnb0t/trailcam-automation) (`docs/json-commands.md`, `docs/operations-from-apk.md`); everything below was observed on our camera unless it says otherwise.
+Status: tested on hardware on 2026-11-04 with one camera (TC100, firmware 2.2.5.9, 122 GB card). Since #194 the firmware sends 773 and 518 on request ([camera-actions.md](camera-actions.md)): by `mediaId` after a fresh media list, with a confirmation, never from Telegram; 774 is not used. The command IDs come from [`pwnb0t/trailcam-automation`](https://github.com/pwnb0t/trailcam-automation) (`docs/json-commands.md`, `docs/operations-from-apk.md`); everything below was observed on our camera unless it says otherwise.
 
 ## Summary
 

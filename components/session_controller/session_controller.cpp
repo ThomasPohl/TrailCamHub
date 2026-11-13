@@ -64,6 +64,8 @@ struct QueuedEvent {
     std::uint8_t reason;
     // With scan_requested: only list the camera's media.
     bool list_only;
+    // With scan_requested: a short session for the queued actions.
+    bool actions_only;
     // With the end of a listing's session: the files it reported.
     std::uint32_t listed_files;
     // With the end of a session: the camera's id and battery (if reported).
@@ -121,6 +123,8 @@ int s_camera_battery = -1;
 // touched by the controller task.
 bool s_camera_ok;
 bool s_list_only;
+// The cycle is a short session for the queued actions.
+bool s_actions_only;
 // Files reported by the listing of this cycle.
 uint32_t s_listed_files;
 bool s_sync_ok;
@@ -324,6 +328,7 @@ void publish_status(const session::Result &result)
     s_status.camera_no_card = s_fsm.no_card();
     s_status.listed_files = s_listed_files;
     s_status.list_only = s_list_only;
+    s_status.actions_only = s_actions_only;
     s_status.sync_ok = s_sync_ok;
     if (s_status.cycle_finished) {
         s_last_outcome = result.outcome;
@@ -674,7 +679,7 @@ void load_settings_for_cycle()
         s_settings = hub_config::Settings{};
     }
     s_fsm.set_uplink_enabled(hub_config::uplink_ready(s_settings) &&
-                             !s_list_only);
+                             !s_list_only && !s_actions_only);
     // Modem sleep on the home Wi-Fi only on battery power.
     camera_wifi_set_home_power_save(
         hub_config::wifi_power_save(hub_config::mode(s_settings)));
@@ -698,7 +703,8 @@ void load_settings_for_cycle()
     s_fsm.set_uplink_join_timeout_ms(
         s_uplink_modem ? CONFIG_MODEM_ATTACH_TIMEOUT_S * 1000u + 5000u : 0);
 #endif
-    s_fsm.set_listing(s_list_only);
+    // An actions-only cycle ends like a listing: one camera, no sync.
+    s_fsm.set_listing(s_list_only || s_actions_only);
 }
 
 void controller_task(void *arg)
@@ -747,7 +753,9 @@ void controller_task(void *arg)
             s_sync_ok = false;
             s_listed_files = 0;
             s_list_only = event.list_only;
+            s_actions_only = event.actions_only;
             camera_protocol_set_list_only(s_list_only);
+            camera_protocol_set_actions_only(s_actions_only);
         }
         if (is_session_end(event.type) &&
             s_fsm.state() == session::State::session && !s_fsm.stop_pending()) {
@@ -934,6 +942,17 @@ esp_err_t session_controller_request_list(void)
     }
     QueuedEvent event = make_event(session::Event::scan_requested);
     event.list_only = true;
+    post_event(event);
+    return ESP_OK;
+}
+
+esp_err_t session_controller_request_actions(void)
+{
+    if (s_events == NULL || s_state.load() != session::State::idle) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    QueuedEvent event = make_event(session::Event::scan_requested);
+    event.actions_only = true;
     post_event(event);
     return ESP_OK;
 }
