@@ -141,7 +141,7 @@ need a review or a test on hardware.
 
 The summary of every board build has a **Static RAM** table
 (`.github/scripts/ram-report.sh`): used and free bytes of the RAM regions
-(DRAM and IRAM on the ESP32, DIRAM on the newer chips) for the development and
-the release image. What is free of the data RAM is the heap at boot. The job
-warns below 10 % free IRAM (the link fails when it is full, #209) and below
-25 % free data RAM.
+(DRAM and IRAM on the ESP32; one shared region on the newer chips, called
+DIRAM or HP SRAM) for the development and the release image. What is free of
+the data RAM is the heap at boot. The job warns below 10 % free IRAM on the
+ESP32 (the link fails when it is full, #209) and below 25 % free data RAM.

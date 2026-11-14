@@ -7,10 +7,11 @@
 #
 # The table goes to $GITHUB_STEP_SUMMARY and to stdout. A warning is emitted
 # when a region has less free space than its threshold:
-#   MIN_FREE_IRAM_PERCENT (default 10): instruction RAM. The link fails when
-#     it is full (#209), so this is the same early warning as the 10 % rule
-#     for the application partition.
-#   MIN_FREE_DRAM_PERCENT (default 25): data RAM. The rest is the heap.
+#   MIN_FREE_IRAM_PERCENT (default 10): instruction RAM of the ESP32. The
+#     link fails when it is full (#209), so this is the same early warning as
+#     the 10 % rule for the application partition.
+#   MIN_FREE_DRAM_PERCENT (default 25): data RAM (DRAM on the ESP32, the
+#     shared region of the newer chips). The rest is the heap.
 # A failure of esp_idf_size only degrades the report, not the build.
 set -euo pipefail
 
@@ -51,21 +52,32 @@ except (ValueError, KeyError) as error:
           file=sys.stderr)
     sys.exit(0)
 
-# DRAM and IRAM are separate regions on the ESP32; the newer chips have one
-# region for both (DIRAM). Flash and RTC regions are not RAM the heap uses.
-thresholds = {"IRAM": int(min_iram), "DRAM": int(min_dram), "DIRAM": int(min_dram)}
-for region in layout:
-    name = region.get("name", "")
-    total = region.get("total", 0)
-    if name not in thresholds or not total:
-        continue
+# Names of the internal RAM regions in esp_idf_size's chip descriptions: DRAM
+# and IRAM are separate on the ESP32; the ESP32-S3 and -P4 have one shared
+# region (DIRAM) next to small fixed ones; the C series calls it HP SRAM.
+# Flash, external RAM and RTC/LP regions are not listed.
+ram = [r for r in layout
+       if r.get("name") in ("DRAM", "IRAM", "DIRAM", "HP SRAM") and r.get("total")]
+if not ram:
+    names = ", ".join(str(r.get("name")) for r in layout)
+    print(f"::warning::No RAM region in the esp_idf_size output for {board} "
+          f"({label}); regions: {names}", file=sys.stderr)
+# With a shared region, code and data that do not fit the fixed regions go
+# there, so only the shared one says how much is left.
+shared = any(r["name"] == "DIRAM" for r in ram)
+for region in ram:
+    name = region["name"]
+    total = region["total"]
     used = region.get("used", 0)
     free = total - used
     percent = free * 100 // total
     print(f"| {label} | {name} | {used} B | {total} B | {free} B | {percent} % |")
-    if percent < thresholds[name]:
+    if shared and name != "DIRAM":
+        continue
+    threshold = int(min_iram) if name == "IRAM" else int(min_dram)
+    if percent < threshold:
         print(f"::warning::{board} ({label}): only {percent}% of {name} is free "
-              f"(threshold {thresholds[name]}%).", file=sys.stderr)
+              f"(threshold {threshold}%).", file=sys.stderr)
 PY
     rm -f "$json"
 done
