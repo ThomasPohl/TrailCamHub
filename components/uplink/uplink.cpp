@@ -32,6 +32,7 @@
 #include "ota_update.hpp"
 #include "schedule_state.hpp"
 #include "sdkconfig.h"
+#include "sync_cameras.hpp"
 #include "system_diagnostics.h"
 #include "time_sync.h"
 #include "uplink_protocol.hpp"
@@ -247,27 +248,13 @@ void set_clock(std::int64_t unix_seconds)
     }
 }
 
-// One camera's state on the SD card during a sync.
-struct CameraState {
-    std::string id;
-    camera::artemis::MediaCatalog catalog;
-    std::vector<std::int64_t> sent;  // mediaIds of the media in this check-in
-    bool catalog_changed = false;
-};
-
-CameraState *find_camera(std::vector<CameraState> &cameras,
-                         const std::string &id)
-{
-    for (CameraState &camera : cameras) {
-        if (camera.id == id) {
-            return &camera;
-        }
-    }
-    return nullptr;
-}
+// The mediaIds sent with this check-in, per camera, in the order of the
+// cameras of the sync.
+using SentMedia = std::vector<std::vector<std::int64_t>>;
 
 // Collects every camera on the SD card with the media not reported yet.
-void collect_cameras(CheckinRequest &request, std::vector<CameraState> &cameras)
+void collect_cameras(CheckinRequest &request, std::vector<SyncCamera> &cameras,
+                     SentMedia &sent)
 {
     std::size_t media_budget = kMaxMediaPerCheckin;
     for (const std::string &id : camera::store::list_cameras()) {
@@ -283,9 +270,8 @@ void collect_cameras(CheckinRequest &request, std::vector<CameraState> &cameras)
         if (!camera::store::load_camera_info(id, info, report.read_at)) {
             continue;
         }
-        CameraState state;
-        state.id = id;
-        camera::store::load_catalog(id, state.catalog);
+        SyncCamera state = load_camera(id);
+        std::vector<std::int64_t> sent_ids;
 
         // The directory name is the sanitized camera id used everywhere.
         report.cam_id = id;
@@ -310,7 +296,7 @@ void collect_cameras(CheckinRequest &request, std::vector<CameraState> &cameras)
             const MediaRef ref = {e.media_id, e.dir_num, e.media_num,
                                   e.file_type, e.media_time};
             report.media.push_back(ref);
-            state.sent.push_back(e.media_id);
+            sent_ids.push_back(e.media_id);
         }
         media_budget -= report.media.size();
         const std::size_t waiting =
@@ -327,6 +313,7 @@ void collect_cameras(CheckinRequest &request, std::vector<CameraState> &cameras)
         }
         request.cameras.push_back(std::move(report));
         cameras.push_back(std::move(state));
+        sent.push_back(std::move(sent_ids));
     }
 }
 
@@ -353,7 +340,9 @@ ScheduleReport schedule_report()
 }
 
 // Remembers what the backend now knows, so the next check-in sends a delta.
-void apply_checkin_result(CameraState &camera, const CameraCheckin &result)
+void apply_checkin_result(SyncCamera &camera,
+                          const std::vector<std::int64_t> &sent,
+                          const CameraCheckin &result)
 {
     using camera::artemis::MediaCatalog;
     if (!result.accepted) {
@@ -365,12 +354,12 @@ void apply_checkin_result(CameraState &camera, const CameraCheckin &result)
         // New to the backend: send everything again next time.
         if (camera.catalog.count_with_flag(MediaCatalog::kReported) > 0) {
             camera.catalog.clear_flag_everywhere(MediaCatalog::kReported);
-            camera.catalog_changed = true;
+            camera.changed = true;
         }
         return;
     }
-    for (const std::int64_t media_id : camera.sent) {
-        camera.catalog_changed |=
+    for (const std::int64_t media_id : sent) {
+        camera.changed |=
             camera.catalog.set_flag(media_id, MediaCatalog::kReported);
     }
 }
@@ -404,7 +393,7 @@ void update_firmware(const hub_config::Settings &settings)
 // asks for a camera read if the request is new. Returns whether the command
 // is settled (`out` is the answer); otherwise it is not acknowledged and
 // comes again with the next check-in, with a fresh upload URL.
-bool handle_video_command(CameraState *camera, const std::string &cam_id,
+bool handle_video_command(SyncCamera *camera, const std::string &cam_id,
                           const Command &command, bool over_modem,
                           CommandResult &out, Report &report)
 {
@@ -414,7 +403,7 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
         kDownloadsVideos, !command.upload_url.empty());
     switch (decision.step) {
     case VideoStep::request:
-        camera->catalog_changed |= camera->catalog.set_flag(
+        camera->changed |= camera->catalog.set_flag(
             command.media_id, MediaCatalog::kVideoRequested);
         ESP_LOGI(TAG, "Video %lld of %s requested", (long long)command.media_id,
                  cam_id.c_str());
@@ -435,7 +424,7 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
                     size, too_large, sd_read_us);
         if (!too_large.empty()) {
             out.error = too_large;
-            camera->catalog_changed |=
+            camera->changed |=
                 camera->catalog.forget_video_request(command.media_id);
             ESP_LOGW(TAG, "Video %lld of %s: %s", (long long)command.media_id,
                      cam_id.c_str(), out.error.c_str());
@@ -453,7 +442,7 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
                 (unsigned long long)(size >> 10), (long long)ms,
                 (unsigned long long)(ms > 0 ? (size >> 10) * 1000 / ms : 0),
                 (long long)(sd_read_us / 1000));
-            camera->catalog_changed |= camera->catalog.set_flag(
+            camera->changed |= camera->catalog.set_flag(
                 command.media_id, MediaCatalog::kVideoUploaded);
             report.videos_uploaded++;
             out.done = true;
@@ -462,9 +451,9 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
         if (put.error == ESP_ERR_NOT_FOUND ||
             put.error == ESP_ERR_INVALID_STATE) {
             // The stored streams are gone or broken: fetch the video again.
-            camera->catalog_changed |= camera->catalog.clear_flag(
+            camera->changed |= camera->catalog.clear_flag(
                 command.media_id, MediaCatalog::kFileDownloaded);
-            camera->catalog_changed |= camera->catalog.set_flag(
+            camera->changed |= camera->catalog.set_flag(
                 command.media_id, MediaCatalog::kVideoRequested);
         }
         // Tried again with the next check-in.
@@ -476,7 +465,7 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
     case VideoStep::fail:
         out.error = video_failure_text(decision.failure);
         if (camera != nullptr) {
-            camera->catalog_changed |=
+            camera->changed |=
                 camera->catalog.forget_video_request(command.media_id);
         }
         ESP_LOGW(TAG, "Video %lld of %s: %s", (long long)command.media_id,
@@ -522,8 +511,9 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     request.max_thumb_uploads = kMaxThumbUploads;
     request.schedule = schedule_report();
     request.memory = memory_report();
-    std::vector<CameraState> cameras;
-    collect_cameras(request, cameras);
+    std::vector<SyncCamera> cameras;
+    SentMedia sent;
+    collect_cameras(request, cameras, sent);
     report.cameras_reported = (int)request.cameras.size();
     for (const CameraReport &c : request.cameras) {
         report.media_reported += (int)c.media.size();
@@ -567,9 +557,10 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     const bool over_modem =
         hub_config::uplink_transport(settings) == hub_config::Transport::modem;
     for (const CameraCheckin &result : response.cameras) {
-        CameraState *camera = find_camera(cameras, result.cam_id);
+        SyncCamera *camera = find_camera(cameras, result.cam_id);
         if (camera != nullptr) {
-            apply_checkin_result(*camera, result);
+            apply_checkin_result(*camera, sent[camera - cameras.data()],
+                                 result);
         }
         if (!result.accepted) {
             report.cameras_refused++;
@@ -652,13 +643,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
         ack.cameras.push_back(camera_ack);
     }
 
-    for (const CameraState &camera : cameras) {
-        if (camera.catalog_changed &&
-            !camera::store::save_catalog(camera.id, camera.catalog)) {
-            ESP_LOGW(TAG, "Could not save the catalog of %s",
-                     camera.id.c_str());
-        }
-    }
+    save_changed(cameras);
     ESP_LOGI(TAG,
              "Checked in %d cameras (%d refused), %d media; backend wanted "
              "%d thumbnails, %d commands",

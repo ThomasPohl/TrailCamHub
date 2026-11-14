@@ -39,6 +39,7 @@
 #include "push_protocol.hpp"
 #include "schedule_state.hpp"
 #include "sdkconfig.h"
+#include "sync_cameras.hpp"
 
 namespace uplink
 {
@@ -137,36 +138,6 @@ BodyReader framed(const std::string &head, BodyReader inner,
     };
 }
 
-struct CameraFiles {
-    std::string id;
-    MediaCatalog catalog;
-    bool changed = false;
-};
-
-std::vector<CameraFiles> load_cameras()
-{
-    std::vector<CameraFiles> cameras;
-    for (const std::string &id : camera::store::list_cameras()) {
-        CameraFiles camera;
-        camera.id = id;
-        camera::store::load_catalog(id, camera.catalog);
-        cameras.push_back(std::move(camera));
-    }
-    return cameras;
-}
-
-void save_cameras(std::vector<CameraFiles> &cameras)
-{
-    for (CameraFiles &camera : cameras) {
-        if (camera.changed &&
-            !camera::store::save_catalog(camera.id, camera.catalog)) {
-            ESP_LOGW(TAG, "Could not save the catalog of %s",
-                     camera.id.c_str());
-        }
-        camera.changed = false;
-    }
-}
-
 bool success(const HttpResult &result)
 {
     return result.error == ESP_OK && result.status >= 200 &&
@@ -238,7 +209,7 @@ esp_err_t push_webdav(const hub_config::Settings &settings, bool over_modem,
                       Report &report)
 {
     const WebDav dav{settings};
-    std::vector<CameraFiles> cameras = load_cameras();
+    std::vector<SyncCamera> cameras = load_cameras();
     std::string error;
     // A folder for the hub's files may not exist yet.
     if (!dav.make_folder({}, error)) {
@@ -246,7 +217,7 @@ esp_err_t push_webdav(const hub_config::Settings &settings, bool over_modem,
         ESP_LOGE(TAG, "%s", error.c_str());
         return ESP_FAIL;
     }
-    for (CameraFiles &camera : cameras) {
+    for (SyncCamera &camera : cameras) {
         report.cameras_reported++;
         bool folders = false;
         auto ensure_folders = [&]() {
@@ -341,7 +312,7 @@ esp_err_t push_webdav(const hub_config::Settings &settings, bool over_modem,
             break;
         }
     }
-    save_cameras(cameras);
+    save_changed(cameras);
     if (!error.empty()) {
         report.error = error;
         ESP_LOGE(TAG, "%s", error.c_str());
@@ -450,7 +421,7 @@ class Telegram
     std::string api_;
 };
 
-std::string status_text(const std::vector<CameraFiles> &cameras)
+std::string status_text(const std::vector<SyncCamera> &cameras)
 {
     const schedule::Effective effective = schedule::effective();
     const schedule::Times times = schedule::next_times(effective);
@@ -460,7 +431,7 @@ std::string status_text(const std::vector<CameraFiles> &cameras)
     if (battery >= 0) {
         text += "\nHub battery " + std::to_string(battery) + " %";
     }
-    for (const CameraFiles &camera : cameras) {
+    for (const SyncCamera &camera : cameras) {
         camera::artemis::DeviceInfo info;
         std::int64_t read_at = 0;
         if (camera::store::load_camera_info(camera.id, info, read_at)) {
@@ -487,23 +458,13 @@ std::string status_text(const std::vector<CameraFiles> &cameras)
     return text;
 }
 
-CameraFiles *find(std::vector<CameraFiles> &cameras, const std::string &id)
-{
-    for (CameraFiles &camera : cameras) {
-        if (camera.id == id) {
-            return &camera;
-        }
-    }
-    return nullptr;
-}
-
 }  // namespace
 
 esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
                         Report &report)
 {
     const Telegram bot(settings);
-    std::vector<CameraFiles> cameras = load_cameras();
+    std::vector<SyncCamera> cameras = load_cameras();
     std::int64_t chat =
         settings.telegram_chat.empty()
             ? 0
@@ -556,10 +517,10 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
         if (!update.callback_id.empty()) {
             std::string camera_id;
             std::int64_t media_id = 0;
-            CameraFiles *camera = nullptr;
+            SyncCamera *camera = nullptr;
             if (push::parse_video_button(update.callback_data, camera_id,
                                          media_id)) {
-                camera = find(cameras, camera_id);
+                camera = find_camera(cameras, camera_id);
             }
             if (camera == nullptr ||
                 camera->catalog.find(media_id) == nullptr) {
@@ -610,7 +571,7 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
         schedule::request_camera_read("asked for in Telegram");
     }
     if (chat == 0) {
-        save_cameras(cameras);
+        save_changed(cameras);
         ESP_LOGW(TAG, "No Telegram chat yet: send /start to the bot");
         return ESP_OK;
     }
@@ -626,7 +587,7 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
     int photos = 0;
     int waiting = 0;
     std::string error;
-    for (CameraFiles &camera : cameras) {
+    for (SyncCamera &camera : cameras) {
         report.cameras_reported++;
         for (const CatalogEntry &entry : camera.catalog.entries()) {
             if (!has(entry, MediaCatalog::kThumbPresent) ||
@@ -679,7 +640,7 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
 
     // 3. Requested videos that are on the SD card now; failed ones are
     // answered and forgotten, so that a new request starts over.
-    for (CameraFiles &camera : cameras) {
+    for (SyncCamera &camera : cameras) {
         for (const CatalogEntry &entry : camera.catalog.entries()) {
             if (!error.empty() || !has(entry, MediaCatalog::kVideoRequested) ||
                 has(entry, MediaCatalog::kVideoUploaded)) {
@@ -738,7 +699,7 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
             report.videos_uploaded++;
         }
     }
-    save_cameras(cameras);
+    save_changed(cameras);
     if (!error.empty()) {
         report.error = error;
         ESP_LOGE(TAG, "%s", error.c_str());
