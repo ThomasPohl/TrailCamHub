@@ -1,0 +1,20 @@
+menu "TrailCamHub: camera BLE"
+
+config CAMERA_WIFI_ENABLE_PAYLOAD_HEX
+    string "Wi-Fi enable payload (hex)"
+    default "42545F4B45595F4F4E"
+    help
+        Payload to write to characteristic 0x0002, separated by optional spaces,
+        colons, or hyphens. The default is ASCII "BT_KEY_ON".
+
+config CAMERA_BLE_RELEASE_AFTER_ACTIVATION
+    bool "Release BLE after the camera Wi-Fi was activated"
+    default y
+    help
+        Disconnect from the camera and shut down the NimBLE stack and the
+        Bluetooth controller once the camera has returned its Wi-Fi
+        credentials. This returns their memory for the camera session; BLE
+        is started again for the next activation. Disable this if the
+        camera turns off its access point when the BLE connection ends.
+
+endmenu

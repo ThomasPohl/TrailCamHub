@@ -1,0 +1,98 @@
+menu "TrailCamHub: Ethernet uplink"
+
+config ETH_UPLINK_ENABLE
+    bool "Use wired Ethernet as the uplink"
+    # Not SOC_EMAC_SUPPORTED: the classic ESP32 has an EMAC as well, but
+    # the ESP32-WROOM-32D board has no PHY.
+    default y if IDF_TARGET_ESP32P4 || BOARD_S3_ETH
+    default n
+    help
+        Start the board's Ethernet at boot and obtain an address over DHCP.
+        The Ethernet interface stays the default route while the camera
+        Wi-Fi is joined, and it is the hub's transport unless the setting
+        "transport" says otherwise (docs/modes.md).
+
+choice ETH_UPLINK_CHIP
+    prompt "Ethernet hardware"
+    depends on ETH_UPLINK_ENABLE
+    default ETH_UPLINK_IP101 if IDF_TARGET_ESP32P4
+    default ETH_UPLINK_W5500
+
+config ETH_UPLINK_IP101
+    bool "On-chip MAC with an IP101 PHY (ESP32-P4-NANO)"
+    depends on SOC_EMAC_SUPPORTED
+    help
+        The GPIO defaults match the Waveshare ESP32-P4-NANO (RMII reference
+        clock input on GPIO50).
+
+config ETH_UPLINK_W5500
+    bool "W5500 on SPI (ESP32-S3-ETH)"
+    select ETH_SPI_ETHERNET_W5500
+    help
+        The WIZnet W5500 on its own SPI bus (SPI3). The GPIO defaults match
+        the Waveshare ESP32-S3-ETH.
+
+endchoice
+
+config ETH_UPLINK_MDC_GPIO
+    int "SMI MDC GPIO"
+    depends on ETH_UPLINK_IP101
+    range 0 54
+    default 31
+
+config ETH_UPLINK_MDIO_GPIO
+    int "SMI MDIO GPIO"
+    depends on ETH_UPLINK_IP101
+    range 0 54
+    default 52
+
+config ETH_UPLINK_PHY_ADDR
+    int "PHY address"
+    depends on ETH_UPLINK_IP101
+    range 0 31
+    default 1
+
+config ETH_UPLINK_SPI_SCLK_GPIO
+    int "W5500 SCLK GPIO"
+    depends on ETH_UPLINK_W5500
+    range 0 48
+    default 13
+
+config ETH_UPLINK_SPI_MOSI_GPIO
+    int "W5500 MOSI GPIO"
+    depends on ETH_UPLINK_W5500
+    range 0 48
+    default 11
+
+config ETH_UPLINK_SPI_MISO_GPIO
+    int "W5500 MISO GPIO"
+    depends on ETH_UPLINK_W5500
+    range 0 48
+    default 12
+
+config ETH_UPLINK_SPI_CS_GPIO
+    int "W5500 CS GPIO"
+    depends on ETH_UPLINK_W5500
+    range 0 48
+    default 14
+
+config ETH_UPLINK_INT_GPIO
+    int "W5500 interrupt GPIO (-1: poll)"
+    depends on ETH_UPLINK_W5500
+    range -1 48
+    default 10
+
+config ETH_UPLINK_SPI_CLOCK_MHZ
+    int "W5500 SPI clock (MHz)"
+    depends on ETH_UPLINK_W5500
+    range 1 80
+    default 36
+
+config ETH_UPLINK_PHY_RST_GPIO
+    int "PHY reset GPIO (-1: none)"
+    depends on ETH_UPLINK_ENABLE
+    range -1 54
+    default 9 if ETH_UPLINK_W5500
+    default 51
+
+endmenu

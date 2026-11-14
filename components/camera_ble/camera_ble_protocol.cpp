@@ -15,7 +15,7 @@
 #include "hex_payload.hpp"
 
 #ifndef CONFIG_CAMERA_WIFI_ENABLE_PAYLOAD_HEX
-#error "main/Kconfig.projbuild was not processed"
+#error "The Kconfig file of this component was not processed"
 #endif
 
 using camera::ble::WifiResponseAssembler;

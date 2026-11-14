@@ -37,7 +37,7 @@
 #include "uplink.hpp"
 
 #ifndef CONFIG_SESSION_WIFI_JOIN_TIMEOUT_S
-#error "main/Kconfig.projbuild was not processed"
+#error "The Kconfig file of this component was not processed"
 #endif
 
 #define EVENT_QUEUE_LENGTH 8

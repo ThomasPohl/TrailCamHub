@@ -13,7 +13,7 @@ behaviour:
 | Deep sleep between cycles (`POWER_DEEP_...`) | on (if built in)       | off                    |
 | Modem sleep on the home Wi-Fi                | on                     | off                    |
 
-The build's preset (`CONFIG_HUB_PROFILE_*`, menu *TrailCamHub PoC → Preset
+The build's preset (`CONFIG_HUB_PROFILE_*`, menu *TrailCamHub → Preset
 mode*) is the mode of a hub whose `power` and `direction` settings are empty:
 battery + push on the ESP32-S3-A7670E-4G, mains + pull on the T-Dongles and
 the ESP32-P4-NANO. A few build options still follow the preset rather than the

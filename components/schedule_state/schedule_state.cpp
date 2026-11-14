@@ -24,7 +24,7 @@
 #include "time_sync.h"
 
 #ifndef CONFIG_SCHEDULE_CAMERA_PLAN
-#error "main/Kconfig.projbuild was not processed"
+#error "The Kconfig file of this component was not processed"
 #endif
 
 namespace schedule

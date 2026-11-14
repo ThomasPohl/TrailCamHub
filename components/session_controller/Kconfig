@@ -1,0 +1,69 @@
+menu "TrailCamHub: session"
+
+config SESSION_BLE_ACTIVATION_TIMEOUT_S
+    int "Camera BLE activation timeout (seconds)"
+    range 10 600
+    default 90
+    help
+        Time allowed for finding the camera over BLE and receiving its Wi-Fi
+        credentials after a scan was requested. A timeout counts as a failed
+        attempt.
+
+config SESSION_WIFI_JOIN_TIMEOUT_S
+    int "Wi-Fi join timeout (seconds)"
+    range 5 300
+    default 30
+    help
+        Time allowed for joining the camera access point after the camera
+        returned its Wi-Fi credentials, and for joining the home Wi-Fi for
+        the backend uplink.
+
+config SESSION_MAX_ATTEMPTS
+    int "Attempts per camera"
+    range 1 10
+    default 3
+    help
+        A scan activates a camera at most this many times before giving up
+        on it. A camera that answered over BLE but could not be read is then
+        skipped and the scan goes on with the next one; if no camera was
+        read, the hub returns to idle and the next scan comes with the next
+        request or the schedule, which waits longer after failed scans.
+
+config SESSION_MAX_CAMERAS
+    int "Cameras per scan"
+    range 1 4
+    default 4
+    help
+        A scan reads one camera after the other: after each one it looks for
+        a further camera over BLE, skipping those done in this scan, until
+        none answers within SESSION_NEXT_CAMERA_TIMEOUT_S or this many are
+        done. Then it syncs all of them in one check-in. With 1 a scan reads
+        only the first camera that answers and spends no time looking for
+        more.
+
+config SESSION_NEXT_CAMERA_TIMEOUT_S
+    int "Time to look for a further camera (seconds)"
+    range 5 300
+    default 20
+    help
+        After a camera is done, the scan looks this long for a further one
+        over BLE. Each scan spends this time once after its last camera, so
+        keep it short on battery; a camera is usually found within a few
+        seconds when it is awake.
+
+config SESSION_CAMERA_BUDGET_S
+    int "Time budget for the cameras of one scan (seconds)"
+    range 0 7200
+    default 900
+    help
+        No further camera is started once the camera part of a scan has run
+        this long; the cameras read so far are synced, the others wait for
+        the next scan. A running camera session is not cut short. 0: no
+        limit.
+
+config SESSION_RETRY_DELAY_S
+    int "Delay between camera attempts (seconds)"
+    range 1 600
+    default 10
+
+endmenu

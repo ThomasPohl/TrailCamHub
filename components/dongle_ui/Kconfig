@@ -1,0 +1,14 @@
+menu "TrailCamHub: dongle display"
+
+config DONGLE_LED_BRIGHTNESS
+    int "RGB LED brightness (0: off)"
+    depends on BOARD_TDONGLE
+    range 0 31
+    default 0
+    help
+        The APA102 LED on the back of the dongle shows the phase in the
+        colour of the display title (white idle, yellow searching and
+        connecting, green connected, orange waiting for a retry) at this
+        global brightness (1 is very dim, 31 the maximum). 0 keeps it off.
+
+endmenu

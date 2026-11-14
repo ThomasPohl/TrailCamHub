@@ -1,0 +1,48 @@
+menu "TrailCamHub: log on the SD card"
+    depends on SD_CARD_ENABLE
+
+config SD_LOG_ENABLE
+    bool "Write the log to the SD card"
+    default y
+    help
+        Copy every log line to /sdcard/logs/log-NNNNN.txt, so that a test
+        run can be read afterwards (or live in the web UI) without a serial
+        console. The lines are written every SD_LOG_FLUSH_INTERVAL_S seconds
+        and synced to the card. A new file is started at every boot (but not
+        at a wake-up from deep sleep, which continues the last file) and
+        when a file reaches the size limit; the oldest files are removed.
+
+config SD_LOG_FLUSH_INTERVAL_S
+    int "Write interval (seconds)"
+    depends on SD_LOG_ENABLE
+    range 1 60
+    default 10 if HUB_PROFILE_AUTONOMOUS
+    default 1
+    help
+        Fewer, larger writes save power and wear of the card; pulling the
+        card loses the lines of up to one interval. The log is written in
+        full before the hub goes to sleep.
+
+config SD_LOG_MAX_FILE_KB
+    int "Maximum size of one log file (KB)"
+    depends on SD_LOG_ENABLE
+    range 64 65536
+    default 4096
+
+config SD_LOG_MAX_FILES
+    int "Log files to keep"
+    depends on SD_LOG_ENABLE
+    range 2 1000
+    default 50
+
+config SD_LOG_BUFFER_KB
+    int "Log buffer in PSRAM (KB)"
+    depends on SD_LOG_ENABLE
+    range 8 1024
+    default 64
+    help
+        Holds the lines until they are written, including the boot messages
+        before the card is mounted. Without PSRAM an 8 KB buffer in internal
+        RAM is used.
+
+endmenu

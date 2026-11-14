@@ -1,0 +1,56 @@
+menu "TrailCamHub: clock"
+
+config TIME_ZONE
+    string "Time zone (POSIX TZ rule)"
+    default "CET-1CEST,M3.5.0,M10.5.0/3"
+    help
+        The time zone of the device, as the TZ rule of the C library: the name
+        of the standard time and its offset from UTC (west of Greenwich
+        positive, so "CET-1" is one hour east), then the summer time with the
+        dates on which it starts and ends. The default is Central European
+        Time and Summer Time. Rules for other zones: the TZ column of
+        https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+        The camera sets its clock at login. The TrailCam Go app gives it the
+        local time of the phone, and the camera shows that time on its photos
+        and videos as it is, so the device sends its local time too. Without
+        a valid clock the login carries no time and the camera keeps its own.
+
+config TIME_SYNC_SNTP
+    bool "Set the clock by SNTP"
+    default y
+    help
+        The clock is not set at boot. Without it, the time of a camera sync
+        and the file times are not recorded, and the camera login carries no
+        time, so the camera keeps its own clock. With this option the device asks an NTP server as soon as
+        a network with internet access is up (Ethernet, or the home Wi-Fi
+        during a backend sync) and then about once an hour. The backend sync
+        sets the clock as well. Traffic goes to the server below only.
+
+config TIME_SYNC_SERVER
+    string "NTP server"
+    depends on TIME_SYNC_SNTP
+    default "pool.ntp.org"
+
+config TIME_SYNC_BROWSER
+    bool "Take the time of a browser that opens the web UI"
+    depends on WEB_UI_ENABLE
+    default y
+    help
+        The page sends the time of the computer or phone that shows it, when
+        the clock of the device comes from no better source than that (SNTP
+        or the backend replace it, and it replaces the camera's time). The
+        camera gets it with the next login. Anyone who can reach the web UI
+        can set the clock this way.
+
+config TIME_SYNC_CAMERA
+    bool "Take the time of the camera if there is no other"
+    default y
+    help
+        When a session starts while the clock holds no time, the device takes
+        the time that the camera reports (the clock it was last given, shown
+        as local time and turned back to UTC with TIME_ZONE) and does not give
+        it back to the camera. A time before the build of the firmware is not
+        taken, but a camera clock that someone set wrong is: any other source
+        replaces it.
+
+endmenu
