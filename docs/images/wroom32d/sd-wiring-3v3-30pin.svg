@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="680" height="724" viewBox="0 0 680 724" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="724" viewBox="0 0 700 724" font-family="Helvetica, Arial, sans-serif">
 <title>ESP32 DevKit V1 (30 pins) wired to a 3.3 V microSD reader</title>
-<rect width="680" height="724" fill="#ffffff"/>
+<rect width="700" height="724" fill="#ffffff"/>
 <rect x="230" y="60" width="180" height="564" rx="8" fill="#0C447C"/>
 <rect x="270" y="70" width="100" height="190" rx="4" fill="#B4B2A9"/>
 <rect x="270" y="70" width="100" height="50" rx="4" fill="#D3D1C7"/>
@@ -16,7 +16,7 @@
 <text x="256" y="154" font-size="10" fill="#B5D4F4">1</text>
 <text x="384" y="154" font-size="10" text-anchor="end" fill="#B5D4F4">1</text>
 <text x="222" y="154" font-size="12" text-anchor="end" fill="#444441">EN</text>
-<rect x="422" y="140" width="88" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+<rect x="422" y="140" width="92" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
 <text x="428" y="154" font-size="12" font-weight="bold" text-anchor="start" fill="#085041">D23 → MOSI</text>
 <circle cx="242" cy="176" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="176" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
@@ -47,22 +47,22 @@
 <text x="256" y="284" font-size="10" fill="#B5D4F4">6</text>
 <text x="384" y="284" font-size="10" text-anchor="end" fill="#B5D4F4">6</text>
 <text x="222" y="284" font-size="12" text-anchor="end" fill="#444441">D32</text>
-<rect x="422" y="270" width="88" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
-<text x="428" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#085041">D19 → MISO</text>
+<rect x="422" y="270" width="92" height="20" rx="4" fill="#FBEAF0" stroke="#993556" stroke-width="1"/>
+<text x="428" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#72243E">D19 → MISO</text>
 <circle cx="242" cy="306" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="306" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <text x="256" y="310" font-size="10" fill="#B5D4F4">7</text>
 <text x="384" y="310" font-size="10" text-anchor="end" fill="#B5D4F4">7</text>
 <text x="222" y="310" font-size="12" text-anchor="end" fill="#444441">D33</text>
-<rect x="422" y="296" width="88" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
-<text x="428" y="310" font-size="12" font-weight="bold" text-anchor="start" fill="#085041">D18 → SCK</text>
+<rect x="422" y="296" width="92" height="20" rx="4" fill="#FAEEDA" stroke="#854F0B" stroke-width="1"/>
+<text x="428" y="310" font-size="12" font-weight="bold" text-anchor="start" fill="#633806">D18 → CLK</text>
 <circle cx="242" cy="332" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="332" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <text x="256" y="336" font-size="10" fill="#B5D4F4">8</text>
 <text x="384" y="336" font-size="10" text-anchor="end" fill="#B5D4F4">8</text>
 <text x="222" y="336" font-size="12" text-anchor="end" fill="#444441">D25</text>
-<rect x="422" y="322" width="88" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
-<text x="428" y="336" font-size="12" font-weight="bold" text-anchor="start" fill="#085041">D5 → CS</text>
+<rect x="422" y="322" width="92" height="20" rx="4" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+<text x="428" y="336" font-size="12" font-weight="bold" text-anchor="start" fill="#3C3489">D5 → CS</text>
 <circle cx="242" cy="358" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="358" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <text x="256" y="362" font-size="10" fill="#B5D4F4">9</text>
@@ -98,7 +98,7 @@
 <text x="256" y="492" font-size="10" fill="#B5D4F4">14</text>
 <text x="384" y="492" font-size="10" text-anchor="end" fill="#B5D4F4">14</text>
 <text x="222" y="492" font-size="12" text-anchor="end" fill="#444441">GND</text>
-<rect x="422" y="478" width="88" height="20" rx="4" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
+<rect x="422" y="478" width="92" height="20" rx="4" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
 <text x="428" y="492" font-size="12" font-weight="bold" text-anchor="start" fill="#444441">GND → GND</text>
 <circle cx="242" cy="514" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="514" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
@@ -106,32 +106,38 @@
 <text x="384" y="518" font-size="10" text-anchor="end" fill="#B5D4F4">15</text>
 <rect x="90" y="504" width="128" height="20" rx="4" fill="#FAEEDA" stroke="#854F0B" stroke-width="1"/>
 <text x="212" y="518" font-size="12" font-weight="bold" text-anchor="end" fill="#633806">VIN (5 V) – unused</text>
-<rect x="422" y="504" width="88" height="20" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
-<text x="428" y="518" font-size="12" font-weight="bold" text-anchor="start" fill="#712B13">3V3 → VCC</text>
-<rect x="590" y="118" width="76" height="194" rx="6" fill="#185FA5"/>
-<rect x="602" y="322" width="52" height="50" rx="3" fill="#B4B2A9" stroke="#5F5E5A"/>
-<text x="628.0" y="352" font-size="11" text-anchor="middle" fill="#2C2C2A">card</text>
-<text x="628.0" y="394" font-size="11" text-anchor="middle" fill="#5F5E5A">3.3 V type</text>
-<text x="628.0" y="108" font-size="12" text-anchor="middle" fill="#2C2C2A">microSD reader</text>
-<circle cx="600" cy="150" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="612" y="154" font-size="12" font-weight="bold" fill="#ffffff">MOSI</text>
-<circle cx="600" cy="176" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="612" y="180" font-size="12" font-weight="bold" fill="#ffffff">MISO</text>
-<circle cx="600" cy="202" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="612" y="206" font-size="12" font-weight="bold" fill="#ffffff">SCK</text>
-<circle cx="600" cy="228" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="612" y="232" font-size="12" font-weight="bold" fill="#ffffff">CS</text>
-<circle cx="600" cy="254" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="612" y="258" font-size="12" font-weight="bold" fill="#ffffff">GND</text>
-<circle cx="600" cy="280" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="612" y="284" font-size="12" font-weight="bold" fill="#ffffff">VCC</text>
-<polyline points="510,150 595,150" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
-<polyline points="510,280 522,280 522,176 595,176" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
-<polyline points="510,306 536,306 536,202 595,202" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
-<polyline points="510,332 550,332 550,228 595,228" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
-<polyline points="510,488 564,488 564,254 595,254" fill="none" stroke="#5F5E5A" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
-<polyline points="510,514 578,514 578,280 595,280" fill="none" stroke="#D85A30" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
-<line x1="40" y1="664" x2="70" y2="664" stroke="#D85A30" stroke-width="2.5" stroke-dasharray="7 4"/><text x="78" y="668" font-size="12" fill="#2C2C2A">power (3.3 V / GND)</text>
-<line x1="240" y1="664" x2="270" y2="664" stroke="#1D9E75" stroke-width="2.5"/><text x="278" y="668" font-size="12" fill="#2C2C2A">SPI signal</text>
-<text x="40" y="694" font-size="12" fill="#5F5E5A">Top view, antenna up. Labels as on the common DOIT DevKit V1 and its clones (D23 = GPIO23).</text>
+<rect x="422" y="504" width="92" height="20" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="428" y="518" font-size="12" font-weight="bold" text-anchor="start" fill="#712B13">3V3 → 3V3</text>
+<rect x="610" y="197" width="76" height="194" rx="6" fill="#185FA5"/>
+<rect x="622" y="401" width="52" height="50" rx="3" fill="#B4B2A9" stroke="#5F5E5A"/>
+<text x="648.0" y="431" font-size="11" text-anchor="middle" fill="#2C2C2A">card</text>
+<text x="648.0" y="473" font-size="11" text-anchor="middle" fill="#5F5E5A">3.3 V type</text>
+<text x="648.0" y="187" font-size="12" text-anchor="middle" fill="#2C2C2A">microSD reader</text>
+<polyline points="514,514 590,514 590,229 615,229" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,514 590,514 590,229 615,229" fill="none" stroke="#D85A30" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
+<polyline points="514,332 566,332 566,255 615,255" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,332 566,332 566,255 615,255" fill="none" stroke="#7F77DD" stroke-width="2.5" stroke-linejoin="round"/>
+<polyline points="514,150 542,150 542,281 615,281" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,150 542,150 542,281 615,281" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
+<polyline points="514,306 554,306 554,307 615,307" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,306 554,306 554,307 615,307" fill="none" stroke="#BA7517" stroke-width="2.5" stroke-linejoin="round"/>
+<polyline points="514,280 530,280 530,333 615,333" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,280 530,280 530,333 615,333" fill="none" stroke="#D4537E" stroke-width="2.5" stroke-linejoin="round"/>
+<polyline points="514,488 578,488 578,359 615,359" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,488 578,488 578,359 615,359" fill="none" stroke="#5F5E5A" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
+<circle cx="620" cy="229" r="5" fill="#D85A30" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="233" font-size="12" font-weight="bold" fill="#ffffff">3V3</text>
+<circle cx="620" cy="255" r="5" fill="#7F77DD" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="259" font-size="12" font-weight="bold" fill="#ffffff">CS</text>
+<circle cx="620" cy="281" r="5" fill="#1D9E75" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="285" font-size="12" font-weight="bold" fill="#ffffff">MOSI</text>
+<circle cx="620" cy="307" r="5" fill="#BA7517" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="311" font-size="12" font-weight="bold" fill="#ffffff">CLK</text>
+<circle cx="620" cy="333" r="5" fill="#D4537E" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="337" font-size="12" font-weight="bold" fill="#ffffff">MISO</text>
+<circle cx="620" cy="359" r="5" fill="#5F5E5A" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="363" font-size="12" font-weight="bold" fill="#ffffff">GND</text>
+<line x1="40" y1="664" x2="70" y2="664" stroke="#D85A30" stroke-width="2.5" stroke-dasharray="7 4"/><text x="78" y="668" font-size="12" fill="#2C2C2A">power (3.3 V / GND), dashed</text>
+<line x1="280" y1="664" x2="310" y2="664" stroke="#7F77DD" stroke-width="2.5"/><text x="318" y="668" font-size="12" fill="#2C2C2A">SPI signal, one colour per wire</text>
+<text x="40" y="690" font-size="12" fill="#5F5E5A">Top view, antenna up. Labels as on the common DOIT DevKit V1 and its clones (D23 = GPIO23).</text>
 </svg>

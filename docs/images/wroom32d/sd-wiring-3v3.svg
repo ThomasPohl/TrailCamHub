@@ -1,164 +1,170 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="680" height="760" viewBox="0 0 680 760" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="768" viewBox="0 0 700 768" font-family="Helvetica, Arial, sans-serif">
 <title>ESP32-DevKitC V4 (38 pins) wired to a 3.3 V microSD reader</title>
-<rect width="680" height="760" fill="#ffffff"/>
-<rect x="230" y="60" width="180" height="600" rx="8" fill="#2C2C2A" stroke="#2C2C2A"/>
+<rect width="700" height="768" fill="#ffffff"/>
+<rect x="230" y="60" width="180" height="608" rx="8" fill="#2C2C2A"/>
 <rect x="270" y="70" width="100" height="190" rx="4" fill="#B4B2A9"/>
 <rect x="270" y="70" width="100" height="50" rx="4" fill="#D3D1C7"/>
 <text x="320.0" y="100" font-size="13" text-anchor="middle" fill="#444441">antenna</text>
 <text x="320.0" y="180" font-size="15" font-weight="bold" text-anchor="middle" fill="#2C2C2A">ESP32-</text>
 <text x="320.0" y="200" font-size="15" font-weight="bold" text-anchor="middle" fill="#2C2C2A">WROOM-32D</text>
-<rect x="290.0" y="632" width="60" height="36" rx="3" fill="#888780"/>
-<text x="320.0" y="654" font-size="12" text-anchor="middle" fill="#ffffff">USB</text>
-<rect x="278" y="580" width="34" height="22" rx="3" fill="#5F5E5A"/><text x="295" y="595" font-size="10" text-anchor="middle" fill="#fff">EN</text>
-<rect x="328" y="580" width="34" height="22" rx="3" fill="#5F5E5A"/><text x="345" y="595" font-size="10" text-anchor="middle" fill="#fff">BOOT</text>
+<rect x="290.0" y="640" width="60" height="36" rx="3" fill="#888780"/>
+<text x="320.0" y="662" font-size="12" text-anchor="middle" fill="#ffffff">USB</text>
+<rect x="278" y="588" width="34" height="22" rx="3" fill="#5F5E5A"/><text x="295" y="603" font-size="10" text-anchor="middle" fill="#fff">EN</text>
+<rect x="328" y="588" width="34" height="22" rx="3" fill="#5F5E5A"/><text x="345" y="603" font-size="10" text-anchor="middle" fill="#fff">BOOT</text>
 <text x="242" y="136" font-size="11" fill="#D3D1C7">J2</text>
 <text x="398" y="136" font-size="11" text-anchor="end" fill="#D3D1C7">J3</text>
 <circle cx="242" cy="150" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="150" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<rect x="130" y="140" width="88" height="20" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
-<text x="212" y="154" font-size="12" font-weight="bold" text-anchor="end" fill="#712B13">3V3 → VCC</text>
 <text x="256" y="154" font-size="10" fill="#888780">1</text>
 <text x="384" y="154" font-size="10" text-anchor="end" fill="#888780">1</text>
-<rect x="422" y="140" width="88" height="20" rx="4" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
+<rect x="130" y="140" width="88" height="20" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="212" y="154" font-size="12" font-weight="bold" text-anchor="end" fill="#712B13">3V3 → 3V3</text>
+<rect x="422" y="140" width="92" height="20" rx="4" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
 <text x="428" y="154" font-size="12" font-weight="bold" text-anchor="start" fill="#444441">GND → GND</text>
 <circle cx="242" cy="176" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="176" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="180" font-size="12" text-anchor="end" fill="#444441">EN</text>
 <text x="256" y="180" font-size="10" fill="#888780">2</text>
 <text x="384" y="180" font-size="10" text-anchor="end" fill="#888780">2</text>
-<rect x="422" y="166" width="88" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+<text x="222" y="180" font-size="12" text-anchor="end" fill="#444441">EN</text>
+<rect x="422" y="166" width="92" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
 <text x="428" y="180" font-size="12" font-weight="bold" text-anchor="start" fill="#085041">IO23 → MOSI</text>
 <circle cx="242" cy="202" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="202" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="206" font-size="12" text-anchor="end" fill="#444441">VP</text>
 <text x="256" y="206" font-size="10" fill="#888780">3</text>
 <text x="384" y="206" font-size="10" text-anchor="end" fill="#888780">3</text>
+<text x="222" y="206" font-size="12" text-anchor="end" fill="#444441">VP</text>
 <text x="418" y="206" font-size="12" fill="#444441">IO22</text>
 <circle cx="242" cy="228" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="228" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="232" font-size="12" text-anchor="end" fill="#444441">VN</text>
 <text x="256" y="232" font-size="10" fill="#888780">4</text>
 <text x="384" y="232" font-size="10" text-anchor="end" fill="#888780">4</text>
+<text x="222" y="232" font-size="12" text-anchor="end" fill="#444441">VN</text>
 <text x="418" y="232" font-size="12" fill="#444441">TX</text>
 <circle cx="242" cy="254" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="254" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="258" font-size="12" text-anchor="end" fill="#444441">IO34</text>
 <text x="256" y="258" font-size="10" fill="#888780">5</text>
 <text x="384" y="258" font-size="10" text-anchor="end" fill="#888780">5</text>
+<text x="222" y="258" font-size="12" text-anchor="end" fill="#444441">IO34</text>
 <text x="418" y="258" font-size="12" fill="#444441">RX</text>
 <circle cx="242" cy="280" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="280" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="284" font-size="12" text-anchor="end" fill="#444441">IO35</text>
 <text x="256" y="284" font-size="10" fill="#888780">6</text>
 <text x="384" y="284" font-size="10" text-anchor="end" fill="#888780">6</text>
+<text x="222" y="284" font-size="12" text-anchor="end" fill="#444441">IO35</text>
 <text x="418" y="284" font-size="12" fill="#444441">IO21</text>
 <circle cx="242" cy="306" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="306" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="310" font-size="12" text-anchor="end" fill="#444441">IO32</text>
 <text x="256" y="310" font-size="10" fill="#888780">7</text>
 <text x="384" y="310" font-size="10" text-anchor="end" fill="#888780">7</text>
+<text x="222" y="310" font-size="12" text-anchor="end" fill="#444441">IO32</text>
 <text x="418" y="310" font-size="12" fill="#444441">GND</text>
 <circle cx="242" cy="332" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="332" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="336" font-size="12" text-anchor="end" fill="#444441">IO33</text>
 <text x="256" y="336" font-size="10" fill="#888780">8</text>
 <text x="384" y="336" font-size="10" text-anchor="end" fill="#888780">8</text>
-<rect x="422" y="322" width="88" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
-<text x="428" y="336" font-size="12" font-weight="bold" text-anchor="start" fill="#085041">IO19 → MISO</text>
+<text x="222" y="336" font-size="12" text-anchor="end" fill="#444441">IO33</text>
+<rect x="422" y="322" width="92" height="20" rx="4" fill="#FBEAF0" stroke="#993556" stroke-width="1"/>
+<text x="428" y="336" font-size="12" font-weight="bold" text-anchor="start" fill="#72243E">IO19 → MISO</text>
 <circle cx="242" cy="358" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="358" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="362" font-size="12" text-anchor="end" fill="#444441">IO25</text>
 <text x="256" y="362" font-size="10" fill="#888780">9</text>
 <text x="384" y="362" font-size="10" text-anchor="end" fill="#888780">9</text>
-<rect x="422" y="348" width="88" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
-<text x="428" y="362" font-size="12" font-weight="bold" text-anchor="start" fill="#085041">IO18 → SCK</text>
+<text x="222" y="362" font-size="12" text-anchor="end" fill="#444441">IO25</text>
+<rect x="422" y="348" width="92" height="20" rx="4" fill="#FAEEDA" stroke="#854F0B" stroke-width="1"/>
+<text x="428" y="362" font-size="12" font-weight="bold" text-anchor="start" fill="#633806">IO18 → CLK</text>
 <circle cx="242" cy="384" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="384" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="388" font-size="12" text-anchor="end" fill="#444441">IO26</text>
 <text x="256" y="388" font-size="10" fill="#888780">10</text>
 <text x="384" y="388" font-size="10" text-anchor="end" fill="#888780">10</text>
-<rect x="422" y="374" width="88" height="20" rx="4" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
-<text x="428" y="388" font-size="12" font-weight="bold" text-anchor="start" fill="#085041">IO5 → CS</text>
+<text x="222" y="388" font-size="12" text-anchor="end" fill="#444441">IO26</text>
+<rect x="422" y="374" width="92" height="20" rx="4" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+<text x="428" y="388" font-size="12" font-weight="bold" text-anchor="start" fill="#3C3489">IO5 → CS</text>
 <circle cx="242" cy="410" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="410" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="414" font-size="12" text-anchor="end" fill="#444441">IO27</text>
 <text x="256" y="414" font-size="10" fill="#888780">11</text>
 <text x="384" y="414" font-size="10" text-anchor="end" fill="#888780">11</text>
+<text x="222" y="414" font-size="12" text-anchor="end" fill="#444441">IO27</text>
 <text x="418" y="414" font-size="12" fill="#444441">IO17</text>
 <circle cx="242" cy="436" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="436" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="440" font-size="12" text-anchor="end" fill="#444441">IO14</text>
 <text x="256" y="440" font-size="10" fill="#888780">12</text>
 <text x="384" y="440" font-size="10" text-anchor="end" fill="#888780">12</text>
+<text x="222" y="440" font-size="12" text-anchor="end" fill="#444441">IO14</text>
 <text x="418" y="440" font-size="12" fill="#444441">IO16</text>
 <circle cx="242" cy="462" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="462" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="466" font-size="12" text-anchor="end" fill="#444441">IO12</text>
 <text x="256" y="466" font-size="10" fill="#888780">13</text>
 <text x="384" y="466" font-size="10" text-anchor="end" fill="#888780">13</text>
+<text x="222" y="466" font-size="12" text-anchor="end" fill="#444441">IO12</text>
 <text x="418" y="466" font-size="12" fill="#444441">IO4</text>
 <circle cx="242" cy="488" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="488" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="492" font-size="12" text-anchor="end" fill="#444441">GND</text>
 <text x="256" y="492" font-size="10" fill="#888780">14</text>
 <text x="384" y="492" font-size="10" text-anchor="end" fill="#888780">14</text>
+<text x="222" y="492" font-size="12" text-anchor="end" fill="#444441">GND</text>
 <text x="418" y="492" font-size="12" fill="#444441">IO0</text>
 <circle cx="242" cy="514" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="514" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="518" font-size="12" text-anchor="end" fill="#444441">IO13</text>
 <text x="256" y="518" font-size="10" fill="#888780">15</text>
 <text x="384" y="518" font-size="10" text-anchor="end" fill="#888780">15</text>
+<text x="222" y="518" font-size="12" text-anchor="end" fill="#444441">IO13</text>
 <text x="418" y="518" font-size="12" fill="#444441">IO2</text>
 <circle cx="242" cy="540" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="540" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="544" font-size="12" text-anchor="end" fill="#B4B2A9">D2</text>
 <text x="256" y="544" font-size="10" fill="#888780">16</text>
 <text x="384" y="544" font-size="10" text-anchor="end" fill="#888780">16</text>
+<text x="222" y="544" font-size="12" text-anchor="end" fill="#B4B2A9">D2</text>
 <text x="418" y="544" font-size="12" fill="#444441">IO15</text>
 <circle cx="242" cy="566" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="566" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="570" font-size="12" text-anchor="end" fill="#B4B2A9">D3</text>
 <text x="256" y="570" font-size="10" fill="#888780">17</text>
 <text x="384" y="570" font-size="10" text-anchor="end" fill="#888780">17</text>
+<text x="222" y="570" font-size="12" text-anchor="end" fill="#B4B2A9">D3</text>
 <text x="418" y="570" font-size="12" fill="#B4B2A9">D1</text>
 <circle cx="242" cy="592" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="592" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<text x="222" y="596" font-size="12" text-anchor="end" fill="#B4B2A9">CMD</text>
 <text x="256" y="596" font-size="10" fill="#888780">18</text>
 <text x="384" y="596" font-size="10" text-anchor="end" fill="#888780">18</text>
+<text x="222" y="596" font-size="12" text-anchor="end" fill="#B4B2A9">CMD</text>
 <text x="418" y="596" font-size="12" fill="#B4B2A9">D0</text>
 <circle cx="242" cy="618" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
 <circle cx="398" cy="618" r="5" fill="#EF9F27" stroke="#854F0B" stroke-width="1"/>
-<rect x="130" y="608" width="88" height="20" rx="4" fill="#FAEEDA" stroke="#854F0B" stroke-width="1"/>
-<text x="212" y="622" font-size="12" font-weight="bold" text-anchor="end" fill="#633806">5V – unused</text>
 <text x="256" y="622" font-size="10" fill="#888780">19</text>
 <text x="384" y="622" font-size="10" text-anchor="end" fill="#888780">19</text>
+<rect x="130" y="608" width="88" height="20" rx="4" fill="#FAEEDA" stroke="#854F0B" stroke-width="1"/>
+<text x="212" y="622" font-size="12" font-weight="bold" text-anchor="end" fill="#633806">5V – unused</text>
 <text x="418" y="622" font-size="12" fill="#B4B2A9">CLK</text>
-<rect x="580" y="92" width="80" height="190" rx="6" fill="#185FA5"/>
-<rect x="594" y="290" width="52" height="50" rx="3" fill="#B4B2A9" stroke="#5F5E5A"/>
-<text x="620.0" y="320" font-size="11" text-anchor="middle" fill="#2C2C2A">card</text>
-<circle cx="590" cy="124" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="602" y="128" font-size="12" font-weight="bold" fill="#ffffff">VCC</text>
-<circle cx="590" cy="150" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="602" y="154" font-size="12" font-weight="bold" fill="#ffffff">GND</text>
-<circle cx="590" cy="176" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="602" y="180" font-size="12" font-weight="bold" fill="#ffffff">MOSI</text>
-<circle cx="590" cy="202" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="602" y="206" font-size="12" font-weight="bold" fill="#ffffff">MISO</text>
-<circle cx="590" cy="228" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="602" y="232" font-size="12" font-weight="bold" fill="#ffffff">SCK</text>
-<circle cx="590" cy="254" r="5" fill="#EF9F27" stroke="#854F0B"/>
-<text x="602" y="258" font-size="12" font-weight="bold" fill="#ffffff">CS</text>
-<text x="620.0" y="82" font-size="12" text-anchor="middle" fill="#2C2C2A">microSD reader</text>
-<text x="620.0" y="364" font-size="11" text-anchor="middle" fill="#5F5E5A">3.3 V type</text>
-<polyline points="130,150 110,150 110,30 560,30 560,124 585,124" fill="none" stroke="#D85A30" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
-<polyline points="510,150 585,150" fill="none" stroke="#5F5E5A" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
-<polyline points="510,176 585,176" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
-<polyline points="510,332 524,332 524,202 585,202" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
-<polyline points="510,358 538,358 538,228 585,228" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
-<polyline points="510,384 552,384 552,254 585,254" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
-<line x1="40" y1="700" x2="70" y2="700" stroke="#D85A30" stroke-width="2.5" stroke-dasharray="7 4"/><text x="78" y="704" font-size="12" fill="#2C2C2A">power (3.3 V / GND)</text>
-<line x1="240" y1="700" x2="270" y2="700" stroke="#1D9E75" stroke-width="2.5"/><text x="278" y="704" font-size="12" fill="#2C2C2A">SPI signal</text>
-<text x="380" y="704" font-size="12" fill="#B4B2A9">D0–D3, CMD, CLK: flash, do not use</text>
-<text x="40" y="730" font-size="12" fill="#5F5E5A">Top view, antenna up. Pin names as printed by Espressif; clones may print G23, D23 or just 23.</text>
+<rect x="610" y="93" width="76" height="194" rx="6" fill="#185FA5"/>
+<rect x="622" y="297" width="52" height="50" rx="3" fill="#B4B2A9" stroke="#5F5E5A"/>
+<text x="648.0" y="327" font-size="11" text-anchor="middle" fill="#2C2C2A">card</text>
+<text x="648.0" y="369" font-size="11" text-anchor="middle" fill="#5F5E5A">3.3 V type</text>
+<text x="648.0" y="83" font-size="12" text-anchor="middle" fill="#2C2C2A">microSD reader</text>
+<polyline points="130,150 110,150 110,30 590,30 590,125 615,125" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="130,150 110,150 110,30 590,30 590,125 615,125" fill="none" stroke="#D85A30" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
+<polyline points="514,384 578,384 578,151 615,151" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,384 578,384 578,151 615,151" fill="none" stroke="#7F77DD" stroke-width="2.5" stroke-linejoin="round"/>
+<polyline points="514,176 542,176 542,177 615,177" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,176 542,176 542,177 615,177" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linejoin="round"/>
+<polyline points="514,358 566,358 566,203 615,203" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,358 566,358 566,203 615,203" fill="none" stroke="#BA7517" stroke-width="2.5" stroke-linejoin="round"/>
+<polyline points="514,332 554,332 554,229 615,229" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,332 554,332 554,229 615,229" fill="none" stroke="#D4537E" stroke-width="2.5" stroke-linejoin="round"/>
+<polyline points="514,150 530,150 530,255 615,255" fill="none" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="514,150 530,150 530,255 615,255" fill="none" stroke="#5F5E5A" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
+<circle cx="620" cy="125" r="5" fill="#D85A30" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="129" font-size="12" font-weight="bold" fill="#ffffff">3V3</text>
+<circle cx="620" cy="151" r="5" fill="#7F77DD" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="155" font-size="12" font-weight="bold" fill="#ffffff">CS</text>
+<circle cx="620" cy="177" r="5" fill="#1D9E75" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="181" font-size="12" font-weight="bold" fill="#ffffff">MOSI</text>
+<circle cx="620" cy="203" r="5" fill="#BA7517" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="207" font-size="12" font-weight="bold" fill="#ffffff">CLK</text>
+<circle cx="620" cy="229" r="5" fill="#D4537E" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="233" font-size="12" font-weight="bold" fill="#ffffff">MISO</text>
+<circle cx="620" cy="255" r="5" fill="#5F5E5A" stroke="#ffffff" stroke-width="1.5"/>
+<text x="632" y="259" font-size="12" font-weight="bold" fill="#ffffff">GND</text>
+<line x1="40" y1="708" x2="70" y2="708" stroke="#D85A30" stroke-width="2.5" stroke-dasharray="7 4"/><text x="78" y="712" font-size="12" fill="#2C2C2A">power (3.3 V / GND), dashed</text>
+<line x1="280" y1="708" x2="310" y2="708" stroke="#7F77DD" stroke-width="2.5"/><text x="318" y="712" font-size="12" fill="#2C2C2A">SPI signal, one colour per wire</text>
+<text x="40" y="730" font-size="12" fill="#B4B2A9">Grey pins D0–D3, CMD, CLK: flash, do not use.</text>
+<text x="40" y="752" font-size="12" fill="#5F5E5A">Top view, antenna up. Pin names as printed by Espressif; clones may print G23, D23 or just 23.</text>
 </svg>

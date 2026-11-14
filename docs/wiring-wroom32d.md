@@ -15,7 +15,9 @@ thumbnails only, mains power) are in [modes.md](modes.md#esp32-wroom-32d-with-an
   The GPIO numbers are the same on both; only their place on the board
   differs. If your board looks different from both drawings, follow the
   labels printed on it.
-- A **microSD reader breakout** with SPI pins (VCC, GND, MISO, MOSI, SCK, CS).
+- A **microSD reader breakout** with SPI pins. The drawings use the order
+  3V3, CS, MOSI, CLK, MISO, GND; other readers print VCC instead of 3V3 and
+  SCK instead of CLK, and may order the pins differently. Go by the names.
 - Six female-to-female jumper wires, as short as possible (under 10 cm).
 - A microSD card, FAT32, up to 32 GB (SDHC).
 
@@ -38,14 +40,14 @@ too little voltage after its regulator and fails to mount the card.
 Hold the board with the antenna up and the components facing you. J2 is the
 left row, J3 the right row; pin 1 of each row is next to the antenna.
 
-| Reader | Board pin | Row / position | Firmware setting |
-| ------ | --------- | -------------- | ---------------- |
-| VCC    | 3V3       | J2 / 1         | |
-| GND    | GND       | J3 / 1         | |
-| MOSI   | IO23      | J3 / 2         | `CONFIG_SD_CARD_CMD_GPIO` |
-| MISO   | IO19      | J3 / 8         | `CONFIG_SD_CARD_D0_GPIO` |
-| SCK    | IO18      | J3 / 9         | `CONFIG_SD_CARD_CLK_GPIO` |
-| CS     | IO5       | J3 / 10        | `CONFIG_SD_CARD_CS_GPIO` |
+| Reader      | Board pin | Row / position | Firmware setting |
+| ----------- | --------- | -------------- | ---------------- |
+| 3V3 (VCC)   | 3V3       | J2 / 1         | |
+| CS          | IO5       | J3 / 10        | `CONFIG_SD_CARD_CS_GPIO` |
+| MOSI        | IO23      | J3 / 2         | `CONFIG_SD_CARD_CMD_GPIO` |
+| CLK (SCK)   | IO18      | J3 / 9         | `CONFIG_SD_CARD_CLK_GPIO` |
+| MISO        | IO19      | J3 / 8         | `CONFIG_SD_CARD_D0_GPIO` |
+| GND         | GND       | J3 / 1         | |
 
 For a **5 V reader** the only change is VCC: connect it to **5V** (J2 / 19)
 instead of 3V3. The signal lines stay the same.
@@ -62,14 +64,14 @@ pins of each row from the antenna end (1) down to the USB end (15). All six
 wires go to the right row. These boards print the GPIO number with a `D`:
 `D23` is GPIO23.
 
-| Reader | Board pin | Right row, position | Firmware setting |
-| ------ | --------- | ------------------- | ---------------- |
-| MOSI   | D23       | 1                   | `CONFIG_SD_CARD_CMD_GPIO` |
-| MISO   | D19       | 6                   | `CONFIG_SD_CARD_D0_GPIO` |
-| SCK    | D18       | 7                   | `CONFIG_SD_CARD_CLK_GPIO` |
-| CS     | D5        | 8                   | `CONFIG_SD_CARD_CS_GPIO` |
-| GND    | GND       | 14                  | |
-| VCC    | 3V3       | 15                  | |
+| Reader      | Board pin | Right row, position | Firmware setting |
+| ----------- | --------- | ------------------- | ---------------- |
+| 3V3 (VCC)   | 3V3       | 15                  | |
+| CS          | D5        | 8                   | `CONFIG_SD_CARD_CS_GPIO` |
+| MOSI        | D23       | 1                   | `CONFIG_SD_CARD_CMD_GPIO` |
+| CLK (SCK)   | D18       | 7                   | `CONFIG_SD_CARD_CLK_GPIO` |
+| MISO        | D19       | 6                   | `CONFIG_SD_CARD_D0_GPIO` |
+| GND         | GND       | 14                  | |
 
 For a **5 V reader** connect VCC to **VIN** (left row, position 15) instead
 of 3V3.
@@ -97,7 +99,7 @@ This applies only if you add more hardware; the reader uses none of these.
 3. The boot log first prints `Mounting SD card (SPI, SCK=18 MOSI=23 MISO=19
    CS=5)` and then `SD card mounted at /sdcard: … MB total, … MB free`.
    If it reports `Could not initialize SD card` instead:
-   - check VCC against the table above,
+   - check the supply pin (3V3 or VCC) against the table above,
    - swap MISO and MOSI if they are mixed up (the reader may label them
      DO/DI: DO = MISO, DI = MOSI),
    - shorten the wires.
