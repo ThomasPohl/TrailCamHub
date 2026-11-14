@@ -4,15 +4,17 @@ Design decisions that shape the code, newest first, each with its reason so
 that it can be revisited. Details are in the linked issues and pages. Add an
 entry when a decision changes how new code should be written.
 
-## 2026-11-14 — The project keeps the name `trailcamhub_ble_poc`
+## 2026-11-14 — The project is named `trailcamhub`; older hubs need one flash over USB
 
-The menu is now "TrailCamHub" and the options are with their components, but
-the ESP-IDF project name stays. It is the `project_name` of the application
-description, and a firmware update is refused when it differs from the
-running image's (`ota_update.cpp`). A renamed image would be refused by every
-hub in the field, which could then only be updated over USB. The name shows
-only in build file names (`build/trailcamhub_ble_poc.bin`); the packages and
-installer images are named `trailcamhub-<board>-…` already. (#219)
+The ESP-IDF project was `trailcamhub_ble_poc`. Its name is the `project_name`
+of the application description, and a firmware update is refused when it
+differs from the running image's (`ota_update.cpp`). So a hub with firmware
+from before the rename refuses every later release ("image of another
+project") and has to be flashed once with the web installer; after that it
+updates itself again. Accepted by the maintainer, who flashes his hubs by
+hand, instead of carrying the old name on or accepting both names. The
+packages and installer images were named `trailcamhub-<board>-…` already.
+(#219)
 
 ## 2026-11-12 — Camera actions go through one queue, and a lost action is not repeated
 
