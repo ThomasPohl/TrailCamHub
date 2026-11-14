@@ -261,11 +261,13 @@ void print_details()
     reply("INFO", "firmware " + ota::running_version() + " (" + ota::board() +
                       "-" + ota::variant() + "), " + ota::last_check_text());
     reply("INFO",
-          format_line(
-              "internal RAM %u KB free, %u KB minimum",
-              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
-              (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) /
-                         1024)));
+          format_line("internal RAM %u KB free, %u KB minimum",
+                      (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL |
+                                                         MALLOC_CAP_8BIT) /
+                                 1024),
+                      (unsigned)(heap_caps_get_minimum_free_size(
+                                     MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) /
+                                 1024)));
     reply("INFO",
           format_line(
               "PSRAM %u KB free, %u KB minimum",
