@@ -55,11 +55,22 @@ constexpr std::size_t kMaxMediaPerCheckin = 1000;
 // Without PSRAM the check-in has to fit next to the TLS session in about
 // 80 KB of heap. A recording costs about 140 B there (its entry in the
 // request and in the JSON); 300 of them left 7 KB free on the WROOM-32D,
-// not enough for the response (#244). The backend asks for at most 30
-// thumbnails per check-in anyway, so a backlog does not reach the phone
-// later because of this limit.
+// not enough for the response (#244). The backend asks for fewer thumbnails
+// per check-in than that anyway, so a backlog does not reach the phone later
+// because of this limit.
 constexpr std::size_t kMaxMediaPerCamera = 40;
 constexpr std::size_t kMaxMediaPerCheckin = 40;
+#endif
+#if CONFIG_SPIRAM
+// Thumbnail uploads per check-in: left to the backend (30).
+constexpr std::int64_t kMaxThumbUploads = -1;
+#else
+// The backend answers with a presigned URL of about 650 B per thumbnail. 30
+// of them are 20 KB, which arrive as one TLS record of 16 KB, and mbedTLS
+// needs that record in one block: "alloc(16749 bytes) failed" on the
+// WROOM-32D (#244). Four keep the response at about 3 KB; the rest of a
+// backlog follows with the next check-ins, newest first.
+constexpr std::int64_t kMaxThumbUploads = 4;
 #endif
 constexpr std::size_t kVideoChunk = 16 * 1024;
 
@@ -502,6 +513,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     request.hub_variant = ota::variant();
     // -1 (left out of the check-in) on boards without a measurement.
     request.hub_bat_percent = hub_battery::percent();
+    request.max_thumb_uploads = kMaxThumbUploads;
     request.schedule = schedule_report();
     request.memory = memory_report();
     std::vector<CameraState> cameras;

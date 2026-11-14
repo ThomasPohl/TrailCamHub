@@ -65,6 +65,7 @@ request (and TLS handshake) however many cameras there are — important over LT
    {
      "hubFirmware": "0.5.0",
      "hubBatPercent": 91,
+     "maxThumbUploads": 4,
      "schedule": {
        "cameraPlan": "05:00-09:00=30,*=120",
        "cameraPlanOrigin": "remote",
@@ -153,7 +154,10 @@ request (and TLS handshake) however many cameras there are — important over LT
      hub. See [docs/power-and-schedule.md](../docs/power-and-schedule.md).
 
    - `thumbUploads`: missing thumbnails, newest first over all cameras, at most 30
-     per check-in, each with a presigned `PUT` URL.
+     per check-in, each with a presigned `PUT` URL. A hub can ask for fewer with
+     `maxThumbUploads` in the request: a presigned URL is about 650 B, and a hub
+     without PSRAM cannot receive a 20 KB response next to the TLS session
+     (#244). The rest follows with the next check-ins.
    - `resync: true`: the camera is new to the backend; the hub should send its
      full media list at the next check-in.
    - `accepted: false`: the camera belongs to another hub; nothing was stored.
