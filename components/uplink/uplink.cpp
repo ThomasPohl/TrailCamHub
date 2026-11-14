@@ -65,12 +65,13 @@ constexpr std::size_t kMaxMediaPerCheckin = 40;
 // Thumbnail uploads per check-in: left to the backend (30).
 constexpr std::int64_t kMaxThumbUploads = -1;
 #else
-// The backend answers with a presigned URL of about 650 B per thumbnail. 30
-// of them are 20 KB, which arrive as one TLS record of 16 KB, and mbedTLS
-// needs that record in one block: "alloc(16749 bytes) failed" on the
-// WROOM-32D (#244). Four keep the response at about 3 KB; the rest of a
-// backlog follows with the next check-ins, newest first.
-constexpr std::int64_t kMaxThumbUploads = 4;
+// The backend answers with a presigned URL per thumbnail, and the response
+// arrives as one TLS record that mbedTLS needs in one block. On the
+// WROOM-32D the record for 4 uploads was 7.6 KB (about 1.8 KB per upload)
+// and did not always fit: "alloc(7646 bytes) failed" in one cycle, fine in
+// the next (#244). Two should give about 4 KB; the rest of a backlog follows
+// with the next check-ins, newest first.
+constexpr std::int64_t kMaxThumbUploads = 2;
 #endif
 constexpr std::size_t kVideoChunk = 16 * 1024;
 
@@ -113,6 +114,11 @@ HttpResult post_json(const std::string &url, const std::string &device_key,
             std::string().swap(body);
             result = read_response(client);
         }
+    }
+    if (result.error != ESP_OK) {
+        // While the connection still holds its memory: how much was left
+        // for the response (#244).
+        diagnostics_log_memory("request failed");
     }
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
