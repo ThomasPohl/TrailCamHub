@@ -62,6 +62,21 @@ struct ScheduleReport {
     std::string stretch;
 };
 
+// Memory headroom of the hub (cycle_trace), so that "RAM is tight" on a board
+// becomes numbers from the field.
+struct MemoryReport {
+    bool present = false;
+    // The cycle the figures belong to (the running one at a check-in).
+    std::int64_t cycle = 0;
+    // Lowest free heap of that cycle in bytes; PSRAM -1: the board has none.
+    std::int64_t heap_min_internal = 0;
+    std::int64_t heap_min_psram = -1;
+    // Lowest free stack of the tasks in bytes; -1 = unknown, left out.
+    std::int64_t stack_session = -1;
+    std::int64_t stack_uplink = -1;
+    std::int64_t stack_controller = -1;
+};
+
 struct CheckinRequest {
     std::string hub_firmware;
     // Board and build variant ("esp32s3", "release"): which firmware image
@@ -70,6 +85,7 @@ struct CheckinRequest {
     std::string hub_variant;
     std::int64_t hub_bat_percent = -1;  // -1 = unknown
     ScheduleReport schedule;
+    MemoryReport memory;
     std::vector<CameraReport> cameras;
 };
 

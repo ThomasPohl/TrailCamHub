@@ -208,6 +208,25 @@ std::string build_checkin_json(const CheckinRequest &request)
         }
         out += schedule.sleeps ? ",\"sleeps\":true}" : ",\"sleeps\":false}";
     }
+    const MemoryReport &memory = request.memory;
+    if (memory.present) {
+        out += ",\"memory\":{\"cycle\":" + std::to_string(memory.cycle) +
+               ",\"heapMin\":" + std::to_string(memory.heap_min_internal);
+        if (memory.heap_min_psram >= 0) {
+            out += ",\"psramMin\":" + std::to_string(memory.heap_min_psram);
+        }
+        if (memory.stack_session >= 0) {
+            out += ",\"stackSession\":" + std::to_string(memory.stack_session);
+        }
+        if (memory.stack_uplink >= 0) {
+            out += ",\"stackUplink\":" + std::to_string(memory.stack_uplink);
+        }
+        if (memory.stack_controller >= 0) {
+            out += ",\"stackController\":" +
+                   std::to_string(memory.stack_controller);
+        }
+        out += "}";
+    }
     out += ",\"cameras\":[";
     for (std::size_t i = 0; i < request.cameras.size(); i++) {
         const CameraReport &c = request.cameras[i];

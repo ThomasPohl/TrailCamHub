@@ -45,6 +45,12 @@ At boot the firmware logs the reset reason, PSRAM, whether a core dump is
 stored (read it with `idf.py coredump-info`) and mounts the SD card at
 `/sdcard` without ever formatting it; a missing card is not fatal.
 
+Every cycle has a number that goes on across deep sleep. The log lines of a
+cycle on the SD card start with it (`#12 …`), the console's `status` shows
+the last cycle with its lowest free heap and stack, the check-in sends these
+figures (`memory`), and `/sdcard/logs/cycles.jsonl` keeps one line per cycle
+([sd-layout.md](sd-layout.md#logscyclesjsonl)).
+
 ## Build profiles
 
 - **Development** (default): only `sdkconfig.defaults` (+ the board file).

@@ -36,6 +36,7 @@
 #include "command_parser.hpp"
 #include "diagnostics.hpp"
 #include "device_info.hpp"
+#include "cycle_trace.hpp"
 #include "hub_battery.hpp"
 #include "media_store.hpp"
 #include "ota_update.hpp"
@@ -406,6 +407,7 @@ void print_status()
     print_details();
     print_web_access();
     print_schedule();
+    reply("INFO", cycle_trace::status_text());
 }
 
 void request_cycle(esp_err_t error, const char *what)

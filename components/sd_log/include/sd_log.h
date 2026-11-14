@@ -15,6 +15,9 @@
  * Files are /sdcard/logs/log-NNNNN.txt with a number that increases with every
  * boot and when a file reaches its size limit; the oldest files are removed.
  * A wake-up from deep sleep continues the newest file.
+ *
+ * /sdcard/logs/cycles.jsonl has one line per cycle (docs/sd-layout.md); when
+ * it reaches CONFIG_SD_LOG_CYCLES_MAX_KB it becomes cycles.1.jsonl.
  */
 
 /*
@@ -40,3 +43,16 @@ void sd_log_disable(void);
  * Safe to call from any task.
  */
 void sd_log_current_path(char *path, size_t size);
+
+/*
+ * Marks the log lines written from now on with the number of the running
+ * cycle ("#12 " in front of the line in the file); 0 ends the marking.
+ */
+void sd_log_set_cycle(uint32_t cycle);
+
+/*
+ * Appends a line (ending with a newline) to cycles.jsonl; written by the log
+ * task within a moment and before sd_log_flush() returns. Dropped when the
+ * log is not written. Safe to call from any task.
+ */
+void sd_log_append_cycle_line(const char *line);

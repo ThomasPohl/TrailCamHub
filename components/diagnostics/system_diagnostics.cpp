@@ -22,9 +22,9 @@
 
 static const char *TAG = "trailcamhub_diag";
 
-static const char *reset_reason_name(esp_reset_reason_t reason)
+const char *diagnostics_reset_reason_name(int reason)
 {
-    switch (reason) {
+    switch ((esp_reset_reason_t)reason) {
     case ESP_RST_POWERON:
         return "power-on";
     case ESP_RST_EXT:
@@ -86,8 +86,8 @@ void diagnostics_log_memory(const char *stage)
 esp_err_t diagnostics_start(void)
 {
     esp_reset_reason_t reason = esp_reset_reason();
-    ESP_LOGI(TAG, "Reset reason: %s (%d)", reset_reason_name(reason),
-             (int)reason);
+    ESP_LOGI(TAG, "Reset reason: %s (%d)",
+             diagnostics_reset_reason_name((int)reason), (int)reason);
     log_core_dump_status();
 
     size_t psram_size = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);

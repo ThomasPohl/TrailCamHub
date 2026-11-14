@@ -29,4 +29,9 @@ std::vector<unsigned> files_to_remove(std::vector<unsigned> numbers,
 // or an error (a negative `length`).
 std::size_t fit_line(char *line, int length, std::size_t capacity);
 
+// Writes the mark of a cycle's log lines ("#12 ") to `line` and returns its
+// length; 0 (nothing written) for cycle 0 (no cycle runs) or a buffer
+// without room for it.
+std::size_t cycle_prefix(char *line, std::size_t capacity, unsigned cycle);
+
 }  // namespace sdlog

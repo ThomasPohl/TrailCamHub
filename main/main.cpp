@@ -27,6 +27,7 @@
 #include "camera_ble.h"
 #include "camera_protocol.h"
 #include "coprocessor_update.h"
+#include "cycle_trace.hpp"
 #include "dongle_ui.h"
 #include "ethernet_uplink.h"
 #include "hub_config.hpp"
@@ -43,6 +44,30 @@
 #include "web_ui.h"
 
 static const char *TAG = "trailcamhub";
+
+// Tells the cycle trace when a cycle starts and ends, whoever asked for it.
+// Only called from the session controller task.
+static void on_cycle_status(const session_status_t *status, void *context)
+{
+    (void)context;
+    static bool s_cycle_running;
+    if (!s_cycle_running && status->phase != SESSION_PHASE_IDLE) {
+        s_cycle_running = true;
+        const bool sync_only =
+            status->phase == SESSION_PHASE_UPLINK_WIFI_JOIN ||
+            status->phase == SESSION_PHASE_UPLINK;
+        cycle_trace::on_cycle_started(status->list_only      ? "list"
+                                      : status->actions_only ? "actions"
+                                      : sync_only            ? "checkin"
+                                                             : "scan");
+    }
+    if (s_cycle_running && status->cycle_finished) {
+        s_cycle_running = false;
+        cycle_trace::on_cycle_finished(status->last_result_name,
+                                       status->cameras_done,
+                                       status->cameras_read);
+    }
+}
 
 #if CONFIG_BOARD_TDONGLE || CONFIG_WEB_UI_ENABLE
 #if CONFIG_BOARD_TDONGLE
@@ -253,6 +278,13 @@ extern "C" void app_main(void)
 #endif
 
     ESP_ERROR_CHECK(session_controller_init());
+    // The cycle journal is written by the SD log (started above); the
+    // listeners exist once the controller is initialized.
+    cycle_trace::init();
+    if (session_controller_add_status_listener(on_cycle_status, NULL) !=
+        ESP_OK) {
+        ESP_LOGW(TAG, "The cycles are not traced");
+    }
 #if CONFIG_WEB_UI_ENABLE
     // Needs the Wi-Fi driver, which session_controller_init() started.
     static const web_ui_callbacks_t web_callbacks = {

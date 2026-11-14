@@ -19,6 +19,7 @@
 #include "freertos/task.h"
 #include "sdkconfig.h"
 
+#include "cycle_trace.hpp"
 #include "hub_battery.hpp"
 #include "modem_uplink.hpp"
 #include "ota_update.hpp"
@@ -260,6 +261,10 @@ void scheduler_task(void *arg)
                                             ? schedule::due(times, now)
                                             : schedule::Task::none;
             esp_err_t error = ESP_OK;
+            if (task != schedule::Task::none) {
+                // The cycle journal names who asked for a cycle.
+                cycle_trace::note_trigger("schedule");
+            }
             if (task == schedule::Task::camera) {
                 ESP_LOGI(TAG, "Camera read due");
                 error = session_controller_request_scan();
@@ -269,6 +274,7 @@ void scheduler_task(void *arg)
             }
             if (task != schedule::Task::none) {
                 if (error != ESP_OK) {
+                    cycle_trace::note_trigger(nullptr);
                     ESP_LOGW(TAG, "Could not start the cycle: %s",
                              esp_err_to_name(error));
                 } else {
