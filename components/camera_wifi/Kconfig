@@ -1,0 +1,13 @@
+menu "TrailCamHub: home Wi-Fi"
+
+config UPLINK_WIFI_POWER_SAVE
+    bool "Wi-Fi modem sleep on the home network on battery power"
+    default y
+    help
+        Used only while the mode's power is "battery".
+        Saves power during the backend sync over the home Wi-Fi at the cost
+        of a slower transfer. The camera Wi-Fi never uses power save: in
+        modem sleep, acknowledgements queue up and the camera stream runs
+        out of transmit buffers.
+
+endmenu

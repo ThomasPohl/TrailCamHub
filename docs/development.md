@@ -10,7 +10,7 @@ The firmware is an ESP-IDF 5.5 project (CI and the dev container use
 
 ```sh
 idf.py set-target esp32s3
-idf.py menuconfig        # optional: menu "TrailCamHub PoC"
+idf.py menuconfig        # optional, see below
 idf.py build flash monitor
 ```
 
@@ -24,7 +24,13 @@ idf.py -B build-tdongle-c5 -D IDF_TARGET=esp32c5 \
     build
 ```
 
-Project options are in `main/Kconfig.projbuild` (menu **TrailCamHub PoC**).
+The board and the preset are in `main/Kconfig.projbuild` (menu
+**TrailCamHub**). Every other option is in the `Kconfig` file of the
+component that uses it, in `menuconfig` under **Component config →
+TrailCamHub: …** (for example `components/session_controller/Kconfig`,
+**TrailCamHub: session**). An option used by several components is with the
+one that owns the function. [modes.md](modes.md#where-a-setting-lives) lists
+which settings are build options and which can be changed on the hub.
 Useful ones while investigating a camera:
 
 - **Wi-Fi enable payload (hex)** — `BT_KEY_ON` by default; spaces, colons and

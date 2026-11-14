@@ -1,0 +1,46 @@
+menu "TrailCamHub: power"
+
+config POWER_DEEP_SLEEP
+    bool "Deep sleep between cycles on battery power"
+    default n if IDF_TARGET_ESP32P4
+    default y
+    help
+        Builds the deep sleep in; it is used only while the mode's power is
+        "battery" (setting "power", or the preset). Off on the ESP32-P4-NANO,
+        whose Wi-Fi co-processor is not set up for it.
+        When nothing is due for at least POWER_MIN_SLEEP_S seconds, the hub
+        goes into deep sleep until the next camera read or check-in. While
+        it sleeps the serial console, a web UI and the display do not
+        respond; press the reset button to wake it for
+        POWER_AWAKE_AFTER_BOOT_MIN minutes.
+
+config POWER_AWAKE_AFTER_BOOT_MIN
+    int "Stay awake after a power-on or reset (minutes)"
+    depends on POWER_DEEP_SLEEP
+    range 0 120
+    default 10
+
+config POWER_AWAKE_AFTER_ACTIVITY_MIN
+    int "Stay awake after a serial command (minutes)"
+    depends on POWER_DEEP_SLEEP
+    range 0 120
+    default 5
+
+config POWER_MIN_SLEEP_S
+    int "Shortest deep sleep (seconds)"
+    depends on POWER_DEEP_SLEEP
+    range 10 3600
+    default 60
+    help
+        If the next cycle is due sooner, the hub waits awake.
+
+config POWER_MAX_SLEEP_MIN
+    int "Longest deep sleep (minutes)"
+    depends on POWER_DEEP_SLEEP
+    range 10 1440
+    default 720
+    help
+        The hub wakes up at least this often, even with nothing scheduled,
+        and goes back to sleep after checking its schedule.
+
+endmenu

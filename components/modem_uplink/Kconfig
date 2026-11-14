@@ -1,0 +1,39 @@
+menu "TrailCamHub: modem uplink"
+
+config MODEM_UPLINK
+    bool "Sync with the backend over the A7670E cellular modem"
+    depends on IDF_TARGET_ESP32S3 && !BOARD_TDONGLE_S3 && !BOARD_S3_ETH
+    default y
+    help
+        Drive the A7670E LTE modem of the Waveshare ESP32-S3-A7670E-4G on
+        the S3's native USB port (USB host, PPP). It is switched on for a
+        backend sync and off again afterwards. Which transport a hub uses is a
+        setting ("config set transport wifi|modem"); without one the modem is
+        used when no home Wi-Fi is set. The APN and the SIM PIN are settings
+        too. On the board the USB DIP switch must be OFF (modem on the S3).
+        See docs/modem.md.
+
+config MODEM_POWER_GPIO
+    int "GPIO that switches the modem's power (-1: DIP switch)"
+    depends on MODEM_UPLINK
+    range -1 48
+    default -1
+    help
+        High switches the modem on. With -1 the modem's power comes from the
+        4G DIP switch (ON): it stays powered and is put into flight mode
+        (AT+CFUN=4) between syncs. Waveshare names GPIO33 for boards where
+        the 4G DIP switch is OFF; check the board revision, GPIO33-37 are
+        taken by the octal PSRAM of the ESP32-S3R8.
+
+config MODEM_ATTACH_TIMEOUT_S
+    int "Time allowed to get online over the modem (seconds)"
+    depends on MODEM_UPLINK
+    range 30 600
+    default 120
+    help
+        From switching the modem on to an IP address: the modem starts,
+        the SIM card is unlocked, the modem registers with the network and
+        the data call is made. Without a home Wi-Fi this replaces the
+        Wi-Fi join timeout of the uplink.
+
+endmenu

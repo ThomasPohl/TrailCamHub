@@ -1,0 +1,213 @@
+menu "TrailCamHub: camera session"
+
+config CAMERA_SEND_PRELOGIN
+    bool "Send PRE_LOGIN (0xF9) to the camera after discovery"
+    default y
+    help
+        The hub has always sent this packet, taken from the pi_trailcam
+        reference, and then waited for the camera's first DATA packet. The
+        TrailCam Go app never sends 0xF9 to the camera: in all captures of
+        pwnb0t/trailcam-automation it goes only to the CS2 P2P servers
+        (UDP port 32100), and the camera sends its first DATA packet
+        ("ACK") after discovery on its own (docs/udp-protocol.md, #51).
+        Switch this off to test a session without it; the hub then only
+        waits for that DATA packet.
+
+config CAMERA_SESSION_IDLE_TIMEOUT_S
+    int "Close the camera session after this many seconds without progress"
+    range 30 600
+    default 60
+    help
+        The camera session is closed when the camera neither answered a
+        request nor sent new media data for this long; its heartbeat answers
+        and repeated or stray media frames do not count. This ends a session
+        that waits for an answer that never comes, so the camera does not keep
+        its Wi-Fi on until its battery is empty. With media downloads it must
+        be above the download stall timeout (checked when building).
+
+config CAMERA_UDP_LOG_PACKET_HEX
+    bool "Log camera UDP packet contents as hex"
+    default y
+    help
+        Compile the per-packet hex dump of every camera UDP packet that is
+        sent or received, in addition to the one-line packet summary. Useful
+        while investigating the camera protocol. Both the hex dump and the
+        one-line summaries use the DEBUG level, so they stay off in a normal
+        INFO build (and out of the bulk-transfer hot path); raise the
+        "trailcamhub_udp" tag to DEBUG to see them. Disable this option to
+        drop the hex dump from the build entirely.
+
+config CAMERA_THUMBNAIL_SERIAL_PREVIEW
+    bool "Print the first thumbnail of a session as Base64"
+    default y
+    help
+        Log the first thumbnail of each session as Base64 lines between
+        "THUMB" markers, which the browser installer's live view shows.
+        About 33 KB of log per session; boards with a web UI can show the
+        thumbnails from the SD card instead.
+
+config CAMERA_MEDIA_LIST_MAX_PAGES
+    int "Media-list pages read per camera session"
+    range 1 1000
+    default 20
+    help
+        The camera hands out its media list in pages of 45 files, newest
+        first. A scan reads the pages until the list ends or this many pages
+        were read (20 pages = 900 files). Each page is a request over the
+        camera's Wi-Fi and the hub keeps the catalog in RAM, so a card with
+        more files is read only up to its newest ones; older files are
+        neither fetched nor requested. Listing only (camlist) is not limited
+        by this.
+
+endmenu
+
+menu "TrailCamHub: media download"
+    depends on SD_CARD_ENABLE
+
+config CAMERA_DOWNLOAD_PHOTOS
+    bool "Download photos to the SD card"
+    default n
+    help
+        After the thumbnails, download every photo of the camera's media
+        list that is not on the SD card yet to /sdcard/<camera>/media/.
+        The file is streamed to the card while it arrives, so it is never
+        held in RAM. Videos are a separate option: the camera sends them
+        only as a playback stream (cmdId 769), not as a file.
+
+config CAMERA_DOWNLOAD_VIDEOS
+    bool "Download videos (raw H.264 and AAC streams)"
+    depends on SPIRAM
+    default y if HUB_PROFILE_AUTONOMOUS
+    default n
+    help
+        After the photos, play back the videos selected below that are not
+        on the SD card yet (cmdId 769) and store their streams as
+        /sdcard/<camera>/media/<dir>_<num>.h264 (H.264 Annex-B, playable
+        with VLC) and .aac (AAC with ADTS headers). One MP4 can be made
+        without re-encoding:
+          ffmpeg -i 100_2.h264 -i 100_2.aac -c copy 100_2.mp4
+        The camera streams the frames one by one; they are put in order in
+        PSRAM and written through a 4 MB buffer in PSRAM. Verified on the
+        T-Dongle-C5: a 15-second 1080p video takes about 31 s.
+
+choice CAMERA_VIDEO_DOWNLOAD
+    prompt "Which videos to download"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    default CAMERA_VIDEO_ON_REQUEST if HUB_PROFILE_AUTONOMOUS
+    default CAMERA_VIDEO_ALL
+    help
+        A video costs the camera's battery (about twice its length of
+        playback) and, when uploaded, data volume.
+
+config CAMERA_VIDEO_ALL
+    bool "Every video"
+    help
+        Every video of the media list that is not on the SD card yet.
+
+config CAMERA_VIDEO_ON_REQUEST
+    bool "Only videos requested in the app"
+    help
+        Only the videos asked for with "Download video" in the app or the
+        bot. The request reaches the hub with the next check-in, which makes
+        a camera read due at once; the video is uploaded with the sync after
+        that read. A video that is no longer on the camera's card, or whose
+        download failed three times, is reported as failed.
+
+endchoice
+
+config CAMERA_VIDEO_MAX_PER_SESSION
+    int "Videos downloaded in one camera session (0: no limit)"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    range 0 100
+    default 3 if CAMERA_VIDEO_ON_REQUEST
+    default 0
+    help
+        The newest ones first; the rest follow in later sessions.
+
+choice CAMERA_VIDEO_MP4
+    prompt "MP4 files for downloaded videos"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    default CAMERA_VIDEO_MP4_ON_REQUEST if WEB_UI_ENABLE
+    default CAMERA_VIDEO_MP4_NONE
+    help
+        The download stores each video as a raw .h264 and a .aac file, which
+        players handle poorly (no duration, no index, no sound). This selects
+        whether and how an MP4 with picture and sound is made from them.
+
+config CAMERA_VIDEO_MP4_NONE
+    bool "None"
+    help
+        Only the raw files.
+
+config CAMERA_VIDEO_MP4_ON_REQUEST
+    bool "Build when the web UI sends it"
+    depends on WEB_UI_ENABLE
+    help
+        The web UI lists a <dir>_<num>.mp4 next to every video and builds it
+        while it is downloaded, from the two stored files (copy only, no
+        re-encoding). Nothing extra is stored and the download path does not
+        change, but the file is built at every request, which takes a pass
+        over the .h264 file before the first byte is sent. Requests are
+        refused while a camera session is running. Range requests work, so
+        players can seek. The frame rate comes from the duration of the audio
+        track.
+
+endchoice
+
+config CAMERA_VIDEO_HEARTBEAT_INTERVAL_MS
+    int "Heartbeat interval during a video download (ms)"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    range 100 3000
+    default 1500
+    help
+        The camera does not pace the stream by the heartbeat: with 500 ms
+        instead of 1.5 s a video downloaded at the same speed (see
+        docs/video-download.md). Outside a video download the heartbeat is
+        sent every 1.5 s.
+
+config CAMERA_VIDEO_DISCARD_DATA
+    bool "Throughput test: do not write videos to the SD card"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    default n
+    help
+        Receive, reorder, decrypt and parse every video as usual, but drop
+        the data instead of writing it, and log the throughput per video
+        ("Throughput test: ... KB/s"). Shows how fast the camera and the
+        Wi-Fi link deliver without the SD card. Nothing is stored and no
+        video is marked as downloaded, so the next normal session fetches
+        them all. For measurements only.
+
+config CAMERA_VIDEO_TRACE
+    bool "Diagnostics: write a trace of every video's frames and ACKs"
+    depends on CAMERA_DOWNLOAD_VIDEOS
+    default n
+    help
+        Record every received playback frame (time, sequence, distance to
+        the expected one, whether it starts an ARTEMIS record, whether a gap
+        was open) and every sequence sent in an ACK, in PSRAM (up to 65536
+        events, 768 KB), and write them after each video to
+        /sdcard/<camera>/trace_<dir>_<num>.csv. Shows which frames the camera
+        sends again and when they had been acknowledged. Writing the file
+        takes about a second after each video.
+
+config CAMERA_BULK_ACK_FRAMES
+    int "Frames acknowledged in one ACK"
+    range 1 64
+    default 17
+    help
+        Received bulk frames (thumbnails, photos, videos) are acknowledged
+        once each, this many in one ACK packet, as the TrailCam Go app does
+        (17); an ACK is also sent when no frame arrived for 1 ms. Fewer
+        frames per ACK tell the camera sooner what arrived, at the cost of
+        more packets.
+
+config CAMERA_DOWNLOAD_STALL_TIMEOUT_S
+    int "Abort a download after this many seconds without data"
+    depends on CAMERA_DOWNLOAD_PHOTOS || CAMERA_DOWNLOAD_VIDEOS
+    range 5 300
+    default 20
+    help
+        The partial file is removed and the next item is requested. The
+        item is tried again in the next session.
+
+endmenu

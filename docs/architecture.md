@@ -89,7 +89,7 @@ that is already running finishes.
 A scan that does not reach the camera is retried a few times (3 attempts,
 10 seconds apart by default) and then given up; the hub never retries
 forever. Timeouts, attempts and the retry delay are in `menuconfig` under
-**TrailCamHub PoC → Session**. The pure state machine (`session_fsm.cpp`) is
+**Component config → TrailCamHub: session**. The pure state machine (`session_fsm.cpp`) is
 host-tested.
 
 ### Front ends

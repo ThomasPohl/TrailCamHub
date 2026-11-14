@@ -1,0 +1,62 @@
+menu "TrailCamHub: schedule"
+
+config SCHEDULE_CAMERA_PLAN
+    string "Camera read plan"
+    default "*=120"
+    help
+        Applies on battery power, or when the hub pushes to a configured
+        destination; otherwise (mains, nothing to push to) there are no
+        automatic reads unless camera_plan is set.
+        When the hub reads the cameras on its own: time windows in local time
+        (TIME_ZONE), each with an interval in minutes, and "*" for the rest
+        of the day, for example
+          05:00-09:00=30,17:00-22:00=30,*=120
+        reads every 30 minutes at dawn and dusk and every two hours
+        otherwise. An interval of 0 means no reads; an empty plan or "off"
+        means no automatic reads at all. The first window that contains a
+        time applies. Without a valid clock the windows are ignored and the
+        "*" interval applies (if it is 0 or missing, the longest window
+        interval). Each read wakes the camera's Wi-Fi for a minute or two,
+        which costs its battery. A read is followed by a backend sync if the
+        uplink is configured.
+        Overridden by "config set camera_plan" (serial console, web
+        installer) and by the backend.
+
+config SCHEDULE_CHECKIN_INTERVAL_MIN
+    int "Backend check-in interval (minutes, 0 = off)"
+    range 0 1440
+    default 30
+    help
+        Applies when the hub pushes (direction push); with pull there are no
+        check-ins.
+        How often the hub syncs with the backend between camera reads, to
+        pick up commands from the app (for example a camera read on
+        request) and upload what is left. Only with complete uplink
+        settings; every camera read syncs as well and restarts the
+        interval. Overridden by "config set checkin_min" and by the
+        backend.
+
+config SCHEDULE_START_DELAY_S
+    int "Delay before the first scheduled cycle after power-on (seconds)"
+    range 0 3600
+    default 60
+    help
+        Gives the web installer and the serial console time before the
+        first automatic camera read or check-in after a power-on or reset.
+        Not applied after a wake-up from deep sleep.
+
+config SCHEDULE_LOW_BATTERY_PERCENT
+    int "Camera battery level that stretches the read interval (%, 0 = off)"
+    range 0 100
+    default 20
+
+config SCHEDULE_LOW_BATTERY_FACTOR
+    int "Read interval factor for a camera with a low battery"
+    range 1 16
+    default 3
+    help
+        Failed reads stretch the interval as well (2, 4, 8, 16 times after
+        one to four failures in a row), and failed check-ins stretch the
+        check-in interval in the same way, up to one day.
+
+endmenu

@@ -1,0 +1,11 @@
+menu "TrailCamHub: diagnostics"
+
+config DIAG_MEMORY_LOG_INTERVAL_S
+    int "Memory log interval (seconds)"
+    range 0 3600
+    default 30
+    help
+        Log free and minimum free heap for internal RAM and PSRAM at this
+        interval. Set to 0 to log memory only at fixed workflow stages.
+
+endmenu

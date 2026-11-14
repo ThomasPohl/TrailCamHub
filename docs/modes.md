@@ -157,6 +157,29 @@ config set camera_user <user>        # only if that changed too
 A rejected login is logged as `camera login rejected (result …); if its
 password was changed in the TrailCam Go app, set camera_user/camera_password`.
 
+## Where a setting lives
+
+A setting can come from up to four places. Where more than one has a value,
+the one further left in "Wins" applies.
+
+| Setting | Build (Kconfig) | `boards.json` | Hub (NVS, `config set`) | Backend | Wins |
+| --- | --- | --- | --- | --- | --- |
+| Capabilities (modem, Ethernet, battery gauge, PSRAM, display, web UI, deep sleep) | `CONFIG_MODEM_UPLINK`, … (table below) | `capabilities`: a copy for the installer and the docs; CI fails when it differs from the build | – | – | build |
+| Preset of `power` and `direction` | `CONFIG_HUB_PROFILE_*` | `preset`: a copy for the installer | – | – | build |
+| `power`, `direction`, `transport`, `destination` | the preset, for an empty setting | – | yes | – | hub, then the preset; a value the board cannot use is refused |
+| Camera read plan | `CONFIG_SCHEDULE_CAMERA_PLAN` | – | `camera_plan` | `config` in the check-in response | backend, hub, build ([power-and-schedule.md](power-and-schedule.md)) |
+| Check-in interval | `CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN` | – | `checkin_min` | `config` in the check-in response | backend, hub, build |
+| Home Wi-Fi, APN, SIM PIN, destination URLs and credentials, `health_url`, camera login | – | – | yes | – | hub |
+| Web UI password | – | – | `web_password`; empty: generated at the first start | – | hub |
+| Time zone | `CONFIG_TIME_ZONE` | – | – | – | build |
+| Pins, timeouts, limits, video download, log, firmware update policy | the component's `Kconfig` | the board's `defaults` file (`sdkconfig.defaults.<board>`) names the values that differ per board | – | – | build |
+
+Build options are in the `Kconfig` file of the component that uses them
+(`menuconfig`: **Component config → TrailCamHub: …**); only the board and the
+preset are in `main/Kconfig.projbuild`. The values a board changes are in its
+`sdkconfig.defaults.<board>` file, the ones of the release image in
+`sdkconfig.defaults.release`.
+
 ## Capabilities
 
 What a board can do comes from its build (Kconfig) and is listed per board in

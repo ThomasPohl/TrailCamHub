@@ -1,0 +1,46 @@
+menu "TrailCamHub: web UI"
+
+config WEB_UI_ENABLE
+    bool "Serve a web UI"
+    depends on !IDF_TARGET_ESP32P4 || ETH_UPLINK_ENABLE
+    default n
+    help
+        Serve a web UI to start and stop the camera search, follow the
+        status and the live log, and browse, view and download the files on
+        the SD card. Boards with Wi-Fi only open their own WPA2 access point
+        "TrailCamHub-XXXX" next to the camera station and serve it at
+        http://10.42.0.1; while the camera Wi-Fi is joined, the access point
+        uses the camera's channel, so clients are disconnected briefly when
+        it changes. Needs about 40 KB of internal RAM. The ESP32-P4 serves
+        it over its Ethernet port instead (see WEB_UI_OVER_ETHERNET).
+
+config WEB_UI_OVER_ETHERNET
+    bool
+    depends on WEB_UI_ENABLE && ETH_UPLINK_ENABLE
+    default y
+    help
+        Serve the web UI on the Ethernet interface at the address that the
+        DHCP server of the network assigns, without an access point. The
+        address is shown in the log ("Web UI at http://..."). The page asks
+        for a password (HTTP Basic auth, any user name; see
+        WEB_UI_ETHERNET_PASSWORD), which the log shows next to the address.
+        HTTP is not encrypted: use it in a network you trust.
+
+config WEB_UI_ETHERNET_PASSWORD
+    string "Web UI password over Ethernet (empty: generate one)"
+    depends on WEB_UI_OVER_ETHERNET
+    default ""
+    help
+        At least 8 characters. When empty, a random password is generated
+        at the first boot, stored in NVS and shown in the boot log with the
+        address of the page.
+
+config WEB_UI_AP_PASSWORD
+    string "Access point password (empty: generate one)"
+    depends on WEB_UI_ENABLE && !WEB_UI_OVER_ETHERNET
+    default ""
+    help
+        At least 8 characters. When empty, a random password is generated
+        at the first boot, stored in NVS and shown on the dongle display.
+
+endmenu
