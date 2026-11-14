@@ -196,7 +196,7 @@ boot log). Power from USB-C or the optional PoE module: the preset is mains.
 
 ### ESP32-WROOM-32D with an SPI microSD reader
 
-Wiring diagram with all 38 pins: [wiring-wroom32d.md](wiring-wroom32d.md).
+Wiring diagrams for 38-pin and 30-pin boards: [wiring-wroom32d.md](wiring-wroom32d.md).
 
 Image `wroom32d` (`sdkconfig.defaults.wroom32d`, target `esp32`, #77). A
 low-cost classic ESP32 dev board (4 MB flash, no PSRAM) with an external
