@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace camera::artemis
@@ -18,11 +19,20 @@ class BulkReassembler
 {
   public:
     static constexpr std::size_t kFramePayload = 1024;
-    // The whole record is kept in RAM and a failed allocation restarts the
-    // hub (C++ exceptions are off), so a length field must not be able to
-    // claim more than the hub can hold. Thumbnails are a few 10 KB; photos
+    // The whole record is kept in RAM, so a length field must not be able
+    // to claim more than a hub can hold. Thumbnails are a few 10 KB; photos
     // and videos are streamed to the SD card instead (bulk_stream.hpp).
     static constexpr std::size_t kMaxRecordSize = 256u * 1024u;
+
+    // Returns `size` bytes or null. The buffer of a record is one block of
+    // exactly the record's size, taken when its header arrives: a record the
+    // heap cannot hold is refused (no_memory) instead of restarting the hub,
+    // which a growing std::vector did on a board without PSRAM (C++
+    // exceptions are off, so a failed `new` aborts).
+    using Allocate = std::uint8_t *(*)(std::size_t size);
+    // `allocate` null: operator new (std::nothrow). The block is freed with
+    // delete[].
+    explicit BulkReassembler(Allocate allocate = nullptr);
 
     enum class Status {
         incomplete,  // more frames needed
@@ -36,9 +46,12 @@ class BulkReassembler
         short_header_frame,  // first frame too short to hold the 20-byte header
         bad_signature,       // first frame did not start with "ARTEMIS\0"
         bad_length,  // header length field was zero or implausibly large
+        no_memory,   // no free block of the record's size
     };
     static const char *reason_name(InvalidReason reason);
 
+    // Forgets the record. The buffer is kept for the next record of the
+    // session; assign a new BulkReassembler to free it.
     void reset();
 
     // Feeds one bulk frame's payload (the bytes after the 8-byte DRW header).
@@ -106,7 +119,13 @@ class BulkReassembler
     void place_frame(std::uint16_t seq, const std::uint8_t *payload,
                      std::size_t size);
 
-    std::vector<std::uint8_t> buffer_;
+    // Makes buffer_ hold `size` bytes; the old block is freed before a
+    // larger one is taken, so the two never exist side by side.
+    bool reserve(std::size_t size);
+
+    Allocate allocate_;
+    std::unique_ptr<std::uint8_t[]> buffer_;
+    std::size_t capacity_ = 0;
     std::vector<bool> seen_;           // indexed by frame-relative position
     std::size_t received_frames_ = 0;  // distinct in-record frames seen
     std::size_t received_bytes_ = 0;
