@@ -39,6 +39,12 @@
 #define SD_LOG_TASK_STACK 4096
 #define SD_LOG_TASK_PRIORITY 2
 #define SD_LOG_MAX_PATH 64
+// One line per cycle (cycle_trace); the previous file is kept when it is
+// full, so the two hold at least CONFIG_SD_LOG_CYCLES_MAX_KB of history.
+#define SD_LOG_CYCLES_PATH SD_LOG_DIR "/cycles.jsonl"
+#define SD_LOG_CYCLES_OLD_PATH SD_LOG_DIR "/cycles.1.jsonl"
+// Lines waiting for the writer; more are dropped (a cycle line is ~300 B).
+#define SD_LOG_CYCLES_PENDING_MAX 2048
 
 static const char *TAG = "trailcamhub_sdlog";
 
@@ -57,6 +63,12 @@ size_t s_file_size;
 // sd_log_flush(): set by the caller, answered by the writer.
 std::atomic<bool> s_flush_requested;
 SemaphoreHandle_t s_flushed;
+// The running cycle (0: none): its number marks the lines in the file.
+std::atomic<unsigned> s_cycle;
+// The last chunk logged ended a line, so the next one starts one.
+std::atomic<bool> s_line_start{true};
+// Lines for cycles.jsonl, handed to the writer under s_path_lock.
+std::string s_cycle_lines;
 
 int log_vprintf(const char *format, va_list args)
 {
@@ -65,10 +77,22 @@ int log_vprintf(const char *format, va_list args)
     const int result = s_console(format, args);
     if (s_enabled.load(std::memory_order_relaxed)) {
         char line[SD_LOG_LINE_MAX];
+        // ESP-IDF logs a line with one call, so a call that follows a
+        // complete line starts one. Lines of a cycle carry its number
+        // ("#12 "), so that the file can be cut by cycle.
+        const size_t prefix =
+            s_line_start.load(std::memory_order_relaxed)
+                ? sdlog::cycle_prefix(line, sizeof(line),
+                                      s_cycle.load(std::memory_order_relaxed))
+                : 0;
         const size_t length = sdlog::fit_line(
-            line, vsnprintf(line, sizeof(line), format, copy), sizeof(line));
+            line + prefix,
+            vsnprintf(line + prefix, sizeof(line) - prefix, format, copy),
+            sizeof(line) - prefix);
         if (length > 0) {
-            if (xRingbufferSend(s_ring, line, length, 0) != pdTRUE) {
+            s_line_start.store(line[prefix + length - 1] == '\n',
+                               std::memory_order_relaxed);
+            if (xRingbufferSend(s_ring, line, prefix + length, 0) != pdTRUE) {
                 s_dropped.fetch_add(1, std::memory_order_relaxed);
             }
         }
@@ -183,6 +207,32 @@ void write_bytes(const void *data, size_t size)
     s_file_size += size;
 }
 
+// Appends the waiting cycle lines to cycles.jsonl; the file is closed again,
+// so the lines are on the card. A full file replaces the previous one.
+void write_cycle_lines()
+{
+    std::string lines;
+    xSemaphoreTake(s_path_lock, portMAX_DELAY);
+    lines.swap(s_cycle_lines);
+    xSemaphoreGive(s_path_lock);
+    if (lines.empty()) {
+        return;
+    }
+    struct stat info;
+    if (stat(SD_LOG_CYCLES_PATH, &info) == 0 &&
+        (size_t)info.st_size >= CONFIG_SD_LOG_CYCLES_MAX_KB * 1024u) {
+        // FAT does not replace on rename.
+        remove(SD_LOG_CYCLES_OLD_PATH);
+        rename(SD_LOG_CYCLES_PATH, SD_LOG_CYCLES_OLD_PATH);
+    }
+    FILE *file = fopen(SD_LOG_CYCLES_PATH, "a");
+    if (file == NULL) {
+        return;
+    }
+    fwrite(lines.data(), 1, lines.size(), file);
+    fclose(file);
+}
+
 void writer_task(void *arg)
 {
     (void)arg;
@@ -210,6 +260,7 @@ void writer_task(void *arg)
                 dirty = true;
             }
         }
+        write_cycle_lines();
         const unsigned dropped = s_dropped.exchange(0);
         if (dropped > 0) {
             char note[64];
@@ -304,6 +355,23 @@ void sd_log_current_path(char *path, size_t size)
     }
     xSemaphoreTake(s_path_lock, portMAX_DELAY);
     snprintf(path, size, "%s", s_path);
+    xSemaphoreGive(s_path_lock);
+}
+
+void sd_log_set_cycle(uint32_t cycle)
+{
+    s_cycle.store(cycle, std::memory_order_relaxed);
+}
+
+void sd_log_append_cycle_line(const char *line)
+{
+    if (!s_enabled.load() || s_path_lock == NULL) {
+        return;
+    }
+    xSemaphoreTake(s_path_lock, portMAX_DELAY);
+    if (s_cycle_lines.size() + strlen(line) <= SD_LOG_CYCLES_PENDING_MAX) {
+        s_cycle_lines += line;
+    }
     xSemaphoreGive(s_path_lock);
 }
 

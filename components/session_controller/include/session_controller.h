@@ -190,7 +190,7 @@ typedef void (*session_status_listener_t)(const session_status_t *status,
                                           void *context);
 
 /* Maximum number of status listeners. */
-#define SESSION_CONTROLLER_MAX_LISTENERS 4
+#define SESSION_CONTROLLER_MAX_LISTENERS 6
 
 /* Creates the controller's queues and timers and initializes Wi-Fi. */
 esp_err_t session_controller_init(void);

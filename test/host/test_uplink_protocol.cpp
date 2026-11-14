@@ -245,3 +245,23 @@ TEST_CASE("check-in body carries the camera's state when it is known")
           "\"media\":[]},"
           "{\"camId\":\"A1B2C3D4E5F6\",\"media\":[]}]}");
 }
+
+TEST_CASE("the check-in carries the memory headroom")
+{
+    CheckinRequest request;
+    request.hub_firmware = "dev";
+    request.memory.present = true;
+    request.memory.cycle = 12;
+    request.memory.heap_min_internal = 81234;
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"memory\":{\"cycle\":12,"
+          "\"heapMin\":81234},\"cameras\":[]}");
+    request.memory.heap_min_psram = 3912345;
+    request.memory.stack_session = 2100;
+    request.memory.stack_uplink = 5400;
+    request.memory.stack_controller = 3300;
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"memory\":{\"cycle\":12,"
+          "\"heapMin\":81234,\"psramMin\":3912345,\"stackSession\":2100,"
+          "\"stackUplink\":5400,\"stackController\":3300},\"cameras\":[]}");
+}

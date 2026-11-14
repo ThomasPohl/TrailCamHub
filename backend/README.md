@@ -143,6 +143,11 @@ request (and TLS handshake) however many cameras there are — important over LT
    - `hubBoard`, `hubVariant` (request): the hub's board and build variant.
      The backend offers no firmware; the hub reads the releases from GitHub
      itself (see [docs/ota.md](../docs/ota.md)).
+   - `memory` (request): the hub's memory headroom in the running cycle
+     (`cycle`, `heapMin`, and where known `psramMin`, `stackSession`,
+     `stackUplink`, `stackController`, all in bytes; see
+     [docs/sd-layout.md](../docs/sd-layout.md#logscyclesjsonl)). Sent by the
+     hub; this backend ignores it (it is not extended, #150).
    - `config` (response): the schedule set in the app for this hub
      (`cameraPlan`, `checkinIntervalS`); a missing field leaves the setting to the
      hub. See [docs/power-and-schedule.md](../docs/power-and-schedule.md).

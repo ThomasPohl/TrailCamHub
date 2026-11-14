@@ -19,6 +19,7 @@
 #include "camera_wifi.h"
 #include "destinations.hpp"
 #include "device_info.hpp"
+#include "cycle_trace.hpp"
 #include "hub_battery.hpp"
 #include "http_util.hpp"
 #include "hub_config.hpp"
@@ -446,6 +447,22 @@ bool handle_video_command(CameraState *camera, const std::string &cam_id,
 namespace
 {
 
+// The memory headroom of the running cycle so far (the sync is its last
+// part, and the one that needs the most).
+MemoryReport memory_report()
+{
+    const cycle_trace::Memory memory = cycle_trace::memory();
+    MemoryReport report;
+    report.present = true;
+    report.cycle = memory.cycle;
+    report.heap_min_internal = memory.heap_min_internal;
+    report.heap_min_psram = memory.heap_min_psram;
+    report.stack_session = memory.stack_session;
+    report.stack_uplink = memory.stack_uplink;
+    report.stack_controller = memory.stack_controller;
+    return report;
+}
+
 // The sync with the own backend (check-in, thumbnails, commands, ack).
 esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
 {
@@ -459,6 +476,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     // -1 (left out of the check-in) on boards without a measurement.
     request.hub_bat_percent = hub_battery::percent();
     request.schedule = schedule_report();
+    request.memory = memory_report();
     std::vector<CameraState> cameras;
     collect_cameras(request, cameras);
     report.cameras_reported = (int)request.cameras.size();

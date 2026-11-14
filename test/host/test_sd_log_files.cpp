@@ -71,3 +71,14 @@ TEST_CASE("fit_line cuts overlong lines and keeps the newline")
     CHECK(sdlog::fit_line(line, 0, sizeof(line)) == 0);
     CHECK(sdlog::fit_line(line, -1, sizeof(line)) == 0);
 }
+
+TEST_CASE("cycle_prefix marks the lines of a cycle")
+{
+    char line[16];
+    CHECK(sdlog::cycle_prefix(line, sizeof(line), 12) == 4);
+    CHECK(std::string(line, 4) == "#12 ");
+    // Between cycles the lines carry no mark.
+    CHECK(sdlog::cycle_prefix(line, sizeof(line), 0) == 0);
+    // No room: no mark instead of a cut one.
+    CHECK(sdlog::cycle_prefix(line, 4, 12) == 0);
+}

@@ -71,4 +71,16 @@ std::size_t fit_line(char *line, int length, std::size_t capacity)
     return capacity - 1;
 }
 
+std::size_t cycle_prefix(char *line, std::size_t capacity, unsigned cycle)
+{
+    if (cycle == 0) {
+        return 0;
+    }
+    const int length = std::snprintf(line, capacity, "#%u ", cycle);
+    if (length <= 0 || static_cast<std::size_t>(length) >= capacity) {
+        return 0;
+    }
+    return static_cast<std::size_t>(length);
+}
+
 }  // namespace sdlog

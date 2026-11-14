@@ -55,7 +55,7 @@ schedules) sits in separate files and is covered by the host tests in
 | `hub_console` | Line-based serial commands used by the web installer ([installer.md](installer.md#serial-commands)) |
 | `web_ui`, `dongle_ui` | Web page on the hub; display and button of the T-Dongles |
 | `ota_update`, `coprocessor_update` | Firmware updates from GitHub releases ([ota.md](ota.md)); ESP-Hosted firmware of the P4's C6 |
-| `hub_battery`, `time_sync`, `diagnostics` | MAX17048 fuel gauge; which source may set the clock ([clock.md](clock.md)); reset reason, core dump, heap statistics |
+| `hub_battery`, `time_sync`, `diagnostics` | MAX17048 fuel gauge; which source may set the clock ([clock.md](clock.md)); reset reason, core dump, heap statistics; the cycle trace (cycle number, lowest free heap and stack per cycle, `logs/cycles.jsonl`, see [sd-layout.md](sd-layout.md)) |
 
 ## Session state machine
 

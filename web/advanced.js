@@ -70,9 +70,11 @@
     return bytes;
   }
 
-  // The last `maxBytes` of the newest log file on the SD card, if the build
-  // has the diagnostic commands (ls, cat).
-  async function newestLog(maxBytes) {
+  // The last `maxBytes` of the newest file in logs/ on the SD card whose
+  // name matches `pattern`, if the build has the diagnostic commands (ls,
+  // cat). The directory holds the log files (log-NNNNN.txt) and the cycle
+  // journal (cycles.jsonl).
+  async function newestLog(pattern, maxBytes) {
     const listing = await serial().command("ls logs", 10000);
     if (listing.some((line) => line.startsWith("ERR "))) {
       return { note: listing.join("\n") };
@@ -81,9 +83,10 @@
       .map((line) => line.match(/^INFO f (\d+) (\d+) (\S+)$/))
       .filter(Boolean)
       .map((m) => ({ size: Number(m[1]), time: Number(m[2]), name: m[3] }))
+      .filter((file) => pattern.test(file.name))
       .sort((a, b) => b.time - a.time || b.name.localeCompare(a.name));
     if (files.length === 0) {
-      return { note: "no log files on the SD card" };
+      return { note: "no such file on the SD card" };
     }
     const file = files[0];
     const offset = Math.max(0, file.size - maxBytes);
@@ -114,8 +117,11 @@
       }
       try {
         status.textContent = "Reading the newest log file…";
-        const log = await newestLog(64 * 1024);
+        const log = await newestLog(/^log-\d+\.txt$/, 64 * 1024);
         add(log.name ? `SD card log ${log.name} from byte ${log.offset}` : "SD card log", log.text ?? log.note);
+        // One line per cycle: result, duration, lowest free heap and stack.
+        const cycles = await newestLog(/^cycles\.jsonl$/, 16 * 1024);
+        add(cycles.name ? `Cycle journal ${cycles.name} from byte ${cycles.offset}` : "Cycle journal", cycles.text ?? cycles.note);
       } catch (error) {
         add("SD card log", `not available: ${error.message}`);
       }

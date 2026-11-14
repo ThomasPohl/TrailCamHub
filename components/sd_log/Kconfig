@@ -45,4 +45,15 @@ config SD_LOG_BUFFER_KB
         before the card is mounted. Without PSRAM an 8 KB buffer in internal
         RAM is used.
 
+config SD_LOG_CYCLES_MAX_KB
+    int "Size limit of the cycle journal (KB)"
+    depends on SD_LOG_ENABLE
+    range 16 4096
+    default 256
+    help
+        /sdcard/logs/cycles.jsonl gets one line per cycle (about 300 bytes:
+        start, kind, result, duration, lowest free heap and stack). When it
+        reaches this size it becomes cycles.1.jsonl, replacing the previous
+        one, and a new file starts.
+
 endmenu

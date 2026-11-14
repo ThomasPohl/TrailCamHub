@@ -8,7 +8,7 @@ endif()
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "."
-                       PRIV_REQUIRES camera_link esp_driver_uart esp_driver_usb_serial_jtag
+                       PRIV_REQUIRES camera_link diagnostics esp_driver_uart esp_driver_usb_serial_jtag
                                      esp_rom esp_timer fatfs heap hub_battery
                                      hub_config mbedtls ota_update schedule schedule_state sd_log
                                      sd_storage

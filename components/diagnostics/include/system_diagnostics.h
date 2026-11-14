@@ -14,3 +14,6 @@ esp_err_t diagnostics_start(void);
  * names the point in the workflow, for example "BLE started".
  */
 void diagnostics_log_memory(const char *stage);
+
+/* Name of an esp_reset_reason_t value, e.g. "panic" or "power-on". */
+const char *diagnostics_reset_reason_name(int reason);

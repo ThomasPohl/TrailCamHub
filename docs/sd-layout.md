@@ -17,6 +17,8 @@ formats of the files other tools may read. The hub never formats its own card (i
   actions.csv             queue of camera actions (photo, video, delete, format)
   actions.csv.tmp         only while the queue is being saved
   logs/log-NNNNN.txt      rotating log (sd_log)
+  logs/cycles.jsonl       one line per cycle (cycle journal)
+  logs/cycles.1.jsonl     the previous, full cycle journal
 ```
 
 `<camera-id>` is the camera's `devId` with every character outside
@@ -103,6 +105,39 @@ id,type,mediaId,source,state,created,finished,notified,key,reason
 
 At most 32 lines; the oldest finished one goes first. A `running` line found
 at start-up ends as `failed` and is not repeated.
+
+## `logs/cycles.jsonl`
+
+One JSON object per line, written when a cycle ends (`cycle_trace`), so that
+what a hub did can be read without piecing it together from the log:
+
+```
+{"cycle":12,"start":1794000000,"kind":"scan","trigger":"schedule","result":"uplink-done","durationS":42,"camerasDone":1,"camerasRead":1,"heapMin":81234,"psramMin":3912345,"stackSession":2100,"stackUplink":5400,"stackController":3300}
+{"boot":"panic","time":1794000100,"lastCycle":12}
+```
+
+| Field | Meaning |
+|---|---|
+| `cycle` | number of the cycle; goes on across deep sleep, crashes and restarts (RTC memory) and starts again at 1 after a power loss |
+| `start` | Unix seconds when the cycle started; left out while the clock is not set |
+| `kind` | `scan` (camera read, then sync), `list`, `actions` or `checkin` (sync only) |
+| `trigger` | `schedule`, or `request` (console, button, web UI, backend, Telegram) |
+| `result` | the controller's result, as in the console's `done …` line (`uplink-done`, `camera-unreachable`, …) |
+| `durationS` | seconds from leaving idle to the end of the cycle |
+| `camerasDone`, `camerasRead` | cameras handled in the cycle and, of those, the ones read |
+| `heapMin`, `psramMin` | lowest free heap of the cycle in bytes (internal RAM, PSRAM; `psramMin` only on boards with PSRAM). The free heap is sampled once a second, so a shorter dip only shows when it is the lowest since boot |
+| `stackSession`, `stackUplink`, `stackController` | lowest free stack in bytes of the `camera_session`, `uplink` and `session_ctrl` tasks since boot |
+
+A `boot` line is written at every start that is not a wake-up from deep
+sleep: the reset reason (`power-on`, `panic`, `task watchdog`, `brownout`, …)
+and the last cycle before it, so a cycle without a line of its own is the one
+that did not end.
+
+The lines of a cycle in `log-NNNNN.txt` start with its number (`#12 I (5321)
+trailcamhub_ctrl: …`), so a log can be cut by cycle. When the file reaches
+`CONFIG_SD_LOG_CYCLES_MAX_KB` (256 KB, roughly 800 cycles) it becomes
+`cycles.1.jsonl`, replacing the previous one. The web installer's support
+package includes the end of the journal.
 
 ## Who writes
 
