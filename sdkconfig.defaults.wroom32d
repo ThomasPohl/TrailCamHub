@@ -20,6 +20,15 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL is not set
 CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_INTERNAL=y
 
+# TLS in internal RAM: mbedTLS would keep a 16 KB receive and a 4 KB send
+# buffer for the whole connection. Allocate them per record instead, at the
+# record's size, and free the handshake's configuration and CA data once the
+# connection is up. The check-in response has to fit next to the session in
+# about 80 KB of heap (#244).
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA=y
+CONFIG_MBEDTLS_DYNAMIC_FREE_CA_CERT=y
+
 # BLE only: the controller's Bluetooth Classic memory is given back to the
 # heap at the first BLE start (camera_ble).
 CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
