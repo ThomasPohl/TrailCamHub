@@ -14,7 +14,12 @@ head_dir=$(realpath "$1")
 base_dir=${2:+$(realpath "$2")}
 min_free_percent=${MIN_FREE_PERCENT:-10}
 summary=${GITHUB_STEP_SUMMARY:-/dev/stdout}
-app_name=trailcamhub_ble_poc
+
+# The image is named after the project. The base revision may still have
+# another name (the project was renamed), so each checkout is asked.
+app_name() {
+    sed -n 's/^project(\([A-Za-z0-9_-]*\).*/\1/p' "$1/CMakeLists.txt" | head -n 1
+}
 
 # Builds the release profile of the project in $1. The base revision may not
 # have its own release defaults yet; it then uses the head's file so the
@@ -47,12 +52,13 @@ report_build_errors() {
 # Prints the free space of the smallest app partition in percent, as reported
 # by ESP-IDF's partition size check at the end of the build.
 free_percent() {
-    grep -oE "${app_name}\.bin binary size .* \(([0-9]+)%\) free" "$1" |
+    grep -oE "[A-Za-z0-9_-]+\.bin binary size .* \(([0-9]+)%\) free" "$1" |
+        grep -v '^bootloader' |
         tail -n 1 | grep -oE '[0-9]+%' | tr -d '%' || true
 }
 
 image_size() {
-    stat -c %s "$1/build-release/${app_name}.bin"
+    stat -c %s "$1/build-release/$(app_name "$1").bin"
 }
 
 code_block() {
@@ -69,12 +75,12 @@ idf_size() {
 build_release "$head_dir"
 head_size=$(image_size "$head_dir")
 head_free=$(free_percent "$head_dir/build-release.log")
-head_map="$head_dir/build-release/${app_name}.map"
+head_map="$head_dir/build-release/$(app_name "$head_dir").map"
 if [[ -n $base_dir ]]; then
     build_release "$base_dir"
     base_size=$(image_size "$base_dir")
     base_free=$(free_percent "$base_dir/build-release.log")
-    base_map="$base_dir/build-release/${app_name}.map"
+    base_map="$base_dir/build-release/$(app_name "$base_dir").map"
 fi
 
 {

@@ -73,12 +73,20 @@ static void periodic_memory_log(void *arg)
 
 void diagnostics_log_memory(const char *stage)
 {
+    // "internal" counts every internal heap; "for data" only those a byte
+    // buffer can come from (malloc, TLS records). On the WROOM-32D a 7.6 KB
+    // allocation failed while "internal" showed 28 KB as the minimum (#244).
+    const uint32_t data = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
     ESP_LOGI(TAG,
              "Memory [%s]: internal free %u B (min %u B, largest block %u B), "
+             "for data %u B (min %u B, largest block %u B), "
              "PSRAM free %u B (min %u B)",
              stage, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(data),
+             (unsigned)heap_caps_get_minimum_free_size(data),
+             (unsigned)heap_caps_get_largest_free_block(data),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
              (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM));
 }

@@ -1,6 +1,7 @@
 #include "bulk_reassembler.hpp"
 
 #include <cstring>
+#include <new>
 
 namespace camera::artemis
 {
@@ -18,7 +19,32 @@ std::uint32_t read_u32_le(const std::uint8_t *p)
            (static_cast<std::uint32_t>(p[3]) << 24);
 }
 
+std::uint8_t *allocate_nothrow(std::size_t size)
+{
+    return new (std::nothrow) std::uint8_t[size];
+}
+
 }  // namespace
+
+BulkReassembler::BulkReassembler(Allocate allocate)
+    : allocate_(allocate != nullptr ? allocate : allocate_nothrow)
+{
+}
+
+bool BulkReassembler::reserve(std::size_t size)
+{
+    if (capacity_ >= size) {
+        return true;
+    }
+    buffer_.reset();
+    capacity_ = 0;
+    buffer_.reset(allocate_(size));
+    if (!buffer_) {
+        return false;
+    }
+    capacity_ = size;
+    return true;
+}
 
 const char *BulkReassembler::reason_name(InvalidReason reason)
 {
@@ -31,13 +57,14 @@ const char *BulkReassembler::reason_name(InvalidReason reason)
         return "bad signature";
     case InvalidReason::bad_length:
         return "bad length";
+    case InvalidReason::no_memory:
+        return "no memory for the record";
     }
     return "unknown";
 }
 
 void BulkReassembler::reset()
 {
-    buffer_.clear();
     seen_.clear();
     received_frames_ = 0;
     received_bytes_ = 0;
@@ -62,10 +89,12 @@ void BulkReassembler::place_frame(std::uint16_t seq,
         return;  // stale, wrapped, or belongs to another record
     }
     const std::size_t offset = static_cast<std::size_t>(rel) * kFramePayload;
-    if (buffer_.size() < offset + size) {
-        buffer_.resize(offset + size, 0);
+    if (offset >= total_) {
+        return;
     }
-    std::memcpy(buffer_.data() + offset, payload, size);
+    // A frame cannot reach past the record, whatever its size says.
+    const std::size_t room = total_ - offset;
+    std::memcpy(buffer_.get() + offset, payload, size < room ? size : room);
     if (!seen_[rel]) {
         seen_[rel] = true;
         ++received_frames_;
@@ -106,6 +135,13 @@ BulkReassembler::Status BulkReassembler::feed(std::uint16_t seq,
             invalid_reason_ = InvalidReason::bad_length;
             return Status::invalid;
         }
+        if (!reserve(total_)) {
+            invalid_ = true;
+            invalid_reason_ = InvalidReason::no_memory;
+            return Status::invalid;
+        }
+        // The block may be the one of the last record.
+        std::memset(buffer_.get(), 0, total_);
         total_frames_ = (total_ + kFramePayload - 1) / kFramePayload;
         base_seq_ = seq;
         have_header_ = true;
@@ -115,7 +151,6 @@ BulkReassembler::Status BulkReassembler::feed(std::uint16_t seq,
     place_frame(seq, payload, size);
 
     if (received_frames_ >= total_frames_) {
-        buffer_.resize(total_);  // trim any over-allocation
         return Status::complete;
     }
     return Status::incomplete;
@@ -123,10 +158,10 @@ BulkReassembler::Status BulkReassembler::feed(std::uint16_t seq,
 
 const std::uint8_t *BulkReassembler::payload() const
 {
-    if (buffer_.size() < 20) {
+    if (!have_header_ || !buffer_) {
         return nullptr;
     }
-    return buffer_.data() + 20;
+    return buffer_.get() + 20;
 }
 
 }  // namespace camera::artemis

@@ -219,6 +219,8 @@ boot log). Power from USB-C or the optional PoE module: the preset is mains.
 
 ### ESP32-WROOM-32D with an SPI microSD reader
 
+Wiring diagrams for 38-pin and 30-pin boards: [wiring-wroom32d.md](wiring-wroom32d.md).
+
 Image `wroom32d` (`sdkconfig.defaults.wroom32d`, target `esp32`, #77). A
 low-cost classic ESP32 dev board (4 MB flash, no PSRAM) with an external
 microSD breakout in SPI mode:
@@ -235,7 +237,7 @@ microSD breakout in SPI mode:
 The common blue breakout with an AMS1117 regulator and a 74LVC125A level
 shifter ("4.5–5.5 V") must be powered from **5 V** (VIN/USB), not from
 3.3 V; its signal lines work with the ESP32's 3.3 V. A breakout without a
-regulator takes 3.3 V. GPIO5 is a strapping pin and must be high at boot,
+regulator takes **3.3 V** (3V3 pin), never 5 V. GPIO5 is a strapping pin and must be high at boot,
 which the breakout's pull-up on CS ensures. SDHC cards up to 32 GB, FAT32.
 
 The console is UART0 through the board's USB-to-UART bridge. The 4 MB flash

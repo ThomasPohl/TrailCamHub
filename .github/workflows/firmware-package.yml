@@ -94,8 +94,8 @@ jobs:
         run: |
           source "$IDF_PATH/export.sh"
           .github/scripts/ram-report.sh "$BOARD" \
-            dev=build/trailcamhub_ble_poc.map \
-            release=build-release/trailcamhub_ble_poc.map
+            dev=build/trailcamhub.map \
+            release=build-release/trailcamhub.map
 
       # Saved by every run: a pull request run can only restore caches of its
       # own merge ref and of main, not those of the push run of its branch.
@@ -112,8 +112,8 @@ jobs:
           set -euo pipefail
           package_dir="dist/trailcamhub-$BOARD"
           mkdir -p "$package_dir"
-          cp build/trailcamhub_ble_poc.bin "$package_dir/app.bin"
-          cp build-release/trailcamhub_ble_poc.bin "$package_dir/app-release.bin"
+          cp build/trailcamhub.bin "$package_dir/app.bin"
+          cp build-release/trailcamhub.bin "$package_dir/app-release.bin"
           cp build/bootloader/bootloader.bin "$package_dir/bootloader.bin"
           cp build/partition_table/partition-table.bin "$package_dir/partition-table.bin"
           cp build/ota_data_initial.bin "$package_dir/ota_data_initial.bin"
@@ -132,8 +132,8 @@ jobs:
           # addr2line); kept apart, as they are much larger than the images.
           elf_dir="dist/trailcamhub-$BOARD-elf"
           mkdir -p "$elf_dir"
-          cp build/trailcamhub_ble_poc.elf "$elf_dir/trailcamhub-$BOARD-dev.elf"
-          cp build-release/trailcamhub_ble_poc.elf "$elf_dir/trailcamhub-$BOARD-release.elf"
+          cp build/trailcamhub.elf "$elf_dir/trailcamhub-$BOARD-dev.elf"
+          cp build-release/trailcamhub.elf "$elf_dir/trailcamhub-$BOARD-release.elf"
           cp build/bootloader/bootloader.elf "$elf_dir/bootloader-$BOARD.elf"
           cp "$package_dir/BUILD_INFO.txt" "$elf_dir/BUILD_INFO.txt"
           (

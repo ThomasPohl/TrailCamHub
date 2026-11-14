@@ -110,6 +110,29 @@ describe('hub check-in with several cameras', () => {
     expect(all.sort()).toEqual([`${CAM_2}:3007`, `${CAM_ID}:2036`].sort());
   });
 
+  it('gives the hub no more thumbnail uploads than it asks for', async () => {
+    const uploads = async (maxThumbUploads: unknown, backendLimit?: number) => {
+      const { deps, hubKey } = await setup();
+      if (backendLimit !== undefined) deps.config = { maxThumbUploadsPerCheckin: backendLimit };
+      const res = await handleRequest(
+        hubRequest('/v1/device/checkin', hubKey, { ...checkinBody, maxThumbUploads }),
+        deps,
+      );
+      return body<CheckinResponse>(res).cameras.flatMap((c) =>
+        c.thumbUploads.map((t) => `${c.camId}:${t.mediaId}`),
+      );
+    };
+    // The newest recording only.
+    expect(await uploads(1)).toEqual([`${CAM_2}:3007`]);
+    expect(await uploads(0)).toEqual([]);
+    // The backend's limit still applies.
+    expect(await uploads(100, 2)).toHaveLength(2);
+    // Values that are no count leave the backend's limit in place.
+    for (const invalid of [-1, 1.5, '1', null]) {
+      expect(await uploads(invalid)).toHaveLength(3);
+    }
+  });
+
   it('accepts deltas: known media keep their state, no resync for known cameras', async () => {
     const { deps, hubKey, storage } = await setup();
     await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);

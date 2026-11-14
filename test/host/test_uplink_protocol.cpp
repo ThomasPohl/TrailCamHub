@@ -46,6 +46,18 @@ TEST_CASE("check-in body without cameras")
           "{\"hubFirmware\":\"dev\",\"hubBatPercent\":91,\"cameras\":[]}");
 }
 
+TEST_CASE("check-in body with a limit for the thumbnail uploads")
+{
+    CheckinRequest request;
+    request.hub_firmware = "dev";
+    request.max_thumb_uploads = 4;
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"maxThumbUploads\":4,\"cameras\":[]}");
+    request.max_thumb_uploads = 0;
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"maxThumbUploads\":0,\"cameras\":[]}");
+}
+
 TEST_CASE("strings are JSON-escaped")
 {
     CHECK(json_escape("a\"b\\c\nd") == "a\\\"b\\\\c\\nd");

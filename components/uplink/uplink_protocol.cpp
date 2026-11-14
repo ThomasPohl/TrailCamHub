@@ -185,6 +185,10 @@ std::string build_checkin_json(const CheckinRequest &request)
     if (request.hub_bat_percent >= 0) {
         out += ",\"hubBatPercent\":" + std::to_string(request.hub_bat_percent);
     }
+    if (request.max_thumb_uploads >= 0) {
+        out +=
+            ",\"maxThumbUploads\":" + std::to_string(request.max_thumb_uploads);
+    }
     const ScheduleReport &schedule = request.schedule;
     if (schedule.present) {
         out += ",\"schedule\":{\"cameraPlan\":\"" +

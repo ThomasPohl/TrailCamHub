@@ -258,6 +258,12 @@ export interface CheckinRequest {
   hubBoard?: string;
   hubVariant?: string;
   hubBatPercent?: number;
+  /**
+   * The most thumbnail uploads the hub takes from this check-in. A hub with
+   * little memory keeps the response small with it; the backend's own limit
+   * still applies.
+   */
+  maxThumbUploads?: number;
   schedule?: HubSchedule;
   cameras?: CameraReport[];
 }

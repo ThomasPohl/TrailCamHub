@@ -125,7 +125,7 @@ what a hub did can be read without piecing it together from the log:
 | `result` | the controller's result, as in the console's `done …` line (`uplink-done`, `camera-unreachable`, …) |
 | `durationS` | seconds from leaving idle to the end of the cycle |
 | `camerasDone`, `camerasRead` | cameras handled in the cycle and, of those, the ones read |
-| `heapMin`, `psramMin` | lowest free heap of the cycle in bytes (internal RAM, PSRAM; `psramMin` only on boards with PSRAM). The free heap is sampled once a second, so a shorter dip only shows when it is the lowest since boot |
+| `heapMin`, `psramMin` | lowest free heap of the cycle in bytes (internal RAM that data can use, PSRAM; `psramMin` only on boards with PSRAM). On the classic ESP32 about 20 KB of internal heap cannot hold data and are not counted. The free heap is sampled once a second, so a shorter dip only shows when it is the lowest since boot |
 | `stackSession`, `stackUplink`, `stackController` | lowest free stack in bytes of the `camera_session`, `uplink` and `session_ctrl` tasks since boot |
 
 A `boot` line is written at every start that is not a wake-up from deep
