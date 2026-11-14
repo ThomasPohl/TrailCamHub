@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
+#include <new>
 
 #include "esp_crt_bundle.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "sdkconfig.h"
@@ -18,6 +21,35 @@ namespace
 constexpr int kTimeoutMs = 20000;
 constexpr int kMaxResponseBytes = 64 * 1024;
 constexpr std::size_t kChunk = 16 * 1024;
+// A response without Content-Length grows in steps of this size.
+constexpr std::size_t kBodyStep = 4 * 1024;
+
+const char *TAG = "trailcamhub_http";
+
+// Makes room for `capacity` bytes in `body`, or returns false if the heap
+// has no block for it. C++ exceptions are off, so a std::string that cannot
+// grow aborts (the WROOM-32D did, while it read a check-in response over
+// TLS); malloc() says beforehand whether the block is there. Another task
+// can take it in between, which the probe makes unlikely, not impossible.
+bool reserve_body(std::string &body, std::size_t capacity)
+{
+    if (body.capacity() >= capacity) {
+        return true;
+    }
+    void *probe = malloc(capacity + 1);
+    if (probe == nullptr) {
+        ESP_LOGW(TAG,
+                 "No %u B block for the response (largest free block %u B, "
+                 "free heap %u B)",
+                 (unsigned)(capacity + 1),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
+        return false;
+    }
+    free(probe);
+    body.reserve(capacity);
+    return true;
+}
 
 // Switches the log of ESP-IDF's HTTP client off while it exists and restores
 // the level it had. The level is global, so a request in another task is
@@ -72,11 +104,29 @@ HttpResult read_response(esp_http_client_handle_t client)
         return result;
     }
     result.status = esp_http_client_get_status_code(client);
+    // With a Content-Length the body gets one block of its size. A string
+    // that grows by itself doubles and copies: a 20 KB response then needs
+    // a 32 KB block next to the 16 KB one it already holds.
+    const std::int64_t length = esp_http_client_get_content_length(client);
+    if (length > kMaxResponseBytes) {
+        result.error = ESP_ERR_INVALID_SIZE;
+        return result;
+    }
+    if (length > 0 && !reserve_body(result.body, (std::size_t)length)) {
+        result.error = ESP_ERR_NO_MEM;
+        return result;
+    }
     char buffer[512];
     int read;
     while ((read = esp_http_client_read(client, buffer, sizeof(buffer))) > 0) {
-        if (result.body.size() + (size_t)read > (size_t)kMaxResponseBytes) {
+        const std::size_t needed = result.body.size() + (std::size_t)read;
+        if (needed > (std::size_t)kMaxResponseBytes) {
             result.error = ESP_ERR_INVALID_SIZE;
+            return result;
+        }
+        if (needed > result.body.capacity() &&
+            !reserve_body(result.body, needed + kBodyStep)) {
+            result.error = ESP_ERR_NO_MEM;
             return result;
         }
         result.body.append(buffer, read);
@@ -115,11 +165,24 @@ HttpResult send(const Request &request, std::int64_t *read_us)
     result.error = esp_http_client_open(client, (int)request.body_size);
     if (result.error == ESP_OK) {
         bool ok = true;
+        bool no_memory = false;
         if (request.body_size > 0) {
-            std::unique_ptr<std::uint8_t[]> chunk(new std::uint8_t[kChunk]);
+            // A small body (a check-in) does not need the 16 KB of a video
+            // upload, and a board without PSRAM may not have them.
+            const std::size_t chunk_size = request.body_size < kChunk
+                                               ? (std::size_t)request.body_size
+                                               : kChunk;
+            std::unique_ptr<std::uint8_t[]> chunk(new (std::nothrow)
+                                                      std::uint8_t[chunk_size]);
+            if (!chunk) {
+                ESP_LOGW(TAG, "No %u B block to send the request body",
+                         (unsigned)chunk_size);
+                no_memory = true;
+                ok = false;
+            }
             std::uint64_t position = 0;
             while (ok && position < request.body_size) {
-                std::size_t want = kChunk;
+                std::size_t want = chunk_size;
                 if (request.body_size - position < want) {
                     want = (std::size_t)(request.body_size - position);
                 }
@@ -141,6 +204,9 @@ HttpResult send(const Request &request, std::int64_t *read_us)
             result = read_response(client);
         } else {
             result = HttpResult{};
+            if (no_memory) {
+                result.error = ESP_ERR_NO_MEM;
+            }
         }
     }
     esp_http_client_close(client);
