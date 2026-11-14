@@ -1,0 +1,15 @@
+{
+  "name": "TrailCamHub ESP32-WROOM-32D + SPI microSD (Release)",
+  "version": "20261114-150640-6a069f7",
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "./trailcamhub-wroom32d-release.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

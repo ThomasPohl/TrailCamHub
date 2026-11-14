@@ -1,0 +1,15 @@
+{
+  "name": "TrailCamHub Waveshare ESP32-S3-ETH (Dev — verbose logs)",
+  "version": "20261114-133132-e7c3381",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "./trailcamhub-s3-eth-dev.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

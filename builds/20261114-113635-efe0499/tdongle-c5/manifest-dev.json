@@ -1,0 +1,15 @@
+{
+  "name": "TrailCamHub LilyGO T-Dongle-C5 (Dev — verbose logs)",
+  "version": "20261114-113635-efe0499",
+  "builds": [
+    {
+      "chipFamily": "ESP32-C5",
+      "parts": [
+        {
+          "path": "./trailcamhub-tdongle-c5-dev.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

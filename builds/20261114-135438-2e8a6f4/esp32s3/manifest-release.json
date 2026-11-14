@@ -1,0 +1,15 @@
+{
+  "name": "TrailCamHub Waveshare ESP32-S3-A7670E-4G (Release)",
+  "version": "20261114-135438-2e8a6f4",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "./trailcamhub-esp32s3-release.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

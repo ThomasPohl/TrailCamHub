@@ -1,0 +1,15 @@
+{
+  "name": "TrailCamHub Waveshare ESP32-P4-NANO (Dev — verbose logs)",
+  "version": "20261114-150640-6a069f7",
+  "builds": [
+    {
+      "chipFamily": "ESP32-P4",
+      "parts": [
+        {
+          "path": "./trailcamhub-esp32p4-dev.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
