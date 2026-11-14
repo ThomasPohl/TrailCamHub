@@ -34,8 +34,16 @@ for entry in "$@"; do
     label="${entry%%=*}"
     map="${entry#*=}"
     json="$(mktemp)"
-    if ! python -m esp_idf_size --format json2 "$map" >"$json" 2>/dev/null; then
-        echo "::warning::esp_idf_size failed for $map; no static RAM report for $board ($label)"
+    # esp_idf_size 1.x (ESP-IDF 5.5) has the json2 format only in its new
+    # implementation, which the variable selects; 2.x has only that one.
+    if ! ESP_IDF_SIZE_NG=1 python -m esp_idf_size --format json2 "$map" \
+        >"$json" 2>"$json.err"; then
+        echo "::warning::esp_idf_size failed for $map; no static RAM report for $board ($label):" \
+            "$(tail -n 3 "$json.err" | tr '\n' ' ')"
+        rm -f "$json" "$json.err"
+        continue
+    fi
+    rm -f "$json.err"
         rm -f "$json"
         continue
     fi
