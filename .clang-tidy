@@ -1,0 +1,21 @@
+# Static analysis of the files that build without ESP-IDF (the sources of the
+# host tests), run by .github/scripts/static-analysis.sh and in CI.
+# Every finding is an error: fix it, or suppress it with a NOLINT comment
+# that says why.
+Checks: >
+  -*,
+  clang-analyzer-*,
+  -clang-analyzer-optin.performance.Padding,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-inc-dec-in-conditions,
+  -bugprone-branch-clone,
+  performance-*,
+  -performance-enum-size,
+  misc-unused-parameters,
+  misc-redundant-expression,
+  readability-container-size-empty
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(components|tools/camera_mock)/.*'

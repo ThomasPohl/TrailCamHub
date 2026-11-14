@@ -7,6 +7,8 @@ project(trailcamhub_host_tests LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# For clang-tidy (.github/scripts/static-analysis.sh).
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # doctest is header-only; only its header is used (SOURCE_SUBDIR skips its
 # CMake project).
