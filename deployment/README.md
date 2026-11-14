@@ -1,6 +1,6 @@
 # TrailCamHub ESP32-S3 Deployment Package
 
-This archive contains the firmware images for the ESP32-S3 BLE/Wi-Fi proof of concept, built for the Waveshare ESP32-S3-A7670E-4G board (16 MB flash, 8 MB PSRAM).
+This archive contains the TrailCamHub firmware images, built for the Waveshare ESP32-S3-A7670E-4G board (16 MB flash, 8 MB PSRAM).
 
 ## Browser installer
 
@@ -26,7 +26,7 @@ Replace `PORT` with the board's serial port. On Linux this is commonly `/dev/tty
 
 The merged image includes the bootloader, partition table, initial OTA data, and application. The separate images (`bootloader.bin`, `partition-table.bin`, `ota_data_initial.bin`, `app.bin`) and their offsets in `flasher_args.json` are included for workflows that flash components individually. Verify `SHA256SUMS` before flashing.
 
-## PoC behavior
+## Default behavior
 
 The default CI build scans for a camera advertising the name `TC100_ED3B` or service UUID `0x8801` and connects only to that camera. It sends ASCII `BT_KEY_ON` (`42 54 5F 4B 45 59 5F 4F 4E` in hex) only if the camera's service `0x8801` has writable characteristic `0x0002` and notification/indication characteristic `0x0003`. The payload can be changed or disabled in `menuconfig`. Use this firmware only with a camera you are authorized to access.
 

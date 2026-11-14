@@ -61,7 +61,7 @@ The hub reads the manifest itself; no server is involved (#150). At the end of a
 
    The failures are counted per version in NVS; a newer release starts afresh, a successful install clears them.
 
-5. **Install:** `ota::install()` downloads the image over HTTPS straight into the other OTA slot, block by block. Before the first block is written it checks the image's own description (project name and version must match the manifest); at the end the size and the SHA-256 of the manifest, then `esp_ota_end()` checks the image itself. A download that breaks off is continued with an HTTP range request from the last byte written (up to three times, while the hub is running); GitHub's asset storage supports ranges.
+5. **Install:** `ota::install()` downloads the image over HTTPS straight into the other OTA slot, block by block. Before the first block is written it checks the image's own description (the project name must be the running firmware's, the version the manifest's; a hub with firmware from before the project was renamed to `trailcamhub` on 2026-11-14 therefore refuses newer releases and needs one flash with the web installer, see [decisions.md](decisions.md)); at the end the size and the SHA-256 of the manifest, then `esp_ota_end()` checks the image itself. A download that breaks off is continued with an HTTP range request from the last byte written (up to three times, while the hub is running); GitHub's asset storage supports ranges.
 
 6. **Restart** once the cycle is over: the uplink ends as usual (over the modem: data call ended, radio off), the scheduler waits until the modem is down (at most 30 s) and restarts the hub (the SD log is written first).
 
