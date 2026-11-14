@@ -44,9 +44,6 @@ for entry in "$@"; do
         continue
     fi
     rm -f "$json.err"
-        rm -f "$json"
-        continue
-    fi
     python3 - "$board" "$label" "$json" \
         "${MIN_FREE_IRAM_PERCENT:-10}" "${MIN_FREE_DRAM_PERCENT:-25}" >>"$report" 2>>"$warnings" <<'PY' || status=$?
 import json
