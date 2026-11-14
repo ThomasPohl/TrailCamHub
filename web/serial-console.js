@@ -357,7 +357,7 @@ if (!("serial" in navigator)) {
 // When the last line was sent to the hub (Date.now()).
 let lastSentAt = 0;
 
-// Sends one command line to the device (used by the device setup panel).
+// Sends one command line to the device (used by the dock of the "Advanced" view).
 async function sendLine(line) {
   if (!port || !port.writable) {
     throw new Error("Serial port is not connected");

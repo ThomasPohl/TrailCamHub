@@ -1,16 +1,15 @@
-// Device setup panel: stores the hub's settings (home Wi-Fi, backend URL,
+// Device setup: the "Advanced" view's dock (hub status, commands, activity)
+// and its settings form. Stores the hub's settings (home Wi-Fi, backend URL,
 // device key, wake-up schedule) and starts scans over the serial connection. It speaks the
 // hub's line protocol: commands go out as text lines, replies come back as
 // "TCH ..." lines inside the normal log stream (see hub_console.h).
 
 (() => {
-  const panel = document.querySelector("#device-setup");
-  if (!panel) {
+  const panel = document;
+  if (!document.querySelector("#device-setup")) {
     return;
   }
 
-  const connectButton = panel.querySelector("#ds-connect");
-  const connection = panel.querySelector("#ds-connection");
   const stateChip = panel.querySelector("#ds-state");
   const form = panel.querySelector("#ds-form");
   const formStatus = panel.querySelector("#ds-form-status");
@@ -43,8 +42,23 @@
     backend: panel.querySelector("#ds-current-backend"),
   };
   const scheduleList = panel.querySelector("#ds-schedule");
-  // "TCH INFO" lines of the status reply that describe the schedule.
-  const SCHEDULE_INFO = ["mode ", "camera plan ", "check-in every ", "next camera read ", "next check-in ", "failed in a row", "camera battery "];
+  const factsList = panel.querySelector("#hub-facts");
+  const factsAge = panel.querySelector("#hub-facts-age");
+  // "TCH INFO" lines of the status reply with a row of their own in the
+  // dock: [prefix, data-fact of the row].
+  const FACTS = [
+    ["mode ", "mode"],
+    ["camera plan ", "plan"],
+    ["check-in every ", "checkin"],
+    ["next camera read ", "next-read"],
+    ["next check-in ", "next-checkin"],
+    ["battery ", "battery"],
+    ["SD card ", "sd"],
+    ["firmware ", "firmware"],
+    ["web UI ", "web"],
+  ];
+  // Lines that only appear when there is something to tell.
+  const NOTES = ["failed in a row", "camera battery ", "hub battery level ", "schedule stretched", "retry in "];
 
   const STATE_TEXT = {
     IDLE: "Idle — waiting for a scan",
@@ -139,13 +153,39 @@
   }
 
   function setConnected(connected) {
-    connection.textContent = connected ? "Connected" : "Not connected";
-    connectButton.hidden = connected;
-    for (const button of [...actionButtons, eraseButton, form.querySelector("button")]) {
+    for (const button of [...actionButtons, eraseButton, form.querySelector('button[type="submit"]')]) {
       button.disabled = !connected;
     }
     if (!connected) {
       showState(undefined);
+      // The last status stays readable, marked as old.
+      if (factsList.classList.contains("known")) {
+        factsList.classList.add("stale");
+        factsAge.textContent = `Not connected. ${factsAge.textContent.replace(/^Not connected\. /, "")}`;
+      }
+    }
+  }
+
+  // One line of the status reply: its own row, a note below the rows, or
+  // nothing.
+  function showFact(text) {
+    if (text.startsWith("mode ")) {
+      // The first line of a status reply.
+      scheduleList.replaceChildren();
+      factsList.classList.add("known");
+      factsList.classList.remove("stale");
+      factsAge.textContent = `Status of ${new Date().toLocaleTimeString()}`;
+    }
+    const fact = FACTS.find(([prefix]) => text.startsWith(prefix));
+    if (fact) {
+      const row = factsList.querySelector(`[data-fact="${fact[1]}"]`);
+      row.textContent = text.slice(fact[0].length);
+      row.title = row.textContent;
+      row.classList.toggle("bad", /not mounted|unknown|overdue/.test(row.textContent));
+    } else if (NOTES.some((prefix) => text.startsWith(prefix))) {
+      const item = document.createElement("li");
+      item.textContent = text;
+      scheduleList.append(item);
     }
   }
 
@@ -281,14 +321,7 @@
         break;
       }
       case "INFO":
-        if (text.startsWith("mode ")) {
-          scheduleList.replaceChildren();
-        }
-        if (SCHEDULE_INFO.some((prefix) => text.startsWith(prefix))) {
-          const item = document.createElement("li");
-          item.textContent = text;
-          scheduleList.append(item);
-        }
+        showFact(text);
         break;
       case "OK":
         addLog("ok", text);
@@ -307,6 +340,8 @@
           if (details.includes("no-card")) {
             addLog("error", DONE_TEXT["camera-no-card"]);
           }
+          // Next read, battery and SD card have changed.
+          void serial().sendLine("status").catch(() => {});
         } else {
           addLog(event === "uplink" && details[0] === "failed" ? "error" : "event", text);
         }
@@ -320,7 +355,6 @@
     }
   }
 
-  connectButton.addEventListener("click", () => serial()?.connect());
   form.addEventListener("submit", saveSettings);
   form.addEventListener("input", (event) => {
     if (event.target !== rememberBox) {
@@ -358,8 +392,4 @@
 
   restoreRemembered();
   setConnected(false);
-  if (!("serial" in navigator)) {
-    connectButton.disabled = true;
-    connection.textContent = "Web Serial is not supported by this browser.";
-  }
 })();
