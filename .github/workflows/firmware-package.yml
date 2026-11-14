@@ -87,6 +87,16 @@ jobs:
         shell: bash
         run: .github/scripts/check-board-capabilities.sh "$BOARD" sdkconfig
 
+      # Static RAM per board (#220): the first WROOM-32D build overflowed
+      # IRAM (#209), which a size report of flash alone does not show.
+      - name: Report static RAM
+        shell: bash
+        run: |
+          source "$IDF_PATH/export.sh"
+          .github/scripts/ram-report.sh "$BOARD" \
+            dev=build/trailcamhub_ble_poc.map \
+            release=build-release/trailcamhub_ble_poc.map
+
       # Saved by every run: a pull request run can only restore caches of its
       # own merge ref and of main, not those of the push run of its branch.
       - name: Save compiler cache
@@ -265,6 +275,15 @@ jobs:
           cmake -S test/host -B build-host-sanitize -DCMAKE_BUILD_TYPE=Debug -DHOST_TESTS_SANITIZE=ON
           .github/scripts/run-annotated.sh "Host test build (sanitizers)" cmake --build build-host-sanitize --parallel
           .github/scripts/run-annotated.sh "Host tests (sanitizers)" ctest --test-dir build-host-sanitize --output-on-failure
+
+      # The files of the host tests build without ESP-IDF, so clang-tidy can
+      # check them with the flags of that build (.clang-tidy).
+      - name: Static analysis (clang-tidy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends clang-tidy
+          .github/scripts/run-annotated.sh "Static analysis" .github/scripts/static-analysis.sh build-host
 
       - name: Check the dongle screenshots
         shell: bash
