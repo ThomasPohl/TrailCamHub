@@ -32,6 +32,7 @@
 #include "ota_update.hpp"
 #include "schedule_state.hpp"
 #include "sdkconfig.h"
+#include "system_diagnostics.h"
 #include "time_sync.h"
 #include "uplink_protocol.hpp"
 #include "video_request.hpp"
@@ -47,8 +48,19 @@ constexpr size_t kUploadChunk = 4096;
 // Keep a check-in well below the backend's limits (16 cameras, 2000 media);
 // media not sent now go with the next sync.
 constexpr std::size_t kMaxCamerasPerCheckin = 16;
+#if CONFIG_SPIRAM
 constexpr std::size_t kMaxMediaPerCamera = 300;
 constexpr std::size_t kMaxMediaPerCheckin = 1000;
+#else
+// Without PSRAM the check-in has to fit next to the TLS session in about
+// 80 KB of heap. A recording costs about 140 B there (its entry in the
+// request and in the JSON); 300 of them left 7 KB free on the WROOM-32D,
+// not enough for the response (#244). The backend asks for at most 30
+// thumbnails per check-in anyway, so a backlog does not reach the phone
+// later because of this limit.
+constexpr std::size_t kMaxMediaPerCamera = 40;
+constexpr std::size_t kMaxMediaPerCheckin = 40;
+#endif
 constexpr std::size_t kVideoChunk = 16 * 1024;
 
 #if CONFIG_CAMERA_DOWNLOAD_VIDEOS
@@ -67,8 +79,10 @@ constexpr std::uint64_t kMaxVideoBytesModem = kMaxVideoBytes;
 #endif
 
 // POSTs a JSON body to the API with the device key.
+// `body` is taken over and freed once it is sent, so that it does not sit
+// next to the response.
 HttpResult post_json(const std::string &url, const std::string &device_key,
-                     const std::string &body)
+                     std::string body)
 {
     HttpResult result;
     esp_http_client_handle_t client = open_client(url, HTTP_METHOD_POST);
@@ -85,6 +99,7 @@ HttpResult post_json(const std::string &url, const std::string &device_key,
             (int)body.size()) {
             result.error = ESP_FAIL;
         } else {
+            std::string().swap(body);
             result = read_response(client);
         }
     }
@@ -281,7 +296,19 @@ void collect_cameras(CheckinRequest &request, std::vector<CameraState> &cameras)
             state.sent.push_back(e.media_id);
         }
         media_budget -= report.media.size();
-        request.cameras.push_back(report);
+        const std::size_t waiting =
+            state.catalog.size() -
+            state.catalog.count_with_flag(
+                camera::artemis::MediaCatalog::kReported) -
+            report.media.size();
+        if (waiting > 0) {
+            ESP_LOGI(TAG,
+                     "%s: %u recordings in this check-in, %u more with the "
+                     "next ones",
+                     id.c_str(), (unsigned)report.media.size(),
+                     (unsigned)waiting);
+        }
+        request.cameras.push_back(std::move(report));
         cameras.push_back(std::move(state));
     }
 }
@@ -487,10 +514,18 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
         ESP_LOGW(TAG, "No camera data on the SD card yet; hub telemetry only");
     }
 
-    // 1. One check-in for all cameras.
-    const HttpResult checkin =
-        post_json(base + "/v1/device/checkin", settings.device_key,
-                  build_checkin_json(request));
+    // 1. One check-in for all cameras. Only the JSON is needed from here;
+    // the request and, after parsing, the response text are freed, because
+    // on a board without PSRAM they compete with the TLS session for the
+    // heap.
+    std::string body = build_checkin_json(request);
+    request = CheckinRequest{};
+    ESP_LOGI(TAG, "Check-in: %d cameras, %d recordings, %u B",
+             report.cameras_reported, report.media_reported,
+             (unsigned)body.size());
+    diagnostics_log_memory("check-in");
+    HttpResult checkin = post_json(base + "/v1/device/checkin",
+                                   settings.device_key, std::move(body));
     CheckinResponse response;
     if (checkin.error != ESP_OK || checkin.status != 200 ||
         !parse_checkin_response(checkin.body, response)) {
@@ -498,6 +533,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
         ESP_LOGE(TAG, "%s", report.error.c_str());
         return checkin.error != ESP_OK ? checkin.error : ESP_FAIL;
     }
+    std::string().swap(checkin.body);
     report.server_time = response.server_time;
     // The firmware can reach the backend: a new one is kept.
     ota::confirm_running();
