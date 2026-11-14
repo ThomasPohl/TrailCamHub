@@ -26,7 +26,8 @@ struct HttpResult {
 esp_http_client_handle_t open_client(const std::string &url,
                                      esp_http_client_method_t method);
 
-// Reads the status and up to 64 KB of body.
+// Reads the status and up to 64 KB of body. ESP_ERR_NO_MEM if the heap has
+// no block for the body; the response is then incomplete.
 HttpResult read_response(esp_http_client_handle_t client);
 
 // "HTTP 404 <start of body>" or the transport error.
