@@ -17,7 +17,7 @@
 #include "system_diagnostics.h"
 
 #ifndef CONFIG_DIAG_MEMORY_LOG_INTERVAL_S
-#error "main/Kconfig.projbuild was not processed"
+#error "The Kconfig file of this component was not processed"
 #endif
 
 static const char *TAG = "trailcamhub_diag";
