@@ -1,8 +1,8 @@
 // Setup assistant: board → install → connect → questions → save → check.
 // Uses the serial connection of serial-console.js (window.trailcamSerial) and
 // stores the answers with the console commands "config set-hex"/"unset"
-// (docs/modes.md). The settings form under "Advanced" still offers every
-// setting on its own.
+// (docs/modes.md). The settings form of the "Advanced" view still offers
+// every setting on its own.
 (function () {
   "use strict";
 
@@ -56,14 +56,21 @@
   const steps = [...root.querySelectorAll(".wz-step")];
   const progress = [...root.querySelectorAll(".wz-progress li")];
 
-  function show(step) {
+  // The furthest step reached: the steps before it can be opened again from
+  // the progress bar.
+  let reached = 1;
+
+  function show(step, focus = true) {
     state.step = step;
+    reached = Math.max(reached, step);
     for (const element of steps) {
       element.hidden = Number(element.dataset.step) !== step;
     }
     for (const item of progress) {
       const n = Number(item.dataset.step);
       item.classList.toggle("done", n < step);
+      // Not past "Save": the later steps need what the earlier ones did.
+      item.querySelector("button").disabled = n === step || n > Math.min(reached, 4);
       if (n === step) {
         item.setAttribute("aria-current", "step");
       } else {
@@ -76,7 +83,18 @@
     if (step === 6) {
       void runChecks();
     }
-    root.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (step === 3 && serial()?.isConnected() && !state.hub) {
+      // Already connected in the "Advanced" view.
+      void readHub();
+    }
+    if (focus) {
+      window.scrollTo({ top: 0 });
+      stepElement(step).querySelector("h3").focus({ preventScroll: true });
+    }
+  }
+
+  for (const item of progress) {
+    item.querySelector("button").addEventListener("click", () => show(Number(item.dataset.step)));
   }
 
   function stepElement(step) {
@@ -265,9 +283,10 @@
   });
 
   window.addEventListener("serial-disconnected", () => {
-    if (state.step === 3) {
-      connectStatus.textContent = "Not connected";
-    }
+    state.hub = null;
+    nextButton(3).disabled = true;
+    $("#wz-hub").hidden = true;
+    connectStatus.textContent = "Not connected";
   });
 
   // --- 4. Questions ---
@@ -664,5 +683,5 @@
     }
   });
 
-  show(1);
+  show(1, false);
 })();

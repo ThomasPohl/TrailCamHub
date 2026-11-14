@@ -1,4 +1,5 @@
-// "Advanced" tools: reset, restart, a command line and the support package.
+// "Advanced" tools in the dock: reset, restart, a command line (with a
+// history on the arrow keys) and the support package.
 (function () {
   "use strict";
 
@@ -13,7 +14,7 @@
     if (serial()?.isConnected()) {
       return true;
     }
-    status.textContent = "Connect first (Device setup or the serial console).";
+    status.textContent = "Connect to the hub first.";
     return false;
   }
 
@@ -44,12 +45,47 @@
     }
   });
 
-  document.getElementById("adv-command").addEventListener("submit", async (event) => {
+  const commandForm = document.getElementById("adv-command");
+  const commandLine = commandForm.elements.line;
+  // Buttons that need the hub; the support package also works without it
+  // (it then holds only this page's log).
+  const needHub = [document.getElementById("adv-reset"), document.getElementById("adv-restart"), commandForm.querySelector("button")];
+
+  function setConnected(on) {
+    for (const button of needHub) {
+      button.disabled = !on;
+    }
+    if (on) {
+      status.textContent = "";
+    }
+  }
+  window.addEventListener("serial-connected", () => setConnected(true));
+  window.addEventListener("serial-disconnected", () => setConnected(false));
+  setConnected(false);
+
+  // Commands sent from the command line, oldest first; arrow up/down walk it.
+  const history = [];
+  let historyAt = 0;
+  commandLine.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return;
+    }
     event.preventDefault();
-    const line = event.target.elements.line.value.trim();
+    historyAt = Math.max(0, Math.min(history.length, historyAt + (event.key === "ArrowUp" ? -1 : 1)));
+    commandLine.value = history[historyAt] ?? "";
+  });
+
+  commandForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const line = commandLine.value.trim();
     if (!line || !connected()) {
       return;
     }
+    if (history[history.length - 1] !== line) {
+      history.push(line);
+    }
+    historyAt = history.length;
+    commandLine.value = "";
     answer.textContent = `> ${line}\n`;
     try {
       const lines = await serial().command(line, 60000);

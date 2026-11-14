@@ -11,9 +11,14 @@ over USB and shows its serial console. No toolchain is needed.
   available in other browsers or on phones.
 - A USB **data** cable. The browser asks for permission for each serial port.
 
-## Setup assistant
+## Two views
 
-The page opens with an assistant:
+The bar at the top switches between the **Setup assistant** and **Advanced**;
+each view replaces the other. The view is part of the address (`#wizard`,
+`#advanced/console`) and the last one is remembered in the browser. The bar
+also shows whether the hub is connected.
+
+### Setup assistant
 
 1. **Choose the board** (from [`boards.json`](../boards.json)).
 2. **Install** the release build with [ESP Web Tools](https://esphome.github.io/esp-web-tools/).
@@ -27,11 +32,26 @@ The page opens with an assistant:
 6. **Check the hub**: firmware, SD card, battery, settings, then a first
    camera search with the upload.
 
-Everything else is under **Advanced**: older and development builds, every
-single setting, the live protocol view (including the first thumbnail of a
-session), the serial console at 115200 baud, a reset over the serial lines, a
-command line and a **support package** (status, settings without secrets, the
-newest log file from the SD card and the page's serial log in one text file).
+A finished step can be opened again from the progress bar.
+
+### Advanced
+
+A dock stays in place while the rest scrolls (at the left, in a narrow window
+at the top):
+
+- **Hub**: connect and disconnect, the hub's state and its last status (mode,
+  schedule, next camera read and check-in, battery, SD card, firmware). The
+  status is read again after every scan.
+- **Commands**: scan, stop, upload, status, reset over the serial lines,
+  restart, erase the settings, a command line (arrow up repeats a command) and
+  the **support package** (status, settings without secrets, the newest log
+  file from the SD card and the page's serial log in one text file).
+- **Activity**: what was sent and what the hub reported.
+
+Next to it, four tabs: **Firmware** (older and development builds, manual
+download), **Settings** (every single setting, in groups), **Protocol** (the
+live protocol view, including the first thumbnail of a session) and
+**Console** (the serial log at 115200 baud).
 
 The installer does not configure the camera name or the Wi-Fi-enable payload;
 the CI build sends `BT_KEY_ON`. Install firmware only from a source you trust
