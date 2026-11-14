@@ -517,7 +517,10 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
 
   // Newest thumbnails first over all cameras, so the latest pictures reach
   // the phone first.
-  const maxUploads = deps.config?.maxThumbUploadsPerCheckin ?? DEFAULT_MAX_THUMB_UPLOADS;
+  const maxUploads = thumbUploadLimit(
+    body.maxThumbUploads,
+    deps.config?.maxThumbUploadsPerCheckin ?? DEFAULT_MAX_THUMB_UPLOADS,
+  );
   work.sort((a, b) => b.mediaTime - a.mediaTime || b.num - a.num);
   for (const m of work.slice(0, maxUploads)) {
     results.get(m.camId)?.thumbUploads.push({
@@ -539,6 +542,17 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     config: hub.scheduleConfig ?? {},
   };
   return json(200, response);
+}
+
+/**
+ * Thumbnail uploads for one check-in: the backend's limit, lowered by the hub
+ * if it asks for fewer (a hub without PSRAM cannot hold a response with 30
+ * presigned URLs). Anything but a whole number from 0 up is ignored.
+ */
+function thumbUploadLimit(requested: unknown, backendLimit: number): number {
+  const wanted = optionalNumber(requested);
+  if (wanted === undefined || !Number.isInteger(wanted) || wanted < 0) return backendLimit;
+  return Math.min(wanted, backendLimit);
 }
 
 function emptyResult(camId: string, accepted: boolean, resync: boolean): CameraCheckin {
