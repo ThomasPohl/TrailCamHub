@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "esp_attr.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
@@ -870,6 +871,18 @@ static bool handle_bulk_frame(int socket_fd,
                  BulkReassembler::reason_name(s_bulk.invalid_reason()),
                  (unsigned)payload_len);
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, payload, dump, ESP_LOG_WARN);
+        if (s_bulk.invalid_reason() ==
+            BulkReassembler::InvalidReason::no_memory) {
+            // The thumbnail is skipped; the stall handling asks for it again
+            // or moves on.
+            ESP_LOGW(
+                TAG,
+                "No %u B block for the thumbnail record (largest free "
+                "block %u B, free heap %u B)",
+                (unsigned)s_bulk.total_bytes(),
+                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
+        }
         s_bulk.reset();
         s_bulk_active = false;
         return false;

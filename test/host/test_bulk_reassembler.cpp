@@ -203,3 +203,99 @@ TEST_CASE("ArtemisBulkAckRequest builds a windowed ACK")
                                     0);
     CHECK_FALSE(ack.build(0x04, many.data(), many.size()));
 }
+
+namespace
+{
+
+int g_allocations = 0;
+
+std::uint8_t *counting_allocate(std::size_t size)
+{
+    ++g_allocations;
+    return new std::uint8_t[size];
+}
+
+std::uint8_t *failing_allocate(std::size_t)
+{
+    return nullptr;
+}
+
+// The header frame of a record with `len` payload bytes.
+std::vector<std::uint8_t> header_frame(std::uint32_t len)
+{
+    std::vector<std::uint8_t> out(len + 20 < kFrame ? len + 20 : kFrame, 0x11);
+    std::copy(kRealSeq0Prefix, kRealSeq0Prefix + 20, out.begin());
+    out[16] = static_cast<std::uint8_t>(len);
+    out[17] = static_cast<std::uint8_t>(len >> 8);
+    out[18] = static_cast<std::uint8_t>(len >> 16);
+    out[19] = static_cast<std::uint8_t>(len >> 24);
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("BulkReassembler refuses a record the heap cannot hold")
+{
+    // On a board without PSRAM the block for a thumbnail may not be there;
+    // the record is refused instead of the hub restarting.
+    BulkReassembler r(failing_allocate);
+    const auto first = header_frame(19217);
+    CHECK(r.feed(0, first.data(), first.size()) ==
+          BulkReassembler::Status::invalid);
+    CHECK(r.invalid_reason() == BulkReassembler::InvalidReason::no_memory);
+    CHECK(r.payload() == nullptr);
+    CHECK(std::string(BulkReassembler::reason_name(r.invalid_reason())) ==
+          "no memory for the record");
+}
+
+TEST_CASE("BulkReassembler takes one block per record and reuses it")
+{
+    g_allocations = 0;
+    BulkReassembler r(counting_allocate);
+
+    // 3 frames: one block of the record's size, not one per growth step.
+    const auto first = header_frame(2500);
+    REQUIRE(r.feed(10, first.data(), first.size()) ==
+            BulkReassembler::Status::incomplete);
+    const auto middle = frame(kFrame, 0x22);
+    REQUIRE(r.feed(11, middle.data(), middle.size()) ==
+            BulkReassembler::Status::incomplete);
+    const auto last = frame(2520 - 2 * kFrame, 0x33);
+    REQUIRE(r.feed(12, last.data(), last.size()) ==
+            BulkReassembler::Status::complete);
+    CHECK(g_allocations == 1);
+    CHECK(r.payload_size() == 2500);
+    CHECK(r.payload()[0] == 0x11);
+    CHECK(r.payload()[kFrame - 20] == 0x22);
+    CHECK(r.payload()[2499] == 0x33);
+
+    // A smaller record uses the same block and does not see the old bytes.
+    r.reset();
+    CHECK(r.payload() == nullptr);
+    const auto small = header_frame(100);
+    REQUIRE(r.feed(13, small.data(), small.size()) ==
+            BulkReassembler::Status::complete);
+    CHECK(g_allocations == 1);
+    CHECK(r.payload()[99] == 0x11);
+
+    // A larger one takes a new block.
+    r.reset();
+    const auto large = header_frame(5000);
+    REQUIRE(r.feed(14, large.data(), large.size()) ==
+            BulkReassembler::Status::incomplete);
+    CHECK(g_allocations == 2);
+}
+
+TEST_CASE("BulkReassembler keeps a frame inside the record")
+{
+    // The last frame claims more bytes than the record has left.
+    BulkReassembler r;
+    const auto first = header_frame(1100);  // 1120 bytes: 2 frames
+    REQUIRE(r.feed(0, first.data(), first.size()) ==
+            BulkReassembler::Status::incomplete);
+    const auto last = frame(kFrame, 0x44);
+    REQUIRE(r.feed(1, last.data(), last.size()) ==
+            BulkReassembler::Status::complete);
+    CHECK(r.payload_size() == 1100);
+    CHECK(r.payload()[1099] == 0x44);
+}

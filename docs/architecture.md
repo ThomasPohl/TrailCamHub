@@ -153,7 +153,7 @@ only with PSRAM. Sizes from the code:
 |---|---|---|---|
 | Video reorder window | 256 frames × 1472 B = 377 KB | 8 frames = 12 KB | video download |
 | SD writer ring buffer | 4 MB | none (direct writes) | downloads |
-| Thumbnail record | bounded by `BulkReassembler::kMaxRecordSize` | same | one thumbnail at a time |
+| Thumbnail record | one block of the record's size (a few 10 KB, at most `BulkReassembler::kMaxRecordSize`), taken when the record starts; a record the heap cannot hold is skipped | same | one thumbnail at a time; the block is reused during a session and freed after it |
 | Catalog | 48 B per recording | same | session, sync (all cameras) |
 | Log ring buffer | 64 KB (`SD_LOG_BUFFER_KB`) | same | always |
 | Display frame buffer | 160 × 80 × 2 B = 26 KB | same | T-Dongles |
