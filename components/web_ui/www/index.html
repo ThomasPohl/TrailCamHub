@@ -40,6 +40,24 @@
   </section>
 
   <section>
+    <h2>Camera actions</h2>
+    <p class="actions">
+      <button id="act-photo">Take photo</button>
+      <button id="act-vstart">Start video</button>
+      <button id="act-vstop">Stop video</button>
+    </p>
+    <p class="actions">
+      <input type="text" id="act-id" inputmode="numeric" maxlength="10"
+        placeholder="mediaId" autocomplete="off"
+        aria-label="mediaId of the recording to delete">
+      <button id="act-delete">Delete recording</button>
+      <button id="act-format">Erase camera SD card</button>
+    </p>
+    <p class="note" id="act-msg" hidden></p>
+    <ul id="act-list"></ul>
+  </section>
+
+  <section>
     <h2>Files</h2>
     <div class="crumbs" id="crumbs"></div>
     <div class="listhead" id="listhead">

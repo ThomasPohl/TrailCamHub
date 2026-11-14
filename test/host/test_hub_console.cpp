@@ -593,3 +593,60 @@ TEST_CASE("webdav_videos decides which videos WebDAV gets")
     settings.destination = "telegram";
     CHECK_FALSE(hub_config::webdav_fetches_videos(settings, Transport::wifi));
 }
+
+TEST_CASE("camera action commands")
+{
+    CHECK(parse_command("photo").type == CommandType::photo);
+    CHECK(parse_command("actions").type == CommandType::actions);
+    CHECK(parse_command("video start").type == CommandType::video_start);
+    CHECK(parse_command("video stop").type == CommandType::video_stop);
+    CHECK(parse_command("video").type == CommandType::invalid);
+    CHECK(parse_command("video pause").type == CommandType::invalid);
+    CHECK(parse_command("photo now").type == CommandType::invalid);
+    CHECK(parse_command("actions all").type == CommandType::invalid);
+}
+
+TEST_CASE("delete and format take a code in a second step")
+{
+    Command first = parse_command("delete 2653775860");
+    CHECK(first.type == CommandType::delete_media);
+    CHECK(first.media_id == 2653775860LL);
+    CHECK_FALSE(first.confirm);
+
+    Command second = parse_command("delete 2653775860 confirm 4821");
+    CHECK(second.type == CommandType::delete_media);
+    CHECK(second.confirm);
+    CHECK(second.code == "4821");
+    CHECK(second.media_id == 2653775860LL);
+
+    CHECK(parse_command("delete").type == CommandType::invalid);
+    CHECK(parse_command("delete 0").type == CommandType::invalid);
+    CHECK(parse_command("delete -5").type == CommandType::invalid);
+    CHECK(parse_command("delete abc").type == CommandType::invalid);
+    CHECK(parse_command("delete 99999999999").type == CommandType::invalid);
+    CHECK(parse_command("delete 5 confirm").type == CommandType::invalid);
+    CHECK(parse_command("delete 5 confirm 12").type == CommandType::invalid);
+    CHECK(parse_command("delete 5 confirm 4821 now").type ==
+          CommandType::invalid);
+    CHECK(parse_command("delete 5 now").type == CommandType::invalid);
+
+    CHECK(parse_command("format").type == CommandType::format_sd);
+    CHECK_FALSE(parse_command("format").confirm);
+    const Command confirmed = parse_command("format confirm 0042");
+    CHECK(confirmed.type == CommandType::format_sd);
+    CHECK(confirmed.confirm);
+    CHECK(confirmed.code == "0042");
+    const Command bad = parse_command("format sdcard");
+    CHECK(bad.type == CommandType::invalid);
+    CHECK(bad.error.find("format") != std::string::npos);
+    CHECK(parse_command("format confirm abcd").type == CommandType::invalid);
+}
+
+TEST_CASE("the help lists the action commands")
+{
+    const std::string help = help_text();
+    for (const char *word : {"photo", "video start|stop", "delete <mediaId>",
+                             "format", "actions"}) {
+        CHECK(help.find(word) != std::string::npos);
+    }
+}

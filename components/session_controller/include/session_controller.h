@@ -159,6 +159,11 @@ typedef struct {
      * cleared when the next cycle starts.
      */
     bool list_only;
+    /*
+     * The cycle is a short session that only runs the queued camera actions
+     * (session_controller_request_actions()). Kept like list_only.
+     */
+    bool actions_only;
     /* Files reported by the listing of this cycle; kept like list_only. */
     uint32_t listed_files;
     /* True only on the update that ends a cycle. */
@@ -206,6 +211,14 @@ esp_err_t session_controller_request_scan(void);
  * schedule. Returns ESP_ERR_INVALID_STATE while a cycle is running.
  */
 esp_err_t session_controller_request_list(void);
+
+/*
+ * Requests a short camera session that runs the queued actions (see
+ * camera_actions.hpp) and nothing else: no thumbnails, files or backend sync.
+ * Actions queued while no such session is requested run at the next scan
+ * instead. Returns ESP_ERR_INVALID_STATE while a cycle is running.
+ */
+esp_err_t session_controller_request_actions(void);
 
 /*
  * Requests a backend sync of the data already on the SD card. Returns

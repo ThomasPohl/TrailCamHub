@@ -571,6 +571,64 @@ async function refreshLog() {
   }
 }
 
+// --- Camera actions ---------------------------------------------------------
+
+function showActionMessage(text, isError) {
+  const message = $("act-msg");
+  message.hidden = false;
+  message.textContent = text;
+  message.classList.toggle("error", !!isError);
+}
+
+// Photo, video, delete and format. The hub answers delete and format with a
+// code first; the page asks the person and repeats the request with it.
+async function runAction(type, id) {
+  const url = "/api/action?type=" + type + (id ? "&id=" + id : "");
+  try {
+    let reply = await (await fetch(url, POST)).json();
+    if (reply.needsCode) {
+      if (!window.confirm(reply.text + ". Continue?")) {
+        showActionMessage("Cancelled.");
+        return;
+      }
+      reply = await (await fetch(url + "&code=" + reply.code, POST)).json();
+    }
+    showActionMessage(reply.text || (reply.ok ? "Queued." : "Failed."), !reply.ok);
+  } catch (e) {
+    showActionMessage("No connection to the hub.", true);
+  }
+  refreshActions();
+  refreshStatus();
+}
+
+async function refreshActions() {
+  try {
+    const list = (await (await fetch("/api/actions")).json()).actions || [];
+    const items = $("act-list");
+    items.textContent = "";
+    for (const action of list.slice(-6)) {
+      const item = document.createElement("li");
+      item.textContent = "#" + action.id + " " + action.text;
+      items.appendChild(item);
+    }
+  } catch (e) {
+    // Retried with the next poll.
+  }
+}
+
+$("act-photo").onclick = () => runAction("photo");
+$("act-vstart").onclick = () => runAction("video-start");
+$("act-vstop").onclick = () => runAction("video-stop");
+$("act-format").onclick = () => runAction("format");
+$("act-delete").onclick = () => {
+  const id = $("act-id").value.trim();
+  if (!/^[1-9][0-9]{0,9}$/.test(id)) {
+    showActionMessage("Enter the mediaId of the recording (see the file names).", true);
+    return;
+  }
+  runAction("delete", id);
+};
+
 // --- Start ------------------------------------------------------------------
 
 $("search").onclick = () => post("/api/search");
@@ -603,5 +661,7 @@ filterText = locationFilter();
 addressPath = locationPath();
 show(addressPath);
 refreshLog();
+refreshActions();
 setInterval(refreshStatus, 2000);
+setInterval(refreshActions, 4000);
 setInterval(refreshLog, 1500);

@@ -11,7 +11,9 @@
  * The BLE stack is started by the camera BLE module when it is needed.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #include <time.h>
 
 #include "esp_err.h"
@@ -21,6 +23,7 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
+#include "camera_actions.hpp"
 #include "camera_ble.h"
 #include "camera_protocol.h"
 #include "coprocessor_update.h"
@@ -33,6 +36,7 @@
 #include "scheduler.h"
 #include "sd_card.h"
 #include "sd_log.h"
+#include "session_actions.hpp"
 #include "session_controller.h"
 #include "system_diagnostics.h"
 #include "time_sync.h"
@@ -148,6 +152,28 @@ static void on_stop_request(void)
 {
     session_controller_request_stop();
 }
+
+#if CONFIG_WEB_UI_ENABLE
+// Camera actions from the web page: the same path as the console.
+static void copy_json(const std::string &json, char *out, size_t size)
+{
+    snprintf(out, size, "%s", json.c_str());
+}
+
+static void on_action_request(const char *type, long long media_id,
+                              const char *code, char *out, size_t size)
+{
+    copy_json(session_actions::to_json(session_actions::request(
+                  session_actions::From::web_ui, type, media_id, code)),
+              out, size);
+}
+
+static void on_actions_list(char *out, size_t size)
+{
+    // The newest twelve fit the page's buffer.
+    copy_json(session_actions::queue_json(12), out, size);
+}
+#endif
 #endif
 
 extern "C" void app_main(void)
@@ -186,6 +212,8 @@ extern "C" void app_main(void)
         ESP_LOGW(TAG, "Continuing without SD card");
     } else {
         camera_protocol_init_storage();
+        // The queue of camera actions lives on the card too.
+        camera::action::service::init();
     }
 #if CONFIG_SD_LOG_ENABLE
     if (sd_log_ready) {
@@ -230,6 +258,8 @@ extern "C" void app_main(void)
     static const web_ui_callbacks_t web_callbacks = {
         .on_search = on_search_request,
         .on_stop = on_stop_request,
+        .on_action = on_action_request,
+        .on_actions = on_actions_list,
     };
     {
         // A password set by the user replaces the generated one (#101).

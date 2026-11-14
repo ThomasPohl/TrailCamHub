@@ -68,8 +68,9 @@ void on_status(const session_status_t *status, void *context)
 {
     (void)context;
     // A listing fetches nothing: it is no read of the camera, so it neither
-    // moves the next read nor answers a read that the backend asked for.
-    if (status->list_only) {
+    // moves the next read nor answers a read that the backend asked for. The
+    // same holds for a short session that only runs queued actions.
+    if (status->list_only || status->actions_only) {
         s_last_phase = status->phase;
         wake_task();
         return;

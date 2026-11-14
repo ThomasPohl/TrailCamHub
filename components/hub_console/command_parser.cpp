@@ -175,6 +175,75 @@ Command parse_config(const std::string &args)
     return command;
 }
 
+bool all_digits(const std::string &text)
+{
+    if (text.empty()) {
+        return false;
+    }
+    for (const char c : text) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// "confirm <code>" after a delete or format; `rest` is what follows.
+bool parse_confirm(const std::string &rest, Command &command)
+{
+    std::string code;
+    const std::string word = next_word(rest, code);
+    if (word != "confirm" || code.size() != 4 || !all_digits(code)) {
+        return false;
+    }
+    command.confirm = true;
+    command.code = code;
+    return true;
+}
+
+Command parse_delete(const std::string &rest)
+{
+    const char *usage =
+        "usage: delete <mediaId>, then delete <mediaId> confirm <code>; the "
+        "mediaId is in 'camlist'";
+    std::string after;
+    const std::string id = next_word(rest, after);
+    if (!all_digits(id) || id.size() > 10) {
+        return invalid(usage);
+    }
+    Command command = simple(CommandType::delete_media);
+    command.media_id = std::stoll(id);
+    if (command.media_id < 1) {
+        return invalid(usage);
+    }
+    if (!after.empty() && !parse_confirm(after, command)) {
+        return invalid(usage);
+    }
+    return command;
+}
+
+Command parse_format(const std::string &rest)
+{
+    Command command = simple(CommandType::format_sd);
+    if (!rest.empty() && !parse_confirm(rest, command)) {
+        return invalid(
+            "usage: format, then format confirm <code>; it erases the "
+            "camera's SD card");
+    }
+    return command;
+}
+
+Command parse_video(const std::string &rest)
+{
+    if (rest == "start") {
+        return simple(CommandType::video_start);
+    }
+    if (rest == "stop") {
+        return simple(CommandType::video_stop);
+    }
+    return invalid("usage: video start | video stop");
+}
+
 }  // namespace
 
 bool hex_decode(const std::string &hex, std::string &out)
@@ -225,6 +294,15 @@ Command parse_command(const std::string &line)
     if (word == "sdbench") {
         return parse_sdbench(rest);
     }
+    if (word == "delete") {
+        return parse_delete(rest);
+    }
+    if (word == "format") {
+        return parse_format(rest);
+    }
+    if (word == "video") {
+        return parse_video(rest);
+    }
     if (word == "heap" && (rest.empty() || rest == "blocks")) {
         Command command = simple(CommandType::heap);
         command.blocks = !rest.empty();
@@ -254,6 +332,12 @@ Command parse_command(const std::string &line)
     if (word == "stop") {
         return simple(CommandType::stop);
     }
+    if (word == "photo") {
+        return simple(CommandType::photo);
+    }
+    if (word == "actions") {
+        return simple(CommandType::actions);
+    }
     if (word == "restart") {
         return simple(CommandType::restart);
     }
@@ -274,6 +358,13 @@ const char *help_text()
            "update                     sync, then look for a firmware "
            "update now\n"
            "stop                       end the running scan\n"
+           "photo                      take a photo, then read the camera\n"
+           "video start|stop           start or stop a video on the camera\n"
+           "delete <mediaId>           delete one recording (asks for a "
+           "code)\n"
+           "format                     erase the camera's SD card (asks for "
+           "a code)\n"
+           "actions                    queued camera actions and results\n"
            "restart                    restart the hub (like the reset "
            "button)\n"
            "ping                       keep the hub awake a while longer\n"

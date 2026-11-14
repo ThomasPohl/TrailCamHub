@@ -12,6 +12,7 @@
 #include <string.h>
 #include <string>
 #include <time.h>
+#include <vector>
 
 #include "esp_check.h"
 #include "esp_heap_caps.h"
@@ -31,6 +32,7 @@
 #include "driver/usb_serial_jtag_vfs.h"
 #endif
 
+#include "camera_actions.hpp"
 #include "command_parser.hpp"
 #include "diagnostics.hpp"
 #include "device_info.hpp"
@@ -40,6 +42,7 @@
 #include "hub_config.hpp"
 #include "schedule_state.hpp"
 #include "sd_card.h"
+#include "session_actions.hpp"
 #include "session_controller.h"
 
 #define CONSOLE_TASK_STACK 6144
@@ -424,6 +427,49 @@ void request_cycle(esp_err_t error, const char *what)
     }
 }
 
+// --- Camera actions (#194): photo, video, delete, format, actions ---
+
+std::string action_line(const camera::action::Entry &entry)
+{
+    return format_line("action %u ", (unsigned)entry.id) +
+           camera::action::describe(entry);
+}
+
+void print_actions()
+{
+    const std::vector<camera::action::Entry> entries =
+        camera::action::service::snapshot();
+    if (entries.empty()) {
+        reply("INFO", "no actions");
+    }
+    for (const camera::action::Entry &entry : entries) {
+        reply("INFO", action_line(entry));
+    }
+}
+
+// The same path as the web UI (session_actions): checks, confirmation, queue,
+// and the session that runs it. A photo is followed by a normal scan (so that
+// the picture is read and pushed), everything else by a short session.
+void run_action(const char *type, const hub_console::Command &command)
+{
+    const session_actions::Reply reply_of = session_actions::request(
+        session_actions::From::console, type, command.media_id,
+        command.confirm ? command.code : "");
+    if (reply_of.needs_code) {
+        reply("OK",
+              reply_of.text + "; within a minute send '" + type +
+                  (command.media_id > 0 ? " " + std::to_string(command.media_id)
+                                        : std::string()) +
+                  " confirm " + reply_of.code + "'");
+    } else if (reply_of.ok) {
+        reply("OK", format_line("action %u: ", reply_of.id) + reply_of.text +
+                        (reply_of.session_started ? "; results with 'actions'"
+                                                  : std::string()));
+    } else {
+        reply("ERR", reply_of.text);
+    }
+}
+
 void set_setting(const hub_console::Command &command)
 {
     hub_config::Key key;
@@ -501,6 +547,24 @@ void execute(const hub_console::Command &command)
         break;
     case CommandType::camlist:
         request_cycle(session_controller_request_list(), "camlist");
+        break;
+    case CommandType::photo:
+        run_action("photo", command);
+        break;
+    case CommandType::video_start:
+        run_action("video-start", command);
+        break;
+    case CommandType::video_stop:
+        run_action("video-stop", command);
+        break;
+    case CommandType::delete_media:
+        run_action("delete", command);
+        break;
+    case CommandType::format_sd:
+        run_action("format", command);
+        break;
+    case CommandType::actions:
+        print_actions();
         break;
     case CommandType::upload:
         request_cycle(session_controller_request_upload(), "upload");

@@ -4,6 +4,9 @@
 // installer or typed into a terminal:
 //
 //   help | status | scan | camlist | upload | update | stop
+//   photo | video start | video stop | actions
+//   delete <mediaId> [confirm <code>]
+//   format [confirm <code>]
 //   config show | config clear
 //   config set <key> <value...>   value = rest of the line (empty erases)
 //   config set-hex <key> <hex>    value as hex-encoded bytes (any characters)
@@ -33,6 +36,12 @@ enum class CommandType {
     upload,
     update,
     stop,
+    photo,
+    video_start,
+    video_stop,
+    delete_media,
+    format_sd,
+    actions,  // list the queued camera actions and their results
     restart,
     ping,  // only keeps the hub awake (the installer sends it while connected)
     heap,
@@ -59,6 +68,11 @@ struct Command {
     long long length = -1;
     long long total_kb = 4096;
     long long chunk_kb = 8;
+    // delete: the recording's mediaId; delete and format: the second step,
+    // with the code the first one printed.
+    long long media_id = 0;
+    bool confirm = false;
+    std::string code;
 };
 
 Command parse_command(const std::string &line);

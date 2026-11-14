@@ -6,7 +6,8 @@
  *             subfolder per camera.
  *   Telegram: the hub talks to the Bot API itself (only over the modem, see
  *             #150): new thumbnails as photos with a "Get video" button,
- *             requested videos as MP4, and the commands /scan and /status.
+ *             requested videos as MP4, and the commands /scan, /status, /photo,
+ *             /video_start and /video_stop.
  *
  * Both keep track of what was sent in the catalog: kReported for a
  * thumbnail, kVideoUploaded for a photo or video file.
@@ -25,6 +26,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "camera_actions.hpp"
 #include "camera_wifi.h"
 #include "device_info.hpp"
 #include "http_util.hpp"
@@ -538,8 +540,9 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
             hub_config::set(hub_config::Key::telegram_chat,
                             std::to_string((long long)chat), nullptr);
             bot.message(chat, "TrailCamHub is paired with this chat. New "
-                              "pictures arrive with each check-in; /status "
-                              "and /scan are answered then too.");
+                              "pictures arrive with each check-in; /status, "
+                              "/scan, /photo and /video_start are answered "
+                              "then too.");
             ESP_LOGI(TAG, "Paired with Telegram chat %lld", (long long)chat);
             continue;
         }
@@ -573,12 +576,33 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
             read_requested = true;
             bot.message(chat, "Reading the cameras now; new pictures follow "
                               "right after.");
+        } else if (const auto type = push::action_of_command(command); type) {
+            // Taken at the next camera read, which is requested now; the
+            // result follows with the next check-in. The update id keeps a
+            // command that is delivered twice from running twice.
+            const auto added = camera::action::service::submit(
+                camera::action::Action{*type, 0},
+                camera::action::Source::telegram,
+                "tg:" + std::to_string((long long)update.update_id));
+            using Kind = camera::action::ActionQueue::AddResult::Kind;
+            if (added.kind == Kind::added || added.kind == Kind::duplicate) {
+                read_requested = true;
+                bot.message(chat, "Queued. The camera does it at its next "
+                                  "read, which starts now; the result "
+                                  "follows.");
+            } else if (added.kind == Kind::full) {
+                bot.message(chat, "Too many actions are waiting; try again "
+                                  "after the next read.");
+            } else {
+                bot.message(chat, added.reason);
+            }
         } else if (command == "/status") {
             bot.message(chat, status_text(cameras));
         } else if (command == "/start" || command == "/help") {
             bot.message(chat, "/status: battery and schedule\n/scan: read "
-                              "the cameras now\nThe button under a video "
-                              "fetches it.");
+                              "the cameras now\n/photo: take a photo\n"
+                              "/video_start, /video_stop: record a video\n"
+                              "The button under a video fetches it.");
         }
     }
     hub_config::store_state(kOffsetKey, std::to_string((long long)offset));
@@ -589,6 +613,13 @@ esp_err_t push_telegram(const hub_config::Settings &settings, bool over_modem,
         save_cameras(cameras);
         ESP_LOGW(TAG, "No Telegram chat yet: send /start to the bot");
         return ESP_OK;
+    }
+
+    // The results of actions asked for here, from the camera reads since.
+    for (const camera::action::Entry &entry :
+         camera::action::service::take_unreported(
+             camera::action::Source::telegram)) {
+        bot.message(chat, push::action_result_text(entry));
     }
 
     // 2. New thumbnails, with a button for the video of a video.

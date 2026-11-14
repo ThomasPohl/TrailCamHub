@@ -94,7 +94,9 @@ last one (`getUpdates`), then sends new thumbnails as photos (at most 20 per
 check-in, the rest follow) with a **Get video** button under videos, and the
 videos that were asked for (as MP4, up to the modem's size limit). Commands:
 `/status` (batteries, next read and check-in), `/scan` (read the cameras now),
-`/help`.
+`/photo`, `/video_start` and `/video_stop` ([camera actions](camera-actions.md): queued,
+run at the next read, which starts now; the result follows with the next
+check-in), `/help`.
 
 Limits:
 
