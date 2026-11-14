@@ -36,6 +36,11 @@ const char *TAG = "trailcamhub_cycle";
 constexpr std::uint64_t kSampleIntervalUs = 1000000;
 // A clock before this is not set (2023-11-14).
 constexpr std::int64_t kClockValidAfter = 1700000000;
+// The internal heap that data can come from. Plain MALLOC_CAP_INTERNAL also
+// counts heaps that cannot hold byte buffers: about 20 KB on the classic
+// ESP32, where an allocation failed although that figure showed 28 KB as
+// the minimum (#244).
+constexpr std::uint32_t kDataHeap = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
 constexpr std::uint32_t kNumberMagic = 0x43594331;  // "CYC1"
 
 // RTC memory that the start-up code leaves alone: the number goes on after
@@ -74,8 +79,7 @@ void lower(std::atomic<std::int64_t> &lowest, std::int64_t value)
 void sample(void *arg)
 {
     (void)arg;
-    lower(s_sample_internal,
-          (std::int64_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    lower(s_sample_internal, (std::int64_t)heap_caps_get_free_size(kDataHeap));
     lower(s_sample_psram,
           (std::int64_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
@@ -84,7 +88,7 @@ std::int64_t heap_min_internal()
 {
     return cycle_heap_minimum(
         s_boot_min_internal_at_start,
-        (std::int64_t)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+        (std::int64_t)heap_caps_get_minimum_free_size(kDataHeap),
         s_sample_internal.load());
 }
 
@@ -185,11 +189,10 @@ void on_cycle_started(const char *kind)
     s_next_trigger.clear();
     s_started_us = esp_timer_get_time();
     s_boot_min_internal_at_start =
-        (std::int64_t)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+        (std::int64_t)heap_caps_get_minimum_free_size(kDataHeap);
     s_boot_min_psram_at_start =
         (std::int64_t)heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM);
-    s_sample_internal =
-        (std::int64_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    s_sample_internal = (std::int64_t)heap_caps_get_free_size(kDataHeap);
     s_sample_psram = (std::int64_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     s_running = true;
     const Record started = s_current;
@@ -254,7 +257,7 @@ Memory memory()
         out.heap_min_psram = s_last.heap_min_psram;
     } else {
         out.heap_min_internal =
-            (std::int64_t)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+            (std::int64_t)heap_caps_get_minimum_free_size(kDataHeap);
         out.heap_min_psram =
             has_psram() ? (std::int64_t)heap_caps_get_minimum_free_size(
                               MALLOC_CAP_SPIRAM)
