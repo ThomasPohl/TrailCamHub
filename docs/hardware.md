@@ -18,6 +18,7 @@ check in CI read it.
 ¹ Without a web UI the direction is push.
 
 Pins, wiring and notes for the smaller boards are in [modes.md](modes.md#boards).
+Wiring diagram for the ESP32-WROOM-32D and its microSD reader: [wiring-wroom32d.md](wiring-wroom32d.md).
 The 4G modem is described in [modem.md](modem.md).
 
 **What you need besides the board:** a microSD card (FAT32, up to 32 GB
