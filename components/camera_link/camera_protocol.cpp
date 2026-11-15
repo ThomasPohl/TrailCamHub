@@ -36,6 +36,7 @@
 #include "camera_udp_transport.h"
 #include "catalog_file.hpp"
 #include "bulk_reassembler.hpp"
+#include "bulk_side_channel.hpp"
 #include "bulk_stream.hpp"
 #include "device_info.hpp"
 #include "media_catalog.hpp"
@@ -251,6 +252,8 @@ static bool s_bulk_next_seq_valid;
 // Last frame of the record being received, and how often the current
 // thumbnail was requested again after it stalled.
 static int64_t s_bulk_last_frame_us;
+// Bulk frames outside the requested media (see bulk_side_channel.hpp).
+static camera::artemis::BulkSideChannel s_side_channel;
 
 // Media download state, reset at the start of each session. A download is
 // active from its request (cmdId 1285) until its record is complete or it is
@@ -752,6 +755,8 @@ static bool handle_bulk_frame(int socket_fd,
 {
     using namespace camera::artemis;
     static const uint8_t kSig[8] = {'A', 'R', 'T', 'E', 'M', 'I', 'S', 0};
+    // Bytes of a side-channel frame shown in the log.
+    static const size_t kSideChannelDumpMax = 96;
     const uint8_t subtype = packet[5];
     const uint16_t seq = static_cast<uint16_t>((packet[6] << 8) | packet[7]);
     const uint8_t *payload = packet + 8;
@@ -782,6 +787,31 @@ static bool handle_bulk_frame(int socket_fd,
         if (stray_ack.build(subtype, &seq, 1)) {
             send_udp_request(socket_fd, camera_address, "BULK ACK (stray)",
                              stray_ack);
+        }
+        return false;
+    }
+    // Records the camera sends on its own: acknowledge them, so that it does
+    // not send them again and again, and leave the record being received
+    // alone. They are no progress of the session.
+    if (is_bulk_side_channel(subtype, s_download_active)) {
+        camera::ArtemisBulkAckRequest side_ack;
+        if (side_ack.build(subtype, &seq, 1)) {
+            send_udp_request(socket_fd, camera_address,
+                             "BULK ACK (side channel)", side_ack);
+        }
+        if (s_side_channel.note(subtype, seq)) {
+            // Diagnostics until the records are understood: every frame
+            // once, with its content.
+            const size_t dump = payload_len < kSideChannelDumpMax
+                                    ? payload_len
+                                    : kSideChannelDumpMax;
+            ESP_LOGI(TAG,
+                     "BULK side channel 0x%02x seq %u: %u payload bytes "
+                     "(frame %u of this session)%s",
+                     (unsigned)subtype, (unsigned)seq, (unsigned)payload_len,
+                     (unsigned)s_side_channel.frames(),
+                     is_record_start ? ", record start" : "");
+            ESP_LOG_BUFFER_HEX_LEVEL(TAG, payload, dump, ESP_LOG_INFO);
         }
         return false;
     }
@@ -1496,6 +1526,7 @@ static esp_err_t run_artemis_session(int socket_fd,
     s_bulk_ack_pending = 0;
     s_bulk_active = false;
     s_bulk_next_seq_valid = false;
+    s_side_channel.reset();
     s_download_queue.clear();
     s_download_index = 0;
     s_download_active = false;
