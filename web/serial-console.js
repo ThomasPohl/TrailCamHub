@@ -1,5 +1,7 @@
 const connectButton = document.querySelector("#connect-serial");
 const disconnectButton = document.querySelector("#disconnect-serial");
+// Opens the picker although the port used last is known.
+const otherPortButton = document.querySelector("#other-port");
 const clearButton = document.querySelector("#clear-serial");
 const copyButton = document.querySelector("#copy-serial");
 const output = document.querySelector("#serial-output");
@@ -10,6 +12,86 @@ let reader;
 let reading = false;
 let lineBuffer = "";
 const encoder = new TextEncoder();
+
+// --- Connecting again without the port picker ---
+//
+// The browser remembers which ports this page may use. The page remembers
+// which of them was the hub (its USB ids) and whether a connection is
+// wanted, and then opens the port on its own:
+// - when the connection is lost (the hub went to sleep, was reset or
+//   unplugged) and the port comes back,
+// - when the page is loaded again while it was connected,
+// - on "Connect", if the hub's port is there (otherwise the picker opens).
+// "Disconnect" and the firmware installer end that: the port stays closed
+// until the next "Connect".
+
+// The user wants a connection; a lost one is taken up again.
+let wanted = false;
+// USB ids of the port used last (getInfo()), or null.
+let lastInfo = null;
+// An open() is running: the retry timer and a click must not start another.
+let opening = false;
+let retryTimer;
+const PORT_KEY = "trailcamhub.serial.port";
+const RETRY_MS = 1000;
+
+function rememberPort(auto) {
+  try {
+    if (lastInfo) {
+      window.localStorage.setItem(PORT_KEY, JSON.stringify({ usbVendorId: lastInfo.usbVendorId, usbProductId: lastInfo.usbProductId, auto }));
+    }
+  } catch {
+    // Storage blocked: connecting again then needs the picker after a reload.
+  }
+}
+
+function rememberedPort() {
+  try {
+    return JSON.parse(window.localStorage.getItem(PORT_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+// "Other port…" only while not connected and a port is remembered, that is
+// when "Connect" would not ask.
+function showOtherPort() {
+  otherPortButton.hidden = connectButton.disabled || !(lastInfo ?? rememberedPort());
+}
+
+// A port this page may use that is the same kind of device as `info`.
+async function grantedPort(info) {
+  if (!info) {
+    return undefined;
+  }
+  const ports = await navigator.serial.getPorts();
+  return ports.find((candidate) => {
+    const other = candidate.getInfo();
+    return other.usbVendorId === info.usbVendorId && other.usbProductId === info.usbProductId;
+  });
+}
+
+// One attempt to take the connection up again; quiet if the port is not
+// there (yet).
+async function tryReopen() {
+  if (!wanted || opening || (port && reading)) {
+    return;
+  }
+  const match = await grantedPort(lastInfo);
+  if (match && wanted && !opening && !(port && reading)) {
+    await openPort(match, true);
+  }
+}
+
+function waitForPort() {
+  clearInterval(retryTimer);
+  retryTimer = setInterval(() => void tryReopen().catch(() => {}), RETRY_MS);
+  status.textContent = "Connection lost. Waiting for the hub to come back (asleep, reset or unplugged)…";
+  connectButton.disabled = true;
+  disconnectButton.disabled = false;
+  disconnectButton.textContent = "Stop waiting";
+  showOtherPort();
+}
 
 // How close to the end (in pixels) still counts as "at the newest line".
 const FOLLOW_THRESHOLD = 24;
@@ -112,7 +194,14 @@ function dispatchLines(text) {
 // waits for this, then closes the port.
 let readLoopDone = Promise.resolve();
 
-async function disconnect() {
+// Closes the port. `keepWanted` is for a lost connection, which is taken up
+// again; every other caller ends the connection for good.
+async function disconnect(keepWanted = false) {
+  if (!keepWanted) {
+    wanted = false;
+    clearInterval(retryTimer);
+    rememberPort(false);
+  }
   reading = false;
   const activeReader = reader;
   if (activeReader) {
@@ -130,6 +219,8 @@ async function disconnect() {
   }
   connectButton.disabled = !("serial" in navigator);
   disconnectButton.disabled = true;
+  disconnectButton.textContent = "Disconnect";
+  showOtherPort();
   status.textContent = "Not connected";
   window.dispatchEvent(new CustomEvent("serial-disconnected"));
 }
@@ -165,20 +256,35 @@ function openErrorText(error) {
 }
 
 // Opens a port the user picked (or allowed before) and reads it in the
-// background; returns false if it could not be opened.
-async function openPort(selected) {
+// background; returns false if it could not be opened. `quiet` (a retry in
+// the background) leaves the status text alone on a failure.
+async function openPort(selected, quiet = false) {
+  if (opening) {
+    return false;
+  }
+  opening = true;
   try {
     await selected.open({ baudRate: 115200 });
   } catch (error) {
-    status.textContent = openErrorText(error);
+    if (!quiet) {
+      status.textContent = openErrorText(error);
+    }
     return false;
+  } finally {
+    opening = false;
   }
   port = selected;
   reading = true;
+  wanted = true;
+  lastInfo = selected.getInfo();
+  rememberPort(true);
+  clearInterval(retryTimer);
+  disconnectButton.textContent = "Disconnect";
   lineBuffer = "";
   window.dispatchEvent(new CustomEvent("serial-reset"));
   connectButton.disabled = true;
   disconnectButton.disabled = false;
+  showOtherPort();
   status.textContent = "Connected at 115200 baud";
   window.dispatchEvent(new CustomEvent("serial-connected"));
   void watchPort();
@@ -195,19 +301,31 @@ async function watchPort() {
     // disconnect() stopped the loop and closes the port.
     return;
   }
-  // The device went away (unplugged, reset over USB) or the read failed.
+  // The device went away (unplugged, reset over USB, asleep) or the read
+  // failed: close the port and wait for it to come back.
   try {
-    await disconnect();
+    await disconnect(true);
   } catch (cleanupError) {
+    wanted = false;
     status.textContent = `Serial connection lost${failure ? `: ${failure.message}` : ""}. Could not close the port: ${cleanupError.message}`;
     return;
   }
-  if (failure) {
-    status.textContent = `Serial connection lost: ${failure.message}`;
-  }
+  waitForPort();
 }
 
-async function connect() {
+// Connects to the hub: to the port used last if it is there, otherwise (or
+// with `choose`) to the one the user picks. Call it from a click, the picker
+// needs one.
+async function connect(choose = false) {
+  if (port && reading) {
+    return true;
+  }
+  if (!choose) {
+    const known = await grantedPort(lastInfo ?? rememberedPort());
+    if (known && (await openPort(known, true))) {
+      return true;
+    }
+  }
   let selected;
   try {
     selected = await navigator.serial.requestPort();
@@ -222,26 +340,27 @@ async function connect() {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Connects again to a port this page was allowed to use, without the picker:
-// after a reset the USB-Serial-JTAG of the ESP32-S3/C5 comes back as a new
-// device. `info` (from getInfo()) picks the same kind of device.
+// Waits until the connection is back after a reset: the USB-Serial-JTAG of
+// the ESP32-S3/C5 goes away and comes back as a new device, which the retry
+// above opens. `info` (from reset()) is the port to wait for, in case the
+// loss was not noticed yet. Returns false after `timeoutMs`.
 async function reconnect(info, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
+  if (!wanted) {
+    // Not lost but closed (or never open): take it up here.
+    wanted = true;
+    lastInfo = info ?? lastInfo;
+  }
   while (Date.now() < deadline) {
     if (port && reading) {
       return true;
     }
-    const ports = await navigator.serial.getPorts();
-    const match = ports.find((candidate) => {
-      const other = candidate.getInfo();
-      return !info || (other.usbVendorId === info.usbVendorId && other.usbProductId === info.usbProductId);
-    });
-    if (match && (await openPort(match))) {
-      return true;
+    await tryReopen().catch(() => {});
+    if (!(port && reading)) {
+      await sleep(250);
     }
-    await sleep(500);
   }
-  return false;
+  return Boolean(port && reading);
 }
 
 // Resets the board over the serial lines like esptool's hard reset (RTS
@@ -392,7 +511,26 @@ window.trailcamSerial = {
   isConnected: () => Boolean(port && reading),
 };
 
-connectButton.addEventListener("click", connect);
+connectButton.addEventListener("click", () => connect());
+otherPortButton.addEventListener("click", () => connect(true));
+showOtherPort();
+
+if ("serial" in navigator) {
+  // A port this page may use was plugged in (or woke up).
+  navigator.serial.addEventListener("connect", () => void tryReopen().catch(() => {}));
+  // The page was connected when it was closed or reloaded: connect again,
+  // once every script listens for the connection.
+  window.addEventListener("DOMContentLoaded", async () => {
+    const stored = rememberedPort();
+    if (!stored?.auto) {
+      return;
+    }
+    const known = await grantedPort(stored).catch(() => undefined);
+    if (known && !(port && reading)) {
+      await openPort(known, true);
+    }
+  });
+}
 disconnectButton.addEventListener("click", handleDisconnect);
 clearButton.addEventListener("click", clearOutput);
 copyButton.addEventListener("click", copyOutput);

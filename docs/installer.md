@@ -41,7 +41,8 @@ at the top):
 
 - **Hub**: connect and disconnect, the hub's state and its last status (mode,
   schedule, next camera read and check-in, battery, SD card, firmware). The
-  status is read again after every scan.
+  status is read again after every scan. See
+  [Connecting again](#connecting-again).
 - **Commands**: scan, stop, upload, status, reset over the serial lines,
   restart, erase the settings, a command line (arrow up repeats a command) and
   the **support package** (status, settings without secrets, the newest log
@@ -52,6 +53,21 @@ Next to it, four tabs: **Firmware** (older and development builds, manual
 download), **Settings** (every single setting, in groups), **Protocol** (the
 live protocol view, including the first thumbnail of a session) and
 **Console** (the serial log at 115200 baud).
+
+### Connecting again
+
+The browser asks for the serial port once. After that the page opens the
+hub's port on its own:
+
+- when the connection is lost because the hub went to sleep, was reset or
+  unplugged, as soon as the port is back (*Stop waiting* ends that),
+- when the page is reloaded while it was connected,
+- on **Connect**, if the port used last is there. **Other port…** opens the
+  browser's port list instead.
+
+**Disconnect** and the firmware installer close the port until the next
+**Connect**. The page remembers only the USB ids of the port
+(`trailcamhub.serial.port` in the browser's local storage).
 
 The installer does not configure the camera name or the Wi-Fi-enable payload;
 the CI build sends `BT_KEY_ON`. Install firmware only from a source you trust
