@@ -14,6 +14,7 @@
     <script src="./device-setup.js" defer></script>
     <script src="./wizard.js" defer></script>
     <script src="./advanced.js" defer></script>
+    <script src="./camera.js" defer></script>
     <script src="./shell.js" defer></script>
   </head>
   <body data-view="wizard">
@@ -231,6 +232,7 @@
         <div class="adv-tabs" role="tablist" aria-label="Advanced">
           <button id="adv-tab-firmware" type="button" role="tab" data-tab="firmware" aria-controls="adv-panel-firmware" aria-selected="true">Firmware</button>
           <button id="adv-tab-settings" type="button" role="tab" data-tab="settings" aria-controls="adv-panel-settings" aria-selected="false" tabindex="-1">Settings</button>
+          <button id="adv-tab-camera" type="button" role="tab" data-tab="camera" aria-controls="adv-panel-camera" aria-selected="false" tabindex="-1">Camera</button>
           <button id="adv-tab-protocol" type="button" role="tab" data-tab="protocol" aria-controls="adv-panel-protocol" aria-selected="false" tabindex="-1">Protocol</button>
           <button id="adv-tab-console" type="button" role="tab" data-tab="console" aria-controls="adv-panel-console" aria-selected="false" tabindex="-1">Console</button>
         </div>
@@ -432,6 +434,57 @@
               <p id="ds-form-status" class="note" role="status" aria-live="polite"></p>
             </div>
           </form>
+        </div>
+
+        <div id="adv-panel-camera" class="adv-panel" role="tabpanel" aria-labelledby="adv-tab-camera" data-tab="camera" hidden>
+          <p id="cam-status" class="cam-status" role="status" aria-live="polite"></p>
+          <section aria-labelledby="cam-take-heading">
+            <h2 id="cam-take-heading">Photo and video</h2>
+            <p>The hub wakes the camera and asks it to record. A photo is followed by a normal scan, so the picture is read and delivered like any other.</p>
+            <div class="console-controls">
+              <button class="primary-button" type="button" data-action="photo">Take a photo</button>
+              <button class="secondary-button" type="button" data-action="video start">Start a video</button>
+              <button class="secondary-button" type="button" data-action="video stop">Stop the video</button>
+            </div>
+          </section>
+
+          <section aria-labelledby="cam-list-heading">
+            <div class="pv-head">
+              <h2 id="cam-list-heading">Recordings on the camera</h2>
+              <button id="cam-list" class="secondary-button" type="button">Read the list</button>
+            </div>
+            <p id="cam-list-caption" class="note" aria-live="polite">Reads what is on the camera's SD card. Nothing is fetched or delivered, and it does not count as a read for the schedule.</p>
+            <div id="cam-media" class="pv-table-scroll" hidden>
+              <table class="pv-table">
+                <thead>
+                  <tr><th>Type</th><th>Camera time</th><th>Folder/number</th><th>mediaId</th><th></th></tr>
+                </thead>
+                <tbody id="cam-media-body"></tbody>
+              </table>
+            </div>
+            <p class="cam-format"><button id="cam-format" class="secondary-button danger" type="button">Erase the camera's SD card…</button></p>
+          </section>
+
+          <section aria-labelledby="cam-actions-heading">
+            <div class="pv-head">
+              <h2 id="cam-actions-heading">Actions</h2>
+              <button id="cam-actions-refresh" class="secondary-button" type="button">Refresh</button>
+            </div>
+            <p class="note">What was asked of the camera, from here, the hub's web page or Telegram, newest first. An action that was sent and not answered is not repeated: ask again.</p>
+            <ul id="cam-actions" class="cam-actions" aria-live="polite"><li>Connect to the hub to see them.</li></ul>
+          </section>
+
+          <dialog id="cam-confirm" class="cam-dialog" aria-labelledby="cam-confirm-title">
+            <form method="dialog">
+              <h3 id="cam-confirm-title"></h3>
+              <p></p>
+              <label hidden>Type <strong>erase</strong> to go on <input autocomplete="off" spellcheck="false"></label>
+              <div class="wz-nav">
+                <button class="secondary-button" type="submit" value="cancel">Cancel</button>
+                <button class="primary-button danger-fill" type="submit" value="ok"></button>
+              </div>
+            </form>
+          </dialog>
         </div>
 
         <div id="adv-panel-protocol" class="adv-panel" role="tabpanel" aria-labelledby="adv-tab-protocol" data-tab="protocol" hidden>

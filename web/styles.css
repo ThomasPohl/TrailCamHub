@@ -1041,6 +1041,107 @@ body[data-view="advanced"] {
   display: none;
 }
 
+/* --- Camera tab --- */
+
+/* What the hub answered to the last request; stays in view. */
+.cam-status {
+  position: sticky;
+  top: 3.2rem;
+  z-index: 4;
+  margin: 0 0 1rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid #344353;
+  border-radius: 0.5rem;
+  background: #22364a;
+}
+
+.cam-status:empty {
+  display: none;
+}
+
+.cam-format {
+  margin: 1.25rem 0 0;
+}
+
+#cam-media .pv-table button {
+  min-height: 2rem;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.cam-actions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.cam-actions li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin: 0;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #243342;
+  overflow-wrap: anywhere;
+}
+
+.cam-state {
+  flex: none;
+  min-width: 4.2rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #243342;
+  color: #90c8ff;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.cam-done .cam-state {
+  color: #b8e3b8;
+}
+
+.cam-failed .cam-state {
+  color: #ff9c9c;
+}
+
+.cam-dialog {
+  width: min(30rem, calc(100% - 2rem));
+  padding: 1.5rem;
+  border: 1px solid #67809a;
+  border-radius: 0.75rem;
+  background: #18212b;
+  color: inherit;
+}
+
+.cam-dialog::backdrop {
+  background: rgba(5, 8, 12, 0.7);
+}
+
+.cam-dialog h3 {
+  margin-top: 0;
+}
+
+.cam-dialog label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.cam-dialog input {
+  min-height: 2.4rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #344353;
+  border-radius: 0.4rem;
+  background: #090d11;
+  color: inherit;
+  font: inherit;
+}
+
+.danger-fill {
+  background: #ff9c9c;
+  color: #2a0d0d;
+}
+
 /* Narrow windows: the dock stays on top, the tabs scroll below it. */
 @media (max-width: 860px) {
   .view-advanced {

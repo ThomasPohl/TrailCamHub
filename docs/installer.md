@@ -49,8 +49,11 @@ at the top):
   file from the SD card and the page's serial log in one text file).
 - **Activity**: what was sent and what the hub reported.
 
-Next to it, four tabs: **Firmware** (older and development builds, manual
-download), **Settings** (every single setting, in groups), **Protocol** (the
+Next to it, five tabs: **Firmware** (older and development builds, manual
+download), **Settings** (every single setting, in groups), **Camera** (take
+a photo or a video, list the recordings on the camera, delete one, erase the
+camera's SD card, and the queue of these actions with their results; see
+[camera-actions.md](camera-actions.md)), **Protocol** (the
 live protocol view, including the first thumbnail of a session) and
 **Console** (the serial log at 115200 baud).
 
