@@ -2,6 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { DemoGalleryApi } from './demo';
 import { GalleryApp } from './GalleryApp';
+import { HttpGalleryApi } from './http';
+import { takeToken } from './token';
+import type { GalleryApi } from './types';
 import './gallery.css';
 
 // Installable app (#263): the service worker only has to exist.
@@ -14,9 +17,36 @@ if (!root) {
   throw new Error('Missing #root element');
 }
 
-// Only the demo backend exists so far; the real one follows with #259.
+/**
+ * The real backend when the build has an API URL and the user opened the
+ * set-up link once; the demo without an API URL or with `?demo`.
+ */
+function chooseApi(): GalleryApi | undefined {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (!baseUrl || new URLSearchParams(window.location.search).has('demo')) {
+    return new DemoGalleryApi();
+  }
+  const token = takeToken();
+  return token ? new HttpGalleryApi(baseUrl, token) : undefined;
+}
+
+const api = chooseApi();
+
 createRoot(root).render(
   <StrictMode>
-    <GalleryApp api={new DemoGalleryApi()} />
+    {api ? (
+      <GalleryApp api={api} />
+    ) : (
+      <div className="gallery">
+        <h1>Wildkamera</h1>
+        <p className="g-folder">
+          Diese Seite ist noch nicht eingerichtet. Bitte den Einrichtungslink öffnen, den Sie
+          bekommen haben.
+        </p>
+        <p className="g-hint">
+          Zum Ausprobieren ohne Hub: <a href="?demo">Vorführung öffnen</a>
+        </p>
+      </div>
+    )}
   </StrictMode>,
 );

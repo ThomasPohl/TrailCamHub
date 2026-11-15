@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiError } from '../api/http';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
 import { cameraTime, clockTime, stateText } from './text';
@@ -64,7 +65,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       setItems(id ? await api.recordings(id) : []);
       setLoadError(undefined);
     } catch (error) {
-      setLoadError(errorText(error));
+      setLoadError(error instanceof ApiError && error.status === 401 ? 'signin' : errorText(error));
     }
   }, [api, camId]);
 
@@ -200,7 +201,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
 
       {loadError && (
         <div className="g-error" role="alert">
-          <p>Die Bilder konnten nicht geladen werden. Ist der Laptop mit dem Internet verbunden?</p>
+          <p>
+            {loadError === 'signin'
+              ? 'Die Anmeldung gilt nicht mehr. Bitte den neuen Einrichtungslink öffnen.'
+              : 'Die Bilder konnten nicht geladen werden. Ist der Laptop mit dem Internet verbunden?'}
+          </p>
           <button type="button" className="g-btn" onClick={() => void reload()}>
             Nochmal versuchen
           </button>
