@@ -46,7 +46,10 @@
 #include "session_actions.hpp"
 #include "session_controller.h"
 
-#define CONSOLE_TASK_STACK 6144
+// "status" reads the settings from NVS several levels deep, with two copies of
+// them on the stack; the flash read below that needs room for an interrupt
+// frame as well. With 6 KB the stack overflowed there (#251).
+#define CONSOLE_TASK_STACK 12288
 #define CONSOLE_TASK_PRIORITY 4
 #define CONSOLE_LINE_MAX 512
 #define CONSOLE_RX_BUFFER 1024
@@ -410,6 +413,10 @@ void print_status()
     print_web_access();
     print_schedule();
     reply("INFO", cycle_trace::status_text());
+    // Last, so that it counts what the lines above needed.
+    reply("INFO", format_line("console stack %u of %u bytes never used",
+                              (unsigned)uxTaskGetStackHighWaterMark(NULL),
+                              (unsigned)CONSOLE_TASK_STACK));
 }
 
 void request_cycle(esp_err_t error, const char *what)

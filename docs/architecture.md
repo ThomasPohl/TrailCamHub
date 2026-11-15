@@ -123,7 +123,7 @@ changes is in [media-identity.md](media-identity.md); the file formats are in
 | `camera_session` | 8 KB | one camera session per request (`camera_protocol_run()`) | all state of `camera_link` during a session; the camera's directory on the SD card |
 | `uplink` | 12 KB (TLS) | one sync per request (`uplink::run()`) | the catalogs of all cameras during the sync |
 | `scheduler` | 6 KB | requests cycles on the plan, enters deep sleep | the schedule state (RTC memory) |
-| `hub_console` | 6 KB | serial commands | nothing shared; calls the request interface |
+| `hub_console` | 12 KB | serial commands | nothing shared; calls the request interface |
 | `sd_log` | 4 KB | writes the log ring buffer to the card | the log files |
 | `sd_writer` | 4 KB | writes downloads to the card (PSRAM boards only) | the open media file |
 | `modem` | 4 KB | modem power, registration, PPP | the modem driver |
