@@ -1,4 +1,5 @@
 import type { Deps } from './api';
+import { generateAppToken, newAppUserId } from './auth/app';
 import { generateDeviceKey } from './auth/device';
 import { ADMIN_CODE_TTL_S, createPairingCode, pairingLink } from './pairing';
 import type { Store } from './store/types';
@@ -30,14 +31,30 @@ export interface CreatePairingCodeEvent {
   ttlHours?: number;
 }
 
-export type AdminEvent = RegisterHubEvent | CreatePairingCodeEvent;
+/**
+ * Creates a gallery user (#259) linked to hubs, or with `userId` issues a new
+ * token for an existing one (the old token stops working). The token is
+ * returned once.
+ */
+export interface CreateAppUserEvent {
+  admin: 'createAppUser';
+  name?: string;
+  hubIds?: string[];
+  role?: 'user' | 'admin';
+  userId?: number;
+}
+
+export type AdminEvent = RegisterHubEvent | CreatePairingCodeEvent | CreateAppUserEvent;
 
 type Failure = { ok: false; error: string };
 export type RegisterHubResult =
   | { ok: true; created: boolean; key?: string; linkedUsers: number[] }
   | Failure;
 export type PairingResult = { ok: true; code: string; link?: string; expiresAt: number } | Failure;
-export type AdminResult = RegisterHubResult | PairingResult;
+export type AppUserResult =
+  | { ok: true; userId: number; token: string; linkedHubs: string[] }
+  | Failure;
+export type AdminResult = RegisterHubResult | PairingResult | AppUserResult;
 
 export type AdminDeps = Pick<Deps, 'store' | 'now' | 'telegram'>;
 
@@ -54,6 +71,9 @@ export async function handleAdmin(
   deps: AdminDeps,
 ): Promise<AdminResult> {
   if (event.admin === 'registerHub') return registerHub(event as RegisterHubEvent, deps.store);
+  if (event.admin === 'createAppUser') {
+    return createAppUser(event as CreateAppUserEvent, deps);
+  }
   if (event.admin === 'createPairingCode') {
     return createPairing(event as CreatePairingCodeEvent, deps);
   }
@@ -125,4 +145,40 @@ export async function registerHub(
     await store.linkUser(user, hubId);
   }
   return { ok: true, created: !existing, key, linkedUsers: users };
+}
+
+export async function createAppUser(
+  event: CreateAppUserEvent,
+  deps: AdminDeps,
+): Promise<AppUserResult> {
+  const hubIds = event.hubIds ?? [];
+  const role = event.role ?? 'user';
+  if (role !== 'user' && role !== 'admin')
+    return { ok: false, error: 'role must be user or admin' };
+  if (!Array.isArray(hubIds) || !hubIds.every((h) => typeof h === 'string' && HUB_ID.test(h))) {
+    return { ok: false, error: 'hubIds must be hub ids' };
+  }
+  for (const hubId of hubIds) {
+    if (!(await deps.store.getHub(hubId))) return { ok: false, error: `unknown hub ${hubId}` };
+  }
+
+  const existing =
+    event.userId === undefined ? undefined : await deps.store.getAppUser(event.userId);
+  if (event.userId !== undefined && !existing) {
+    return { ok: false, error: `unknown user ${event.userId}` };
+  }
+  const name = event.name?.trim() || existing?.name;
+  if (!name) return { ok: false, error: 'name must be a non-empty string' };
+
+  const userId = existing?.userId ?? newAppUserId();
+  const { token, tokenHash } = generateAppToken(userId);
+  await deps.store.putAppUser({
+    userId,
+    name,
+    role: event.role ?? existing?.role ?? role,
+    tokenHash,
+    created: existing?.created ?? deps.now(),
+  });
+  for (const hubId of hubIds) await deps.store.linkUser(userId, hubId);
+  return { ok: true, userId, token, linkedHubs: hubIds };
 }

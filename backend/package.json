@@ -14,7 +14,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "register-hub": "node scripts/register-hub.mjs"
+    "register-hub": "node scripts/register-hub.mjs",
+    "add-user": "node scripts/add-user.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.850.0",

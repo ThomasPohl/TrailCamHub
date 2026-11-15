@@ -12,9 +12,13 @@
 
 export type FileType = 0 | 2;
 export type VideoState = 'none' | 'requested' | 'downloading' | 'available' | 'failed';
-/** requestVideo: fetch a video (mediaId); readCamera: read the camera now. */
-export type CommandType = 'requestVideo' | 'readCamera';
-export type CommandState = 'queued' | 'delivered' | 'done' | 'failed';
+/**
+ * requestVideo: fetch a video (mediaId); readCamera: read the camera now;
+ * deleteMedia: delete a recording on the camera (mediaId).
+ */
+export type CommandType = 'requestVideo' | 'readCamera' | 'deleteMedia';
+/** `cancelled`: withdrawn in the app before the hub picked it up. */
+export type CommandState = 'queued' | 'delivered' | 'done' | 'failed' | 'cancelled';
 
 /** Where the hub got a schedule setting from. */
 export type ScheduleOrigin = 'built-in' | 'local' | 'remote';
@@ -125,6 +129,19 @@ export interface CommandRecord {
   error?: string;
 }
 
+/**
+ * A user of the gallery web app (#259), created by the admin. Signs in with
+ * an app token `<userId>.<secret>`; only the hash of the secret is stored.
+ * The ids are far above Telegram's, so both kinds of users share links.
+ */
+export interface AppUser {
+  userId: number;
+  name: string;
+  role: 'user' | 'admin';
+  tokenHash: string;
+  created: number;
+}
+
 /** Bot settings of a Telegram user (in a private chat, chat id = user id). */
 export interface UserSettings {
   /** Messages about new recordings. */
@@ -201,6 +218,11 @@ export interface MediaItem {
   videoState: VideoState;
   /** With videoState `available`: short-lived URL of the MP4. */
   videoUrl?: string;
+  /** With videoState `failed`: why, as the hub reported it. */
+  videoError?: string;
+  /** A delete was asked for (`requested`, `delivered` to the hub) or failed. */
+  deleteState?: 'requested' | 'delivered' | 'failed';
+  deleteError?: string;
 }
 
 export interface CommandResult {

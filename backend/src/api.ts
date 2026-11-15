@@ -1,7 +1,8 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { parseAppToken } from './auth/app';
 import { parseDeviceKey, verifySecret } from './auth/device';
 import { validateInitData } from './auth/telegram';
-import { requestVideo } from './commands';
+import { requestDelete, requestVideo, withdraw } from './commands';
 import {
   HttpError,
   json,
@@ -85,6 +86,7 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'GET', pattern: '/v1/cameras', handler: listCameras },
   { method: 'GET', pattern: '/v1/cameras/:camId/media', handler: listMedia },
   { method: 'POST', pattern: '/v1/cameras/:camId/commands', handler: createCommand },
+  { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/withdraw', handler: withdrawMedia },
   { method: 'PUT', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
   { method: 'POST', pattern: '/v1/device/checkin', handler: checkin },
   { method: 'POST', pattern: '/v1/device/ack', handler: ack },
@@ -118,7 +120,19 @@ function bearer(req: ApiRequest, scheme: string): string {
   return header.slice(prefix.length).trim();
 }
 
+/**
+ * The signed-in user: a gallery user with an app token (`Bearer
+ * <userId>.<secret>`, #259) or a Telegram user (`tma <initData>`).
+ */
 async function authUser(req: ApiRequest, deps: Deps): Promise<number> {
+  if ((req.headers.authorization ?? '').startsWith('Bearer ')) {
+    const parsed = parseAppToken(bearer(req, 'Bearer'));
+    const user = parsed && (await deps.store.getAppUser(parsed.userId));
+    if (!parsed || !user || !verifySecret(parsed.secret, user.tokenHash)) {
+      throw new HttpError(401, 'Invalid app token');
+    }
+    return user.userId;
+  }
   const result = validateInitData(bearer(req, 'tma'), await deps.botToken(), deps.now());
   if (!result.ok) throw new HttpError(401, `Invalid Telegram init data (${result.reason})`);
   return result.identity.userId;
@@ -207,8 +221,18 @@ async function listCameras(req: ApiRequest, _p: Record<string, string>, deps: De
 
 async function listMedia(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const camera = await authUserForCamera(req, params.camId ?? '', deps);
+  // The latest command of each kind per recording (commands sort by creation).
+  const commands = [...(await deps.store.listCommands(camera.camId))].sort(
+    (a, b) => a.created - b.created,
+  );
+  const latest = new Map<string, CommandRecord>();
+  for (const c of commands) {
+    if (c.type !== 'readCamera' && c.state !== 'cancelled') latest.set(`${c.type}:${c.mediaId}`, c);
+  }
   const media = (await deps.store.listMedia(camera.camId))
     .filter((m) => m.thumbPresent)
+    // Deleted on the camera: gone for the user too.
+    .filter((m) => latest.get(`deleteMedia:${m.mediaId}`)?.state !== 'done')
     .sort((a, b) => b.mediaTime - a.mediaTime || b.num - a.num);
   const items: MediaItem[] = await Promise.all(
     media.map(async (m) => ({
@@ -222,15 +246,44 @@ async function listMedia(req: ApiRequest, params: Record<string, string>, deps: 
       ...(m.videoState === 'available'
         ? { videoUrl: await deps.storage.videoReadUrl(camera.camId, m.mediaId) }
         : {}),
+      ...(m.videoState === 'failed'
+        ? { videoError: latest.get(`requestVideo:${m.mediaId}`)?.error }
+        : {}),
+      ...deleteInfo(latest.get(`deleteMedia:${m.mediaId}`)),
     })),
   );
   return json(200, items);
 }
 
+function deleteInfo(c: CommandRecord | undefined): Pick<MediaItem, 'deleteState' | 'deleteError'> {
+  if (!c) return {};
+  if (c.state === 'queued') return { deleteState: 'requested' };
+  if (c.state === 'delivered') return { deleteState: 'delivered' };
+  if (c.state === 'failed') return { deleteState: 'failed', deleteError: c.error };
+  return {};
+}
+
+/** At most this many recordings per delete request. */
+const MAX_DELETE_PER_REQUEST = 200;
+
 async function createCommand(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const camera = await authUserForCamera(req, params.camId ?? '', deps);
-  const body = parseJsonBody<{ type?: unknown; mediaId?: unknown }>(req);
+  const body = parseJsonBody<{ type?: unknown; mediaId?: unknown; mediaIds?: unknown }>(req);
   if (body.type === 'readCamera') return createReadCommand(camera, deps);
+  if (body.type === 'deleteMedia') {
+    const ids = body.mediaIds;
+    if (
+      !Array.isArray(ids) ||
+      ids.length === 0 ||
+      ids.length > MAX_DELETE_PER_REQUEST ||
+      !ids.every(isMediaId)
+    ) {
+      throw new HttpError(400, `mediaIds must be 1-${MAX_DELETE_PER_REQUEST} valid media ids`);
+    }
+    const result = await requestDelete(camera, ids as number[], deps);
+    if (!result.ok) throw new HttpError(result.status, result.error);
+    return json(201, result.commands.map(commandResult));
+  }
   if (body.type !== 'requestVideo') throw new HttpError(400, 'Unsupported command type');
   if (!isMediaId(body.mediaId)) throw new HttpError(400, 'mediaId must be a valid media id');
   const result = await requestVideo(camera, body.mediaId, deps);
@@ -296,6 +349,19 @@ async function setSchedule(req: ApiRequest, params: Record<string, string>, deps
   }
   await deps.store.setHubScheduleConfig(hubId, config);
   return json(200, config);
+}
+
+/**
+ * Withdraws the open requests (video, delete) for a recording that the hub
+ * has not picked up yet. Once delivered, the hub may already be at work.
+ */
+async function withdrawMedia(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const camera = await authUserForCamera(req, params.camId ?? '', deps);
+  const mediaId = Number(params.mediaId);
+  if (!isMediaId(mediaId)) throw new HttpError(400, 'mediaId must be a valid media id');
+  const result = await withdraw(camera, mediaId, deps);
+  if (!result.ok) throw new HttpError(result.status, result.error);
+  return json(200, { withdrawn: result.withdrawn });
 }
 
 function commandResult(c: CommandRecord): CommandResult {
@@ -509,7 +575,9 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
               mediaId: c.mediaId,
               uploadUrl: await deps.storage.videoUploadUrl(camId, c.mediaId),
             }
-          : { id: c.id, type: c.type },
+          : c.type === 'deleteMedia'
+            ? { id: c.id, type: c.type, mediaId: c.mediaId }
+            : { id: c.id, type: c.type },
       ),
     );
     results.set(camId, result);
@@ -588,7 +656,7 @@ async function ack(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
     for (const c of Array.isArray(entry.commands) ? entry.commands : []) {
       if (typeof c?.id !== 'string' || (c.state !== 'done' && c.state !== 'failed')) continue;
       const command = await deps.store.getCommand(camera.camId, c.id);
-      if (!command || command.state === 'done' || command.state === 'failed') continue;
+      if (!command || !isOpen(command)) continue;
       let state: 'done' | 'failed' = c.state;
       let error = state === 'failed' ? (optionalText(c.error) ?? 'failed on the hub') : undefined;
       // Trust S3, not the device: a video is available only if it arrived.

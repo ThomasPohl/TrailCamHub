@@ -1,4 +1,5 @@
 import type {
+  AppUser,
   CameraRecord,
   CommandRecord,
   HubRecord,
@@ -51,6 +52,9 @@ export interface Store {
   listUserHubIds(userId: number): Promise<string[]>;
   isLinked(userId: number, hubId: string): Promise<boolean>;
   listHubUserIds(hubId: string): Promise<number[]>;
+
+  putAppUser(user: AppUser): Promise<void>;
+  getAppUser(userId: number): Promise<AppUser | undefined>;
 
   getUserSettings(userId: number): Promise<UserSettings | undefined>;
   putUserSettings(userId: number, settings: UserSettings): Promise<void>;
