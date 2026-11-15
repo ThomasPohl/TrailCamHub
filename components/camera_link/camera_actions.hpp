@@ -39,6 +39,9 @@ ConfirmGate::Result confirm(const std::string &subject,
 // A copy of the queue, oldest first, for the front ends.
 std::vector<Entry> snapshot();
 
+// A copy of one entry; false if the queue has no entry with this id.
+bool find(std::uint32_t id, Entry &out);
+
 // Finished entries of `source` that were not reported yet; they are marked
 // as reported.
 std::vector<Entry> take_unreported(Source source);
@@ -52,8 +55,9 @@ struct Job {
     Action action;
 };
 // The oldest waiting action the session can run now (`list_ready`: the media
-// list of this session is read, so a deletion may run); it becomes running.
-bool take_next(bool list_ready, Job &job);
+// list of this session is read, so a deletion may run) on the camera
+// `camera_id` (actions for another camera wait); it becomes running.
+bool take_next(bool list_ready, const std::string &camera_id, Job &job);
 void finish(std::uint32_t id, const Outcome &outcome);
 // The session ended: whatever was sent and not answered ends as failed.
 void abandon_running(const std::string &reason);

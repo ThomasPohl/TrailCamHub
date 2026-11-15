@@ -129,7 +129,8 @@ TEST_CASE("invalid and forbidden actions are refused")
     CHECK_FALSE(bad.reason.empty());
     const auto remote = queue.add(kFormat, Source::telegram, "", 1);
     CHECK(remote.kind == Kind::not_allowed);
-    CHECK(queue.add(del(5), Source::backend, "", 1).kind == Kind::not_allowed);
+    CHECK(queue.add(del(5), Source::telegram, "", 1).kind == Kind::not_allowed);
+    CHECK(queue.add(kFormat, Source::backend, "", 1).kind == Kind::not_allowed);
     CHECK(queue.pending_count() == 0);
 }
 
@@ -334,4 +335,51 @@ TEST_CASE("an unreadable file is reported and leaves the queue empty")
     queue.add(kPhoto, Source::console, "", 1);
     CHECK_FALSE(load_queue(dir.file(), queue, 2));
     CHECK(queue.entries().empty());
+}
+
+TEST_CASE("an action keeps its camera, and the same file of two cameras is "
+          "two deletions")
+{
+    ActionQueue queue;
+    CHECK(queue
+              .add(Action{Type::delete_media, 7, "CAMA"}, Source::backend,
+                   "be:a", 1)
+              .kind == Kind::added);
+    CHECK(queue
+              .add(Action{Type::delete_media, 7, "CAMB"}, Source::backend,
+                   "be:b", 1)
+              .kind == Kind::added);
+    CHECK(
+        queue.add(Action{Type::delete_media, 7, "CAMA"}, Source::web_ui, "", 2)
+            .kind == Kind::duplicate);
+
+    ActionQueue loaded;
+    REQUIRE(loaded.parse(queue.serialize()));
+    REQUIRE(loaded.entries().size() == 2);
+    CHECK(loaded.entries()[0].action.cam_id == "CAMA");
+    CHECK(loaded.entries()[1].action.cam_id == "CAMB");
+    CHECK(queue.serialize().rfind("v2,", 0) == 0);
+}
+
+TEST_CASE("a v1 file (without camera) is still read")
+{
+    ActionQueue queue;
+    REQUIRE(queue.parse("v1,3\n"
+                        "1,delete,42,console,pending,10,0,0,,\n"
+                        "2,photo,0,telegram,failed,10,11,1,tg:5,snapRet -2\n"));
+    REQUIRE(queue.entries().size() == 2);
+    CHECK(queue.entries()[0].action.cam_id.empty());
+    CHECK(queue.entries()[1].reason == "snapRet -2");
+}
+
+TEST_CASE("the gallery can queue a batch of deletions")
+{
+    ActionQueue queue;
+    for (std::int64_t i = 1; i <= 30; ++i) {
+        CHECK(queue
+                  .add(Action{Type::delete_media, i, "CAM"}, Source::backend,
+                       "be:" + std::to_string(i), 1)
+                  .kind == Kind::added);
+    }
+    CHECK(queue.pending_count() == 30);
 }

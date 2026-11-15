@@ -11,7 +11,8 @@ namespace camera::action
 namespace
 {
 
-constexpr const char *kHeader = "v1";
+constexpr const char *kHeader = "v2";
+constexpr const char *kHeaderV1 = "v1";
 
 std::string clean_reason(const std::string &reason)
 {
@@ -195,6 +196,7 @@ ActionQueue::AddResult ActionQueue::add(const Action &action, Source source,
         const bool same_pending = entry.state == State::pending &&
                                   entry.action.type == action.type &&
                                   entry.action.media_id == action.media_id &&
+                                  entry.action.cam_id == action.cam_id &&
                                   (action.type == Type::delete_media ||
                                    action.type == Type::format_sd);
         if (same_key || same_pending) {
@@ -211,6 +213,7 @@ ActionQueue::AddResult ActionQueue::add(const Action &action, Source source,
     Entry entry;
     entry.id = next_id_++;
     entry.action = action;
+    entry.action.cam_id = sanitize_key(action.cam_id);
     entry.source = source;
     entry.key = clean_key;
     entry.created_s = now_s > 0 ? now_s : 0;
@@ -324,7 +327,8 @@ bool ActionQueue::mark_notified(std::uint32_t id)
     return true;
 }
 
-// id,type,mediaId,source,state,created,finished,notified,key,reason
+// v2: id,type,mediaId,source,state,created,finished,notified,key,cam,reason
+// (v1 had no cam)
 std::string ActionQueue::serialize() const
 {
     std::ostringstream out;
@@ -333,8 +337,8 @@ std::string ActionQueue::serialize() const
         out << e.id << ',' << type_name(e.action.type) << ','
             << e.action.media_id << ',' << source_name(e.source) << ','
             << state_name(e.state) << ',' << e.created_s << ',' << e.finished_s
-            << ',' << (e.notified ? 1 : 0) << ',' << e.key << ',' << e.reason
-            << '\n';
+            << ',' << (e.notified ? 1 : 0) << ',' << e.key << ','
+            << e.action.cam_id << ',' << e.reason << '\n';
     }
     return out.str();
 }
@@ -350,7 +354,12 @@ bool ActionQueue::parse(const std::string &text)
     }
     const std::size_t comma = line.find(',');
     std::int64_t next = 0;
-    if (comma == std::string::npos || line.substr(0, comma) != kHeader ||
+    const std::string version =
+        comma == std::string::npos ? "" : line.substr(0, comma);
+    const bool v1 = version == kHeaderV1;
+    // Fields before the reason (which has no commas).
+    const std::size_t field_count = v1 ? 9 : 10;
+    if (comma == std::string::npos || (version != kHeader && !v1) ||
         !to_int(line.substr(comma + 1), next) || next < 1 ||
         next > 0x7fffffff) {
         return false;
@@ -360,10 +369,9 @@ bool ActionQueue::parse(const std::string &text)
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
         }
-        // Nine fields, then the reason (which has no commas).
         std::vector<std::string> fields;
         std::size_t start = 0;
-        while (fields.size() < 9) {
+        while (fields.size() < field_count) {
             const std::size_t end = line.find(',', start);
             if (end == std::string::npos) {
                 break;
@@ -371,7 +379,7 @@ bool ActionQueue::parse(const std::string &text)
             fields.push_back(line.substr(start, end - start));
             start = end + 1;
         }
-        if (fields.size() < 9) {
+        if (fields.size() < field_count) {
             continue;
         }
         Entry entry;
@@ -390,7 +398,7 @@ bool ActionQueue::parse(const std::string &text)
             continue;
         }
         entry.id = static_cast<std::uint32_t>(id);
-        entry.action = Action{*type, media};
+        entry.action = Action{*type, media, v1 ? "" : sanitize_key(fields[9])};
         entry.source = *source;
         entry.state = *state;
         entry.created_s = created;

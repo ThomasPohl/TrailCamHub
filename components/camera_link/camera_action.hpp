@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "device_info.hpp"
 #include "media_catalog.hpp"
@@ -53,8 +54,10 @@ enum class Source : std::uint8_t {
 const char *source_name(Source source);
 
 // Photo and video need only the chat's trust. Deleting needs someone at the
-// hub or its password-protected page; formatting the card could lose
-// recordings the hub has not fetched, so it is never done remotely (#196).
+// hub, its password-protected page, or the backend, where the user of the
+// gallery confirmed it (#260); a chat may not delete. Formatting the card
+// could lose recordings the hub has not fetched, so it is never done
+// remotely (#196).
 bool allowed(Type type, Source source);
 
 // The action cannot be undone and the front end must ask for a confirmation
@@ -66,9 +69,19 @@ bool needs_confirmation(Type type);
 bool needs_media_list(Type type);
 
 struct Action {
+    Action() = default;
+    Action(Type type_, std::int64_t media_id_ = 0, std::string cam_id_ = {})
+        : type(type_), media_id(media_id_), cam_id(std::move(cam_id_))
+    {
+    }
+
     Type type = Type::photo;
     // delete only: the recording's mediaId (never dir/num, which are reused).
     std::int64_t media_id = 0;
+    // The camera (devId) the action is for; empty: whichever camera the next
+    // session reads. A deletion from the backend names its camera, because a
+    // mediaId is only unique within one camera.
+    std::string cam_id;
 };
 
 // Empty if the action is complete, else why not (e.g. a delete without a

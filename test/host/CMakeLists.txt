@@ -92,6 +92,7 @@ add_executable(host_tests
     test_uplink_protocol.cpp
     test_push_protocol.cpp
     test_video_request.cpp
+    test_delete_request.cpp
     test_wifi_disconnect_policy.cpp
     ${ble_dir}/ble_advertising.cpp
     ${ble_dir}/ble_wifi_response.cpp
@@ -137,6 +138,7 @@ add_executable(host_tests
     ${console_dir}/command_parser.cpp
     ${uplink_dir}/uplink_protocol.cpp
     ${uplink_dir}/video_request.cpp
+    ${uplink_dir}/delete_request.cpp
     ${uplink_dir}/push_protocol.cpp
     ${mp4_dir}/mp4_mux.cpp
     ${mp4_dir}/mp4_file_source.cpp
