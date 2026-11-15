@@ -45,7 +45,7 @@ TEST_CASE("formatting is never remote and deleting needs the hub or its page")
     CHECK(allowed(Type::delete_media, Source::console));
     CHECK(allowed(Type::delete_media, Source::web_ui));
     CHECK_FALSE(allowed(Type::delete_media, Source::telegram));
-    CHECK_FALSE(allowed(Type::delete_media, Source::backend));
+    CHECK(allowed(Type::delete_media, Source::backend));
     CHECK(allowed(Type::format_sd, Source::console));
     CHECK(allowed(Type::format_sd, Source::web_ui));
     CHECK_FALSE(allowed(Type::format_sd, Source::telegram));

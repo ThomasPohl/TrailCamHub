@@ -119,10 +119,12 @@ config CAMERA_VIDEO_MAX_PER_SESSION
     int "Videos downloaded in one camera session (0: no limit)"
     depends on CAMERA_DOWNLOAD_VIDEOS
     range 0 100
-    default 3 if CAMERA_VIDEO_ON_REQUEST
+    default 10 if CAMERA_VIDEO_ON_REQUEST
     default 0
     help
-        The newest ones first; the rest follow in later sessions.
+        The newest ones first; the rest follow in later sessions. With
+        requested videos 10, so that a batch asked for in the gallery comes
+        in one wake cycle (#261); a video takes about twice its length.
 
 choice CAMERA_VIDEO_MP4
     prompt "MP4 files for downloaded videos"

@@ -123,13 +123,26 @@ bool pending_needs_list()
     return s_queue.has_pending_needing_list();
 }
 
-bool take_next(bool list_ready, Job &job)
+bool find(std::uint32_t id, Entry &out)
+{
+    std::lock_guard<std::mutex> guard(s_lock);
+    const Entry *entry = s_queue.find(id);
+    if (entry == nullptr) {
+        return false;
+    }
+    out = *entry;
+    return true;
+}
+
+bool take_next(bool list_ready, const std::string &camera_id, Job &job)
 {
     std::lock_guard<std::mutex> guard(s_lock);
     s_queue.expire_stale(now_s());
     for (const Entry &entry : s_queue.entries()) {
         if (entry.state != State::pending ||
-            (needs_media_list(entry.action.type) && !list_ready)) {
+            (needs_media_list(entry.action.type) && !list_ready) ||
+            (!entry.action.cam_id.empty() &&
+             entry.action.cam_id != camera_id)) {
             continue;
         }
         job.id = entry.id;

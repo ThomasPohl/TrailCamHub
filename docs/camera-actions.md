@@ -9,7 +9,7 @@ how that works from every front end. The camera commands are described in
 | `photo` | take a photo | 641 | console, web UI, Telegram, backend |
 | `video-start` | start a video | 643 | console, web UI, Telegram, backend |
 | `video-stop` | stop it | 644 | console, web UI, Telegram, backend |
-| `delete` | delete one recording by `mediaId` | 773 | console, web UI |
+| `delete` | delete one recording by `mediaId` | 773 | console, web UI, backend |
 | `format` | erase the camera's SD card | 518 | console, web UI |
 
 Formatting is never remote, and neither is deleting (#196). Both need a
@@ -84,7 +84,8 @@ An action that was sent and not answered (the session ended, the hub
 restarted or the camera was silent for 15 s) is **not repeated**: it ends as
 `failed` with the reason, and the person asks again. A repeated delete could
 remove a newer recording that took the number. An action that waited more than
-24 h for a camera read is dropped. At most 8 actions wait, 32 entries are kept.
+24 h for a camera read is dropped. At most 40 actions wait, 64 entries are kept
+(the gallery deletes in batches, #261).
 A command that arrives twice (a Telegram update delivered again after a crash)
 is queued once when the front end gives a key such as `tg:<update id>`.
 
@@ -121,8 +122,17 @@ code from the hub's answer and sends the confirmation.
   key, so a command that `getUpdates` delivers again is queued once. The hub
   requests a camera read at once; at the check-in after it, the chat is told
   how each action ended (once). Deleting and formatting are not available in
-  a chat. The backend's commands (`CommandType`) are not extended: the
-  backend is not extended any more (#150).
+  a chat.
+- **Backend (gallery, #260):** a `deleteMedia` command (`mediaId`) becomes a
+  `delete` for that camera (an action carries the camera's `devId`, so it
+  runs only in that camera's session), keyed `be:<command id>`, so the
+  command the backend sends again with every check-in is queued once. The
+  user confirmed it in the gallery, so no code is asked for. Queuing it
+  requests a camera read at once; the hub answers the command at the check-in
+  after the read (usually in the same wake cycle): `done`, also when the
+  camera no longer lists the file (it is gone either way), else `failed`
+  with the reason. Pure logic in `components/uplink/delete_request.cpp`.
+  Formatting stays local only.
 
 ## Hardware test points
 

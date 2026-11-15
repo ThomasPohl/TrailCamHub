@@ -78,7 +78,7 @@ The raw `.h264` and `.aac` files play poorly: no duration, no index, no sound in
 
 ## Videos on request (app → hub → backend)
 
-With `CONFIG_CAMERA_VIDEO_ON_REQUEST` (the default of the autonomous profile) a session downloads only the videos the user asked for in the app or the bot, at most `CONFIG_CAMERA_VIDEO_MAX_PER_SESSION` (3), newest first. `CONFIG_CAMERA_VIDEO_ALL` downloads every missing video as before (dongles, P4).
+With `CONFIG_CAMERA_VIDEO_ON_REQUEST` (the default of the autonomous profile) a session downloads only the videos the user asked for in the app or the bot, at most `CONFIG_CAMERA_VIDEO_MAX_PER_SESSION` (10, so that a batch from the gallery comes in one wake cycle), newest first. `CONFIG_CAMERA_VIDEO_ALL` downloads every missing video as before (dongles, P4).
 
 1. The app queues a `requestVideo` command. At the next check-in the hub sets `kVideoRequested` in the camera's catalog and makes a camera read due at once (`schedule::request_camera_read()`); the command stays unanswered.
 2. That read downloads the video (`MediaCatalog::download_queue()`).

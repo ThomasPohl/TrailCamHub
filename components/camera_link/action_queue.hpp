@@ -53,12 +53,13 @@ struct Entry {
 class ActionQueue
 {
   public:
-    // Actions waiting at most; a person at the console can wait for one to
-    // finish, and a chat cannot fill the card.
-    static constexpr std::size_t kMaxPending = 8;
+    // Actions waiting at most. The gallery deletes in batches (#261), so a
+    // few dozen; the backend sends the rest again with later check-ins.
+    static constexpr std::size_t kMaxPending = 40;
     // Entries kept, finished ones included, so that the results can still be
-    // read and the keys still recognised. The oldest finished one goes first.
-    static constexpr std::size_t kMaxEntries = 32;
+    // read and the keys still recognised until the backend has its answer.
+    // The oldest finished one goes first. About 100 bytes each.
+    static constexpr std::size_t kMaxEntries = 64;
     static constexpr std::size_t kMaxKeyLength = 40;
     static constexpr std::size_t kMaxReasonLength = 100;
     // A pending action older than this is dropped (expire_stale()).
@@ -115,9 +116,9 @@ class ActionQueue
     }
 
     // Text form for the SD card: a version line with the next id, then one
-    // line per entry. parse() replaces the contents; false (and an empty
-    // queue) if the version is not recognised. Lines that cannot be read are
-    // skipped.
+    // line per entry (v2 adds the camera; v1 files are still read). parse()
+    // replaces the contents; false (and an empty queue) if the version is not
+    // recognised. Lines that cannot be read are skipped.
     std::string serialize() const;
     bool parse(const std::string &text);
 
@@ -134,6 +135,7 @@ class ActionQueue
 std::string describe(const Entry &entry);
 
 // Cleans a key: only letters, digits and ":_-" stay, cut to kMaxKeyLength.
+// Camera ids are cleaned the same way.
 std::string sanitize_key(const std::string &key);
 
 }  // namespace camera::action

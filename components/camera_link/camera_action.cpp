@@ -86,7 +86,7 @@ bool allowed(Type type, Source source)
     case Type::video_stop:
         return true;
     case Type::delete_media:
-        return source == Source::console || source == Source::web_ui;
+        return source != Source::telegram;
     case Type::format_sd:
         return source == Source::console || source == Source::web_ui;
     }

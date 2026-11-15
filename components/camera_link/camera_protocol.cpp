@@ -1123,7 +1123,7 @@ static bool send_next_action()
     namespace act = camera::action;
     while (!s_action_active) {
         act::service::Job job;
-        if (!act::service::take_next(s_list_ready, job)) {
+        if (!act::service::take_next(s_list_ready, s_camera_id, job)) {
             return false;
         }
         const char *name = act::type_name(job.action.type);

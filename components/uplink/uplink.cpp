@@ -16,7 +16,9 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include "camera_actions.hpp"
 #include "camera_wifi.h"
+#include "delete_request.hpp"
 #include "destinations.hpp"
 #include "device_info.hpp"
 #include "cycle_trace.hpp"
@@ -389,6 +391,39 @@ void update_firmware(const hub_config::Settings &settings)
     }
 }
 
+// Answers a deleteMedia command (#260): queues the deletion for the camera's
+// next session (once, recognised by the command id) and answers it when the
+// queue has its result. Returns whether the command is settled (`out` is the
+// answer); `read_needed` is set when a camera session should run it now.
+bool handle_delete_command(const std::string &cam_id, const Command &command,
+                           CommandResult &out, bool &read_needed)
+{
+    namespace act = camera::action;
+    act::Action action{act::Type::delete_media, command.media_id, cam_id};
+    const act::ActionQueue::AddResult added = act::service::submit(
+        action, act::Source::backend, delete_key(command.id));
+    act::Entry entry;
+    const bool known =
+        added.kind == act::ActionQueue::AddResult::Kind::duplicate &&
+        act::service::find(added.id, entry);
+    const DeleteDecision decision =
+        decide_delete(added, known ? &entry : nullptr);
+    read_needed |= decision.read_needed;
+    if (added.kind == act::ActionQueue::AddResult::Kind::added) {
+        ESP_LOGI(TAG, "Deletion of %lld on %s queued (action %u)",
+                 (long long)command.media_id, cam_id.c_str(),
+                 (unsigned)added.id);
+    }
+    if (!decision.answer) {
+        return false;
+    }
+    out.done = decision.done;
+    out.error = decision.error;
+    ESP_LOGI(TAG, "Deletion of %lld on %s: %s", (long long)command.media_id,
+             cam_id.c_str(), decision.done ? "done" : decision.error.c_str());
+    return true;
+}
+
 // Answers a requestVideo command: uploads the video if it is on the SD card,
 // asks for a camera read if the request is new. Returns whether the command
 // is settled (`out` is the answer); otherwise it is not acknowledged and
@@ -556,6 +591,8 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     // Videos have a lower size limit over the cellular modem.
     const bool over_modem =
         hub_config::uplink_transport(settings) == hub_config::Transport::modem;
+    // A deletion was queued or still waits: the camera session runs it.
+    bool delete_read = false;
     for (const CameraCheckin &result : response.cameras) {
         SyncCamera *camera = find_camera(cameras, result.cam_id);
         if (camera != nullptr) {
@@ -632,6 +669,13 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
                     camera_ack.commands.push_back(command_result);
                 }
                 continue;
+            }
+            if (command.type == "deleteMedia") {
+                if (handle_delete_command(result.cam_id, command,
+                                          command_result, delete_read)) {
+                    camera_ack.commands.push_back(command_result);
+                }
+                continue;
             } else {
                 command_result.error = "unsupported command " + command.type;
             }
@@ -644,6 +688,9 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     }
 
     save_changed(cameras);
+    if (delete_read) {
+        schedule::request_camera_read("a deletion was requested");
+    }
     ESP_LOGI(TAG,
              "Checked in %d cameras (%d refused), %d media; backend wanted "
              "%d thumbnails, %d commands",
