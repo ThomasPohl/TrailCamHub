@@ -11,6 +11,7 @@
     return;
   }
   const serial = () => window.trailcamSerial;
+  const settings = window.trailcamSettings;
   const $ = (selector) => root.querySelector(selector);
 
   // Used if boards.json cannot be loaded (e.g. the page opened from a file).
@@ -402,14 +403,14 @@
       set.transport = transport;
     }
     const need = (name, text) => {
-      const v = name.endsWith("password") ? form.elements[name].value : value(name);
+      const v = settings.fieldValue(form, name);
       if (!v) {
         throw new Error(text);
       }
       set[name] = v;
     };
     const optional = (name) => {
-      const v = name.endsWith("password") ? form.elements[name].value : value(name);
+      const v = settings.fieldValue(form, name);
       if (v) {
         set[name] = v;
       }
@@ -418,46 +419,30 @@
       if (transport === "wifi") {
         need("wifi_ssid", "Enter the name of your home Wi-Fi.");
         need("wifi_password", "Enter the password of your home Wi-Fi.");
-        if (set.wifi_password.length < 8 || set.wifi_password.length > 64) {
-          throw new Error("A Wi-Fi password has 8 to 64 characters.");
-        }
       }
       if (transport === "modem") {
         optional("apn");
         optional("sim_pin");
-        if (set.apn && !/^[A-Za-z0-9._-]{1,63}$/.test(set.apn)) {
-          throw new Error("The APN may only contain letters, digits, '.', '-' and '_'.");
-        }
-        if (set.sim_pin && !/^\d{4}$/.test(set.sim_pin)) {
-          throw new Error("The SIM PIN must have 4 digits.");
-        }
       }
       if (goal === "webdav") {
         need("webdav_url", "Enter the URL of the WebDAV folder.");
-        if (!/^https?:\/\/\S+$/.test(set.webdav_url)) {
-          throw new Error("The folder URL must start with https:// or http://.");
-        }
         optional("webdav_user");
         optional("webdav_password");
       }
       if (goal === "telegram") {
         need("telegram_token", "Paste the bot token from @BotFather.");
-        if (!/^\d{1,20}:[A-Za-z0-9_-]{30,}$/.test(set.telegram_token)) {
-          throw new Error("The bot token looks like 123456789:AA… (from @BotFather).");
-        }
       }
       if (goal === "backend") {
         need("api_url", "Enter the backend's API URL.");
         need("device_key", "Enter the hub's device key.");
-        if (!/^https:\/\/\S+$/.test(set.api_url)) {
-          throw new Error("The API URL must start with https://.");
-        }
       }
       if (goal !== "pull") {
         optional("health_url");
-        if (set.health_url && !/^https?:\/\/\S+$/.test(set.health_url)) {
-          throw new Error("The health check URL must start with https:// or http://.");
-        }
+      }
+      // The same checks as the settings form (hub-settings.js).
+      const invalid = settings.problem(set);
+      if (invalid) {
+        throw new Error(invalid);
       }
     } catch (error) {
       return { error: error.message };
@@ -466,12 +451,6 @@
   }
 
   // --- 5. Save ---
-
-  const SECRETS = ["wifi_password", "device_key", "sim_pin", "webdav_password", "telegram_token"];
-
-  function toHex(text) {
-    return Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join("");
-  }
 
   function checkItem(list, text) {
     const item = document.createElement("li");
@@ -524,10 +503,9 @@
     const order = ["power", "direction", "transport", "destination"];
     const keys = [...order.filter((k) => k in result.set), ...Object.keys(result.set).filter((k) => !order.includes(k))];
     for (const key of keys) {
-      const shown = SECRETS.includes(key) ? "••••" : result.set[key];
-      const item = checkItem(list, `${key} = ${shown}`);
+      const item = checkItem(list, `${key} = ${settings.shown(key, result.set[key])}`);
       try {
-        await run(`config set-hex ${key} ${toHex(result.set[key])}`);
+        await run(settings.setCommand(key, result.set[key]));
         item.ok();
       } catch (error) {
         item.fail(error.message);
@@ -544,9 +522,7 @@
         failed = true;
       }
     }
-    for (const name of SECRETS) {
-      if (form.elements[name]) form.elements[name].value = "";
-    }
+    settings.clearSecrets(form);
     const done = checkItem(list, failed ? "Some settings were not stored" : "All settings stored");
     if (failed) {
       done.fail("go back, correct them and save again");
