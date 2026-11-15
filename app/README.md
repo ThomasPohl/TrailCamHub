@@ -18,6 +18,21 @@ Without `VITE_API_BASE_URL` the app runs in **demo mode** with in-memory sample
 data (one hub with two cameras). `src/api/types.ts` mirrors the v1 API of the
 backend in `backend/`.
 
+## Gallery for the laptop (`gallery.html`)
+
+A second page for the end user who sorts recordings on his laptop (#258):
+large thumbnails, **Fetch video** and **Delete** per recording, "delete all
+new ones" with a confirmation, and a status line with the hub's last and next
+contact. The texts are German. It can be installed as an app (manifest and
+service worker in `public/`), and with Chrome or Edge it writes finished
+videos into a folder chosen once (File System Access API, `src/gallery/folder.ts`),
+one sub-folder per camera; other browsers download them.
+
+So far it only talks to a **demo backend** (`src/gallery/demo.ts`) whose hub
+checks in every 20 seconds and then delivers requested videos (a small text
+file instead of an MP4) and deletes what was marked. The backend side follows
+with #259 and #260. Locally: `npm run dev`, then open `/gallery.html`.
+
 ## Development
 
 ```bash

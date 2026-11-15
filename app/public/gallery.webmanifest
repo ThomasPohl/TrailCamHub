@@ -1,0 +1,14 @@
+{
+  "name": "Wildkamera",
+  "short_name": "Wildkamera",
+  "description": "Bilder der Wildkamera ansehen, Videos holen oder löschen",
+  "lang": "de",
+  "start_url": "./gallery.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#1f5f9e",
+  "icons": [
+    { "src": "./gallery-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
