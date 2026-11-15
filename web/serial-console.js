@@ -476,18 +476,27 @@ if (!("serial" in navigator)) {
 // When the last line was sent to the hub (Date.now()).
 let lastSentAt = 0;
 
-// Sends one command line to the device (used by the dock of the "Advanced" view).
-async function sendLine(line) {
-  if (!port || !port.writable) {
-    throw new Error("Serial port is not connected");
-  }
-  const writer = port.writable.getWriter();
-  try {
-    await writer.write(encoder.encode(`${line}\n`));
-    lastSentAt = Date.now();
-  } finally {
-    writer.releaseLock();
-  }
+// Sends one command line to the device. One line at a time: the stream has
+// a single writer, and a second getWriter() while the first is held throws
+// (the dock's "status" and a tab's command right after connecting).
+let writeChain = Promise.resolve();
+
+function sendLine(line) {
+  const write = async () => {
+    if (!port || !port.writable) {
+      throw new Error("Serial port is not connected");
+    }
+    const writer = port.writable.getWriter();
+    try {
+      await writer.write(encoder.encode(`${line}\n`));
+      lastSentAt = Date.now();
+    } finally {
+      writer.releaseLock();
+    }
+  };
+  const result = writeChain.then(write, write);
+  writeChain = result.catch(() => {});
+  return result;
 }
 
 // Every command keeps a hub on battery awake for a few minutes

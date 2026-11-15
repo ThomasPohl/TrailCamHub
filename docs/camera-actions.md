@@ -98,6 +98,16 @@ is queued once when the front end gives a key such as `tg:<update id>`.
 | `format` / `format confirm <code>` | erase the camera's SD card |
 | `actions` | the queue with the results: `action 3 delete 2653775860 failed: …` |
 
+## Web installer
+
+The *Camera* tab of the installer's advanced view
+([installer.md](installer.md)) sends these console commands over USB: buttons
+for `photo`, `video start` and `video stop`, the media list of `camlist` as a
+table with a *Delete* button per recording, *Erase the camera's SD card* and
+the list of `actions`. Deleting and erasing ask in a dialog first (erasing
+wants the word "erase" typed); the page then sends the command, takes the
+code from the hub's answer and sends the confirmation.
+
 ## Web UI and Telegram
 
 - **Web UI:** the card *Camera actions* has buttons for photo and video, a

@@ -282,6 +282,8 @@
           showState(details[0]);
         } else if (event === "stopping") {
           addLog("event", "Stopping — closing the camera session");
+        } else if (event === "media") {
+          // One line per recording of "camlist": the Camera tab shows them.
         } else if (event === "done") {
           addLog(details[0].endsWith("unreachable") ? "error" : "ok", DONE_TEXT[details[0]] ?? details[0]);
           if (details.includes("no-card")) {
