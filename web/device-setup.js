@@ -81,6 +81,7 @@
   };
 
   const serial = () => window.trailcamSerial;
+  const settings = window.trailcamSettings;
 
   // Remembered form values, so the settings need not be typed again on every
   // visit. Opt-out via the checkbox, which also deletes what is stored.
@@ -216,57 +217,10 @@
     }
   }
 
-  function toHex(text) {
-    return Array.from(new TextEncoder().encode(text), (b) =>
-      b.toString(16).padStart(2, "0"),
-    ).join("");
-  }
-
-  // Mirrors the firmware's checks (hub_config_rules.cpp) for early feedback.
-  function validate(values) {
-    if (values.wifi_ssid && new TextEncoder().encode(values.wifi_ssid).length > 32) {
-      return "The Wi-Fi name may be at most 32 bytes.";
-    }
-    if (values.wifi_password && (values.wifi_password.length < 8 || values.wifi_password.length > 64)) {
-      return "The Wi-Fi password must have 8 to 64 characters.";
-    }
-    // The APN goes into an AT command on the hub.
-    if (values.apn && !/^[A-Za-z0-9._-]{1,63}$/.test(values.apn)) {
-      return "The APN may only contain letters, digits, '.', '-' and '_'.";
-    }
-    if (values.sim_pin && !/^\d{4}$/.test(values.sim_pin)) {
-      return "The SIM PIN must have 4 digits.";
-    }
-    if (values.api_url && !/^https:\/\/\S+$/.test(values.api_url)) {
-      return "The API URL must start with https://.";
-    }
-    if (values.device_key && !/^[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{16,128}$/.test(values.device_key)) {
-      return "The device key must look like <hubId>.<secret>.";
-    }
-    // The hub checks the plan in full and answers with the reason.
-    if (values.camera_plan && !/^(off|((\d\d:\d\d-\d\d:\d\d|\*)=\d{1,4}[,; ]*)+)$/.test(values.camera_plan)) {
-      return "The camera plan must look like 05:00-09:00=30,*=120 (or off).";
-    }
-    if (values.checkin_min && (!/^\d{1,4}$/.test(values.checkin_min) || Number(values.checkin_min) > 1440)) {
-      return "The check-in interval must be 0 to 1440 minutes.";
-    }
-    return "";
-  }
-
   async function saveSettings(event) {
     event.preventDefault();
-    const values = Object.fromEntries(
-      FIELDS.map((key) => [
-        key,
-        form.elements[key].value.trim(),
-      ]),
-    );
-    // Passwords may legitimately contain spaces at the ends.
-    values.wifi_password = form.elements.wifi_password.value;
-    values.webdav_password = form.elements.webdav_password.value;
-    values.web_password = form.elements.web_password.value;
-    values.camera_password = form.elements.camera_password.value;
-    const problem = validate(values);
+    const values = Object.fromEntries(FIELDS.map((key) => [key, settings.fieldValue(form, key)]));
+    const problem = settings.problem(values);
     if (problem) {
       formStatus.textContent = problem;
       return;
@@ -279,18 +233,11 @@
     formStatus.textContent = "Saving…";
     try {
       for (const [key, value] of entries) {
-        const secret = ["wifi_password", "device_key", "sim_pin", "webdav_password", "telegram_token", "web_password", "camera_password"].includes(key);
-        await send(`config set-hex ${key} ${toHex(value)}`, `config set ${key} ${secret ? "••••" : value}`);
+        await send(settings.setCommand(key, value), `config set ${key} ${settings.shown(key, value)}`);
       }
       await send("config show");
       if (!rememberBox.checked) {
-        form.elements.wifi_password.value = "";
-        form.elements.device_key.value = "";
-        form.elements.sim_pin.value = "";
-        form.elements.webdav_password.value = "";
-        form.elements.telegram_token.value = "";
-        form.elements.web_password.value = "";
-        form.elements.camera_password.value = "";
+        settings.clearSecrets(form);
       }
       formStatus.textContent = "Saved. Empty fields keep their stored value.";
     } catch {
