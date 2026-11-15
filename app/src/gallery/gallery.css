@@ -1,0 +1,233 @@
+/* Gallery for the end user (#262): large type, large buttons, high contrast. */
+:root {
+  --g-bg: #f4f1ea;
+  --g-card: #ffffff;
+  --g-text: #1a1a1a;
+  --g-hint: #555555;
+  --g-accent: #1f5f9e;
+  --g-danger: #b3261e;
+  --g-ok: #2e7d32;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-size: 20px;
+  line-height: 1.45;
+  color: var(--g-text);
+  background: var(--g-bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.gallery {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 24px 48px;
+}
+
+.gallery p {
+  margin: 0;
+}
+
+.g-header h1 {
+  margin: 0 0 4px;
+  font-size: 2rem;
+}
+
+.g-status,
+.g-hint {
+  color: var(--g-hint);
+}
+
+.g-banner,
+.g-notice,
+.g-folder,
+.g-error {
+  margin-top: 16px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--g-card);
+}
+
+.g-banner {
+  background: #fff4cc;
+}
+
+.g-notice {
+  background: #e3f1e4;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.g-error {
+  background: #fde7e5;
+}
+
+.g-folder--todo {
+  background: #fff4cc;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.g-btn {
+  min-height: 56px;
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--g-accent);
+  cursor: pointer;
+}
+
+.g-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.g-btn--danger {
+  background: var(--g-danger);
+}
+
+.g-btn--plain {
+  color: var(--g-text);
+  background: #e2ddd2;
+}
+
+.g-btn:focus-visible,
+.g-tab:focus-visible,
+.g-link:focus-visible {
+  outline: 4px solid #f2a900;
+  outline-offset: 2px;
+}
+
+.g-link {
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--g-accent);
+  text-decoration: underline;
+  background: none;
+  cursor: pointer;
+}
+
+.g-tabs {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.g-tab {
+  min-height: 56px;
+  padding: 10px 28px;
+  border: 3px solid var(--g-accent);
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--g-accent);
+  background: var(--g-card);
+  cursor: pointer;
+}
+
+.g-tab--on {
+  color: #ffffff;
+  background: var(--g-accent);
+}
+
+.g-toolbar {
+  margin-top: 20px;
+}
+
+.g-grid {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.g-card {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--g-card);
+  border: 3px solid transparent;
+}
+
+.g-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #333333;
+}
+
+.g-card__time {
+  margin-top: 8px !important;
+  font-weight: 700;
+}
+
+.g-card__state {
+  min-height: 2.9em;
+}
+
+.g-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.g-card__actions .g-btn {
+  flex: 1 1 auto;
+}
+
+.g-card--videoRequested {
+  border-color: var(--g-accent);
+}
+
+.g-card--videoReady {
+  border-color: var(--g-ok);
+}
+
+.g-card--deleteRequested {
+  border-color: var(--g-danger);
+}
+
+.g-card--deleteRequested img {
+  opacity: 0.35;
+}
+
+.g-card--failed {
+  border-color: #f2a900;
+}
+
+.g-dialog {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 45%);
+}
+
+.g-dialog__box {
+  max-width: 560px;
+  margin: 16px;
+  padding: 28px;
+  border-radius: 16px;
+  background: var(--g-card);
+  font-size: 1.15rem;
+}
+
+.g-dialog__box .g-hint {
+  margin-top: 8px;
+}

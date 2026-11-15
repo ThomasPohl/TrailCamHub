@@ -9,6 +9,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // Two pages: the Mini App (index.html) and the gallery for the laptop (#258).
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        gallery: 'gallery.html',
+      },
+    },
   },
   test: {
     environment: 'jsdom',

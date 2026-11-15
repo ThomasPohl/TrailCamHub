@@ -107,6 +107,11 @@ export interface MediaItem {
   videoState: VideoState;
   /** With videoState `available`: short-lived URL of the MP4. */
   videoUrl?: string;
+  /** With videoState `failed`: why, as the hub reported it. */
+  videoError?: string;
+  /** A delete was asked for, handed to the hub, or failed (#260). */
+  deleteState?: 'requested' | 'delivered' | 'failed';
+  deleteError?: string;
 }
 
 export type CommandType = 'requestVideo' | 'readCamera';
