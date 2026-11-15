@@ -67,6 +67,12 @@ export interface Deps {
 }
 
 const DEFAULT_MAX_THUMB_UPLOADS = 30;
+/**
+ * Delete commands handed out per camera and check-in (#261). A gallery batch
+ * can hold 200; the hub queues at most 40, and a hub without PSRAM must keep
+ * the response small (#244). The rest follows with the next check-ins.
+ */
+const MAX_DELETES_PER_CHECKIN = 20;
 const MAX_CAMERAS_PER_CHECKIN = 16;
 const MAX_MEDIA_PER_CHECKIN = 2_000;
 /** A hub clock may lag; readAt values further in the future are ignored. */
@@ -559,7 +565,13 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     }
 
     // Hand out open commands; a delivered command is re-sent until acknowledged.
-    const open = (await deps.store.listCommands(camId)).filter(isOpen);
+    // Deletions go out in portions, delivered ones first so they are answered.
+    const all = (await deps.store.listCommands(camId)).filter(isOpen);
+    const deletes = all
+      .filter((c) => c.type === 'deleteMedia')
+      .sort((a, b) => Number(b.state === 'delivered') - Number(a.state === 'delivered'))
+      .slice(0, MAX_DELETES_PER_CHECKIN);
+    const open = all.filter((c) => c.type !== 'deleteMedia' || deletes.includes(c));
     for (const command of open.filter((c) => c.state === 'queued')) {
       await deps.store.putCommand(camId, { ...command, state: 'delivered', updated: now });
       if (command.type === 'requestVideo') {

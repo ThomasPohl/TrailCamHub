@@ -144,3 +144,54 @@ describe('deleting recordings from the gallery (#260)', () => {
     expect(media.find((m) => m.mediaId === 2037)?.deleteState).toBe('delivered');
   });
 });
+
+describe('delete batches (#261)', () => {
+  it('hands out at most 20 deletions per check-in, the rest later', async () => {
+    const world = await setup();
+    const media = Array.from({ length: 25 }, (_, i) => ({
+      mediaId: 3000 + i,
+      dir: 100,
+      num: i + 1,
+      fileType: 2,
+      mediaTime: NOW - 1000 + i,
+    }));
+    await handleRequest(
+      hubRequest('/v1/device/checkin', world.hubKey, {
+        cameras: [{ camId: CAM_ID, readAt: NOW - 60, media }],
+      }),
+      world.deps,
+    );
+    const user = await createAppUser(
+      { admin: 'createAppUser', name: 'Opa', hubIds: [HUB_ID] },
+      world.deps,
+    );
+    if (!user.ok) throw new Error(user.error);
+    await handleRequest(
+      galleryRequest(user.token, 'POST', `/v1/cameras/${CAM_ID}/commands`, {
+        type: 'deleteMedia',
+        mediaIds: media.map((m) => m.mediaId),
+      }),
+      world.deps,
+    );
+
+    const checkin = async () =>
+      body<CheckinResponse>(
+        await handleRequest(
+          hubRequest('/v1/device/checkin', world.hubKey, { cameras: [] }),
+          world.deps,
+        ),
+      ).cameras[0]?.commands ?? [];
+    const first = await checkin();
+    expect(first).toHaveLength(20);
+    // Not answered yet: the same 20 come again, the other 5 still wait.
+    expect((await checkin()).map((c) => c.id)).toEqual(first.map((c) => c.id));
+
+    await handleRequest(
+      hubRequest('/v1/device/ack', world.hubKey, {
+        cameras: [{ camId: CAM_ID, commands: first.map((c) => ({ id: c.id, state: 'done' })) }],
+      }),
+      world.deps,
+    );
+    expect(await checkin()).toHaveLength(5);
+  });
+});
