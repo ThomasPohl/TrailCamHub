@@ -219,6 +219,19 @@ header's `PayloadLen` (total Base64 + NUL + padding) reassembles the whole messa
 is then decoded as one unit. Each fragment is individually acknowledged. A datagram can be
 ~1.6 KB, so the receive path must not assume a small MTU.
 
+### 5.7 Records the camera sends on its own (bulk subtype `0x06`) **[seen on hardware, not understood]**
+Media arrive on the bulk channel (DRW frames with a non-zero subtype): `0x02` video
+stream, `0x03` photo, `0x04` thumbnail. During a scan on 2026-11-15 a TC100 also sent
+records on subtype `0x06` that the hub had not asked for: one frame each, an ARTEMIS
+header with version 9, a type counting up from 1 and 25 or 26 payload bytes, one every 2
+to 40 seconds for four minutes, starting right after a thumbnail request (cmdId 772).
+The camera repeats a frame until it is acknowledged. What they mean is open.
+
+The hub acknowledges such frames and otherwise ignores them
+(`bulk_side_channel.hpp`): they are neither requested media nor progress of the
+session. Until they are understood it logs each frame once with its content
+(`BULK side channel 0x06 seq ...`, followed by a hex dump).
+
 ---
 
 ## 6. Session lifecycle

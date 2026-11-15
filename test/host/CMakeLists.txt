@@ -63,6 +63,7 @@ add_executable(host_tests
     test_media_transfer.cpp
     test_bulk_reassembler.cpp
     test_bulk_stream.cpp
+    test_bulk_side_channel.cpp
     test_device_info.cpp
     test_action_queue.cpp
     test_camera_action.cpp
