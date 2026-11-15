@@ -10,6 +10,7 @@ import {
   type QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import type {
+  AppUser,
   CameraRecord,
   CommandRecord,
   HubRecord,
@@ -28,6 +29,7 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
  *   USER#<id>    / HUB#<hubId>            user → hub link
  *   HUB#<hubId>  / USER#<id>              hub → user link (who gets notified)
  *   USER#<id>    / SETTINGS               bot settings of the user
+ *   USER#<id>    / APP                    gallery app user (token hash, role)
  *   PAIR#<code>  / META                   one-time pairing code (expires: ttl)
  *   CAM#<camId>  / META                   camera record (with hubId)
  *   CAM#<camId>  / MEDIA#<dir>#<num>      media (zero-padded, sorts by file)
@@ -164,6 +166,19 @@ export class DynamoStore implements Store {
   async listHubUserIds(hubId: string): Promise<number[]> {
     const items = await this.queryPrefix(hubPk(hubId), 'USER#');
     return items.map((item) => Number(item.userId));
+  }
+
+  async putAppUser(user: AppUser): Promise<void> {
+    await this.db.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: { PK: userPk(user.userId), SK: 'APP', ...user },
+      }),
+    );
+  }
+
+  async getAppUser(userId: number): Promise<AppUser | undefined> {
+    return this.getItem<AppUser>(userPk(userId), 'APP');
   }
 
   async getUserSettings(userId: number): Promise<UserSettings | undefined> {

@@ -1,4 +1,5 @@
 import type {
+  AppUser,
   CameraRecord,
   CommandRecord,
   HubRecord,
@@ -24,6 +25,7 @@ export class MemoryStore implements Store {
   private readonly media = new Map<string, Map<number, MediaRecord>>();
   private readonly commands = new Map<string, Map<string, CommandRecord>>();
   private readonly settings = new Map<number, UserSettings>();
+  private readonly appUsers = new Map<number, AppUser>();
   private readonly pairings = new Map<string, PairingCode>();
 
   async putHub(hub: HubRecord): Promise<void> {
@@ -92,6 +94,15 @@ export class MemoryStore implements Store {
       .filter(([, hubs]) => hubs.has(hubId))
       .map(([userId]) => userId)
       .sort((a, b) => a - b);
+  }
+
+  async putAppUser(user: AppUser): Promise<void> {
+    this.appUsers.set(user.userId, { ...user });
+  }
+
+  async getAppUser(userId: number): Promise<AppUser | undefined> {
+    const user = this.appUsers.get(userId);
+    return user && { ...user };
   }
 
   async getUserSettings(userId: number): Promise<UserSettings | undefined> {

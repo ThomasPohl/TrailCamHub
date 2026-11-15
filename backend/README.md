@@ -37,22 +37,47 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 
 ## API v1
 
-| Method | Path                           | Auth                   | Purpose                                        |
-| ------ | ------------------------------ | ---------------------- | ---------------------------------------------- |
-| GET    | `/v1/health`                   | –                      | Liveness check                                 |
-| GET    | `/v1/cameras`                  | `tma <initData>`       | Cameras linked to the Telegram user            |
-| GET    | `/v1/cameras/{camId}/media`    | `tma <initData>`       | Recordings with uploaded thumbnails            |
-| POST   | `/v1/cameras/{camId}/commands` | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}` |
-| POST   | `/v1/cameras/{camId}/commands` | `tma <initData>`       | `{"type":"readCamera"}`                        |
-| PUT    | `/v1/hubs/{hubId}/schedule`    | `tma <initData>`       | Wake-up schedule of a hub (see below)          |
-| POST   | `/v1/device/checkin`           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)       |
-| POST   | `/v1/device/ack`               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands       |
-| POST   | `/v1/device/pairing-code`      | `Bearer <hubId>.<key>` | One-time pairing link for the hub to show      |
-| POST   | `/v1/telegram/webhook`         | webhook secret token   | Updates from Telegram (bot messages, buttons)  |
+| Method | Path                                           | Auth                   | Purpose                                        |
+| ------ | ---------------------------------------------- | ---------------------- | ---------------------------------------------- |
+| GET    | `/v1/health`                                   | –                      | Liveness check                                 |
+| GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user            |
+| GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails            |
+| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}` |
+| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"readCamera"}`                        |
+| PUT    | `/v1/hubs/{hubId}/schedule`                    | `tma <initData>`       | Wake-up schedule of a hub (see below)          |
+| POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`        |
+| POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests          |
+| POST   | `/v1/device/checkin`                           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)       |
+| POST   | `/v1/device/ack`                               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands       |
+| POST   | `/v1/device/pairing-code`                      | `Bearer <hubId>.<key>` | One-time pairing link for the hub to show      |
+| POST   | `/v1/telegram/webhook`                         | webhook secret token   | Updates from Telegram (bot messages, buttons)  |
 
 A recording is identified by its **`mediaId`** (per camera), not by `dir`/`num`:
 the camera reuses `dir`/`num` after its card was cleared. `dir`/`num` are only
 data. See [docs/media-identity.md](../docs/media-identity.md).
+
+### Gallery users (#259)
+
+The gallery web app (`app/gallery.html`) signs in with an **app token**,
+`Authorization: Bearer <userId>.<secret>`, instead of Telegram init data; all
+app endpoints accept both. The admin creates a user and links hubs:
+
+```bash
+npm run add-user -- --name "Opa" --hub garden-hub
+```
+
+The script prints a set-up link (`…/gallery.html#token=<token>`) to open once
+on the user's laptop; the gallery keeps the token. `--user <userId>` issues a
+new token (the old link stops working) and can link more hubs; `--admin` sets
+the admin role (used by the admin view, #264). There is no self-registration.
+
+**Deleting** (#260): `deleteMedia` queues one command per recording; the hub
+gets it as `{"id", "type":"deleteMedia", "mediaId"}` and acknowledges it like
+the others. Recordings with a done delete disappear from the media list; the
+list shows `deleteState` (`requested`, `delivered`, `failed` with
+`deleteError`) and, for failed videos, `videoError`. A queued request can be
+withdrawn; once the hub has received it, `withdraw` answers 409. Hub firmware
+without delete support acknowledges `failed` ("unsupported command").
 
 ### Hub check-in cycle
 
