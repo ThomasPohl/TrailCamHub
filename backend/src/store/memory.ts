@@ -87,6 +87,10 @@ export class MemoryStore implements Store {
     this.links.set(userId, set);
   }
 
+  async listHubIds(): Promise<string[]> {
+    return [...this.hubs.keys()].sort();
+  }
+
   async listUserHubIds(userId: number): Promise<string[]> {
     return [...(this.links.get(userId) ?? [])].sort();
   }

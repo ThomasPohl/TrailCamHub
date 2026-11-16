@@ -5,9 +5,11 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
   TransactWriteCommand,
   UpdateCommand,
   type QueryCommandInput,
+  type ScanCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import type {
   AppUser,
@@ -78,6 +80,27 @@ export class DynamoStore implements Store {
 
   async getHub(hubId: string): Promise<HubRecord | undefined> {
     return this.getItem<HubRecord>(hubPk(hubId), 'META');
+  }
+
+  /**
+   * A scan: hubs have no index item of their own. Only the admin asks for
+   * this, and the table is small (one maintainer's hubs, decision 8 of #258).
+   */
+  async listHubIds(): Promise<string[]> {
+    const input: ScanCommandInput = {
+      TableName: this.table,
+      FilterExpression: 'SK = :meta AND begins_with(PK, :hub)',
+      ExpressionAttributeValues: { ':meta': 'META', ':hub': 'HUB#' },
+      ProjectionExpression: 'hubId',
+    };
+    const ids: string[] = [];
+    let start: ScanCommandInput['ExclusiveStartKey'];
+    do {
+      const page = await this.db.send(new ScanCommand({ ...input, ExclusiveStartKey: start }));
+      for (const item of page.Items ?? []) ids.push(String(item.hubId));
+      start = page.LastEvaluatedKey;
+    } while (start);
+    return ids.sort();
   }
 
   async updateHub(hubId: string, telemetry: HubTelemetry, lastSeen: number): Promise<void> {

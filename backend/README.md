@@ -41,6 +41,7 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | ------ | ---------------------------------------------- | ---------------------- | ---------------------------------------------- |
 | GET    | `/v1/health`                                   | –                      | Liveness check                                 |
 | GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user            |
+| GET    | `/v1/me`                                       | app user               | `{userId, name, role}` of the signed-in user   |
 | GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails            |
 | POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}` |
 | POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"readCamera"}`                        |
@@ -69,8 +70,11 @@ npm run add-user -- --name "Opa" --hub garden-hub
 
 The script prints a set-up link (`…/gallery.html#token=<token>`) to open once
 on the user's laptop; the gallery keeps the token. `--user <userId>` issues a
-new token (the old link stops working) and can link more hubs; `--admin` sets
-the admin role (used by the admin view, #264). There is no self-registration.
+new token (the old link stops working) and can link more hubs;
+`--user <userId> --revoke` locks the user out at once (lost laptop) until a
+new token is issued. `--admin` sets the admin role: an admin sees and may use
+the cameras of **every** hub, linked or not. `GET /v1/me` tells the gallery who
+is signed in (`{userId, name, role}`). There is no self-registration.
 
 **Camera names** (#273): a camera is called by its camId until it gets a
 name. The end user names his cameras in the gallery ("Umbenennen";

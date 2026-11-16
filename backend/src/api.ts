@@ -89,6 +89,7 @@ type Handler = (
 
 const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'GET', pattern: '/v1/health', handler: async () => json(200, { ok: true }) },
+  { method: 'GET', pattern: '/v1/me', handler: me },
   { method: 'GET', pattern: '/v1/cameras', handler: listCameras },
   { method: 'GET', pattern: '/v1/cameras/:camId/media', handler: listMedia },
   { method: 'POST', pattern: '/v1/cameras/:camId/commands', handler: createCommand },
@@ -127,22 +128,35 @@ function bearer(req: ApiRequest, scheme: string): string {
   return header.slice(prefix.length).trim();
 }
 
+/** Who is signed in. Only gallery users can be admins (#259). */
+interface SignedIn {
+  userId: number;
+  name?: string;
+  admin: boolean;
+}
+
 /**
  * The signed-in user: a gallery user with an app token (`Bearer
- * <userId>.<secret>`, #259) or a Telegram user (`tma <initData>`).
+ * <userId>.<secret>`, #259) or a Telegram user (`tma <initData>`). A revoked
+ * token (empty hash) never matches.
  */
-async function authUser(req: ApiRequest, deps: Deps): Promise<number> {
+async function authUser(req: ApiRequest, deps: Deps): Promise<SignedIn> {
   if ((req.headers.authorization ?? '').startsWith('Bearer ')) {
     const parsed = parseAppToken(bearer(req, 'Bearer'));
     const user = parsed && (await deps.store.getAppUser(parsed.userId));
-    if (!parsed || !user || !verifySecret(parsed.secret, user.tokenHash)) {
+    if (!parsed || !user || !user.tokenHash || !verifySecret(parsed.secret, user.tokenHash)) {
       throw new HttpError(401, 'Invalid app token');
     }
-    return user.userId;
+    return { userId: user.userId, name: user.name, admin: user.role === 'admin' };
   }
   const result = validateInitData(bearer(req, 'tma'), await deps.botToken(), deps.now());
   if (!result.ok) throw new HttpError(401, `Invalid Telegram init data (${result.reason})`);
-  return result.identity.userId;
+  return { userId: result.identity.userId, admin: false };
+}
+
+/** The admin sees every hub; everyone else the hubs linked to him. */
+async function mayUseHub(user: SignedIn, hubId: string, deps: Deps): Promise<boolean> {
+  return user.admin || deps.store.isLinked(user.userId, hubId);
 }
 
 async function authUserForCamera(
@@ -150,10 +164,10 @@ async function authUserForCamera(
   camId: string,
   deps: Deps,
 ): Promise<CameraRecord> {
-  const userId = await authUser(req, deps);
+  const user = await authUser(req, deps);
   const camera = await deps.store.getCamera(camId);
   // Same answer for "unknown" and "not yours", so camera ids cannot be probed.
-  if (!camera || !(await deps.store.isLinked(userId, camera.hubId))) {
+  if (!camera || !(await mayUseHub(user, camera.hubId, deps))) {
     throw new HttpError(404, 'Camera not found');
   }
   return camera;
@@ -206,10 +220,23 @@ function toCamera(
   };
 }
 
+/** Who is signed in, so the gallery can offer the admin view (#264). */
+async function me(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
+  const user = await authUser(req, deps);
+  return json(200, {
+    userId: user.userId,
+    name: user.name ?? '',
+    role: user.admin ? 'admin' : 'user',
+  });
+}
+
 async function listCameras(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
-  const userId = await authUser(req, deps);
+  const user = await authUser(req, deps);
+  const hubIds = user.admin
+    ? await deps.store.listHubIds()
+    : await deps.store.listUserHubIds(user.userId);
   const cameras: Camera[] = [];
-  for (const hubId of await deps.store.listUserHubIds(userId)) {
+  for (const hubId of hubIds) {
     const hub = await deps.store.getHub(hubId);
     const ids = await deps.store.listHubCameraIds(hubId);
     const records = await Promise.all(ids.map((id) => deps.store.getCamera(id)));
@@ -326,11 +353,11 @@ async function createReadCommand(camera: CameraRecord, deps: Deps) {
  * check-in.
  */
 async function setSchedule(req: ApiRequest, params: Record<string, string>, deps: Deps) {
-  const userId = await authUser(req, deps);
+  const user = await authUser(req, deps);
   const hubId = params.hubId ?? '';
   const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
   // Same answer for "unknown" and "not yours".
-  if (!hub || !(await deps.store.isLinked(userId, hubId))) {
+  if (!hub || !(await mayUseHub(user, hubId, deps))) {
     throw new HttpError(404, 'Hub not found');
   }
   const body = parseJsonBody<{ cameraPlan?: unknown; checkinIntervalS?: unknown }>(req);

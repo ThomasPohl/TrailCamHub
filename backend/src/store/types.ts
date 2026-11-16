@@ -34,6 +34,8 @@ export type CameraTelemetry = Partial<
 export interface Store {
   putHub(hub: HubRecord): Promise<void>;
   getHub(hubId: string): Promise<HubRecord | undefined>;
+  /** Every hub, sorted by id; for the admin (#259). */
+  listHubIds(): Promise<string[]>;
   updateHub(hubId: string, telemetry: HubTelemetry, lastSeen: number): Promise<void>;
   /** Replaces the schedule set in the app (an empty object removes it). */
   setHubScheduleConfig(hubId: string, config: ScheduleConfig): Promise<void>;

@@ -45,6 +45,15 @@ export interface CreateAppUserEvent {
   userId?: number;
 }
 
+/**
+ * Locks a gallery user out, e.g. after a lost laptop: the token stops
+ * working at once. `createAppUser` with the same `userId` gives a new one.
+ */
+export interface RevokeAppUserEvent {
+  admin: 'revokeAppUser';
+  userId?: number;
+}
+
 /** Gives a camera the name the user sees in the gallery. */
 export interface RenameCameraEvent {
   admin: 'renameCamera';
@@ -56,6 +65,7 @@ export type AdminEvent =
   | RegisterHubEvent
   | CreatePairingCodeEvent
   | CreateAppUserEvent
+  | RevokeAppUserEvent
   | RenameCameraEvent;
 
 type Failure = { ok: false; error: string };
@@ -67,7 +77,13 @@ export type AppUserResult =
   | { ok: true; userId: number; token: string; linkedHubs: string[] }
   | Failure;
 export type RenameResult = { ok: true; camId: string; name: string } | Failure;
-export type AdminResult = RegisterHubResult | PairingResult | AppUserResult | RenameResult;
+export type RevokeResult = { ok: true; userId: number; name: string } | Failure;
+export type AdminResult =
+  | RegisterHubResult
+  | PairingResult
+  | AppUserResult
+  | RevokeResult
+  | RenameResult;
 
 export type AdminDeps = Pick<Deps, 'store' | 'now' | 'telegram'>;
 
@@ -86,6 +102,9 @@ export async function handleAdmin(
   if (event.admin === 'registerHub') return registerHub(event as RegisterHubEvent, deps.store);
   if (event.admin === 'renameCamera') {
     return renameCamera(event as RenameCameraEvent, deps);
+  }
+  if (event.admin === 'revokeAppUser') {
+    return revokeAppUser(event as RevokeAppUserEvent, deps);
   }
   if (event.admin === 'createAppUser') {
     return createAppUser(event as CreateAppUserEvent, deps);
@@ -197,6 +216,18 @@ export async function createAppUser(
   });
   for (const hubId of hubIds) await deps.store.linkUser(userId, hubId);
   return { ok: true, userId, token, linkedHubs: hubIds };
+}
+
+export async function revokeAppUser(
+  event: RevokeAppUserEvent,
+  deps: AdminDeps,
+): Promise<RevokeResult> {
+  const id = event.userId;
+  const user = Number.isSafeInteger(id) ? await deps.store.getAppUser(id as number) : undefined;
+  if (!user) return { ok: false, error: `unknown user ${event.userId}` };
+  // An empty hash matches no token; the hub links stay for a new token.
+  await deps.store.putAppUser({ ...user, tokenHash: '' });
+  return { ok: true, userId: user.userId, name: user.name };
 }
 
 export async function renameCamera(
