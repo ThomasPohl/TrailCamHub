@@ -260,11 +260,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                 alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
               />
               <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
-              <ul className="g-card__files" aria-label="Dateien auf der Kamera">
+              <p className="g-card__files" title="Dateien auf der Kamera">
                 {r.cameraFiles.map((name) => (
-                  <li key={name}>{name}</li>
+                  <span key={name}>{name}</span>
                 ))}
-              </ul>
+              </p>
               <p className="g-card__state">
                 {stateText(r.state, saved.has(r.mediaId), status?.nextContact, t)}
                 {r.state === 'failed' && r.failReason && ` – ${r.failReason}`}
