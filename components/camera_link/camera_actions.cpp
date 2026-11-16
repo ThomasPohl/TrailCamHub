@@ -142,7 +142,7 @@ bool take_next(bool list_ready, const std::string &camera_id, Job &job)
         if (entry.state != State::pending ||
             (needs_media_list(entry.action.type) && !list_ready) ||
             (!entry.action.cam_id.empty() &&
-             entry.action.cam_id != camera_id)) {
+             entry.action.cam_id != camera_key(camera_id))) {
             continue;
         }
         job.id = entry.id;

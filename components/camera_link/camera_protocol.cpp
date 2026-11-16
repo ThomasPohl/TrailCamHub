@@ -1244,6 +1244,10 @@ static void finish_scan_list(bool complete)
     if (send_next_action()) {
         return;
     }
+    if (camera::action::service::has_pending()) {
+        ESP_LOGI(TAG, "Actions still wait, for another camera than %s",
+                 s_camera_id.c_str());
+    }
     after_list_actions();
 }
 
