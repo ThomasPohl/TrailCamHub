@@ -80,6 +80,7 @@ add_executable(host_tests
     test_prelogin.cpp
     test_video_stats.cpp
     test_thumbnail_queue.cpp
+    test_deferred_command.cpp
     test_playback_policy.cpp
     test_schedule_plan.cpp
     test_sd_log_files.cpp

@@ -6,9 +6,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <algorithm>
 #include <string>
 #include <time.h>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 #include "esp_attr.h"
@@ -35,6 +37,7 @@
 #include "camera_protocol.h"
 #include "camera_udp_transport.h"
 #include "catalog_file.hpp"
+#include "deferred_command.hpp"
 #include "bulk_reassembler.hpp"
 #include "bulk_side_channel.hpp"
 #include "bulk_stream.hpp"
@@ -78,7 +81,8 @@
 #define CAMERA_BULK_ACK_MAX 17
 #endif
 #define CAMERA_BULK_ACK_DELAY_US (1 * 1000LL)
-// A thumbnail with no new frame for this long is requested again.
+// A thumbnail with no new frame for this long, or whose request brought no
+// frame at all for this long, is requested again.
 #define CAMERA_THUMBNAIL_STALL_US (3 * 1000 * 1000LL)
 // Log a download's progress every this many bytes.
 #define CAMERA_DOWNLOAD_LOG_INTERVAL_BYTES (256u * 1024u)
@@ -196,6 +200,11 @@ static camera::artemis::MediaCatalog s_catalog;
 // again if the power fails.
 static camera::store::SaveThrottle s_catalog_saves(16, 10 * 1000 * 1000);
 static camera::link::ThumbnailQueue s_thumbnails;
+// When the thumbnail the session waits for was requested; 0 when none is
+// awaited (before the thumbnails and after the last one).
+static int64_t s_thumbnail_requested_us;
+// A command that found every DATA slot of the session in use.
+static camera::link::DeferredCommand s_deferred_command;
 static bool s_thumb_emitted;
 static bool s_work_done;
 // The session cannot do its work (e.g. the camera has no SD card): close it
@@ -340,12 +349,33 @@ static bool send_artemis_command(uint32_t cmd_id, const char *extra_fields,
     const std::string json = "{\"cmdId\":" + std::to_string(cmd_id) +
                              extra_fields +
                              ",\"token\":" + std::to_string(s_token) + "}";
-    const std::vector<uint8_t> packet = camera::artemis::build_request(
+    std::vector<uint8_t> packet = camera::artemis::build_request(
         s_command_cipher, s_next_command_seq++, json);
+    const int64_t now_us = esp_timer_get_time();
+    if (packet.empty()) {
+        ESP_LOGE(TAG, "Could not send %s", context);
+        return false;
+    }
+    // The camera acknowledges commands late while it streams media, so all
+    // slots can still be in use although it answered the commands in them.
+    // Dropping this one would leave the session waiting for an answer nobody
+    // asked for; it goes out once a slot is free (send_deferred_command()).
+    if (s_session.outstanding_count() >=
+        camera::pppp::Session::kMaxOutstanding) {
+        if (s_deferred_command.hold(std::move(packet), cmd_id, context,
+                                    now_us)) {
+            ESP_LOGW(TAG, "%s replaces a command that was still waiting",
+                     context);
+        }
+        ESP_LOGW(TAG,
+                 "No free DATA slot for %s; sending it once one is "
+                 "acknowledged",
+                 context);
+        return true;
+    }
     uint16_t index = 0;
-    if (packet.empty() ||
-        !s_session.send_data(packet.data(), packet.size(), esp_timer_get_time(),
-                             context, &index)) {
+    if (!s_session.send_data(packet.data(), packet.size(), now_us, context,
+                             &index)) {
         ESP_LOGE(TAG, "Could not send %s", context);
         return false;
     }
@@ -354,14 +384,41 @@ static bool send_artemis_command(uint32_t cmd_id, const char *extra_fields,
     return true;
 }
 
+// Sends the command that waited for a free DATA slot, if there is one now.
+// A send that fails with a free slot is repeated after a pause.
+static void send_deferred_command(int64_t now_us)
+{
+    if (!s_deferred_command.due(now_us) ||
+        s_session.outstanding_count() >=
+            camera::pppp::Session::kMaxOutstanding) {
+        return;
+    }
+    const std::vector<uint8_t> &packet = s_deferred_command.packet();
+    uint16_t index = 0;
+    if (!s_session.send_data(packet.data(), packet.size(), now_us,
+                             s_deferred_command.context(), &index)) {
+        ESP_LOGW(TAG, "Could not send %s; retrying",
+                 s_deferred_command.context());
+        s_deferred_command.note_send_failed(now_us);
+        return;
+    }
+    ESP_LOGI(TAG, "Sent %s (cmdId %lu), index %u, after %lld ms without a slot",
+             s_deferred_command.context(),
+             (unsigned long)s_deferred_command.cmd_id(), index,
+             (long long)(s_deferred_command.held_us(now_us) / 1000));
+    s_deferred_command.clear();
+}
+
 static void start_downloads();
 
 // Requests the thumbnail (cmdId 772) for the current queue item, if any. The
 // reply streams back on the bulk channel; handle_bulk_frame() stores it and
-// advances the queue. Returns false when the queue is exhausted.
+// advances the queue. Returns false when the queue is exhausted or the
+// request could not be sent; check_thumbnail_stall() then asks again.
 static bool request_current_thumbnail()
 {
     if (s_thumbnails.current() == nullptr) {
+        s_thumbnail_requested_us = 0;
         ESP_LOGI(TAG, "Thumbnails complete: %u stored of %u catalog items",
                  (unsigned)s_catalog.count_with_flag(
                      camera::artemis::MediaCatalog::kThumbPresent),
@@ -371,6 +428,7 @@ static bool request_current_thumbnail()
         return false;
     }
     const std::string extra = s_thumbnails.request_fields();
+    s_thumbnail_requested_us = esp_timer_get_time();
     return send_artemis_command(772, extra.c_str(), "ARTEMIS GetThumbnail");
 }
 
@@ -699,20 +757,35 @@ static bool handle_download_frame(int socket_fd,
     return progressed;
 }
 
-// Aborts the current download if no data arrived for the stall timeout.
 // A thumbnail record that stops arriving: the heartbeat is paused during a
 // bulk transfer, so without this the camera would end the session. Request
-// the thumbnail again, or skip it after a second stall.
+// the thumbnail again, or skip it after a second stall. The same goes for a
+// request that brings no record at all (it could not be sent, the camera lost
+// it, or the record was rejected): nothing else would ask again, and the
+// session would idle on heartbeats until its watchdog.
 static void check_thumbnail_stall(int64_t now_us)
 {
-    if (!s_bulk_active || s_bulk_subtype != 0x04 ||
-        now_us - s_bulk_last_frame_us < CAMERA_THUMBNAIL_STALL_US) {
-        return;
+    const char *const next =
+        s_thumbnails.retrying() ? "skipping it" : "requesting it again";
+    if (s_bulk_active) {
+        if (s_bulk_subtype != 0x04 ||
+            now_us - s_bulk_last_frame_us < CAMERA_THUMBNAIL_STALL_US) {
+            return;
+        }
+        ESP_LOGW(TAG, "Thumbnail stalled at %u of %u frames; %s",
+                 (unsigned)s_bulk.received_frames(),
+                 (unsigned)s_bulk.total_frames(), next);
+    } else {
+        // Counted from the request, or from the last frame of a record that
+        // was rejected after it.
+        if (s_thumbnail_requested_us == 0 ||
+            now_us - std::max(s_thumbnail_requested_us, s_bulk_last_frame_us) <
+                CAMERA_THUMBNAIL_STALL_US) {
+            return;
+        }
+        ESP_LOGW(TAG, "No thumbnail data %d s after the request; %s",
+                 (int)(CAMERA_THUMBNAIL_STALL_US / 1000000LL), next);
     }
-    ESP_LOGW(TAG, "Thumbnail stalled at %u of %u frames; %s",
-             (unsigned)s_bulk.received_frames(),
-             (unsigned)s_bulk.total_frames(),
-             s_thumbnails.retrying() ? "skipping it" : "requesting it again");
     s_bulk.reset();
     s_bulk_active = false;
     s_thumbnails.on_stall();
@@ -1520,6 +1593,8 @@ static esp_err_t run_artemis_session(int socket_fd,
     s_camera_id.clear();
     s_catalog.clear();
     s_thumbnails.release();
+    s_thumbnail_requested_us = 0;
+    s_deferred_command.clear();
     s_thumb_emitted = false;
     s_scan_list.reset();
     s_work_done = false;
@@ -1573,6 +1648,8 @@ static esp_err_t run_artemis_session(int socket_fd,
         check_download_stall(now_us);
         check_thumbnail_stall(now_us);
         check_action_timeout(now_us);
+        // Before the heartbeat, so that it does not take the freed slot.
+        send_deferred_command(now_us);
         // A video download may use its own interval: the camera streamed about
         // two video frames per heartbeat, as if it were held back by them.
         heartbeat_interval_us =
@@ -1623,6 +1700,8 @@ static esp_err_t run_artemis_session(int socket_fd,
         int64_t timeout_us = CAMERA_RUDP_RECEIVE_TIMEOUT_MS * 1000LL;
         if (!s_bulk_active) {
             timeout_us = s_session.time_until_retransmit_us(now_us, timeout_us);
+            timeout_us =
+                s_deferred_command.time_until_retry_us(now_us, timeout_us);
             if (!heartbeat_pending) {
                 int64_t heartbeat_due_us =
                     heartbeat_interval_us - (now_us - last_heartbeat_us);
@@ -1746,6 +1825,7 @@ static void release_session_memory(void)
     s_bulk = camera::artemis::BulkReassembler();
     s_catalog = camera::artemis::MediaCatalog();
     s_thumbnails.release();
+    s_deferred_command.clear();
     std::vector<camera::artemis::CatalogEntry>().swap(s_download_queue);
     std::string().swap(s_camera_id);
 }
