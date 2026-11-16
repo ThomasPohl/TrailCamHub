@@ -46,7 +46,7 @@ describe('HttpApiClient', () => {
     expect(JSON.parse(String(init?.body))).toEqual({ type: 'readCamera' });
   });
 
-  it('puts the hub schedule, with null for settings left to the hub', async () => {
+  it('posts the hub schedule (#286), with null for settings left to the hub', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ cameraPlan: '*=60' }));
     const client = new HttpApiClient('https://api.example.com', 'x', fetchFn);
 
@@ -55,7 +55,7 @@ describe('HttpApiClient', () => {
     });
     const [url, init] = fetchFn.mock.calls[0] ?? [];
     expect(url).toBe('https://api.example.com/v1/hubs/garden-hub/schedule');
-    expect(init?.method).toBe('PUT');
+    expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({ cameraPlan: '*=60', checkinIntervalS: null });
   });
 
