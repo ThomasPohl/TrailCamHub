@@ -57,7 +57,8 @@ export class HttpApiClient implements ApiClient {
   }
 
   setSchedule(hubId: string, config: ScheduleConfig): Promise<ScheduleConfig> {
-    return this.request<ScheduleConfig>('PUT', `/v1/hubs/${encodeURIComponent(hubId)}/schedule`, {
+    // POST, not PUT: the Function URL's CORS allows only GET and POST (#286).
+    return this.request<ScheduleConfig>('POST', `/v1/hubs/${encodeURIComponent(hubId)}/schedule`, {
       cameraPlan: config.cameraPlan ?? null,
       checkinIntervalS: config.checkinIntervalS ?? null,
     });
