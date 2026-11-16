@@ -48,7 +48,11 @@ const PAIR_WINDOW_S = 120;
  * taken within PAIR_WINDOW_S; files without a partner stay alone. Keeps the order of the
  * backend's list (newest first).
  */
-export function groupRecordings(items: MediaItem[]): MediaItem[][] {
+export function groupRecordings(
+  items: MediaItem[],
+  log?: (rows: Record<string, unknown>[]) => void,
+): MediaItem[][] {
+  const trace: Record<string, unknown>[] = [];
   const photos = new Map<string, MediaItem>();
   for (const m of items) if (m.fileType !== 2) photos.set(`${m.dir}/${m.num}`, m);
   const paired = new Map<number, MediaItem>(); // photo mediaId -> its video
@@ -57,17 +61,30 @@ export function groupRecordings(items: MediaItem[]): MediaItem[][] {
     if (video.fileType !== 2) continue;
     for (const num of [video.num + 1, video.num - 1]) {
       const photo = photos.get(`${video.dir}/${num}`);
-      if (
-        photo &&
-        !paired.has(photo.mediaId) &&
-        Math.abs(photo.mediaTime - video.mediaTime) <= PAIR_WINDOW_S
-      ) {
+      const apart = photo ? Math.abs(photo.mediaTime - video.mediaTime) : undefined;
+      const taken = photo ? paired.has(photo.mediaId) : undefined;
+      const match = photo !== undefined && !taken && (apart ?? Infinity) <= PAIR_WINDOW_S;
+      if (log) {
+        trace.push({
+          video: video.mediaId,
+          videoFile: `${video.dir}/${video.num}`,
+          videoTime: video.mediaTime,
+          tries: `${video.dir}/${num}`,
+          photo: photo?.mediaId ?? '–',
+          photoTime: photo?.mediaTime ?? '–',
+          apartS: apart ?? '–',
+          alreadyPaired: taken ?? '–',
+          result: match ? 'paired' : !photo ? 'no photo' : taken ? 'taken' : 'too far apart',
+        });
+      }
+      if (photo && match) {
         paired.set(photo.mediaId, video);
         partner.set(video.mediaId, photo);
         break;
       }
     }
   }
+  log?.(trace);
   const groups: MediaItem[][] = [];
   for (const m of items) {
     if (m.fileType === 2) {
@@ -93,6 +110,8 @@ export class HttpGalleryApi implements GalleryApi {
     baseUrl: string,
     private readonly token: string,
     private readonly fetchFn: typeof fetch = (...args) => fetch(...args),
+    /** With `?debug` in the address: log how videos and photos are paired. */
+    private readonly debug = false,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
   }
@@ -113,7 +132,22 @@ export class HttpGalleryApi implements GalleryApi {
   async recordings(camId: string): Promise<Recording[]> {
     const items = await this.request<MediaItem[]>('GET', `${this.camera(camId)}/media`);
     const name = this.cameras.get(camId)?.name ?? 'Kamera';
-    return groupRecordings(items).map((files) => {
+    const log = this.debug
+      ? (rows: Record<string, unknown>[]) => {
+          console.info(`[gallery] ${items.length} files of ${camId}:`);
+          console.table(
+            items.map((m) => ({
+              mediaId: m.mediaId,
+              file: `${m.dir}/${m.num}`,
+              fileType: m.fileType,
+              mediaTime: m.mediaTime,
+            })),
+          );
+          console.info('[gallery] pairing:');
+          console.table(rows);
+        }
+      : undefined;
+    return groupRecordings(items, log).map((files) => {
       const video = files.find((m) => m.fileType === 2);
       const photo = files.find((m) => m.fileType !== 2);
       // The video decides the state; a delete of any file shows as well.
