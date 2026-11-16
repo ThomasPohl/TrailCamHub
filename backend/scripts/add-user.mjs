@@ -6,12 +6,15 @@
 //     [--app-url https://thomaspohl.github.io/TrailCamHub/app/gallery.html] \
 //     [--stack trailcamhub | --function <name>] [--region <region>]
 //   npm run add-user -- --user <userId> [--hub ...]   # new token, more hubs
+//   npm run add-user -- --user <userId> --revoke      # lock out (lost laptop)
 //
 // Open the link once on the user's laptop: the gallery keeps the token, and
 // the user never signs in. The token is in the link's #fragment, which the
 // browser does not send to any server. Anyone with the link sees the user's
 // cameras, so send it privately; a new token (--user) makes the old link
-// useless. Needs the AWS CLI like register-hub.
+// useless. --revoke makes the token useless at once without a new one; a
+// later --user <userId> gives the user a new link. Needs the AWS CLI like
+// register-hub.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -25,6 +28,7 @@ const { values } = parseArgs({
     user: { type: 'string' },
     hub: { type: 'string', multiple: true, default: [] },
     admin: { type: 'boolean', default: false },
+    revoke: { type: 'boolean', default: false },
     'app-url': {
       type: 'string',
       default: 'https://thomaspohl.github.io/TrailCamHub/app/gallery.html',
@@ -42,6 +46,7 @@ function fail(message) {
 
 if (!values.user && !values.name) fail('--name is required for a new user');
 if (values.user && !/^\d{16}$/.test(values.user)) fail('--user must be a gallery user id');
+if (values.revoke && !values.user) fail('--revoke needs --user <userId>');
 for (const hub of values.hub) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(hub)) fail(`--hub must be a hub id (got ${hub})`);
 }
@@ -105,6 +110,13 @@ function invoke(event) {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+if (values.revoke) {
+  const revoked = invoke({ admin: 'revokeAppUser', userId: Number(values.user) });
+  if (!revoked.ok) fail(revoked.error);
+  console.log(`Locked out user ${revoked.userId} (${revoked.name}): the old link no longer works.`);
+  process.exit(0);
 }
 
 const result = invoke({

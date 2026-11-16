@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAppUser } from './admin';
+import { createAppUser, revokeAppUser } from './admin';
 import { handleRequest } from './api';
 import type { ApiRequest, ApiResponse } from './http';
 import type { CheckinRequest, CheckinResponse, MediaItem } from './model';
@@ -72,6 +72,62 @@ describe('gallery app users (#259)', () => {
     const world = await galleryWorld();
     const res = await handleRequest(galleryRequest(world.hubKey, 'GET', '/v1/cameras'), world.deps);
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('admin role and locking out (#259)', () => {
+  it('shows the admin the cameras of every hub', async () => {
+    const world = await galleryWorld();
+    await handleRequest(
+      hubRequest('/v1/device/checkin', world.otherHubKey, {
+        cameras: [{ camId: 'CAM_OTHER', readAt: NOW - 60, media: [] }],
+      }),
+      world.deps,
+    );
+    const admin = await createAppUser(
+      { admin: 'createAppUser', name: 'Thomas', role: 'admin' },
+      world.deps,
+    );
+    if (!admin.ok) throw new Error(admin.error);
+    const asAdmin = (method: string, path: string, data?: unknown) =>
+      handleRequest(galleryRequest(admin.token, method, path, data), world.deps);
+
+    const me = body<{ role: string; name: string }>(await asAdmin('GET', '/v1/me'));
+    expect(me).toMatchObject({ role: 'admin', name: 'Thomas' });
+    const ids = body<Array<{ camId: string }>>(await asAdmin('GET', '/v1/cameras')).map(
+      (c) => c.camId,
+    );
+    expect(ids.sort()).toEqual([CAM_ID, 'CAM_OTHER'].sort());
+    expect((await asAdmin('GET', `/v1/cameras/${CAM_ID}/media`)).statusCode).toBe(200);
+
+    // A user without the admin role still sees only his own hub.
+    expect(body<{ role: string }>(await world.call('GET', '/v1/me')).role).toBe('user');
+    const own = body<Array<{ camId: string }>>(await world.call('GET', '/v1/cameras'));
+    expect(own.map((c) => c.camId)).toEqual([CAM_ID]);
+    expect((await world.call('GET', '/v1/cameras/CAM_OTHER/media')).statusCode).toBe(404);
+  });
+
+  it('locks a user out until he gets a new token', async () => {
+    const world = await galleryWorld();
+    expect((await world.call('GET', '/v1/cameras')).statusCode).toBe(200);
+    const revoked = await revokeAppUser(
+      { admin: 'revokeAppUser', userId: world.user.userId },
+      world.deps,
+    );
+    expect(revoked).toEqual({ ok: true, userId: world.user.userId, name: 'Opa' });
+    expect((await world.call('GET', '/v1/cameras')).statusCode).toBe(401);
+    expect((await revokeAppUser({ admin: 'revokeAppUser', userId: 1 }, world.deps)).ok).toBe(false);
+
+    const renewed = await createAppUser(
+      { admin: 'createAppUser', userId: world.user.userId },
+      world.deps,
+    );
+    if (!renewed.ok) throw new Error(renewed.error);
+    const res = await handleRequest(
+      galleryRequest(renewed.token, 'GET', '/v1/cameras'),
+      world.deps,
+    );
+    expect(body<Array<{ camId: string }>>(res).map((c) => c.camId)).toEqual([CAM_ID]);
   });
 });
 
