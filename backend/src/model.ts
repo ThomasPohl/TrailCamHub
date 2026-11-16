@@ -169,6 +169,23 @@ export interface PairingCode {
 
 // ---- App API ---------------------------------------------------------------
 
+/** A hub as the admin view shows it (#264). */
+export interface AdminHub {
+  hubId: string;
+  name: string;
+  firmware?: string;
+  batPercent?: number;
+  /** Last check-in, Unix seconds; 0 = never. */
+  lastSeen: number;
+  /** As reported at the last check-in. */
+  schedule?: HubSchedule;
+  /** Set in the app; empty = the hub's own settings. */
+  scheduleConfig: ScheduleConfig;
+  cameras: Camera[];
+  /** Users linked to the hub; Telegram users have no name here. */
+  users: Array<{ userId: number; name?: string; role?: 'user' | 'admin' }>;
+}
+
 export interface Camera {
   camId: string;
   name: string;

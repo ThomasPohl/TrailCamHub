@@ -1,7 +1,8 @@
 import { ApiError } from '../api/http';
 import type { Camera, MediaItem } from '../api/types';
 import { cameraFile, videoFileName } from './text';
-import type { GalleryApi, GalleryStatus, Recording, RecordingState } from './types';
+import type { ScheduleConfig } from '../api/types';
+import type { AdminHub, GalleryApi, GalleryStatus, Me, Recording, RecordingState } from './types';
 
 /** A reason from the hub or backend in words the user can understand. */
 export function friendlyReason(error: string | undefined): string | undefined {
@@ -222,6 +223,27 @@ export class HttpGalleryApi implements GalleryApi {
     const camera = this.cameras.get(camId);
     if (camera) this.cameras.set(camId, { ...camera, name: result.name });
     return result.name;
+  }
+
+  async me(): Promise<Me> {
+    const me = await this.request<{ name: string; role: string }>('GET', '/v1/me');
+    return { name: me.name, admin: me.role === 'admin' };
+  }
+
+  adminHubs(): Promise<AdminHub[]> {
+    return this.request<AdminHub[]>('GET', '/v1/admin/hubs');
+  }
+
+  async setSchedule(hubId: string, config: ScheduleConfig): Promise<void> {
+    // POST, not PUT: the backend's CORS allows no PUT (#286).
+    await this.request('POST', `/v1/hubs/${encodeURIComponent(hubId)}/schedule`, {
+      cameraPlan: config.cameraPlan ?? null,
+      checkinIntervalS: config.checkinIntervalS ?? null,
+    });
+  }
+
+  async readCamera(camId: string): Promise<void> {
+    await this.request('POST', `${this.camera(camId)}/commands`, { type: 'readCamera' });
   }
 
   private camera(camId: string): string {

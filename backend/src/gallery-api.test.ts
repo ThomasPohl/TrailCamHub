@@ -131,6 +131,43 @@ describe('admin role and locking out (#259)', () => {
   });
 });
 
+describe('admin view (#264)', () => {
+  it('lists every hub with cameras and users, only for the admin', async () => {
+    const world = await galleryWorld();
+    const admin = await createAppUser(
+      { admin: 'createAppUser', name: 'Thomas', role: 'admin' },
+      world.deps,
+    );
+    if (!admin.ok) throw new Error(admin.error);
+    const asAdmin = (method: string, path: string, data?: unknown) =>
+      handleRequest(galleryRequest(admin.token, method, path, data), world.deps);
+
+    const res = await asAdmin('GET', '/v1/admin/hubs');
+    expect(res.statusCode).toBe(200);
+    const hubs =
+      body<
+        Array<{ hubId: string; cameras: Array<{ camId: string }>; users: Array<{ name?: string }> }>
+      >(res);
+    expect(hubs.map((h) => h.hubId)).toEqual([HUB_ID, 'other-hub']);
+    expect(hubs[0]?.cameras.map((c) => c.camId)).toEqual([CAM_ID]);
+    expect(hubs[0]?.users.map((u) => u.name)).toContain('Opa');
+    expect(hubs[1]?.cameras).toEqual([]);
+
+    expect((await world.call('GET', '/v1/admin/hubs')).statusCode).toBe(403);
+  });
+
+  it('takes a schedule by POST as well (CORS allows no PUT, #286)', async () => {
+    const world = await galleryWorld();
+    const res = await world.call('POST', `/v1/hubs/${HUB_ID}/schedule`, {
+      cameraPlan: '*=120',
+      checkinIntervalS: 3600,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(body(res)).toEqual({ cameraPlan: '*=120', checkinIntervalS: 3600 });
+    expect((await world.call('POST', '/v1/hubs/other-hub/schedule', {})).statusCode).toBe(404);
+  });
+});
+
 describe('deleting recordings from the gallery (#260)', () => {
   it('queues deletes, hands them to the hub and hides what the hub deleted', async () => {
     const { call, deps, hubKey } = await galleryWorld();

@@ -144,6 +144,25 @@ describe('HttpGalleryApi', () => {
     expect(sent.flat()).toEqual(ids);
   });
 
+  it('asks who is signed in and calls the admin endpoints', async () => {
+    const { fn, calls } = fakeFetch({
+      'GET https://api/v1/me': { userId: 1, name: 'Thomas', role: 'admin' },
+      'GET https://api/v1/admin/hubs': [{ hubId: 'h1' }],
+      'POST https://api/v1/hubs/h1/schedule': {},
+      'POST https://api/v1/cameras/CAM1/commands': {},
+    });
+    const api = new HttpGalleryApi('https://api', 't', fn);
+    expect(await api.me()).toEqual({ name: 'Thomas', admin: true });
+    expect((await api.adminHubs()).map((h) => h.hubId)).toEqual(['h1']);
+    await api.setSchedule('h1', { checkinIntervalS: 3600 });
+    expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
+      cameraPlan: null,
+      checkinIntervalS: 3600,
+    });
+    await api.readCamera('CAM1');
+    expect(JSON.parse(String(calls[3]?.init?.body))).toEqual({ type: 'readCamera' });
+  });
+
   it('renames a camera and uses the new name for the file names', async () => {
     const { fn, calls } = fakeFetch({
       'GET https://api/v1/cameras': [camera],

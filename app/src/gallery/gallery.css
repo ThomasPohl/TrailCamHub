@@ -313,3 +313,99 @@ body {
   font-weight: 700;
   letter-spacing: 0.03em;
 }
+
+/* Admin view (#264): for the maintainer, denser than the gallery. */
+.g-header__switch {
+  float: right;
+  min-height: 48px;
+}
+
+.g-hub {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--g-card);
+}
+
+.g-hub h2 {
+  margin: 0 0 12px;
+}
+
+.g-hub small {
+  color: var(--g-hint);
+  font-weight: 400;
+}
+
+.g-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.g-facts dt {
+  font-weight: 600;
+}
+
+.g-facts dd {
+  margin: 0;
+}
+
+.g-table {
+  width: 100%;
+  margin-top: 18px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.g-table caption {
+  text-align: left;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding-bottom: 6px;
+}
+
+.g-table th,
+.g-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #ddd8cc;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.g-table .g-btn {
+  min-height: 40px;
+  padding: 6px 14px;
+}
+
+.g-schedule {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  max-width: 36rem;
+}
+
+.g-schedule h3 {
+  margin: 0;
+}
+
+.g-schedule input {
+  min-height: 48px;
+  padding: 6px 12px;
+  border: 2px solid #8a8577;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.g-schedule input[aria-invalid='true'] {
+  border-color: var(--g-danger);
+}
+
+.g-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

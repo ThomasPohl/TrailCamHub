@@ -1,6 +1,7 @@
 import { placeholderThumb } from '../api/demo';
 import { toCameraWallClock } from '../format';
-import type { GalleryApi, GalleryCamera, GalleryStatus, Recording } from './types';
+import type { Camera, ScheduleConfig } from '../api/types';
+import type { AdminHub, GalleryApi, GalleryCamera, GalleryStatus, Me, Recording } from './types';
 import { cameraFile, videoFileName } from './text';
 
 const CAMERAS: GalleryCamera[] = [
@@ -43,10 +44,14 @@ export class DemoGalleryApi implements GalleryApi {
   private readonly media = new Map<string, Recording[]>();
   private readonly cameras = CAMERAS.map((c) => ({ ...c }));
   private lastCheckin: number;
+  private scheduleConfig: ScheduleConfig = {};
+  private readonly readRequested = new Set<string>();
 
   constructor(
     private readonly now: () => number = () => Math.floor(Date.now() / 1000),
     private readonly checkinS = DEMO_CHECKIN_S,
+    /** Signed in as the admin (`?demo=admin`), with the admin view. */
+    private readonly admin = false,
   ) {
     const start = this.now();
     this.lastCheckin = start;
@@ -110,11 +115,69 @@ export class DemoGalleryApi implements GalleryApi {
     return camera.name;
   }
 
+  async me(): Promise<Me> {
+    return { name: this.admin ? 'Admin (Vorführung)' : 'Vorführung', admin: this.admin };
+  }
+
+  async adminHubs(): Promise<AdminHub[]> {
+    this.catchUp();
+    if (!this.admin) throw new Error('Nur für den Admin');
+    const cameras: Camera[] = this.cameras.map((c, i) => ({
+      camId: c.camId,
+      name: c.name,
+      hubId: 'garten-hub',
+      hubName: 'Garten',
+      model: 'TC100',
+      firmware: '2.2.5.9',
+      batPercent: i === 0 ? 76 : 18,
+      sdFreeMB: i === 0 ? 28_400 : 950,
+      sdTotalMB: 30_500,
+      sdCard: 'ok',
+      temperature: 7,
+      lastSeen: this.lastCheckin - 300,
+      hubLastSeen: this.lastCheckin,
+      hubScheduleConfig: this.scheduleConfig,
+      readRequested: this.readRequested.has(c.camId),
+    }));
+    return [
+      {
+        hubId: 'garten-hub',
+        name: 'Garten',
+        firmware: 'v0.1.13',
+        batPercent: 84,
+        lastSeen: this.lastCheckin,
+        schedule: {
+          cameraPlan: this.scheduleConfig.cameraPlan ?? '05:00-09:00=30,*=120',
+          cameraPlanOrigin: this.scheduleConfig.cameraPlan ? 'remote' : 'local',
+          checkinIntervalS: this.scheduleConfig.checkinIntervalS ?? this.checkinS,
+          checkinOrigin: this.scheduleConfig.checkinIntervalS ? 'remote' : 'local',
+          nextCheckinAt: this.lastCheckin + this.checkinS,
+          sleeps: true,
+        },
+        scheduleConfig: { ...this.scheduleConfig },
+        cameras,
+        users: [
+          { userId: 1_000_000_000_000_001, name: 'Anwender', role: 'user' },
+          { userId: 1_000_000_000_000_002, name: 'Admin', role: 'admin' },
+        ],
+      },
+    ];
+  }
+
+  async setSchedule(_hubId: string, config: ScheduleConfig): Promise<void> {
+    this.scheduleConfig = { ...config };
+  }
+
+  async readCamera(camId: string): Promise<void> {
+    this.readRequested.add(camId);
+  }
+
   /** Runs the check-ins that would have happened since the last call. */
   private catchUp(): void {
     const now = this.now();
     while (now >= this.lastCheckin + this.checkinS) {
       this.lastCheckin += this.checkinS;
+      this.readRequested.clear();
       for (const list of this.media.values()) {
         for (const r of list) {
           if (r.state === 'deleteRequested') r.state = 'deleted';

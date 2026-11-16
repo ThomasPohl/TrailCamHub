@@ -126,6 +126,46 @@ describe('GalleryApp', () => {
     expect(screen.queryByLabelText('Neuer Name der Kamera')).not.toBeInTheDocument();
   });
 
+  it('offers the admin view only to the admin', async () => {
+    const user = new DemoGalleryApi(() => 1_000_000, 20);
+    const { unmount } = render(
+      <GalleryApp api={user} folder={fakeFolder({ kind: 'none' })} pollMs={0} />,
+    );
+    await screen.findAllByRole('listitem');
+    expect(screen.queryByRole('button', { name: 'Verwaltung' })).not.toBeInTheDocument();
+    unmount();
+
+    const admin = new DemoGalleryApi(() => 1_000_000, 20, true);
+    render(
+      <GalleryApp
+        api={admin}
+        folder={fakeFolder({ kind: 'none' })}
+        now={() => 1_000_000}
+        pollMs={0}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Verwaltung' }));
+    const hub = await screen.findByRole('article', { name: 'Hub Garten' });
+    expect(within(hub).getByText('84 %')).toBeInTheDocument();
+    expect(within(hub).getByText(/Anwender, Admin \(Admin\)/)).toBeInTheDocument();
+
+    const row = within(hub).getByRole('row', { name: /Wiese/ });
+    fireEvent.click(within(row).getByRole('button', { name: 'Jetzt lesen' }));
+    expect(await within(row).findByText('Lesen angefordert')).toBeInTheDocument();
+
+    const interval = within(hub).getByLabelText(/Kontakt alle/);
+    fireEvent.change(interval, { target: { value: '3' } });
+    const apply = within(hub).getByRole('button', { name: 'Übernehmen' });
+    expect(apply).toBeDisabled();
+    fireEvent.change(interval, { target: { value: '60' } });
+    fireEvent.click(apply);
+    expect(await screen.findByText(/übernimmt den Plan/)).toBeInTheDocument();
+    expect(await within(hub).findByText(/alle 1 h \(aus der App\)/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zur Galerie' }));
+    expect(await screen.findAllByRole('listitem')).toHaveLength(16);
+  });
+
   it('asks for a folder when none is chosen', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
