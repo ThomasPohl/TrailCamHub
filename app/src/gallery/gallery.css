@@ -409,3 +409,31 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.g-faults {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.g-fault {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border-left: 6px solid;
+}
+
+.g-fault--error {
+  background: #fde7e5;
+  border-color: var(--g-danger);
+}
+
+.g-fault--warning {
+  background: #fff4cc;
+  border-color: #f2a900;
+}
+
+.g-notice--ok {
+  display: block;
+}

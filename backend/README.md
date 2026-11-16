@@ -42,6 +42,8 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | GET    | `/v1/health`                                   | –                      | Liveness check                                 |
 | GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user            |
 | GET    | `/v1/me`                                       | app user               | `{userId, name, role}` of the signed-in user   |
+| GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults       |
+| POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT (CORS allows no PUT, #286)     |
 | GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails            |
 | POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}` |
 | POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"readCamera"}`                        |
@@ -75,6 +77,16 @@ new token (the old link stops working) and can link more hubs;
 new token is issued. `--admin` sets the admin role: an admin sees and may use
 the cameras of **every** hub, linked or not. `GET /v1/me` tells the gallery who
 is signed in (`{userId, name, role}`). There is no self-registration.
+
+**Admin view and faults** (#264, #265): `GET /v1/admin/hubs` (admin only)
+lists every hub with its reported state and schedule, the schedule set in the
+app, its cameras and users, and `faults` from `src/faults.ts`: a hub that is
+more than 30 minutes past its planned check-in (or silent for a day without
+one) or never checked in, hub battery at most 25 % or 10 % (or a schedule
+stretched for it), camera battery at most 25 % or 10 %, a missing camera SD
+card, less than 1 GB / 5 % free or less than 200 MB, and failed video or
+delete requests of the last 7 days. The gallery shows them to the admin; they
+are not sent anywhere yet.
 
 **Camera names** (#273): a camera is called by its camId until it gets a
 name. The end user names his cameras in the gallery ("Umbenennen";

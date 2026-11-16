@@ -160,6 +160,10 @@ export class DemoGalleryApi implements GalleryApi {
           { userId: 1_000_000_000_000_001, name: 'Anwender', role: 'user' },
           { userId: 1_000_000_000_000_002, name: 'Admin', role: 'admin' },
         ],
+        faults: [
+          { kind: 'cameraBatteryLow', level: 'warning', camId: 'A1B2C3D4E5F6', value: 18 },
+          { kind: 'sdNearlyFull', level: 'warning', camId: 'A1B2C3D4E5F6', value: 950 },
+        ],
       },
     ];
   }

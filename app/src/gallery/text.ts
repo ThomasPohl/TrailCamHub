@@ -1,4 +1,4 @@
-import type { RecordingState } from './types';
+import type { Fault, RecordingState } from './types';
 
 /**
  * German texts and formatting for the gallery. The end user reads German;
@@ -77,5 +77,50 @@ export function stateText(
       return 'Gelöscht';
     case 'failed':
       return 'Hat nicht geklappt';
+  }
+}
+
+/** A duration as "45 min", "5 h" or "3 Tage". */
+export function durationText(seconds: number): string {
+  if (seconds < 90 * 60) return `${Math.max(1, Math.round(seconds / 60))} min`;
+  if (seconds < 48 * 3600) return `${Math.round(seconds / 3600)} h`;
+  return `${Math.round(seconds / 86400)} Tage`;
+}
+
+/** A fault for the admin (#265) in German; `camera` is the camera's name. */
+export function faultText(fault: Fault, camera: string | undefined, nowSeconds: number): string {
+  const percent = fault.value !== undefined ? ` (${fault.value} %)` : '';
+  const who = `Kamera „${camera ?? fault.camId ?? '?'}“`;
+  switch (fault.kind) {
+    case 'hubNeverSeen':
+      return 'Der Hub hat sich noch nie gemeldet.';
+    case 'hubSilent':
+      return (
+        `Der Hub meldet sich nicht: ${durationText(fault.value ?? 0)} überfällig` +
+        (fault.since ? `, letzter Kontakt ${clockTime(fault.since, nowSeconds)}.` : '.')
+      );
+    case 'hubBatteryCritical':
+      return `Hub-Akku kritisch${percent}.`;
+    case 'hubBatteryLow':
+      return `Hub-Akku schwach${percent}.`;
+    case 'cameraBatteryCritical':
+      return `${who}: Akku kritisch${percent}.`;
+    case 'cameraBatteryLow':
+      return `${who}: Akku schwach${percent}.`;
+    case 'sdMissing':
+      return `${who}: keine SD-Karte${fault.detail ? ` (${fault.detail})` : ''}.`;
+    case 'sdFull':
+      return `${who}: SD-Karte voll (${fault.value ?? 0} MB frei).`;
+    case 'sdNearlyFull':
+      return `${who}: SD-Karte fast voll (${fault.value ?? 0} MB frei).`;
+    case 'requestsFailed': {
+      const n = fault.value ?? 1;
+      return (
+        `${who}: ${n === 1 ? '1 Auftrag' : `${n} Aufträge`} fehlgeschlagen` +
+        (fault.since ? `, zuletzt ${clockTime(fault.since, nowSeconds)}` : '') +
+        (fault.detail ? ` – ${fault.detail}` : '') +
+        '.'
+      );
+    }
   }
 }

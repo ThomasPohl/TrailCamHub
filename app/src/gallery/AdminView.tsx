@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
-import { clockTime } from './text';
+import { clockTime, faultText } from './text';
 import type { AdminHub, GalleryApi } from './types';
 
 /**
@@ -89,11 +89,22 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
       )}
       {hubs === undefined && !error && <p className="g-hint">Hubs werden geladen …</p>}
       {hubs && hubs.length === 0 && <p className="g-hint">Noch kein Hub angemeldet.</p>}
+      {hubs && hubs.length > 0 && <FaultSummary hubs={hubs} />}
       {hubs?.map((hub) => (
         <article key={hub.hubId} className="g-hub" aria-label={`Hub ${hub.name}`}>
           <h2>
             Hub „{hub.name}“{hub.name !== hub.hubId && <small> ({hub.hubId})</small>}
           </h2>
+          {hub.faults.length > 0 && (
+            <ul className="g-faults" aria-label={`Störungen ${hub.name}`}>
+              {hub.faults.map((f, i) => (
+                <li key={i} className={`g-fault g-fault--${f.level}`}>
+                  {f.level === 'error' ? 'Störung: ' : 'Hinweis: '}
+                  {faultText(f, hub.cameras.find((c) => c.camId === f.camId)?.name, t)}
+                </li>
+              ))}
+            </ul>
+          )}
           <dl className="g-facts">
             <dt>Letzter Kontakt</dt>
             <dd>{hub.lastSeen > 0 ? clockTime(hub.lastSeen, t) : 'noch nie'}</dd>
@@ -214,6 +225,24 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
         </article>
       ))}
     </section>
+  );
+}
+
+/** One line over all hubs, so a fault is seen without scrolling (#265). */
+function FaultSummary({ hubs }: { hubs: AdminHub[] }) {
+  const errors = hubs.flatMap((h) => h.faults).filter((f) => f.level === 'error').length;
+  const warnings = hubs.flatMap((h) => h.faults).length - errors;
+  if (errors + warnings === 0) {
+    return <p className="g-notice g-notice--ok">Keine Störungen.</p>;
+  }
+  const parts = [
+    errors > 0 && (errors === 1 ? '1 Störung' : `${errors} Störungen`),
+    warnings > 0 && (warnings === 1 ? '1 Hinweis' : `${warnings} Hinweise`),
+  ].filter(Boolean);
+  return (
+    <p className={errors > 0 ? 'g-error' : 'g-banner'} role="status">
+      {parts.join(' und ')} – Einzelheiten beim jeweiligen Hub.
+    </p>
   );
 }
 

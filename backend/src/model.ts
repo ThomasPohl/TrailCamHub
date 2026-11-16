@@ -169,6 +169,33 @@ export interface PairingCode {
 
 // ---- App API ---------------------------------------------------------------
 
+/** Something the admin should look at (#265); the app words it. */
+export interface Fault {
+  kind:
+    | 'hubNeverSeen'
+    | 'hubSilent'
+    | 'hubBatteryCritical'
+    | 'hubBatteryLow'
+    | 'cameraBatteryCritical'
+    | 'cameraBatteryLow'
+    | 'sdMissing'
+    | 'sdFull'
+    | 'sdNearlyFull'
+    | 'requestsFailed';
+  level: 'error' | 'warning';
+  /** The camera it is about; absent for the hub. */
+  camId?: string;
+  /**
+   * Percent for batteries, free MB for SD cards, seconds overdue for a
+   * silent hub, the number of failed requests.
+   */
+  value?: number;
+  /** The camera's or the hub's reason, as it reported it. */
+  detail?: string;
+  /** Last contact of a silent hub, or the latest failure, Unix seconds. */
+  since?: number;
+}
+
 /** A hub as the admin view shows it (#264). */
 export interface AdminHub {
   hubId: string;
@@ -184,6 +211,8 @@ export interface AdminHub {
   cameras: Camera[];
   /** Users linked to the hub; Telegram users have no name here. */
   users: Array<{ userId: number; name?: string; role?: 'user' | 'admin' }>;
+  /** Errors first (#265). */
+  faults: Fault[];
 }
 
 export interface Camera {
