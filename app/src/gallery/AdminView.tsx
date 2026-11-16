@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
 import { clockTime, faultText } from './text';
-import type { AdminHub, GalleryApi } from './types';
+import type { AdminHub, GalleryApi, HubHistory, Sample } from './types';
 
 /**
  * The admin view (#264): every hub with its state, cameras and users, the
@@ -211,6 +211,8 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             </tbody>
           </table>
 
+          <HistoryPanel api={api} hubId={hub.hubId} />
+
           <ScheduleForm
             key={`${hub.hubId}:${hub.scheduleConfig.cameraPlan ?? ''}:${hub.scheduleConfig.checkinIntervalS ?? ''}`}
             hub={hub}
@@ -225,6 +227,96 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
         </article>
       ))}
     </section>
+  );
+}
+
+/** Battery history of the last 30 days, loaded on request (#76). */
+function HistoryPanel({ api, hubId }: { api: GalleryApi; hubId: string }) {
+  const [history, setHistory] = useState<HubHistory>();
+  const [error, setError] = useState<string>();
+  const [open, setOpen] = useState(false);
+
+  const toggle = async () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    try {
+      setHistory(await api.adminHistory(hubId));
+      setError(undefined);
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  return (
+    <div className="g-history">
+      <button
+        type="button"
+        className="g-btn g-btn--plain"
+        aria-expanded={open}
+        onClick={() => void toggle()}
+      >
+        {open ? 'Akku-Verlauf ausblenden' : 'Akku-Verlauf (30 Tage)'}
+      </button>
+      {open && error && <p className="g-error">Verlauf nicht geladen: {error}</p>}
+      {open && history && (
+        <div className="g-history__charts">
+          <BatteryChart label="Hub" samples={history.hub} />
+          {history.cameras.map((c) => (
+            <BatteryChart key={c.camId} label={`Kamera „${c.name}“`} samples={c.samples} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CHART_W = 320;
+const CHART_H = 64;
+
+/** A small line of the battery level, 0-100 %, over the samples' time span. */
+export function BatteryChart({ label, samples }: { label: string; samples: Sample[] }) {
+  const points = samples.filter((s) => s.batPercent !== undefined);
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (!first || !last) {
+    return (
+      <figure className="g-chart">
+        <figcaption>{label}: noch keine Werte</figcaption>
+      </figure>
+    );
+  }
+  const span = Math.max(1, last.at - first.at);
+  const xy = points
+    .map((s) => {
+      const x = ((s.at - first.at) / span) * CHART_W;
+      const y = CHART_H - ((s.batPercent ?? 0) / 100) * CHART_H;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const summary = `${label}: Akku ${first.batPercent} % → ${last.batPercent} %`;
+  return (
+    <figure className="g-chart">
+      <figcaption>{summary}</figcaption>
+      <svg
+        viewBox={`-2 -2 ${CHART_W + 4} ${CHART_H + 4}`}
+        width={CHART_W}
+        height={CHART_H}
+        role="img"
+        aria-label={summary}
+      >
+        <line
+          x1={0}
+          y1={CHART_H * 0.75}
+          x2={CHART_W}
+          y2={CHART_H * 0.75}
+          className="g-chart__low"
+        />
+        <polyline points={xy} className="g-chart__line" />
+      </svg>
+    </figure>
   );
 }
 

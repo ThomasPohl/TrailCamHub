@@ -1,7 +1,15 @@
 import { placeholderThumb } from '../api/demo';
 import { toCameraWallClock } from '../format';
 import type { Camera, ScheduleConfig } from '../api/types';
-import type { AdminHub, GalleryApi, GalleryCamera, GalleryStatus, Me, Recording } from './types';
+import type {
+  AdminHub,
+  GalleryApi,
+  GalleryCamera,
+  GalleryStatus,
+  HubHistory,
+  Me,
+  Recording,
+} from './types';
 import { cameraFile, videoFileName } from './text';
 
 const CAMERAS: GalleryCamera[] = [
@@ -166,6 +174,24 @@ export class DemoGalleryApi implements GalleryApi {
         ],
       },
     ];
+  }
+
+  async adminHistory(): Promise<HubHistory> {
+    if (!this.admin) throw new Error('Nur für den Admin');
+    // A falling camera battery and a hub battery that the sun recharges.
+    const days = Array.from({ length: 30 }, (_, i) => this.lastCheckin - (29 - i) * 86_400);
+    return {
+      hub: days.map((at, i) => ({ at, batPercent: 70 + Math.round(15 * Math.sin(i / 3)) })),
+      cameras: this.cameras.map((c, k) => ({
+        camId: c.camId,
+        name: c.name,
+        samples: days.map((at, i) => ({
+          at,
+          batPercent: Math.max(5, Math.round((k === 0 ? 95 : 60) - i * (k === 0 ? 1 : 1.5))),
+          sdFreeMB: 30_000 - i * 400,
+        })),
+      })),
+    };
   }
 
   async setSchedule(_hubId: string, config: ScheduleConfig): Promise<void> {

@@ -18,10 +18,13 @@ import type {
   HubRecord,
   MediaRecord,
   PairingCode,
+  Sample,
+  SampleOwner,
   ScheduleConfig,
   UserSettings,
   VideoState,
 } from '../model';
+import { HISTORY_KEEP_S } from '../model';
 import type { CameraTelemetry, HubTelemetry, Store } from './types';
 
 /*
@@ -36,6 +39,8 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
  *   CAM#<camId>  / META                   camera record (with hubId)
  *   CAM#<camId>  / MEDIA#<dir>#<num>      media (zero-padded, sorts by file)
  *   CAM#<camId>  / CMD#<id>               command
+ *   HUB#<hubId>  / BAT#<at>               battery sample of the hub (ttl)
+ *   CAM#<camId>  / BAT#<at>               battery/SD sample of a camera (ttl)
  */
 const hubPk = (hubId: string) => `HUB#${hubId}`;
 const camPk = (camId: string) => `CAM#${camId}`;
@@ -43,6 +48,10 @@ const userPk = (userId: number) => `USER#${userId}`;
 const pairPk = (code: string) => `PAIR#${code}`;
 const mediaSk = (mediaId: number) => `MEDIA#${mediaId}`;
 const cmdSk = (id: string) => `CMD#${id}`;
+// Zero-padded so the sort key orders by time.
+const sampleSk = (at: number) => `BAT#${String(Math.max(0, Math.floor(at))).padStart(10, '0')}`;
+const ownerPk = (owner: SampleOwner) =>
+  'hubId' in owner ? hubPk(owner.hubId) : camPk(owner.camId);
 
 function strip<T>(item: Record<string, unknown>): T {
   const { PK: _pk, SK: _sk, ...rest } = item;
@@ -294,6 +303,44 @@ export class DynamoStore implements Store {
   }
 
   // ---- Commands ------------------------------------------------------------
+
+  async addSample(owner: SampleOwner, sample: Sample): Promise<void> {
+    await this.db.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: {
+          PK: ownerPk(owner),
+          SK: sampleSk(sample.at),
+          ...sample,
+          ttl: sample.at + HISTORY_KEEP_S,
+        },
+      }),
+    );
+  }
+
+  async listSamples(owner: SampleOwner, since: number): Promise<Sample[]> {
+    const input: QueryCommandInput = {
+      TableName: this.table,
+      KeyConditionExpression: 'PK = :pk AND SK BETWEEN :from AND :to',
+      ExpressionAttributeValues: {
+        ':pk': ownerPk(owner),
+        ':from': sampleSk(since),
+        ':to': 'BAT#~',
+      },
+    };
+    const samples: Sample[] = [];
+    let start: QueryCommandInput['ExclusiveStartKey'];
+    do {
+      const page = await this.db.send(new QueryCommand({ ...input, ExclusiveStartKey: start }));
+      for (const item of page.Items ?? []) {
+        const { ttl: _ttl, ...sample } = strip<Sample & { ttl?: number }>(item);
+        void _ttl;
+        samples.push(sample);
+      }
+      start = page.LastEvaluatedKey;
+    } while (start);
+    return samples;
+  }
 
   async putCommand(camId: string, command: CommandRecord): Promise<void> {
     await this.db.send(

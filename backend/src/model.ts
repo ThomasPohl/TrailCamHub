@@ -169,6 +169,30 @@ export interface PairingCode {
 
 // ---- App API ---------------------------------------------------------------
 
+/**
+ * A battery and SD sample of a hub or a camera (#76), at most one per hour
+ * and owner; kept for HISTORY_KEEP_S.
+ */
+export interface Sample {
+  /** Unix seconds: the hub's check-in, or when the hub read the camera. */
+  at: number;
+  batPercent?: number;
+  sdFreeMB?: number;
+  temperature?: number;
+}
+
+/** Who a sample belongs to. */
+export type SampleOwner = { hubId: string } | { camId: string };
+
+/** How long samples are kept: half a year. */
+export const HISTORY_KEEP_S = 183 * 24 * 60 * 60;
+
+/** Battery history for the admin view, newest last. */
+export interface HubHistory {
+  hub: Sample[];
+  cameras: Array<{ camId: string; name: string; samples: Sample[] }>;
+}
+
 /** Something the admin should look at (#265); the app words it. */
 export interface Fault {
   kind:

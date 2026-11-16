@@ -43,6 +43,7 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user            |
 | GET    | `/v1/me`                                       | app user               | `{userId, name, role}` of the signed-in user   |
 | GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults       |
+| GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)            |
 | POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT (CORS allows no PUT, #286)     |
 | GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails            |
 | POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}` |
@@ -87,6 +88,12 @@ stretched for it), camera battery at most 25 % or 10 %, a missing camera SD
 card, less than 1 GB / 5 % free or less than 200 MB, and failed video or
 delete requests of the last 7 days. The gallery shows them to the admin; they
 are not sent anywhere yet.
+
+**Battery history** (#76): each check-in stores a sample of the hub battery
+and of each camera (battery, SD free, temperature; the camera's at its read
+time) as `HUB#<id>` / `CAM#<id>`, `BAT#<at>`, at most one per hour and owner,
+deleted by the DynamoDB TTL after half a year. The admin view draws the last
+30 days.
 
 **Camera names** (#273): a camera is called by its camId until it gets a
 name. The end user names his cameras in the gallery ("Umbenennen";

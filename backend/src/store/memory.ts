@@ -5,6 +5,8 @@ import type {
   HubRecord,
   MediaRecord,
   PairingCode,
+  Sample,
+  SampleOwner,
   ScheduleConfig,
   UserSettings,
   VideoState,
@@ -27,6 +29,7 @@ export class MemoryStore implements Store {
   private readonly settings = new Map<number, UserSettings>();
   private readonly appUsers = new Map<number, AppUser>();
   private readonly pairings = new Map<string, PairingCode>();
+  private readonly samples = new Map<string, Sample[]>();
 
   async putHub(hub: HubRecord): Promise<void> {
     this.hubs.set(hub.hubId, { ...hub });
@@ -166,6 +169,20 @@ export class MemoryStore implements Store {
     if (item) item.videoState = state;
   }
 
+  async addSample(owner: SampleOwner, sample: Sample): Promise<void> {
+    const key = sampleKey(owner);
+    const list = (this.samples.get(key) ?? []).filter((s) => s.at !== sample.at);
+    list.push({ ...sample });
+    list.sort((a, b) => a.at - b.at);
+    this.samples.set(key, list);
+  }
+
+  async listSamples(owner: SampleOwner, since: number): Promise<Sample[]> {
+    return (this.samples.get(sampleKey(owner)) ?? [])
+      .filter((s) => s.at >= since)
+      .map((s) => ({ ...s }));
+  }
+
   async putCommand(camId: string, command: CommandRecord): Promise<void> {
     const map = this.commands.get(camId) ?? new Map<string, CommandRecord>();
     map.set(command.id, { ...command });
@@ -182,4 +199,8 @@ export class MemoryStore implements Store {
       .map((c) => ({ ...c }))
       .sort((a, b) => a.created - b.created);
   }
+}
+
+function sampleKey(owner: SampleOwner): string {
+  return 'hubId' in owner ? `HUB#${owner.hubId}` : `CAM#${owner.camId}`;
 }
