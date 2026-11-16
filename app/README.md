@@ -37,6 +37,12 @@ checks in every 20 seconds and then delivers requested videos (a small text
 file instead of an MP4) and deletes what was marked. The backend side follows
 with #259 and #260. Locally: `npm run dev`, then open `/gallery.html`.
 
+An **admin** (role `admin`, #259) gets a button "Verwaltung" with the admin
+view (#264, `src/gallery/AdminView.tsx`): every hub with last and next
+contact, battery, firmware, schedule and users, its cameras (battery, SD card,
+temperature, last read, "Jetzt lesen"), and the schedule set in the app. The
+demo shows it with `?demo=admin`.
+
 ## Development
 
 ```bash
