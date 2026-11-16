@@ -293,3 +293,30 @@ TEST_CASE("check-in body lists removed media only when there are some")
           "{\"hubFirmware\":\"dev\",\"cameras\":[{\"camId\":\"AA\","
           "\"media\":[],\"removedMedia\":[22,33]}]}");
 }
+
+TEST_CASE("the check-in carries BLE addresses and the cameras heard (#296)")
+{
+    CheckinRequest request;
+    CameraReport camera;
+    camera.cam_id = "F4_C1_56_06_ED_3B";
+    camera.ble_address = "F4:C1:56:06:ED:3B";
+    request.cameras = {camera};
+    request.report_discovered = true;
+    request.discovered = {{"F4:C1:56:06:ED:3B", "TC100_ED3B", -55, 1800000000},
+                          {"AA:BB:CC:00:00:01", "", -80, 0}};
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"\",\"cameras\":["
+          "{\"camId\":\"F4_C1_56_06_ED_3B\","
+          "\"bleAddress\":\"F4:C1:56:06:ED:3B\",\"media\":[]}],"
+          "\"discovered\":["
+          "{\"bleAddress\":\"F4:C1:56:06:ED:3B\",\"name\":\"TC100_ED3B\","
+          "\"rssi\":-55,\"seenAt\":1800000000},"
+          "{\"bleAddress\":\"AA:BB:CC:00:00:01\",\"rssi\":-80}]}");
+
+    // An empty list is sent too: the backend learns that this firmware
+    // reports BLE addresses.
+    CheckinRequest empty;
+    empty.report_discovered = true;
+    CHECK(build_checkin_json(empty) ==
+          "{\"hubFirmware\":\"\",\"cameras\":[],\"discovered\":[]}");
+}

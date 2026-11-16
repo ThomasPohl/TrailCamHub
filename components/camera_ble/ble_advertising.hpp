@@ -62,4 +62,36 @@ class AddressSet
     std::size_t size_ = 0;
 };
 
+// "AA:BB:CC:DD:EE:FF" for an address as NimBLE stores it (least significant
+// byte first, as in the log lines). `out` needs 18 bytes.
+void format_address(const std::uint8_t address[6], char out[18]);
+
+// Cameras heard in the scans of one wake-up, read or not (#296): address,
+// advertised name, signal, time. Pure logic; camera_ble fills it, the session
+// controller takes it to the SD card.
+class SeenList
+{
+  public:
+    static constexpr std::size_t kMax = 16;
+    struct Entry {
+        char address[18];
+        char name[33];
+        int rssi;
+        std::int64_t seen_at;
+    };
+
+    // Notes an advertisement; `name` may be null or empty (a report without
+    // a name, e.g. an advertisement whose name comes in the scan response).
+    // False if the list is full with other addresses.
+    bool note(const std::uint8_t address[6], const std::uint8_t *name,
+              std::size_t name_len, int rssi, std::int64_t at);
+    std::size_t size() const;
+    const Entry &at(std::size_t i) const;
+    void clear();
+
+  private:
+    Entry entries_[kMax] = {};
+    std::size_t size_ = 0;
+};
+
 }  // namespace camera::ble

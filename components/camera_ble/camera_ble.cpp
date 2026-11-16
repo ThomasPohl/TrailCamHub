@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -75,6 +76,9 @@ static char s_device_name[MAX_BLE_DEVICE_NAME_LEN];
 static camera::ble::AddressSet s_done;
 static ble_addr_t s_last_camera;
 static bool s_have_last_camera;
+// Every camera heard advertising since the session controller last took the
+// list (#296), whether or not it is read.
+static camera::ble::SeenList s_seen;
 
 static GattProfile s_profile;
 static size_t s_discovery_service_index;
@@ -217,6 +221,17 @@ static void disconnect_camera(const char *reason)
 
 static void handle_advertisement(const struct ble_gap_disc_desc *disc)
 {
+    // Listen to every camera, including scan responses and cameras done in
+    // this scan: the list of cameras in range is sent with the check-in.
+    if (camera_ble_is_candidate_advertisement(disc->data, disc->length_data)) {
+        const uint8_t *name = NULL;
+        size_t name_len = 0;
+        camera::ble::find_device_name(disc->data, disc->length_data, &name,
+                                      &name_len);
+        s_seen.note(disc->addr.val, name, name_len, disc->rssi,
+                    (int64_t)time(NULL));
+    }
+
     bool connectable = disc->event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND ||
                        disc->event_type == BLE_HCI_ADV_RPT_EVTYPE_DIR_IND;
     if (!s_activation_enabled || !connectable || s_connecting ||
@@ -753,6 +768,43 @@ void camera_ble_mark_done(void)
         ESP_LOGW(TAG, "Too many cameras in one scan; one may be read again");
     }
     s_have_last_camera = false;
+}
+
+void camera_ble_last_address(char *out, size_t size)
+{
+    if (out == NULL || size == 0) {
+        return;
+    }
+    if (s_lock == NULL) {
+        out[0] = '\0';
+        return;
+    }
+    BleLock lock;
+    if (!s_have_last_camera) {
+        out[0] = '\0';
+        return;
+    }
+    char text[18];
+    camera::ble::format_address(s_last_camera.val, text);
+    snprintf(out, size, "%s", text);
+}
+
+size_t camera_ble_take_seen(camera_ble_seen_t *out, size_t max)
+{
+    if (s_lock == NULL) {
+        return 0;  // camera_ble_start() has not run: nothing was heard
+    }
+    BleLock lock;
+    size_t n = 0;
+    for (; out != NULL && n < max && n < s_seen.size(); ++n) {
+        const camera::ble::SeenList::Entry &e = s_seen.at(n);
+        memcpy(out[n].address, e.address, sizeof(out[n].address));
+        memcpy(out[n].name, e.name, sizeof(out[n].name));
+        out[n].rssi = e.rssi;
+        out[n].seen_at = e.seen_at;
+    }
+    s_seen.clear();
+    return n;
 }
 
 void camera_ble_last_name(char *out, size_t size)

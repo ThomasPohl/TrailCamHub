@@ -128,4 +128,62 @@ std::size_t AddressSet::size() const
     return size_;
 }
 
+void format_address(const std::uint8_t address[6], char out[18])
+{
+    static const char kHex[] = "0123456789ABCDEF";
+    for (int i = 0; i < 6; ++i) {
+        const std::uint8_t b = address[5 - i];
+        out[i * 3] = kHex[b >> 4];
+        out[i * 3 + 1] = kHex[b & 0x0f];
+        out[i * 3 + 2] = i < 5 ? ':' : '\0';
+    }
+}
+
+bool SeenList::note(const std::uint8_t address[6], const std::uint8_t *name,
+                    std::size_t name_len, int rssi, std::int64_t at)
+{
+    char text[18];
+    format_address(address, text);
+    Entry *entry = nullptr;
+    for (std::size_t i = 0; i < size_; ++i) {
+        if (std::strcmp(entries_[i].address, text) == 0) {
+            entry = &entries_[i];
+            break;
+        }
+    }
+    if (entry == nullptr) {
+        if (size_ >= kMax) {
+            return false;
+        }
+        entry = &entries_[size_++];
+        *entry = Entry{};
+        std::memcpy(entry->address, text, sizeof(text));
+    }
+    entry->rssi = rssi;
+    entry->seen_at = at;
+    if (name != nullptr && name_len > 0) {
+        const std::size_t n = name_len < sizeof(entry->name) - 1
+                                  ? name_len
+                                  : sizeof(entry->name) - 1;
+        std::memcpy(entry->name, name, n);
+        entry->name[n] = '\0';
+    }
+    return true;
+}
+
+std::size_t SeenList::size() const
+{
+    return size_;
+}
+
+const SeenList::Entry &SeenList::at(std::size_t i) const
+{
+    return entries_[i];
+}
+
+void SeenList::clear()
+{
+    size_ = 0;
+}
+
 }  // namespace camera::ble

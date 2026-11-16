@@ -282,6 +282,9 @@ std::string build_checkin_json(const CheckinRequest &request)
         if (!c.camera_name.empty()) {
             out += ",\"cameraName\":\"" + json_escape(c.camera_name) + "\"";
         }
+        if (!c.ble_address.empty()) {
+            out += ",\"bleAddress\":\"" + json_escape(c.ble_address) + "\"";
+        }
         out += ",\"media\":[";
         bool first = true;
         for (const MediaRef &m : c.media) {
@@ -307,7 +310,25 @@ std::string build_checkin_json(const CheckinRequest &request)
         }
         out += "}";
     }
-    out += "]}";
+    out += "]";
+    if (request.report_discovered) {
+        out += ",\"discovered\":[";
+        for (std::size_t i = 0; i < request.discovered.size(); ++i) {
+            const DiscoveredCamera &d = request.discovered[i];
+            out += std::string(i > 0 ? "," : "") + "{\"bleAddress\":\"" +
+                   json_escape(d.ble_address) + "\"";
+            if (!d.name.empty()) {
+                out += ",\"name\":\"" + json_escape(d.name) + "\"";
+            }
+            out += ",\"rssi\":" + std::to_string(d.rssi);
+            if (d.seen_at > 0) {
+                out += ",\"seenAt\":" + std::to_string(d.seen_at);
+            }
+            out += "}";
+        }
+        out += "]";
+    }
+    out += "}";
     return out;
 }
 

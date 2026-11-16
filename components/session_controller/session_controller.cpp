@@ -12,6 +12,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <vector>
 
 #include "esp_check.h"
 #include "esp_log.h"
@@ -30,6 +32,7 @@
 #include "ethernet_uplink.h"
 #include "hub_config.hpp"
 #include "hub_battery.hpp"
+#include "media_store.hpp"
 #include "modem_uplink.hpp"
 #include "session_controller.h"
 #include "session_fsm.hpp"
@@ -117,6 +120,8 @@ std::atomic<bool> s_waiting_for_ethernet{false};
 // session ended. Only touched by the controller task.
 char s_camera_name[sizeof(session_camera_t::name)];
 char s_camera_id[sizeof(session_camera_t::cam_id)];
+// BLE address of the camera being read (#296), taken with its credentials.
+char s_camera_ble[18];
 int s_camera_battery = -1;
 
 // Outcome of the camera sessions and the sync of the running cycle; only
@@ -545,6 +550,30 @@ void uplink_task(void *arg)
 
 // --- Actions ---
 
+// Writes the cameras heard in this wake-up's scans to the SD card (#296).
+void save_found_cameras()
+{
+    // Static: 1 KB is too much for the task stack on boards without PSRAM.
+    static camera_ble_seen_t seen[CAMERA_BLE_MAX_SEEN];
+    const size_t count = camera_ble_take_seen(seen, CAMERA_BLE_MAX_SEEN);
+    if (count == 0) {
+        return;
+    }
+    std::vector<camera::found::Entry> heard;
+    heard.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        heard.push_back(
+            {seen[i].address, seen[i].name, seen[i].rssi, seen[i].seen_at});
+    }
+    if (!camera::store::add_found_cameras(heard, (std::int64_t)time(NULL))) {
+        ESP_LOGW(TAG, "Could not store the %u camera(s) heard",
+                 (unsigned)count);
+    } else {
+        ESP_LOGI(TAG, "Heard %u camera(s) in this cycle's scans",
+                 (unsigned)count);
+    }
+}
+
 void cancel_timer()
 {
     s_timer_generation++;
@@ -737,6 +766,7 @@ void controller_task(void *arg)
             strcpy(s_ssid, event.ssid);
             strcpy(s_password, event.password);
             camera_ble_last_name(s_camera_name, sizeof(s_camera_name));
+            camera_ble_last_address(s_camera_ble, sizeof(s_camera_ble));
             s_camera_id[0] = '\0';
             s_camera_battery = -1;
         }
@@ -766,6 +796,14 @@ void controller_task(void *arg)
             s_listed_files = event.listed_files;
             snprintf(s_camera_id, sizeof(s_camera_id), "%s", event.cam_id);
             s_camera_battery = event.bat_percent;
+            // The backend matches the cameras it was told about to this one
+            // by its BLE address (#296, #297).
+            if (s_camera_ble[0] != '\0' && s_camera_id[0] != '\0' &&
+                strcmp(s_camera_id, "unknown") != 0) {
+                camera::store::set_camera_ble_address(
+                    camera::store::sanitize_camera_id(s_camera_id),
+                    s_camera_ble);
+            }
         }
         if (event.type == session::Event::uplink_done &&
             s_fsm.state() == session::State::uplink) {
@@ -825,6 +863,13 @@ void controller_task(void *arg)
         if (result.previous == session::State::idle &&
             result.next != session::State::idle) {
             leave_home_before_cycle();
+        }
+        // The scans of this cycle are over: keep the cameras heard for the
+        // check-in, which may come in a later wake-up (#296).
+        if (result.previous != result.next &&
+            (result.next == session::State::uplink ||
+             result.next == session::State::idle)) {
+            save_found_cameras();
         }
         execute(result);
         if (result.next == session::State::idle &&

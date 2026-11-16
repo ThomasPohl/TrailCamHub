@@ -42,6 +42,9 @@ struct CameraReport {
     std::optional<std::int64_t> bat_type;
     std::string ble_version;
     std::string camera_name;
+    // BLE address the hub connected to ("AA:BB:CC:DD:EE:FF", #296); empty =
+    // unknown, left out.
+    std::string ble_address;
     // Media the backend does not know yet (delta).
     std::vector<MediaRef> media;
     // mediaIds no longer on the camera's card that the backend was not told
@@ -80,6 +83,14 @@ struct MemoryReport {
     std::int64_t stack_controller = -1;
 };
 
+// A camera heard advertising (#296).
+struct DiscoveredCamera {
+    std::string ble_address;
+    std::string name;  // advertised name; empty = none heard
+    std::int64_t rssi = 0;
+    std::int64_t seen_at = 0;  // hub clock; 0 = unknown, left out
+};
+
 struct CheckinRequest {
     std::string hub_firmware;
     // Board and build variant ("esp32s3", "release"): which firmware image
@@ -95,6 +106,11 @@ struct CheckinRequest {
     ScheduleReport schedule;
     MemoryReport memory;
     std::vector<CameraReport> cameras;
+    // Cameras heard in BLE scans, read or not (#296). Sent as "discovered"
+    // when `report_discovered` is set, even if empty, so the backend knows
+    // this firmware reports BLE addresses.
+    bool report_discovered = false;
+    std::vector<DiscoveredCamera> discovered;
 };
 
 struct ThumbUpload {

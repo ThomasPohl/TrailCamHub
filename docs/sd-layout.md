@@ -16,6 +16,7 @@ formats of the files other tools may read. The hub never formats its own card (i
     trace_<mediaId>.csv   only with CONFIG_CAMERA_VIDEO_TRACE
   actions.csv             queue of camera actions (photo, video, delete, format)
   actions.csv.tmp         only while the queue is being saved
+  found_cameras.csv       cameras heard in BLE scans, read or not (#296)
   logs/log-NNNNN.txt      rotating log (sd_log)
   logs/cycles.jsonl       one line per cycle (cycle journal)
   logs/cycles.1.jsonl     the previous, full cycle journal
@@ -81,6 +82,28 @@ sizes, temperature, charging state, …), plus fields the hub adds:
 | `readAt` | when the device info was read (Unix seconds, 0 = clock not set) |
 | `lastSyncAt` | when a session last completed all its work; -1 = completed with an unset clock; absent = never |
 | `sdCard`, `sdError` | state of the camera's card from the media list |
+| `bleAddress` | BLE address the hub connected to (`AA:BB:CC:DD:EE:FF`, #296); kept when the file is rewritten |
+
+## `found_cameras.csv`
+
+Every camera the hub heard advertising in its BLE scans, whether or not it
+read it (#296). Written when a cycle's scans are over, sent with every
+check-in as `discovered`, so that the user can take cameras in or leave them
+out in the gallery (#297, #298). One line per camera, no header:
+
+```
+F4:C1:56:06:ED:3B,-55,1800000000,TC100_ED3B
+```
+
+| Column | Meaning |
+| --- | --- |
+| address | BLE address, most significant byte first |
+| rssi | signal strength when heard last, dBm |
+| seen_at | when heard last (hub clock, Unix seconds; 0 = clock not set) |
+| name | advertised name, empty if none was heard |
+
+At most 16 cameras, the most recently heard; a camera not heard for 14 days
+is dropped (`camera::found::merge`).
 
 ## `actions.csv`
 

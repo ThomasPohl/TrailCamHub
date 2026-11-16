@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "esp_err.h"
 
@@ -58,6 +59,30 @@ void camera_ble_mark_done(void);
  * "TC100_ED3B" ("unknown" if none).
  */
 void camera_ble_last_name(char *out, size_t size);
+
+/*
+ * BLE address of the camera of the last connection, "AA:BB:CC:DD:EE:FF", or
+ * "" if there is none (#296). Take it before camera_ble_mark_done().
+ */
+void camera_ble_last_address(char *out, size_t size);
+
+/*
+ * A camera heard advertising in a scan, read or not (#296). The scans only
+ * listen; nothing connects to a camera for this list.
+ */
+#define CAMERA_BLE_MAX_SEEN 16
+typedef struct {
+    char address[18]; /* "AA:BB:CC:DD:EE:FF" */
+    char name[33];    /* advertised name; "" if none was heard */
+    int rssi;         /* dBm */
+    int64_t seen_at;  /* Unix seconds of the hub clock; may be unset */
+} camera_ble_seen_t;
+
+/*
+ * Copies the cameras heard since the last call (at most `max`) and empties
+ * the list. Returns how many were copied.
+ */
+size_t camera_ble_take_seen(camera_ble_seen_t *out, size_t max);
 
 /*
  * Stops scanning and ignores further camera advertisements. With
