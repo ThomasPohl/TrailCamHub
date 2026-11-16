@@ -95,6 +95,13 @@ time) as `HUB#<id>` / `CAM#<id>`, `BAT#<at>`, at most one per hour and owner,
 deleted by the DynamoDB TTL after half a year. The admin view draws the last
 30 days.
 
+**Firmware changes** (#149): when a hub reports another `hubFirmware` than at
+its check-in before (update, rollback, flash over USB), the backend stores
+`HUB#<id>` / `FW#<at>` with `from` and `to` (ttl half a year).
+`/v1/admin/hubs` lists the last five, and a step back to an older version in
+the last 7 days is a `firmwareDowngrade` fault. The hub's own update record
+(result, reason) is not reported yet.
+
 **Camera names** (#273): a camera is called by its camId until it gets a
 name. The end user names his cameras in the gallery ("Umbenennen";
 `POST /v1/cameras/{camId}/name`, allowed for every user linked to the

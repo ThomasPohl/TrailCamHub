@@ -1,4 +1,4 @@
-import type { CameraRecord, CommandRecord, Fault, HubRecord } from './model';
+import type { CameraRecord, CommandRecord, Fault, FirmwareChange, HubRecord } from './model';
 
 /**
  * Faults of a hub and its cameras for the admin (#265). The end user should
@@ -21,6 +21,22 @@ const SD_FULL_MB = 200;
 const SD_LOW_MB = 1024;
 const SD_LOW_SHARE = 0.05;
 
+/**
+ * Compares two firmware versions such as "v0.1.13" (git tags; a suffix like
+ * "-3-gabc" is ignored). Undefined if one of them has no x.y.z.
+ */
+export function compareVersions(a: string, b: string): number | undefined {
+  const parse = (v: string) => /(\d+)\.(\d+)\.(\d+)/.exec(v)?.slice(1, 4).map(Number);
+  const x = parse(a);
+  const y = parse(b);
+  if (!x || !y) return undefined;
+  for (let i = 0; i < 3; i++) {
+    const d = (x[i] as number) - (y[i] as number);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
 /** When the hub should have checked in last, at the latest. */
 function expectedCheckin(hub: HubRecord): number {
   const s = hub.schedule;
@@ -34,8 +50,25 @@ export function hubFaults(
   hub: HubRecord,
   cameras: Array<{ camera: CameraRecord; commands: CommandRecord[] }>,
   now: number,
+  firmwareChanges: FirmwareChange[] = [],
 ): Fault[] {
   const faults: Fault[] = [];
+
+  // A step back to an older version: the bootloader rolled an update back,
+  // or someone flashed an old image (#149).
+  const lastChange = [...firmwareChanges].sort((a, b) => b.at - a.at)[0];
+  if (
+    lastChange &&
+    lastChange.at >= now - FAILED_WINDOW_S &&
+    (compareVersions(lastChange.to, lastChange.from) ?? 0) < 0
+  ) {
+    faults.push({
+      kind: 'firmwareDowngrade',
+      level: 'warning',
+      detail: `${lastChange.from} → ${lastChange.to}`,
+      since: lastChange.at,
+    });
+  }
 
   if (hub.lastSeen <= 0) {
     faults.push({ kind: 'hubNeverSeen', level: 'warning' });

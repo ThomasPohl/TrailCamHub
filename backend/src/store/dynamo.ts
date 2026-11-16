@@ -18,6 +18,7 @@ import type {
   HubRecord,
   MediaRecord,
   PairingCode,
+  FirmwareChange,
   Sample,
   SampleOwner,
   ScheduleConfig,
@@ -41,6 +42,7 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
  *   CAM#<camId>  / CMD#<id>               command
  *   HUB#<hubId>  / BAT#<at>               battery sample of the hub (ttl)
  *   CAM#<camId>  / BAT#<at>               battery/SD sample of a camera (ttl)
+ *   HUB#<hubId>  / FW#<at>                firmware change of the hub (ttl)
  */
 const hubPk = (hubId: string) => `HUB#${hubId}`;
 const camPk = (camId: string) => `CAM#${camId}`;
@@ -340,6 +342,37 @@ export class DynamoStore implements Store {
       start = page.LastEvaluatedKey;
     } while (start);
     return samples;
+  }
+
+  async addFirmwareChange(hubId: string, change: FirmwareChange): Promise<void> {
+    await this.db.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: {
+          PK: hubPk(hubId),
+          SK: `FW#${String(change.at).padStart(10, '0')}`,
+          ...change,
+          ttl: change.at + HISTORY_KEEP_S,
+        },
+      }),
+    );
+  }
+
+  async listFirmwareChanges(hubId: string, limit: number): Promise<FirmwareChange[]> {
+    const page = await this.db.send(
+      new QueryCommand({
+        TableName: this.table,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': hubPk(hubId), ':sk': 'FW#' },
+        ScanIndexForward: false,
+        Limit: limit,
+      }),
+    );
+    return (page.Items ?? []).map((item) => {
+      const { ttl: _ttl, ...change } = strip<FirmwareChange & { ttl?: number }>(item);
+      void _ttl;
+      return change;
+    });
   }
 
   async putCommand(camId: string, command: CommandRecord): Promise<void> {

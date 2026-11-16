@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FAILED_WINDOW_S, hubFaults, SILENT_GRACE_S } from './faults';
+import { compareVersions, FAILED_WINDOW_S, hubFaults, SILENT_GRACE_S } from './faults';
 import type { CameraRecord, CommandRecord, HubRecord } from './model';
 
 const NOW = 1_800_000_000;
@@ -121,5 +121,20 @@ describe('hub faults (#265)', () => {
         since: NOW - 60,
       },
     ]);
+  });
+
+  it('warns about a step back to an older firmware (#149)', () => {
+    expect(compareVersions('v0.1.13', 'v0.1.9')).toBeGreaterThan(0);
+    expect(compareVersions('v0.2.0', 'v0.10.0')).toBeLessThan(0);
+    expect(compareVersions('v0.1.13-3-gabc', 'v0.1.13')).toBe(0);
+    expect(compareVersions('dev', 'v0.1.13')).toBeUndefined();
+
+    const back = { at: NOW - 60, from: 'v0.1.13', to: 'v0.1.12' };
+    expect(hubFaults(hub(), [], NOW, [back])).toEqual([
+      { kind: 'firmwareDowngrade', level: 'warning', detail: 'v0.1.13 → v0.1.12', since: NOW - 60 },
+    ]);
+    const forward = { at: NOW - 30, from: 'v0.1.12', to: 'v0.1.13' };
+    expect(hubFaults(hub(), [], NOW, [back, forward])).toEqual([]);
+    expect(hubFaults(hub(), [], NOW, [{ ...back, at: NOW - FAILED_WINDOW_S - 1 }])).toEqual([]);
   });
 });

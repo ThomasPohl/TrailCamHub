@@ -5,6 +5,7 @@ import type {
   HubRecord,
   MediaRecord,
   PairingCode,
+  FirmwareChange,
   Sample,
   SampleOwner,
   ScheduleConfig,
@@ -82,6 +83,11 @@ export interface Store {
   addSample(owner: SampleOwner, sample: Sample): Promise<void>;
   /** Samples from `since` on, oldest first. */
   listSamples(owner: SampleOwner, since: number): Promise<Sample[]>;
+
+  /** Records a firmware change of a hub (#149); kept for HISTORY_KEEP_S. */
+  addFirmwareChange(hubId: string, change: FirmwareChange): Promise<void>;
+  /** The newest `limit` changes, newest first. */
+  listFirmwareChanges(hubId: string, limit: number): Promise<FirmwareChange[]>;
 
   putCommand(camId: string, command: CommandRecord): Promise<void>;
   getCommand(camId: string, id: string): Promise<CommandRecord | undefined>;

@@ -118,6 +118,20 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             <dd>{hub.batPercent !== undefined ? `${hub.batPercent} %` : '–'}</dd>
             <dt>Firmware</dt>
             <dd>{hub.firmware ?? '–'}</dd>
+            {hub.firmwareChanges && hub.firmwareChanges.length > 0 && (
+              <>
+                <dt>Firmware-Wechsel</dt>
+                <dd>
+                  <ul className="g-plain-list" aria-label={`Firmware-Wechsel ${hub.name}`}>
+                    {hub.firmwareChanges.map((c) => (
+                      <li key={c.at}>
+                        {c.from} → {c.to} ({clockTime(c.at, t)})
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </>
+            )}
             {hub.schedule && (
               <>
                 <dt>Kamera lesen</dt>
