@@ -133,8 +133,13 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
           ? `Die Kamera „${name}“ ist ausgeblendet. Ihre Aufnahmen bleiben gespeichert.`
           : `Die Kamera „${name}“ wird wieder angezeigt.`,
       );
-      if (!hidden) setCamId(id);
       await reload();
+      // After the reload, which keeps the camera shown before; changing the
+      // camera loads its recordings.
+      if (!hidden) {
+        setItems(undefined);
+        setCamId(id);
+      }
     } catch (error) {
       setNotice(`Das hat nicht geklappt: ${errorText(error)}`);
     } finally {
