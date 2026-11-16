@@ -336,5 +336,21 @@ export function isMediaId(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) > 0 && (value as number) <= 0xffffffff;
 }
 
+/** Longest camera name; it is shown as a tab and used in file names (#273). */
+export const MAX_CAMERA_NAME = 40;
+
+/**
+ * A camera name as given by the user or the admin: trimmed, 1 to
+ * MAX_CAMERA_NAME characters, no control characters. Undefined if not valid.
+ */
+export function validCameraName(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const name = value.trim();
+  const chars = [...name];
+  if (chars.length === 0 || chars.length > MAX_CAMERA_NAME) return undefined;
+  if (chars.some((c) => c < ' ' || c === '\x7f')) return undefined;
+  return name;
+}
+
 /** Ids of hubs and cameras: safe as S3 key and URL path segments. */
 export const ID_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$/;

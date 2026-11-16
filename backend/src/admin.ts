@@ -1,6 +1,7 @@
 import type { Deps } from './api';
 import { generateAppToken, newAppUserId } from './auth/app';
 import { generateDeviceKey } from './auth/device';
+import { MAX_CAMERA_NAME, validCameraName } from './model';
 import { ADMIN_CODE_TTL_S, createPairingCode, pairingLink } from './pairing';
 import type { Store } from './store/types';
 
@@ -198,16 +199,13 @@ export async function createAppUser(
   return { ok: true, userId, token, linkedHubs: hubIds };
 }
 
-/** Longest camera name; it is shown as a tab and used in file names. */
-const MAX_CAMERA_NAME = 40;
-
 export async function renameCamera(
   event: RenameCameraEvent,
   deps: AdminDeps,
 ): Promise<RenameResult> {
   const camId = event.camId ?? '';
-  const name = (event.name ?? '').trim();
-  if (!name || name.length > MAX_CAMERA_NAME || [...name].some((c) => c < ' ')) {
+  const name = validCameraName(event.name);
+  if (name === undefined) {
     return { ok: false, error: `name must be 1-${MAX_CAMERA_NAME} printable characters` };
   }
   if (!(await deps.store.getCamera(camId))) return { ok: false, error: `unknown camera ${camId}` };

@@ -41,6 +41,7 @@ function buildRecordings(camera: GalleryCamera, now: number, count: number): Rec
 export class DemoGalleryApi implements GalleryApi {
   readonly isDemo = true;
   private readonly media = new Map<string, Recording[]>();
+  private readonly cameras = CAMERAS.map((c) => ({ ...c }));
   private lastCheckin: number;
 
   constructor(
@@ -58,7 +59,7 @@ export class DemoGalleryApi implements GalleryApi {
       lastContact: this.lastCheckin,
       nextContact: this.lastCheckin + this.checkinS,
       hubBatPercent: 84,
-      cameras: CAMERAS.map((c) => ({ ...c })),
+      cameras: this.cameras.map((c) => ({ ...c })),
     };
   }
 
@@ -100,6 +101,13 @@ export class DemoGalleryApi implements GalleryApi {
       `Aufnahme ${recording.cameraFiles.join(' + ')} (${recording.fileName}).\n` +
       `Mit echtem Hub liegt hier das MP4.\n`;
     return new Blob([text], { type: 'text/plain' });
+  }
+
+  async renameCamera(camId: string, name: string): Promise<string> {
+    const camera = this.cameras.find((c) => c.camId === camId);
+    if (!camera) throw new Error(`Unbekannte Kamera ${camId}`);
+    camera.name = name.trim();
+    return camera.name;
   }
 
   /** Runs the check-ins that would have happened since the last call. */

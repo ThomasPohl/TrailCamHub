@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraFile, cameraTime, videoFileName } from './text';
+import { cameraFile, cameraTime, folderName, videoFileName } from './text';
 
 // 2026-11-15 14:02 on the camera's wall clock (read as UTC, docs/clock.md).
 const WALL = Date.UTC(2026, 10, 15, 14, 2) / 1000;
@@ -14,6 +14,13 @@ describe('gallery texts', () => {
     expect(videoFileName('Am Teich/Süd', WALL, 7)).toBe(
       'Am-Teich-Süd_2026-11-15_14-02_DSCF0007.mp4',
     );
+  });
+
+  it('makes a folder name Windows accepts', () => {
+    expect(folderName('Garten')).toBe('Garten');
+    expect(folderName('Am Teich: Süd/Ost?')).toBe('Am Teich- Süd-Ost-');
+    expect(folderName('Wiese...')).toBe('Wiese');
+    expect(folderName('..')).toBe('Kamera');
   });
 
   it("names the camera's files as on its SD card", () => {
