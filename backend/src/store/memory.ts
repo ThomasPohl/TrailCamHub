@@ -147,6 +147,11 @@ export class MemoryStore implements Store {
     this.media.set(camId, map);
   }
 
+  async removeMedia(camId: string, mediaIds: number[]): Promise<void> {
+    const map = this.media.get(camId);
+    for (const mediaId of mediaIds) map?.delete(mediaId);
+  }
+
   async markThumbPresent(camId: string, mediaId: number): Promise<void> {
     const item = this.media.get(camId)?.get(mediaId);
     if (item) item.thumbPresent = true;

@@ -60,6 +60,32 @@ describe('routing', () => {
 });
 
 describe('hub check-in with several cameras', () => {
+  it('drops recordings the hub reports as removed from the card', async () => {
+    const { deps, hubKey, store } = await setup();
+    await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
+    const res = await handleRequest(
+      hubRequest('/v1/device/checkin', hubKey, {
+        cameras: [{ camId: CAM_ID, media: [], removedMedia: [2035, 9999] }],
+      }),
+      deps,
+    );
+    expect(res.statusCode).toBe(200);
+    expect((await store.listMedia(CAM_ID)).map((m) => m.mediaId)).toEqual([2036]);
+    // Removed ids are not taken back by a later report of other media.
+    expect((await store.listMedia(CAM_2)).map((m) => m.mediaId)).toEqual([3007]);
+  });
+
+  it('rejects invalid removed media', async () => {
+    const { deps, hubKey } = await setup();
+    const res = await handleRequest(
+      hubRequest('/v1/device/checkin', hubKey, {
+        cameras: [{ camId: CAM_ID, removedMedia: ['x'] as unknown as number[] }],
+      }),
+      deps,
+    );
+    expect(res.statusCode).toBe(400);
+  });
+
   it('rejects an invalid hub key', async () => {
     const { deps } = await setup();
     const res = await handleRequest(

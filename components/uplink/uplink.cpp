@@ -250,9 +250,16 @@ void set_clock(std::int64_t unix_seconds)
     }
 }
 
+// What one check-in told the backend about a camera: new media and media
+// that are gone from the card.
+struct SentIds {
+    std::vector<std::int64_t> media;
+    std::vector<std::int64_t> removed;
+};
+
 // The mediaIds sent with this check-in, per camera, in the order of the
 // cameras of the sync.
-using SentMedia = std::vector<std::vector<std::int64_t>>;
+using SentMedia = std::vector<SentIds>;
 
 // Collects every camera on the SD card with the media not reported yet.
 void collect_cameras(CheckinRequest &request, std::vector<SyncCamera> &cameras,
@@ -273,7 +280,7 @@ void collect_cameras(CheckinRequest &request, std::vector<SyncCamera> &cameras,
             continue;
         }
         SyncCamera state = load_camera(id);
-        std::vector<std::int64_t> sent_ids;
+        SentIds sent_ids;
 
         // The directory name is the sanitized camera id used everywhere.
         report.cam_id = id;
@@ -293,19 +300,24 @@ void collect_cameras(CheckinRequest &request, std::vector<SyncCamera> &cameras,
         const std::size_t limit = media_budget < kMaxMediaPerCamera
                                       ? media_budget
                                       : kMaxMediaPerCamera;
-        for (const auto &e : state.catalog.without_flag(
-                 camera::artemis::MediaCatalog::kReported, limit)) {
+        // Entries deleted from the card are not reported as media (the
+        // gallery would show them again), only as removed.
+        const std::vector<camera::artemis::CatalogEntry> unreported =
+            state.catalog.unreported_present(state.catalog.size());
+        for (const auto &e : unreported) {
+            if (report.media.size() >= limit) {
+                break;
+            }
             const MediaRef ref = {e.media_id, e.dir_num, e.media_num,
                                   e.file_type, e.media_time};
             report.media.push_back(ref);
-            sent_ids.push_back(e.media_id);
+            sent_ids.media.push_back(e.media_id);
         }
         media_budget -= report.media.size();
-        const std::size_t waiting =
-            state.catalog.size() -
-            state.catalog.count_with_flag(
-                camera::artemis::MediaCatalog::kReported) -
-            report.media.size();
+        const std::size_t waiting = unreported.size() - report.media.size();
+        // Only ids, so they do not count against the media budget.
+        report.removed = state.catalog.unreported_gone(kMaxMediaPerCamera);
+        sent_ids.removed = report.removed;
         if (waiting > 0) {
             ESP_LOGI(TAG,
                      "%s: %u recordings in this check-in, %u more with the "
@@ -342,8 +354,7 @@ ScheduleReport schedule_report()
 }
 
 // Remembers what the backend now knows, so the next check-in sends a delta.
-void apply_checkin_result(SyncCamera &camera,
-                          const std::vector<std::int64_t> &sent,
+void apply_checkin_result(SyncCamera &camera, const SentIds &sent,
                           const CameraCheckin &result)
 {
     using camera::artemis::MediaCatalog;
@@ -354,15 +365,21 @@ void apply_checkin_result(SyncCamera &camera,
     }
     if (result.resync) {
         // New to the backend: send everything again next time.
-        if (camera.catalog.count_with_flag(MediaCatalog::kReported) > 0) {
+        if (camera.catalog.count_with_flag(MediaCatalog::kReported) > 0 ||
+            camera.catalog.count_with_flag(MediaCatalog::kGoneReported) > 0) {
             camera.catalog.clear_flag_everywhere(MediaCatalog::kReported);
+            camera.catalog.clear_flag_everywhere(MediaCatalog::kGoneReported);
             camera.changed = true;
         }
         return;
     }
-    for (const std::int64_t media_id : sent) {
+    for (const std::int64_t media_id : sent.media) {
         camera.changed |=
             camera.catalog.set_flag(media_id, MediaCatalog::kReported);
+    }
+    for (const std::int64_t media_id : sent.removed) {
+        camera.changed |=
+            camera.catalog.set_flag(media_id, MediaCatalog::kGoneReported);
     }
 }
 

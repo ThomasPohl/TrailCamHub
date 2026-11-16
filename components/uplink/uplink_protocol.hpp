@@ -44,6 +44,9 @@ struct CameraReport {
     std::string camera_name;
     // Media the backend does not know yet (delta).
     std::vector<MediaRef> media;
+    // mediaIds no longer on the camera's card that the backend was not told
+    // about yet; left out when empty.
+    std::vector<std::int64_t> removed;
 };
 
 // The hub's wake-up schedule as it applies now.

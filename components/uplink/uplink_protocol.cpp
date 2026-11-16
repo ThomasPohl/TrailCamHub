@@ -294,7 +294,18 @@ std::string build_checkin_json(const CheckinRequest &request)
             append_media(out, m);
             first = false;
         }
-        out += "]}";
+        out += "]";
+        if (!c.removed.empty()) {
+            out += ",\"removedMedia\":[";
+            for (std::size_t i = 0; i < c.removed.size(); ++i) {
+                if (i > 0) {
+                    out += ",";
+                }
+                out += std::to_string(c.removed[i]);
+            }
+            out += "]";
+        }
+        out += "}";
     }
     out += "]}";
     return out;
