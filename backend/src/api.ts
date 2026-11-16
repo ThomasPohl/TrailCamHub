@@ -719,6 +719,12 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     results.set(camera.camId, emptyResult(camera.camId, true, created));
   }
 
+  // A hub that limits its thumbnail uploads (boards without PSRAM, #244) has
+  // little memory for the response; each video request carries a presigned
+  // URL of about 1.8 KB, so it gets as many as thumbnail uploads (at least
+  // one), delivered ones first. Others get every open request.
+  let videoBudget = videoRequestLimit(body.maxThumbUploads);
+
   // Every camera of the hub can have work: missing thumbnails and commands
   // also for cameras the hub did not read in this cycle.
   const work: Array<{ camId: string; mediaId: number; num: number; mediaTime: number }> = [];
@@ -740,7 +746,16 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       .filter((c) => c.type === 'deleteMedia')
       .sort((a, b) => Number(b.state === 'delivered') - Number(a.state === 'delivered'))
       .slice(0, MAX_DELETES_PER_CHECKIN);
-    const open = all.filter((c) => c.type !== 'deleteMedia' || deletes.includes(c));
+    const videos = all
+      .filter((c) => c.type === 'requestVideo')
+      .sort((a, b) => Number(b.state === 'delivered') - Number(a.state === 'delivered'))
+      .slice(0, Math.max(0, videoBudget));
+    videoBudget -= videos.length;
+    const open = all.filter(
+      (c) =>
+        (c.type !== 'deleteMedia' || deletes.includes(c)) &&
+        (c.type !== 'requestVideo' || videos.includes(c)),
+    );
     for (const command of open.filter((c) => c.state === 'queued')) {
       await deps.store.putCommand(camId, { ...command, state: 'delivered', updated: now });
       if (command.type === 'requestVideo') {
@@ -798,6 +813,13 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
  * if it asks for fewer (a hub without PSRAM cannot hold a response with 30
  * presigned URLs). Anything but a whole number from 0 up is ignored.
  */
+/** Video requests per check-in: unlimited unless the hub limits its uploads. */
+export function videoRequestLimit(maxThumbUploads: unknown): number {
+  const wanted = optionalNumber(maxThumbUploads);
+  if (wanted === undefined || !Number.isInteger(wanted) || wanted < 0) return Infinity;
+  return Math.max(1, wanted);
+}
+
 function thumbUploadLimit(requested: unknown, backendLimit: number): number {
   const wanted = optionalNumber(requested);
   if (wanted === undefined || !Number.isInteger(wanted) || wanted < 0) return backendLimit;
