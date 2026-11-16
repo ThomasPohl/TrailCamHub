@@ -383,3 +383,25 @@ TEST_CASE("the gallery can queue a batch of deletions")
     }
     CHECK(queue.pending_count() == 30);
 }
+
+TEST_CASE("the camera is kept as its SD directory name, the backend's camId")
+{
+    // The session knows the raw devId, the backend the directory name.
+    CHECK(camera_key("LBCS-000123 CCCJJ") == "LBCS-000123_CCCJJ");
+    CHECK(camera_key("") == "");
+
+    ActionQueue queue;
+    const auto added = queue.add(Action{Type::delete_media, 7, "AB:CD.1"},
+                                 Source::backend, "be:x", 1);
+    REQUIRE(added.kind == Kind::added);
+    CHECK(queue.entries()[0].action.cam_id == "AB_CD.1");
+    CHECK(queue.entries()[0].action.cam_id == camera_key("AB:CD.1"));
+    CHECK(queue
+              .add(Action{Type::delete_media, 7, "AB_CD.1"}, Source::web_ui, "",
+                   2)
+              .kind == Kind::duplicate);
+
+    ActionQueue loaded;
+    REQUIRE(loaded.parse(queue.serialize()));
+    CHECK(loaded.entries()[0].action.cam_id == "AB_CD.1");
+}

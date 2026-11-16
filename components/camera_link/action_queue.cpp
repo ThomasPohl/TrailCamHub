@@ -1,5 +1,7 @@
 #include "action_queue.hpp"
 
+#include "media_store.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -98,6 +100,15 @@ std::string describe(const Entry &entry)
     return text;
 }
 
+std::string camera_key(const std::string &camera_id)
+{
+    // The same form as the camera's directory on the SD card, which the
+    // check-in reports as camId: the session's raw devId and the backend's
+    // camId then compare equal.
+    return camera_id.empty() ? std::string()
+                             : camera::store::sanitize_camera_id(camera_id);
+}
+
 std::string sanitize_key(const std::string &key)
 {
     std::string out;
@@ -193,12 +204,12 @@ ActionQueue::AddResult ActionQueue::add(const Action &action, Source source,
         const bool same_key = !clean_key.empty() && entry.key == clean_key;
         // The same thing asked for again while it waits: once is enough, and
         // two deletions of one file or two formats in a row would be a hazard.
-        const bool same_pending = entry.state == State::pending &&
-                                  entry.action.type == action.type &&
-                                  entry.action.media_id == action.media_id &&
-                                  entry.action.cam_id == action.cam_id &&
-                                  (action.type == Type::delete_media ||
-                                   action.type == Type::format_sd);
+        const bool same_pending =
+            entry.state == State::pending && entry.action.type == action.type &&
+            entry.action.media_id == action.media_id &&
+            entry.action.cam_id == camera_key(action.cam_id) &&
+            (action.type == Type::delete_media ||
+             action.type == Type::format_sd);
         if (same_key || same_pending) {
             result.kind = AddResult::Kind::duplicate;
             result.id = entry.id;
@@ -213,7 +224,7 @@ ActionQueue::AddResult ActionQueue::add(const Action &action, Source source,
     Entry entry;
     entry.id = next_id_++;
     entry.action = action;
-    entry.action.cam_id = sanitize_key(action.cam_id);
+    entry.action.cam_id = camera_key(action.cam_id);
     entry.source = source;
     entry.key = clean_key;
     entry.created_s = now_s > 0 ? now_s : 0;
@@ -398,7 +409,7 @@ bool ActionQueue::parse(const std::string &text)
             continue;
         }
         entry.id = static_cast<std::uint32_t>(id);
-        entry.action = Action{*type, media, v1 ? "" : sanitize_key(fields[9])};
+        entry.action = Action{*type, media, v1 ? "" : camera_key(fields[9])};
         entry.source = *source;
         entry.state = *state;
         entry.created_s = created;

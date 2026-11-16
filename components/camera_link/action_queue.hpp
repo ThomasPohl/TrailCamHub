@@ -135,7 +135,11 @@ class ActionQueue
 std::string describe(const Entry &entry);
 
 // Cleans a key: only letters, digits and ":_-" stay, cut to kMaxKeyLength.
-// Camera ids are cleaned the same way.
 std::string sanitize_key(const std::string &key);
+
+// A camera id as the queue keeps it: the name of the camera's directory on
+// the SD card (camera::store::sanitize_camera_id), which is also the camId
+// the backend knows; empty stays empty (any camera).
+std::string camera_key(const std::string &camera_id);
 
 }  // namespace camera::action
