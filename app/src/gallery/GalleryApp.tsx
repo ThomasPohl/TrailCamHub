@@ -257,15 +257,12 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             <li key={r.mediaId} className={`g-card g-card--${r.state}`}>
               <img
                 src={r.thumbUrl}
-                alt={`Aufnahme ${r.cameraFile} vom ${cameraTime(r.mediaTime)}`}
+                alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
               />
               <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
-              <p className="g-card__file">
-                <span className="g-card__name">{r.cameraFile}</span>
-                {r.suffixes.map((suffix) => (
-                  <span key={suffix} className="g-chip">
-                    {suffix}
-                  </span>
+              <p className="g-card__files" title="Dateien auf der Kamera">
+                {r.cameraFiles.map((name) => (
+                  <span key={name}>{name}</span>
                 ))}
               </p>
               <p className="g-card__state">

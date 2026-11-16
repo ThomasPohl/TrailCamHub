@@ -21,9 +21,9 @@ backend in `backend/`.
 ## Gallery for the laptop (`gallery.html`)
 
 A second page for the end user who sorts recordings on his laptop (#258):
-large thumbnails, one tab per camera with its name, the camera's file name
-per recording (e.g. `DSCF0012` with `JPG`/`AVI`; photo and video of one
-name are one recording, the mediaIds stay the keys), **Fetch video** and
+large thumbnails, one tab per camera with its name, the camera's file names
+per recording (a video and the photo taken with it, e.g. `DSCF0011.JPG` and
+`DSCF0012.AVI`, are one recording; the mediaIds stay the keys), **Fetch video** and
 **Delete** per recording, "delete all
 new ones" with a confirmation, and a status line with the hub's last and next
 contact. The texts are German. It can be installed as an app (manifest and

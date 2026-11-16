@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraFileName, cameraSuffix, cameraTime, videoFileName } from './text';
+import { cameraFile, cameraTime, videoFileName } from './text';
 
 // 2026-11-15 14:02 on the camera's wall clock (read as UTC, docs/clock.md).
 const WALL = Date.UTC(2026, 10, 15, 14, 2) / 1000;
@@ -17,8 +17,7 @@ describe('gallery texts', () => {
   });
 
   it("names the camera's files as on its SD card", () => {
-    expect(cameraFileName(12)).toBe('DSCF0012');
-    expect(cameraSuffix(0)).toBe('JPG');
-    expect(cameraSuffix(2)).toBe('AVI');
+    expect(cameraFile(11, 0)).toBe('DSCF0011.JPG');
+    expect(cameraFile(12, 2)).toBe('DSCF0012.AVI');
   });
 });

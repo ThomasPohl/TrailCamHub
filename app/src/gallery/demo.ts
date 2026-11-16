@@ -1,7 +1,7 @@
 import { placeholderThumb } from '../api/demo';
 import { toCameraWallClock } from '../format';
 import type { GalleryApi, GalleryCamera, GalleryStatus, Recording } from './types';
-import { cameraFileName, videoFileName } from './text';
+import { cameraFile, videoFileName } from './text';
 
 const CAMERAS: GalleryCamera[] = [
   { camId: 'F4C15606ED3B', name: 'Garten' },
@@ -14,7 +14,7 @@ export const DEMO_CHECKIN_S = 20;
 function buildRecordings(camera: GalleryCamera, now: number, count: number): Recording[] {
   const list: Recording[] = [];
   for (let i = 0; i < count; i++) {
-    const num = 60 - i;
+    const num = 120 - 2 * i; // each video takes a photo with it: two numbers
     const mediaTime = toCameraWallClock(now - i * 2_700 - 900);
     const mediaId = 4_136_037_000 + num + (camera.camId === 'A1B2C3D4E5F6' ? 500 : 0);
     list.push({
@@ -23,8 +23,7 @@ function buildRecordings(camera: GalleryCamera, now: number, count: number): Rec
       mediaIds: [mediaId, mediaId + 100_000],
       camId: camera.camId,
       fileType: 2,
-      cameraFile: cameraFileName(num),
-      suffixes: ['JPG', 'AVI'],
+      cameraFiles: [cameraFile(num - 1, 0), cameraFile(num, 2)],
       mediaTime,
       thumbUrl: placeholderThumb(`${camera.name} ${num}`, (num * 37) % 360),
       state: 'new',
@@ -98,7 +97,7 @@ export class DemoGalleryApi implements GalleryApi {
   async download(recording: Recording): Promise<Blob> {
     const text =
       `Demo-Datei statt eines Videos.\n` +
-      `Aufnahme ${recording.cameraFile} (${recording.fileName}).\n` +
+      `Aufnahme ${recording.cameraFiles.join(' + ')} (${recording.fileName}).\n` +
       `Mit echtem Hub liegt hier das MP4.\n`;
     return new Blob([text], { type: 'text/plain' });
   }
