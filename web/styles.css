@@ -1183,3 +1183,21 @@ body[data-view="advanced"] {
     display: none;
   }
 }
+
+/* "Reset" next to a stored setting: config unset (#156). */
+.ds-reset {
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.ds-reset:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

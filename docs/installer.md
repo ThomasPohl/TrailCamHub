@@ -50,7 +50,8 @@ at the top):
 - **Activity**: what was sent and what the hub reported.
 
 Next to it, five tabs: **Firmware** (older and development builds, manual
-download), **Settings** (every single setting, in groups), **Camera** (take
+download), **Settings** (every single setting, in groups; "Reset" next to a stored
+value erases it with `config unset`, after a second click), **Camera** (take
 a photo or a video, list the recordings on the camera, delete one, erase the
 camera's SD card, and the queue of these actions with their results; see
 [camera-actions.md](camera-actions.md)), **Protocol** (the
