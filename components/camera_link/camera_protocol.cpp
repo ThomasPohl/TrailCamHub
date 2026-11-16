@@ -1252,10 +1252,7 @@ static void handle_action_response(const std::string &json)
     if (outcome.done && s_action.type == act::Type::delete_media) {
         // Gone from the card: no thumbnail or download is wanted for it, and
         // its dir/num may belong to a new recording soon.
-        if (camera::artemis::CatalogEntry *entry =
-                s_catalog.find(s_action.media_id)) {
-            entry->listed = false;
-        }
+        s_catalog.mark_gone(s_action.media_id);
         save_session_catalog();
     }
     advance_after_actions();
@@ -1303,6 +1300,13 @@ static void finish_scan_list(bool complete)
              (unsigned)s_scan_list.photos(), (unsigned)s_scan_list.videos(),
              (long long)s_scan_list.page());
     if (complete) {
+        // Deleted on the camera (by hand or by the hub): the backend is told
+        // at the next check-in, so the gallery drops them.
+        const size_t removed = s_catalog.mark_unlisted_gone();
+        if (removed > 0) {
+            ESP_LOGI(TAG, "%u recording(s) are no longer on the camera's card",
+                     (unsigned)removed);
+        }
         const size_t gone = s_catalog.mark_unlisted_requests_unavailable();
         if (gone > 0) {
             ESP_LOGW(TAG,

@@ -271,6 +271,11 @@ export interface CameraReport {
    * sending an item again is harmless.
    */
   media?: MediaEntry[];
+  /**
+   * mediaIds no longer on the camera's card (deleted on the camera or by the
+   * hub). The backend drops these recordings; repeating an id is harmless.
+   */
+  removedMedia?: number[];
 }
 
 export interface CheckinRequest {

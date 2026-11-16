@@ -60,6 +60,13 @@ std::size_t MediaCatalog::merge_page(const MediaList &page)
             e->media_time = item.time;
             e->file_type = item.file_type;
             e->listed = true;
+            if ((e->flags & kGone) != 0) {
+                // Back on the card (should not happen, a mediaId is unique):
+                // the backend may have dropped it, so report it again.
+                e->flags &= ~(static_cast<std::uint32_t>(kGone) |
+                              static_cast<std::uint32_t>(kGoneReported) |
+                              static_cast<std::uint32_t>(kReported));
+            }
             continue;
         }
         CatalogEntry n;
@@ -204,6 +211,53 @@ std::size_t MediaCatalog::mark_unlisted_requests_unavailable()
         }
     }
     return marked;
+}
+
+std::size_t MediaCatalog::mark_unlisted_gone()
+{
+    std::size_t marked = 0;
+    for (CatalogEntry &e : entries_) {
+        if (!e.listed && (e.flags & kGone) == 0) {
+            e.flags |= kGone;
+            ++marked;
+        }
+    }
+    return marked;
+}
+
+bool MediaCatalog::mark_gone(std::int64_t media_id)
+{
+    CatalogEntry *e = find(media_id);
+    if (e == nullptr || (e->flags & kGone) != 0)
+        return false;
+    e->flags |= kGone;
+    e->listed = false;
+    return true;
+}
+
+std::vector<CatalogEntry>
+MediaCatalog::unreported_present(std::size_t limit) const
+{
+    std::vector<CatalogEntry> out;
+    for (const CatalogEntry &e : entries_) {
+        if (out.size() >= limit)
+            break;
+        if ((e.flags & (kReported | kGone)) == 0)
+            out.push_back(e);
+    }
+    return out;
+}
+
+std::vector<std::int64_t> MediaCatalog::unreported_gone(std::size_t limit) const
+{
+    std::vector<std::int64_t> out;
+    for (const CatalogEntry &e : entries_) {
+        if (out.size() >= limit)
+            break;
+        if ((e.flags & kGone) != 0 && (e.flags & kGoneReported) == 0)
+            out.push_back(e.media_id);
+    }
+    return out;
 }
 
 std::uint32_t MediaCatalog::video_attempts(std::int64_t media_id) const

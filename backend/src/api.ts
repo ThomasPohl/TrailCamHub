@@ -475,7 +475,7 @@ function sanitizeMedia(raw: CameraReport['media'], camId: string): MediaRecord[]
 /** Validates the whole request before anything is stored. */
 function parseCameraReports(
   body: CheckinRequest,
-): Array<CameraReport & { records: MediaRecord[] }> {
+): Array<CameraReport & { records: MediaRecord[]; removed: number[] }> {
   const raw = body.cameras ?? [];
   if (!Array.isArray(raw)) throw new HttpError(400, 'cameras must be an array');
   if (raw.length > MAX_CAMERAS_PER_CHECKIN) throw new HttpError(413, 'Too many cameras');
@@ -490,7 +490,15 @@ function parseCameraReports(
     seen.add(camId);
     const records = sanitizeMedia(report.media, camId);
     mediaCount += records.length;
-    return { ...report, camId, records };
+    const removed = report.removedMedia ?? [];
+    if (
+      !Array.isArray(removed) ||
+      removed.length > MAX_MEDIA_PER_CHECKIN ||
+      !removed.every(isMediaId)
+    ) {
+      throw new HttpError(400, `Invalid removedMedia for camera ${camId}`);
+    }
+    return { ...report, camId, records, removed: removed as number[] };
   });
   if (mediaCount > MAX_MEDIA_PER_CHECKIN) throw new HttpError(413, 'Too many media entries');
   return reports;
@@ -546,6 +554,8 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     );
     // Only new recordings are written; existing ones keep their flags.
     await deps.store.addMedia(camera.camId, report.records);
+    // Deleted on the camera: gone from the gallery too.
+    if (report.removed.length > 0) await deps.store.removeMedia(camera.camId, report.removed);
     // A new camera may have been reported with a partial (delta) list.
     results.set(camera.camId, emptyResult(camera.camId, true, created));
   }

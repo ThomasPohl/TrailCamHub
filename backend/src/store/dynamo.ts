@@ -251,6 +251,17 @@ export class DynamoStore implements Store {
     }
   }
 
+  async removeMedia(camId: string, mediaIds: number[]): Promise<void> {
+    for (const mediaId of mediaIds) {
+      await this.db.send(
+        new DeleteCommand({
+          TableName: this.table,
+          Key: { PK: camPk(camId), SK: mediaSk(mediaId) },
+        }),
+      );
+    }
+  }
+
   async markThumbPresent(camId: string, mediaId: number): Promise<void> {
     await this.updateIfExists(camPk(camId), mediaSk(mediaId), 'thumbPresent', true);
   }

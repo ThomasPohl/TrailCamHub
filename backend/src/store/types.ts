@@ -69,6 +69,8 @@ export interface Store {
   getMedia(camId: string, mediaId: number): Promise<MediaRecord | undefined>;
   /** Inserts new media; never overwrites existing records (their flags survive). */
   addMedia(camId: string, items: MediaRecord[]): Promise<void>;
+  /** Drops recordings that are no longer on the camera; unknown ids are ignored. */
+  removeMedia(camId: string, mediaIds: number[]): Promise<void>;
   markThumbPresent(camId: string, mediaId: number): Promise<void>;
   setVideoState(camId: string, mediaId: number, state: VideoState): Promise<void>;
 
