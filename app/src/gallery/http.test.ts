@@ -148,3 +148,18 @@ describe('pairing trace', () => {
     expect(rows.map((r) => r.result)).toEqual(['too far apart', 'no photo']);
   });
 });
+
+describe('pairing with a missing photo', () => {
+  it('does not let a video take the photo of the next pair', async () => {
+    const { groupRecordings } = await import('./http');
+    const t = 1_794_731_000;
+    // Video 35 lost its photo 36 (deleted first); pair 33/34 was taken
+    // a minute earlier. Newest first, as the backend lists them.
+    const groups = groupRecordings([
+      item({ mediaId: 35, num: 35, fileType: 2, mediaTime: t + 60, deleteState: 'delivered' }),
+      item({ mediaId: 33, num: 33, fileType: 2, mediaTime: t + 12, deleteState: 'requested' }),
+      item({ mediaId: 34, num: 34, fileType: 0, mediaTime: t, deleteState: 'requested' }),
+    ]);
+    expect(groups.map((g) => g.map((m) => m.num))).toEqual([[35], [34, 33]]);
+  });
+});

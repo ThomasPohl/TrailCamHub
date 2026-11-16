@@ -44,9 +44,10 @@ const PAIR_WINDOW_S = 120;
  * The files of one recording: the camera takes a photo with each video and
  * stores both with neighbouring numbers in the same folder, e.g.
  * DSCF0023.AVI and DSCF0024.JPG. A video is paired with a photo whose number
- * is one off (the one after first, as the TC100 stores them) and that was
- * taken within PAIR_WINDOW_S; files without a partner stay alone. Keeps the order of the
- * backend's list (newest first).
+ * is one off (the one after it for every video first, as the TC100 stores
+ * them, then the one before) and that was taken within PAIR_WINDOW_S; files
+ * without a partner stay alone. Keeps the order of the backend's list
+ * (newest first).
  */
 export function groupRecordings(
   items: MediaItem[],
@@ -57,9 +58,14 @@ export function groupRecordings(
   for (const m of items) if (m.fileType !== 2) photos.set(`${m.dir}/${m.num}`, m);
   const paired = new Map<number, MediaItem>(); // photo mediaId -> its video
   const partner = new Map<number, MediaItem>(); // video mediaId -> its photo
-  for (const video of items) {
-    if (video.fileType !== 2) continue;
-    for (const num of [video.num + 1, video.num - 1]) {
+  // Two passes: first every video with the photo right after it (how the
+  // TC100 stores them), only then the one before. In one pass, a video whose
+  // own photo is gone (deleted, or its thumbnail not uploaded yet) took the
+  // photo of the neighbouring pair, and both pairs fell apart.
+  for (const offset of [1, -1]) {
+    for (const video of items) {
+      if (video.fileType !== 2 || partner.has(video.mediaId)) continue;
+      const num = video.num + offset;
       const photo = photos.get(`${video.dir}/${num}`);
       const apart = photo ? Math.abs(photo.mediaTime - video.mediaTime) : undefined;
       const taken = photo ? paired.has(photo.mediaId) : undefined;
@@ -80,7 +86,6 @@ export function groupRecordings(
       if (photo && match) {
         paired.set(photo.mediaId, video);
         partner.set(video.mediaId, photo);
-        break;
       }
     }
   }
