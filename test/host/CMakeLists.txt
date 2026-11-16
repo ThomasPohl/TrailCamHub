@@ -71,6 +71,7 @@ add_executable(host_tests
     test_media_catalog.cpp
     test_media_files.cpp
     test_media_store.cpp
+    test_found_cameras.cpp
     test_mp4_mux.cpp
     test_ota_policy.cpp
     test_time_policy.cpp
@@ -126,6 +127,7 @@ add_executable(host_tests
     ${link_dir}/action_confirm.cpp
     ${link_dir}/media_catalog.cpp
     ${link_dir}/media_files.cpp
+    ${link_dir}/found_cameras.cpp
     ${link_dir}/camera_prelogin.cpp
     ${link_dir}/camera_udp_packets.cpp
     ${link_dir}/pppp_session.cpp

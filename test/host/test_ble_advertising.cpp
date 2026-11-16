@@ -119,3 +119,40 @@ TEST_CASE("the cameras done in a scan are remembered by address and type")
     CHECK(done.size() == 0);
     CHECK_FALSE(done.contains(0, first));
 }
+
+TEST_CASE("format_address prints the address most significant byte first")
+{
+    const std::uint8_t address[6] = {0x3b, 0xed, 0x06, 0x56, 0xc1, 0xf4};
+    char text[18];
+    camera::ble::format_address(address, text);
+    CHECK(std::string(text) == "F4:C1:56:06:ED:3B");
+}
+
+TEST_CASE("SeenList keeps one entry per address with the latest values")
+{
+    camera::ble::SeenList seen;
+    const std::uint8_t a[6] = {1, 0, 0, 0, 0, 0xaa};
+    const std::uint8_t b[6] = {2, 0, 0, 0, 0, 0xaa};
+    const std::uint8_t name[] = {'T', 'C', '1', '0', '0',
+                                 '_', '0', '0', '0', '1'};
+    CHECK(seen.note(a, name, sizeof(name), -80, 100));
+    CHECK(seen.note(a, nullptr, 0, -70, 105));  // no name in this report
+    CHECK(seen.note(b, nullptr, 0, -60, 106));
+    REQUIRE(seen.size() == 2);
+    CHECK(std::string(seen.at(0).address) == "AA:00:00:00:00:01");
+    CHECK(std::string(seen.at(0).name) == "TC100_0001");
+    CHECK(seen.at(0).rssi == -70);
+    CHECK(seen.at(0).seen_at == 105);
+    CHECK(std::string(seen.at(1).name).empty());
+
+    std::uint8_t other[6] = {0, 0, 0, 0, 0, 0xbb};
+    for (std::uint8_t i = 0; i < camera::ble::SeenList::kMax; ++i) {
+        other[0] = i;
+        seen.note(other, nullptr, 0, -50, 107);
+    }
+    CHECK(seen.size() == camera::ble::SeenList::kMax);
+    other[0] = 0xff;
+    CHECK_FALSE(seen.note(other, nullptr, 0, -50, 108));
+    seen.clear();
+    CHECK(seen.size() == 0);
+}

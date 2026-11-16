@@ -439,6 +439,15 @@ bool save_camera_info(const camera::artemis::DeviceInfo &info,
     text.insert(text.size() - 1,
                 ",\"readAt\":" +
                     std::to_string(read_at >= kClockValidFrom ? read_at : 0));
+    // And the BLE address the hub connected to (#296).
+    std::string ble_address;
+    if (had_file &&
+        camera::artemis::json_find_string(previous, "bleAddress",
+                                          ble_address) &&
+        !ble_address.empty()) {
+        text =
+            camera::artemis::json_set_string(text, "bleAddress", ble_address);
+    }
     // Keep the time of the last completed sync as well.
     std::int64_t last_sync = 0;
     if (had_file &&
@@ -486,6 +495,56 @@ bool set_camera_sd_card(const std::string &camera_id,
         text, "sdCard", camera::artemis::sd_card_name(card));
     text = camera::artemis::json_set_string(text, "sdError", error);
     return write_file(path, text.data(), text.size());
+}
+
+bool set_camera_ble_address(const std::string &camera_id,
+                            const std::string &address)
+{
+    const std::string path = camera_dir(camera_id) + "/camera.json";
+    std::string text;
+    if (address.empty() || !read_file(path, text)) {
+        return false;
+    }
+    std::string stored;
+    if (camera::artemis::json_find_string(text, "bleAddress", stored) &&
+        stored == address) {
+        return true;  // unchanged: no write
+    }
+    text = camera::artemis::json_set_string(text, "bleAddress", address);
+    return write_file(path, text.data(), text.size());
+}
+
+std::string camera_ble_address(const std::string &camera_id)
+{
+    std::string text;
+    std::string address;
+    if (read_file(camera_dir(camera_id) + "/camera.json", text)) {
+        camera::artemis::json_find_string(text, "bleAddress", address);
+    }
+    return address;
+}
+
+namespace
+{
+const std::string kFoundPath =
+    std::string(SD_CARD_MOUNT_POINT) + "/found_cameras.csv";
+}
+
+bool add_found_cameras(const std::vector<camera::found::Entry> &heard,
+                       std::int64_t now)
+{
+    const std::string text = camera::found::serialize(
+        camera::found::merge(load_found_cameras(), heard, now));
+    return write_file(kFoundPath, text.data(), text.size());
+}
+
+std::vector<camera::found::Entry> load_found_cameras()
+{
+    std::string text;
+    if (!read_file(kFoundPath, text)) {
+        return {};
+    }
+    return camera::found::parse(text);
 }
 
 std::vector<std::string> list_cameras()

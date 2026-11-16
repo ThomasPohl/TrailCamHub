@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "found_cameras.hpp"
 #include "device_info.hpp"
 #include "media_catalog.hpp"
 
@@ -175,6 +176,21 @@ bool mark_camera_synced(const std::string &camera_id, std::int64_t at);
 // start. False if there is no camera.json to update.
 bool set_camera_sd_card(const std::string &camera_id,
                         camera::artemis::SdCard card, const std::string &error);
+
+// Records the BLE address the hub connected to for this camera (#296) as
+// "bleAddress" in camera.json; kept when camera.json is rewritten at the next
+// session start. False if there is no camera.json to update.
+bool set_camera_ble_address(const std::string &camera_id,
+                            const std::string &address);
+// The stored BLE address, or "" if none is known.
+std::string camera_ble_address(const std::string &camera_id);
+
+// Cameras heard in BLE scans (#296), /sdcard/found_cameras.csv. `heard` is
+// merged into the file (camera::found::merge); returns false if the file
+// could not be written.
+bool add_found_cameras(const std::vector<camera::found::Entry> &heard,
+                       std::int64_t now);
+std::vector<camera::found::Entry> load_found_cameras();
 
 // Ids (sanitized directory names) of all cameras with a camera.json.
 std::vector<std::string> list_cameras();

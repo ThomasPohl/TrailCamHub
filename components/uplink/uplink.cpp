@@ -297,6 +297,7 @@ void collect_cameras(CheckinRequest &request, std::vector<SyncCamera> &cameras,
         report.bat_type = info.bat_type;
         report.ble_version = info.ble_version;
         report.camera_name = info.camera_name;
+        report.ble_address = camera::store::camera_ble_address(id);
         const std::size_t limit = media_budget < kMaxMediaPerCamera
                                       ? media_budget
                                       : kMaxMediaPerCamera;
@@ -566,6 +567,11 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     std::vector<SyncCamera> cameras;
     SentMedia sent;
     collect_cameras(request, cameras, sent);
+    // Every camera heard in the scans, read or not (#296).
+    request.report_discovered = true;
+    for (const camera::found::Entry &e : camera::store::load_found_cameras()) {
+        request.discovered.push_back({e.address, e.name, e.rssi, e.seen_at});
+    }
     report.cameras_reported = (int)request.cameras.size();
     for (const CameraReport &c : request.cameras) {
         report.media_reported += (int)c.media.size();
