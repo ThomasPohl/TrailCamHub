@@ -182,6 +182,25 @@ describe('GalleryApp', () => {
     expect(await screen.findAllByRole('listitem')).toHaveLength(16);
   });
 
+  it('hides a camera and shows it again (#273)', async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    fireEvent.click(screen.getByRole('button', { name: 'Ausblenden' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Kamera „Garten“ ausblenden?');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ja, ausblenden' }));
+
+    expect(await screen.findByRole('heading', { name: 'Kamera „Wiese“' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Kameras' })).not.toBeInTheDocument();
+    const hidden = screen.getByRole('region', { name: 'Ausgeblendete Kameras' });
+    expect(hidden).toHaveTextContent('Garten');
+
+    fireEvent.click(within(hidden).getByRole('button', { name: 'Wieder anzeigen' }));
+    expect(await screen.findByRole('heading', { name: 'Kamera „Garten“' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Ausgeblendete Kameras' })).not.toBeInTheDocument();
+  });
+
   it('asks for a folder when none is chosen', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);

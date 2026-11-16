@@ -11,6 +11,8 @@
 export interface Camera {
   camId: string;
   name: string;
+  /** Hidden in the gallery (#273). */
+  hidden?: boolean;
   /** The TrailCamHub module that reads this camera. */
   hubId: string;
   hubName: string;

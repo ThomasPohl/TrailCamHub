@@ -79,6 +79,8 @@ export interface CameraRecord {
   camId: string;
   hubId: string;
   name: string;
+  /** Hidden in the gallery by a user (#273); the hub still reads it. */
+  hidden?: boolean;
   model?: string;
   firmware?: string;
   batPercent?: number;
@@ -256,6 +258,8 @@ export interface AdminHub {
 export interface Camera {
   camId: string;
   name: string;
+  /** Hidden in the gallery (#273); the gallery offers to show it again. */
+  hidden?: boolean;
   hubId: string;
   hubName: string;
   model: string;

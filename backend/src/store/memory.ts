@@ -73,6 +73,12 @@ export class MemoryStore implements Store {
     this.cameras.set(camId, { ...camera, name });
   }
 
+  async setCameraHidden(camId: string, hidden: boolean): Promise<void> {
+    const camera = this.cameras.get(camId);
+    if (!camera) throw new Error(`Unknown camera ${camId}`);
+    this.cameras.set(camId, { ...camera, hidden });
+  }
+
   async updateCamera(camId: string, telemetry: CameraTelemetry, lastSeen: number): Promise<void> {
     const camera = this.cameras.get(camId);
     if (!camera) throw new Error(`Unknown camera ${camId}`);

@@ -402,6 +402,30 @@ describe('video requests on a hub without PSRAM (#244)', () => {
   });
 });
 
+describe('hiding a camera (#273)', () => {
+  it('lets a user hide a camera and show it again', async () => {
+    const { call } = await galleryWorld();
+    const hide = await call('POST', `/v1/cameras/${CAM_ID}/hidden`, { hidden: true });
+    expect(hide.statusCode).toBe(200);
+    expect(body(hide)).toEqual({ camId: CAM_ID, hidden: true });
+    const listed = body<Array<{ camId: string; hidden?: boolean }>>(
+      await call('GET', '/v1/cameras'),
+    );
+    expect(listed).toEqual([expect.objectContaining({ camId: CAM_ID, hidden: true })]);
+    // The recordings stay.
+    expect((await call('GET', `/v1/cameras/${CAM_ID}/media`)).statusCode).toBe(200);
+
+    await call('POST', `/v1/cameras/${CAM_ID}/hidden`, { hidden: false });
+    const shown = body<Array<{ hidden?: boolean }>>(await call('GET', '/v1/cameras'));
+    expect(shown[0]?.hidden).toBeUndefined();
+
+    expect((await call('POST', `/v1/cameras/${CAM_ID}/hidden`, { hidden: 'yes' })).statusCode).toBe(
+      400,
+    );
+    expect((await call('POST', '/v1/cameras/nope/hidden', { hidden: true })).statusCode).toBe(404);
+  });
+});
+
 describe('camera names (#273)', () => {
   it('shows the name the admin gave the camera', async () => {
     const { call, deps } = await galleryWorld();

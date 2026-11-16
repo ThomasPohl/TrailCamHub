@@ -52,6 +52,8 @@ export interface Recording {
 export interface GalleryCamera {
   camId: string;
   name: string;
+  /** Hidden by the user (#273); listed only to show it again. */
+  hidden?: boolean;
 }
 
 /** Longest camera name the backend accepts. */
@@ -142,6 +144,8 @@ export interface GalleryApi {
   download(recording: Recording): Promise<Blob>;
   /** Gives the camera the name the user sees (#273); returns the stored name. */
   renameCamera(camId: string, name: string): Promise<string>;
+  /** Hides the camera in the gallery or shows it again (#273). */
+  setCameraHidden(camId: string, hidden: boolean): Promise<void>;
   me(): Promise<Me>;
   /** Admin only: every hub with cameras and users. */
   adminHubs(): Promise<AdminHub[]>;

@@ -74,13 +74,16 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminView, setAdminView] = useState(false);
   const [faultCount, setFaultCount] = useState(0);
+  // Asking before a camera is hidden (#273).
+  const [hideAsk, setHideAsk] = useState(false);
   const saving = useRef(false);
 
   const reload = useCallback(async () => {
     try {
       const s = await api.status();
       setStatus(s);
-      const id = camId && s.cameras.some((c) => c.camId === camId) ? camId : s.cameras[0]?.camId;
+      const shown = s.cameras.filter((c) => !c.hidden);
+      const id = camId && shown.some((c) => c.camId === camId) ? camId : shown[0]?.camId;
       setCamId(id);
       setItems(id ? await api.recordings(id) : []);
       setLoadError(undefined);
@@ -118,6 +121,31 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   }, [folder]);
 
   const cameraName = status?.cameras.find((c) => c.camId === camId)?.name ?? 'Kamera';
+  const shownCameras = status?.cameras.filter((c) => !c.hidden) ?? [];
+  const hiddenCameras = status?.cameras.filter((c) => c.hidden) ?? [];
+
+  const setHidden = async (id: string, name: string, hidden: boolean) => {
+    setBusy(true);
+    try {
+      await api.setCameraHidden(id, hidden);
+      setNotice(
+        hidden
+          ? `Die Kamera „${name}“ ist ausgeblendet. Ihre Aufnahmen bleiben gespeichert.`
+          : `Die Kamera „${name}“ wird wieder angezeigt.`,
+      );
+      await reload();
+      // After the reload, which keeps the camera shown before; changing the
+      // camera loads its recordings.
+      if (!hidden) {
+        setItems(undefined);
+        setCamId(id);
+      }
+    } catch (error) {
+      setNotice(`Das hat nicht geklappt: ${errorText(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const markSaved = useCallback((ids: number[]) => {
     setSaved((current) => {
@@ -295,9 +323,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </div>
           )}
 
-          {status && status.cameras.length > 1 && (
+          {shownCameras.length > 1 && (
             <nav className="g-tabs" aria-label="Kameras">
-              {status.cameras.map((c) => (
+              {shownCameras.map((c) => (
                 <button
                   key={c.camId}
                   type="button"
@@ -321,6 +349,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               name={cameraName}
               disabled={busy}
               onRename={(name) => renameCamera(camId, name)}
+              onHide={() => setHideAsk(true)}
             />
           )}
 
@@ -490,6 +519,60 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </ul>
           )}
 
+          {hideAsk && camId && (
+            <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-hide">
+              <div className="g-dialog__box">
+                <p id="g-hide">Kamera „{cameraName}“ ausblenden?</p>
+                <p className="g-hint">
+                  Ihre Aufnahmen bleiben gespeichert, und der Hub liest sie weiter. Unten auf der
+                  Seite können Sie die Kamera wieder anzeigen.
+                </p>
+                <div className="g-card__actions">
+                  <button
+                    type="button"
+                    className="g-btn g-btn--danger"
+                    onClick={() => {
+                      setHideAsk(false);
+                      setItems(undefined);
+                      setSelected(new Set());
+                      void setHidden(camId, cameraName, true);
+                    }}
+                  >
+                    Ja, ausblenden
+                  </button>
+                  <button
+                    type="button"
+                    className="g-btn g-btn--plain"
+                    onClick={() => setHideAsk(false)}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hiddenCameras.length > 0 && !adminView && (
+            <section className="g-hidden-cams" aria-label="Ausgeblendete Kameras">
+              <h2>Ausgeblendete Kameras</h2>
+              <ul className="g-plain-list">
+                {hiddenCameras.map((c) => (
+                  <li key={c.camId}>
+                    {c.name}{' '}
+                    <button
+                      type="button"
+                      className="g-btn g-btn--plain"
+                      disabled={busy}
+                      onClick={() => void setHidden(c.camId, c.name, false)}
+                    >
+                      Wieder anzeigen
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {confirm && camId && (
             <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-confirm">
               <div className="g-dialog__box">
@@ -534,10 +617,12 @@ function CameraHeading({
   name,
   disabled,
   onRename,
+  onHide,
 }: {
   name: string;
   disabled: boolean;
   onRename(name: string): Promise<boolean>;
+  onHide(): void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
@@ -557,6 +642,9 @@ function CameraHeading({
           }}
         >
           Umbenennen
+        </button>
+        <button type="button" className="g-btn g-btn--plain" disabled={disabled} onClick={onHide}>
+          Ausblenden
         </button>
       </div>
     );

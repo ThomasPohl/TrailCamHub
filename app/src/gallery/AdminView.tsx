@@ -191,6 +191,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
                   <th scope="row">
                     {c.name}
                     {c.name !== c.camId && <small> {c.camId}</small>}
+                    {c.hidden && <small> (ausgeblendet)</small>}
                   </th>
                   <td>
                     {c.model} · {c.firmware}

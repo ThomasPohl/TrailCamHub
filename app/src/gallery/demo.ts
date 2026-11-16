@@ -123,6 +123,12 @@ export class DemoGalleryApi implements GalleryApi {
     return camera.name;
   }
 
+  async setCameraHidden(camId: string, hidden: boolean): Promise<void> {
+    const camera = this.cameras.find((c) => c.camId === camId);
+    if (!camera) throw new Error(`Unbekannte Kamera ${camId}`);
+    camera.hidden = hidden || undefined;
+  }
+
   async me(): Promise<Me> {
     return { name: this.admin ? 'Admin (Vorführung)' : 'Vorführung', admin: this.admin };
   }
