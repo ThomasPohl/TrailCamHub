@@ -26,15 +26,28 @@ per recording (a video and the photo taken with it, e.g. `DSCF0023.AVI` and
 `DSCF0024.JPG`, are one recording; the mediaIds stay the keys), **Fetch video** and
 **Delete** per recording, "delete all
 new ones" with a confirmation, and a status line with the hub's last and next
-contact. The texts are German. It can be installed as an app (manifest and
-service worker in `public/`), and with Chrome or Edge it writes finished
+contact. The texts are German. It can be installed as an app (manifest,
+PNG icons of 192 and 512 px plus a maskable one, and a service worker in
+`public/`), and with Chrome or Edge it writes finished
 videos into a folder chosen once (File System Access API, `src/gallery/folder.ts`),
 one sub-folder per camera; other browsers download them.
 
-So far it only talks to a **demo backend** (`src/gallery/demo.ts`) whose hub
-checks in every 20 seconds and then delivers requested videos (a small text
-file instead of an MP4) and deletes what was marked. The backend side follows
-with #259 and #260. Locally: `npm run dev`, then open `/gallery.html`.
+With `VITE_API_BASE_URL` it talks to the backend and signs in with the token
+from the setup link that `npm run add-user` in `backend/` prints
+(`gallery.html#token=…`, #259). Without it, or with `?demo`, it uses a **demo
+backend** (`src/gallery/demo.ts`) whose hub checks in every 20 seconds and then
+delivers requested videos (a small text file instead of an MP4) and deletes
+what was marked. Locally: `npm run dev`, then open `/gallery.html`.
+
+The PNG icons are drawn from `public/gallery-icon.svg` and
+`public/gallery-icon-maskable.svg` (the same picture with a full background and
+the camera inside the safe zone):
+
+```bash
+rsvg-convert -w 192 -h 192 public/gallery-icon.svg -o public/gallery-icon-192.png
+rsvg-convert -w 512 -h 512 public/gallery-icon.svg -o public/gallery-icon-512.png
+rsvg-convert -w 512 -h 512 public/gallery-icon-maskable.svg -o public/gallery-icon-maskable-512.png
+```
 
 ## Development
 
