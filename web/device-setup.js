@@ -154,7 +154,12 @@
   }
 
   function setConnected(connected) {
-    for (const button of [...actionButtons, eraseButton, form.querySelector('button[type="submit"]')]) {
+    for (const button of [
+      ...actionButtons,
+      eraseButton,
+      form.querySelector('button[type="submit"]'),
+      ...Object.values(resetButtons),
+    ]) {
       button.disabled = !connected;
     }
     if (!connected) {
@@ -217,6 +222,53 @@
     }
   }
 
+  // A "Reset" button next to each stored setting: `config unset <key>`
+  // brings the default back or removes the value (#156). Two clicks, as a
+  // secret cannot be read back once it is gone.
+  const resetButtons = {};
+  for (const [key, span] of Object.entries(current)) {
+    if (key === "backend" || !span) {
+      continue;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ds-reset";
+    button.textContent = "Reset";
+    button.hidden = true;
+    button.setAttribute("aria-label", `Reset ${key} on the hub`);
+    let armed;
+    button.addEventListener("click", async () => {
+      if (!armed) {
+        button.textContent = "Really reset?";
+        armed = setTimeout(() => {
+          armed = undefined;
+          button.textContent = "Reset";
+        }, 4000);
+        return;
+      }
+      clearTimeout(armed);
+      armed = undefined;
+      button.textContent = "Reset";
+      try {
+        await send(`config unset ${key}`);
+        await send("config show");
+        formStatus.textContent = `${key} reset on the hub.`;
+      } catch {
+        formStatus.textContent = "Reset failed; check the connection.";
+      }
+    });
+    span.after(" ", button);
+    resetButtons[key] = button;
+  }
+
+  // Shown only for a stored value, and only while connected.
+  function showReset(key, shown) {
+    const button = resetButtons[key];
+    if (button) {
+      button.hidden = shown === "" || shown === "–" || shown === "(default)" || shown === "(not set)";
+    }
+  }
+
   async function saveSettings(event) {
     event.preventDefault();
     const values = Object.fromEntries(FIELDS.map((key) => [key, settings.fieldValue(form, key)]));
@@ -264,6 +316,7 @@
         const [key, ...value] = rest;
         if (current[key]) {
           current[key].textContent = value.join(" ");
+          showReset(key, value.join(" "));
         }
         break;
       }
