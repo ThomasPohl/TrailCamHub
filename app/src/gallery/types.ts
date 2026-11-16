@@ -20,18 +20,29 @@ export type RecordingState =
   /** The last request failed; `failReason` says why. */
   | 'failed';
 
+/**
+ * One recording as the user sees it: the files the camera stores under one
+ * name, e.g. DSCF0012.JPG and DSCF0012.AVI (#273). The mediaIds stay the keys.
+ */
 export interface Recording {
+  /** Key of the recording: the video's mediaId, else the photo's. */
   mediaId: number;
+  /** Every file of the recording (photo and video). */
+  mediaIds: number[];
   camId: string;
-  /** 0 = photo, 2 = video (camera media list). */
+  /** 2 if the recording has a video, else 0 (photo only). */
   fileType: 0 | 2;
+  /** The name on the camera's SD card without suffix, e.g. "DSCF0012". */
+  cameraFile: string;
+  /** The suffixes the camera has under that name, e.g. ["JPG", "AVI"]. */
+  suffixes: string[];
   /** Camera wall clock read as if it were UTC (docs/clock.md). */
   mediaTime: number;
   thumbUrl: string;
   state: RecordingState;
   /** With `videoReady`: where to download the video. */
   videoUrl?: string;
-  /** File name to save the video under, without folder. */
+  /** File name to save the video under on the laptop, without folder. */
   fileName: string;
   /** With `failed`: a reason the user can understand (German). */
   failReason?: string;
@@ -57,10 +68,12 @@ export interface GalleryApi {
   status(): Promise<GalleryStatus>;
   /** All recordings of a camera that are not deleted yet, newest first. */
   recordings(camId: string): Promise<Recording[]>;
+  /** `mediaIds`: the videos' mediaIds. */
   requestVideos(camId: string, mediaIds: number[]): Promise<void>;
+  /** `mediaIds`: every file of the recordings to delete. */
   requestDelete(camId: string, mediaIds: number[]): Promise<void>;
-  /** Withdraws a request the hub has not picked up yet. */
-  withdraw(camId: string, mediaId: number): Promise<void>;
+  /** Withdraws the requests for a recording the hub has not picked up yet. */
+  withdraw(camId: string, recording: Recording): Promise<void>;
   /** The video file of a recording in state `videoReady`. */
   download(recording: Recording): Promise<Blob>;
 }

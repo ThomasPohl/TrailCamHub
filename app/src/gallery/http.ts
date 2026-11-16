@@ -1,6 +1,6 @@
 import { ApiError } from '../api/http';
 import type { Camera, MediaItem } from '../api/types';
-import { videoFileName } from './text';
+import { cameraFileName, cameraSuffix, videoFileName } from './text';
 import type { GalleryApi, GalleryStatus, Recording, RecordingState } from './types';
 
 /** A reason from the hub or backend in words the user can understand. */
@@ -32,6 +32,22 @@ function toState(m: MediaItem): Pick<Recording, 'state' | 'failReason'> {
   };
   const state = byVideo[m.videoState];
   return state === 'failed' ? { state, failReason: friendlyReason(m.videoError) } : { state };
+}
+
+/**
+ * The files of one recording: the camera keeps a photo and a video under the
+ * same name (dir/num), and the user sees them as one (#273). Newest first,
+ * like the backend's list.
+ */
+export function groupRecordings(items: MediaItem[]): MediaItem[][] {
+  const groups = new Map<string, MediaItem[]>();
+  for (const m of items) {
+    const key = `${m.dir}/${m.num}`;
+    const group = groups.get(key);
+    if (group) group.push(m);
+    else groups.set(key, [m]);
+  }
+  return [...groups.values()];
 }
 
 /**
@@ -67,16 +83,28 @@ export class HttpGalleryApi implements GalleryApi {
   async recordings(camId: string): Promise<Recording[]> {
     const items = await this.request<MediaItem[]>('GET', `${this.camera(camId)}/media`);
     const name = this.cameras.get(camId)?.name ?? 'Kamera';
-    return items.map((m) => ({
-      mediaId: m.mediaId,
-      camId,
-      fileType: m.fileType,
-      mediaTime: m.mediaTime,
-      thumbUrl: m.thumbUrl,
-      videoUrl: m.videoUrl,
-      fileName: videoFileName(name, m.mediaTime, m.num),
-      ...toState(m),
-    }));
+    return groupRecordings(items).map((files) => {
+      const video = files.find((m) => m.fileType === 2);
+      const photo = files.find((m) => m.fileType !== 2);
+      // The video decides the state; a delete of any file shows as well.
+      const main = video ?? photo ?? (files[0] as MediaItem);
+      const deleting = files.find((m) => m.deleteState !== undefined);
+      return {
+        mediaId: main.mediaId,
+        mediaIds: files.map((m) => m.mediaId),
+        camId,
+        fileType: video ? 2 : 0,
+        cameraFile: cameraFileName(main.num),
+        suffixes: [...new Set(files.map((m) => m.fileType).sort((a, b) => a - b))].map(
+          cameraSuffix,
+        ),
+        mediaTime: main.mediaTime,
+        thumbUrl: (photo ?? main).thumbUrl,
+        videoUrl: video?.videoUrl,
+        fileName: videoFileName(name, main.mediaTime, main.num),
+        ...toState(deleting ?? main),
+      };
+    });
   }
 
   async requestVideos(camId: string, mediaIds: number[]): Promise<void> {
@@ -95,9 +123,11 @@ export class HttpGalleryApi implements GalleryApi {
     });
   }
 
-  async withdraw(camId: string, mediaId: number): Promise<void> {
+  async withdraw(camId: string, recording: Recording): Promise<void> {
     try {
-      await this.request('POST', `${this.camera(camId)}/media/${mediaId}/withdraw`);
+      for (const mediaId of recording.mediaIds) {
+        await this.request('POST', `${this.camera(camId)}/media/${mediaId}/withdraw`);
+      }
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         throw new Error('Der Hub hat den Auftrag schon erhalten, Zurücknehmen geht nicht mehr.');

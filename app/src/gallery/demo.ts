@@ -1,7 +1,7 @@
 import { placeholderThumb } from '../api/demo';
 import { toCameraWallClock } from '../format';
 import type { GalleryApi, GalleryCamera, GalleryStatus, Recording } from './types';
-import { videoFileName } from './text';
+import { cameraFileName, videoFileName } from './text';
 
 const CAMERAS: GalleryCamera[] = [
   { camId: 'F4C15606ED3B', name: 'Garten' },
@@ -16,10 +16,15 @@ function buildRecordings(camera: GalleryCamera, now: number, count: number): Rec
   for (let i = 0; i < count; i++) {
     const num = 60 - i;
     const mediaTime = toCameraWallClock(now - i * 2_700 - 900);
+    const mediaId = 4_136_037_000 + num + (camera.camId === 'A1B2C3D4E5F6' ? 500 : 0);
     list.push({
-      mediaId: 4_136_037_000 + num + (camera.camId === 'A1B2C3D4E5F6' ? 500 : 0),
+      mediaId,
+      // The camera keeps a photo and a video under the same name.
+      mediaIds: [mediaId, mediaId + 100_000],
       camId: camera.camId,
       fileType: 2,
+      cameraFile: cameraFileName(num),
+      suffixes: ['JPG', 'AVI'],
       mediaTime,
       thumbUrl: placeholderThumb(`${camera.name} ${num}`, (num * 37) % 360),
       state: 'new',
@@ -82,9 +87,9 @@ export class DemoGalleryApi implements GalleryApi {
     }
   }
 
-  async withdraw(camId: string, mediaId: number): Promise<void> {
+  async withdraw(camId: string, recording: Recording): Promise<void> {
     this.catchUp();
-    const [r] = this.pick(camId, [mediaId]);
+    const [r] = this.pick(camId, [recording.mediaId]);
     if (r && (r.state === 'videoRequested' || r.state === 'deleteRequested')) {
       r.state = r.videoUrl ? 'videoReady' : 'new';
     }
@@ -93,7 +98,7 @@ export class DemoGalleryApi implements GalleryApi {
   async download(recording: Recording): Promise<Blob> {
     const text =
       `Demo-Datei statt eines Videos.\n` +
-      `Aufnahme ${recording.mediaId} (${recording.fileName}).\n` +
+      `Aufnahme ${recording.cameraFile} (${recording.fileName}).\n` +
       `Mit echtem Hub liegt hier das MP4.\n`;
     return new Blob([text], { type: 'text/plain' });
   }
@@ -123,6 +128,6 @@ export class DemoGalleryApi implements GalleryApi {
 
   private pick(camId: string, mediaIds: number[]): Recording[] {
     const ids = new Set(mediaIds);
-    return this.list(camId).filter((r) => ids.has(r.mediaId));
+    return this.list(camId).filter((r) => r.mediaIds.some((id) => ids.has(id)));
   }
 }
