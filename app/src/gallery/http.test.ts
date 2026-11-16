@@ -74,42 +74,52 @@ describe('HttpGalleryApi', () => {
   });
 
   it('shows a video and its photo as one recording with both file names', async () => {
-    const t = Date.UTC(2026, 10, 15, 14, 2) / 1000;
+    // From a real TC100 list (newest first): the photo has the next number
+    // and is up to 12 s older than the video's time.
     const { fn, calls } = fakeFetch({
       'GET https://api/v1/cameras': [camera],
       'GET https://api/v1/cameras/CAM1/media': [
-        // Newest first, as the backend lists them.
-        item({ mediaId: 13, num: 13, fileType: 0, mediaTime: t + 600 }),
-        item({ mediaId: 12, num: 12, fileType: 2, mediaTime: t + 1, videoState: 'requested' }),
-        item({ mediaId: 11, num: 11, fileType: 0, mediaTime: t, thumbUrl: 'https://s3/photo' }),
-        // A neighbour taken much earlier is not its photo.
-        item({ mediaId: 10, num: 10, fileType: 2, mediaTime: t - 3_600 }),
+        item({ mediaId: 33, num: 33, fileType: 2, mediaTime: 1794731054 }),
+        item({
+          mediaId: 34,
+          num: 34,
+          fileType: 0,
+          mediaTime: 1794731042,
+          thumbUrl: 'https://s3/photo',
+        }),
+        item({ mediaId: 28, num: 28, fileType: 0, mediaTime: 1794661708 }),
+        item({ mediaId: 27, num: 27, fileType: 2, mediaTime: 1794661708, videoState: 'failed' }),
+        item({ mediaId: 25, num: 25, fileType: 2, mediaTime: 1794658538, videoState: 'requested' }),
+        item({ mediaId: 26, num: 26, fileType: 0, mediaTime: 1794658526 }),
+        item({ mediaId: 24, num: 24, fileType: 0, mediaTime: 1794656736 }),
+        item({ mediaId: 23, num: 23, fileType: 2, mediaTime: 1794656736 }),
+        item({ mediaId: 22, num: 22, fileType: 0, mediaTime: 1794642848 }),
       ],
-      'POST https://api/v1/cameras/CAM1/media/11/withdraw': { withdrawn: 0 },
-      'POST https://api/v1/cameras/CAM1/media/12/withdraw': { withdrawn: 1 },
+      'POST https://api/v1/cameras/CAM1/media/25/withdraw': { withdrawn: 1 },
+      'POST https://api/v1/cameras/CAM1/media/26/withdraw': { withdrawn: 0 },
     });
     const api = new HttpGalleryApi('https://api', 't', fn);
     await api.status();
     const list = await api.recordings('CAM1');
     expect(list.map((r) => r.cameraFiles)).toEqual([
-      ['DSCF0013.JPG'],
-      ['DSCF0011.JPG', 'DSCF0012.AVI'],
-      ['DSCF0010.AVI'],
+      ['DSCF0034.JPG', 'DSCF0033.AVI'],
+      ['DSCF0028.JPG', 'DSCF0027.AVI'],
+      ['DSCF0026.JPG', 'DSCF0025.AVI'],
+      ['DSCF0024.JPG', 'DSCF0023.AVI'],
+      ['DSCF0022.JPG'],
     ]);
-    expect(list[1]).toMatchObject({
-      mediaId: 12,
-      mediaIds: [11, 12],
-      fileType: 2,
-      state: 'videoRequested',
+    expect(list[0]).toMatchObject({
+      mediaId: 33,
+      mediaIds: [34, 33],
       thumbUrl: 'https://s3/photo',
-      fileName: 'Garten_2026-11-15_14-02_DSCF0012.mp4',
     });
-    expect(list[0]).toMatchObject({ fileType: 0, mediaIds: [13] });
+    expect(list[2]).toMatchObject({ mediaId: 25, state: 'videoRequested', fileType: 2 });
+    expect(list[4]).toMatchObject({ fileType: 0, mediaIds: [22] });
 
-    await api.withdraw('CAM1', list[1]!);
+    await api.withdraw('CAM1', list[2]!);
     expect(calls.slice(-2).map((c) => c.url)).toEqual([
-      'https://api/v1/cameras/CAM1/media/11/withdraw',
-      'https://api/v1/cameras/CAM1/media/12/withdraw',
+      'https://api/v1/cameras/CAM1/media/26/withdraw',
+      'https://api/v1/cameras/CAM1/media/25/withdraw',
     ]);
   });
 

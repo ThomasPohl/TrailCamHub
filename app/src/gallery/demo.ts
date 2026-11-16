@@ -23,11 +23,11 @@ function buildRecordings(camera: GalleryCamera, now: number, count: number): Rec
       mediaIds: [mediaId, mediaId + 100_000],
       camId: camera.camId,
       fileType: 2,
-      cameraFiles: [cameraFile(num - 1, 0), cameraFile(num, 2)],
+      cameraFiles: [cameraFile(num, 0), cameraFile(num - 1, 2)],
       mediaTime,
       thumbUrl: placeholderThumb(`${camera.name} ${num}`, (num * 37) % 360),
       state: 'new',
-      fileName: videoFileName(camera.name, mediaTime, num),
+      fileName: videoFileName(camera.name, mediaTime, num - 1),
     });
   }
   return list;
