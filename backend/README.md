@@ -71,6 +71,10 @@ on the user's laptop; the gallery keeps the token. `--user <userId>` issues a
 new token (the old link stops working) and can link more hubs; `--admin` sets
 the admin role (used by the admin view, #264). There is no self-registration.
 
+**Camera names** (#273): a camera is called by its camId until it gets a
+name: `npm run name-camera -- --camera F4_C1_56_06_ED_3B --name "Garten"`.
+The gallery shows the name; the camId stays the key.
+
 **Deleting** (#260): `deleteMedia` queues one command per recording; the hub
 gets it as `{"id", "type":"deleteMedia", "mediaId"}` and acknowledges it like
 the others. Recordings with a done delete disappear from the media list; the

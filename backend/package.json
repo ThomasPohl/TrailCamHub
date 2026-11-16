@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "register-hub": "node scripts/register-hub.mjs",
-    "add-user": "node scripts/add-user.mjs"
+    "add-user": "node scripts/add-user.mjs",
+    "name-camera": "node scripts/name-camera.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.850.0",

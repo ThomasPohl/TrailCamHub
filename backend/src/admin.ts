@@ -44,7 +44,18 @@ export interface CreateAppUserEvent {
   userId?: number;
 }
 
-export type AdminEvent = RegisterHubEvent | CreatePairingCodeEvent | CreateAppUserEvent;
+/** Gives a camera the name the user sees in the gallery. */
+export interface RenameCameraEvent {
+  admin: 'renameCamera';
+  camId?: string;
+  name?: string;
+}
+
+export type AdminEvent =
+  | RegisterHubEvent
+  | CreatePairingCodeEvent
+  | CreateAppUserEvent
+  | RenameCameraEvent;
 
 type Failure = { ok: false; error: string };
 export type RegisterHubResult =
@@ -54,7 +65,8 @@ export type PairingResult = { ok: true; code: string; link?: string; expiresAt: 
 export type AppUserResult =
   | { ok: true; userId: number; token: string; linkedHubs: string[] }
   | Failure;
-export type AdminResult = RegisterHubResult | PairingResult | AppUserResult;
+export type RenameResult = { ok: true; camId: string; name: string } | Failure;
+export type AdminResult = RegisterHubResult | PairingResult | AppUserResult | RenameResult;
 
 export type AdminDeps = Pick<Deps, 'store' | 'now' | 'telegram'>;
 
@@ -71,6 +83,9 @@ export async function handleAdmin(
   deps: AdminDeps,
 ): Promise<AdminResult> {
   if (event.admin === 'registerHub') return registerHub(event as RegisterHubEvent, deps.store);
+  if (event.admin === 'renameCamera') {
+    return renameCamera(event as RenameCameraEvent, deps);
+  }
   if (event.admin === 'createAppUser') {
     return createAppUser(event as CreateAppUserEvent, deps);
   }
@@ -181,4 +196,21 @@ export async function createAppUser(
   });
   for (const hubId of hubIds) await deps.store.linkUser(userId, hubId);
   return { ok: true, userId, token, linkedHubs: hubIds };
+}
+
+/** Longest camera name; it is shown as a tab and used in file names. */
+const MAX_CAMERA_NAME = 40;
+
+export async function renameCamera(
+  event: RenameCameraEvent,
+  deps: AdminDeps,
+): Promise<RenameResult> {
+  const camId = event.camId ?? '';
+  const name = (event.name ?? '').trim();
+  if (!name || name.length > MAX_CAMERA_NAME || [...name].some((c) => c < ' ')) {
+    return { ok: false, error: `name must be 1-${MAX_CAMERA_NAME} printable characters` };
+  }
+  if (!(await deps.store.getCamera(camId))) return { ok: false, error: `unknown camera ${camId}` };
+  await deps.store.renameCamera(camId, name);
+  return { ok: true, camId, name };
 }

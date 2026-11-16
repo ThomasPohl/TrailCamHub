@@ -195,3 +195,26 @@ describe('delete batches (#261)', () => {
     expect(await checkin()).toHaveLength(5);
   });
 });
+
+describe('camera names (#273)', () => {
+  it('shows the name the admin gave the camera', async () => {
+    const { call, deps } = await galleryWorld();
+    const { renameCamera } = await import('./admin');
+    expect(
+      await renameCamera({ admin: 'renameCamera', camId: CAM_ID, name: ' Garten ' }, deps),
+    ).toEqual({
+      ok: true,
+      camId: CAM_ID,
+      name: 'Garten',
+    });
+    const cameras = body<Array<{ camId: string; name: string }>>(await call('GET', '/v1/cameras'));
+    expect(cameras[0]).toMatchObject({ camId: CAM_ID, name: 'Garten' });
+
+    expect((await renameCamera({ admin: 'renameCamera', camId: CAM_ID, name: '' }, deps)).ok).toBe(
+      false,
+    );
+    expect((await renameCamera({ admin: 'renameCamera', camId: 'nope', name: 'X' }, deps)).ok).toBe(
+      false,
+    );
+  });
+});

@@ -44,6 +44,8 @@ export interface Store {
    */
   claimCamera(camId: string, hubId: string): Promise<{ camera: CameraRecord; created: boolean }>;
   getCamera(camId: string): Promise<CameraRecord | undefined>;
+  /** Sets the name the user sees (#273); the camId stays the key. */
+  renameCamera(camId: string, name: string): Promise<void>;
   updateCamera(camId: string, telemetry: CameraTelemetry, lastSeen: number): Promise<void>;
   listHubCameraIds(hubId: string): Promise<string[]>;
 
