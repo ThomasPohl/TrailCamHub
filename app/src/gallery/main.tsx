@@ -23,11 +23,13 @@ if (!root) {
  */
 function chooseApi(): GalleryApi | undefined {
   const baseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-  if (!baseUrl || new URLSearchParams(window.location.search).has('demo')) {
-    return new DemoGalleryApi();
+  const params = new URLSearchParams(window.location.search);
+  if (!baseUrl || params.has('demo')) {
+    // `?demo=admin` shows the admin view as well.
+    return new DemoGalleryApi(undefined, undefined, params.get('demo') === 'admin');
   }
   const token = takeToken();
-  const debug = new URLSearchParams(window.location.search).has('debug');
+  const debug = params.has('debug');
   return token ? new HttpGalleryApi(baseUrl, token, undefined, debug) : undefined;
 }
 

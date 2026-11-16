@@ -13,6 +13,7 @@ import {
 } from './http';
 import type {
   AckRequest,
+  AdminHub,
   Camera,
   CameraCheckin,
   CameraRecord,
@@ -96,6 +97,9 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/withdraw', handler: withdrawMedia },
   { method: 'POST', pattern: '/v1/cameras/:camId/name', handler: renameCameraByUser },
   { method: 'PUT', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
+  // The same as POST: the Function URL's CORS allows no PUT (#286).
+  { method: 'POST', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
+  { method: 'GET', pattern: '/v1/admin/hubs', handler: adminHubs },
   { method: 'POST', pattern: '/v1/device/checkin', handler: checkin },
   { method: 'POST', pattern: '/v1/device/ack', handler: ack },
   { method: 'POST', pattern: '/v1/device/pairing-code', handler: devicePairingCode },
@@ -228,6 +232,43 @@ async function me(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
     name: user.name ?? '',
     role: user.admin ? 'admin' : 'user',
   });
+}
+
+/** Every hub with its cameras and users, for the admin view (#264). */
+async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
+  const user = await authUser(req, deps);
+  if (!user.admin) throw new HttpError(403, 'Only for the admin');
+  const hubs: AdminHub[] = [];
+  for (const hubId of await deps.store.listHubIds()) {
+    const hub = await deps.store.getHub(hubId);
+    if (!hub) continue;
+    const cameras: Camera[] = [];
+    for (const camId of await deps.store.listHubCameraIds(hubId)) {
+      const record = await deps.store.getCamera(camId);
+      if (record && record.hubId === hubId) {
+        cameras.push(toCamera(record, hub, await deps.store.listCommands(camId)));
+      }
+    }
+    cameras.sort((a, b) => a.name.localeCompare(b.name));
+    const users = await Promise.all(
+      (await deps.store.listHubUserIds(hubId)).map(async (userId) => {
+        const app = await deps.store.getAppUser(userId);
+        return app ? { userId, name: app.name, role: app.role } : { userId };
+      }),
+    );
+    hubs.push({
+      hubId,
+      name: hub.name,
+      firmware: hub.firmware,
+      batPercent: hub.batPercent,
+      lastSeen: hub.lastSeen,
+      schedule: hub.schedule,
+      scheduleConfig: hub.scheduleConfig ?? {},
+      cameras,
+      users,
+    });
+  }
+  return json(200, hubs);
 }
 
 async function listCameras(req: ApiRequest, _p: Record<string, string>, deps: Deps) {

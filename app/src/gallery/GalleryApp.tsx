@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/http';
+import { AdminView } from './AdminView';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
 import { cameraTime, clockTime, folderName, stateText } from './text';
@@ -69,6 +70,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   // Chosen recordings by their key; ones that left the list are ignored.
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [busy, setBusy] = useState(false);
+  // The admin gets a second view with every hub (#264).
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminView, setAdminView] = useState(false);
   const saving = useRef(false);
 
   const reload = useCallback(async () => {
@@ -90,6 +94,14 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     const timer = setInterval(() => void reload(), pollMs);
     return () => clearInterval(timer);
   }, [reload, pollMs]);
+
+  useEffect(() => {
+    // Older backends have no /v1/me: then there is no admin view.
+    api.me().then(
+      (me) => setIsAdmin(me.admin),
+      () => setIsAdmin(false),
+    );
+  }, [api]);
 
   useEffect(() => {
     folder.folderState().then(setFolderInfo, () => setFolderInfo({ kind: 'unsupported' }));
@@ -208,6 +220,16 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     <div className="gallery">
       <header className="g-header">
         <h1>Wildkamera</h1>
+        {isAdmin && (
+          <button
+            type="button"
+            className="g-btn g-btn--plain g-header__switch"
+            aria-pressed={adminView}
+            onClick={() => setAdminView((on) => !on)}
+          >
+            {adminView ? 'Zur Galerie' : 'Verwaltung'}
+          </button>
+        )}
         {status && (
           <p className="g-status">
             {status.lastContact > 0
@@ -220,265 +242,274 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         )}
       </header>
 
-      {api.isDemo && (
-        <p className="g-banner" role="note">
-          Vorführung: Beispielbilder, kein echter Hub. Der Hub „meldet sich“ hier alle 20 Sekunden.
-        </p>
-      )}
-
-      <FolderBar
-        info={folderInfo}
-        onChoose={() => void pickFolder(false)}
-        onAllow={() => void pickFolder(true)}
-      />
-
-      {notice && (
-        <p className="g-notice" role="status">
-          {notice}
-          <button type="button" className="g-link" onClick={() => setNotice(undefined)}>
-            Ausblenden
-          </button>
-        </p>
-      )}
-
-      {loadError && (
-        <div className="g-error" role="alert">
-          <p>
-            {loadError === 'signin'
-              ? 'Die Anmeldung gilt nicht mehr. Bitte den neuen Einrichtungslink öffnen.'
-              : 'Die Bilder konnten nicht geladen werden. Ist der Laptop mit dem Internet verbunden?'}
-          </p>
-          <button type="button" className="g-btn" onClick={() => void reload()}>
-            Nochmal versuchen
-          </button>
-        </div>
-      )}
-
-      {status && status.cameras.length > 1 && (
-        <nav className="g-tabs" aria-label="Kameras">
-          {status.cameras.map((c) => (
-            <button
-              key={c.camId}
-              type="button"
-              className={c.camId === camId ? 'g-tab g-tab--on' : 'g-tab'}
-              aria-pressed={c.camId === camId}
-              onClick={() => {
-                setCamId(c.camId);
-                setItems(undefined);
-                setSelected(new Set());
-              }}
-            >
-              {c.name}
-            </button>
-          ))}
-        </nav>
-      )}
-
-      {status && camId && (
-        <CameraHeading
-          key={camId}
-          name={cameraName}
-          disabled={busy}
-          onRename={(name) => renameCamera(camId, name)}
-        />
-      )}
-
-      {items && newOnes.length > 0 && (
-        <div className="g-toolbar">
-          <button
-            type="button"
-            className="g-btn g-btn--danger"
-            disabled={busy}
-            onClick={() =>
-              setConfirm({
-                question:
-                  newOnes.length === 1
-                    ? '1 neue Aufnahme löschen?'
-                    : `Alle ${newOnes.length} neuen Aufnahmen löschen?`,
-                mediaIds: newOnes.flatMap((r) => r.mediaIds),
-              })
-            }
-          >
-            Alle neuen löschen ({newOnes.length})
-          </button>
-        </div>
-      )}
-
-      {camId && chosen.length > 0 && (
-        <div className="g-selbar" role="region" aria-label="Auswahl">
-          <p>
-            {chosen.length === 1
-              ? '1 Aufnahme ausgewählt'
-              : `${chosen.length} Aufnahmen ausgewählt`}
-          </p>
-          <div className="g-card__actions">
-            {chosenVideos.length > 0 && (
-              <button
-                type="button"
-                className="g-btn"
-                disabled={busy}
-                onClick={() =>
-                  void act(async () => {
-                    await api.requestVideos(
-                      camId,
-                      chosenVideos.map((r) => r.mediaId),
-                    );
-                    setSelected(new Set());
-                  })
-                }
-              >
-                Videos holen ({chosenVideos.length})
-              </button>
-            )}
-            <button
-              type="button"
-              className="g-btn g-btn--danger"
-              disabled={busy}
-              onClick={() =>
-                setConfirm({
-                  question:
-                    chosen.length === 1
-                      ? '1 ausgewählte Aufnahme löschen?'
-                      : `${chosen.length} ausgewählte Aufnahmen löschen?`,
-                  mediaIds: chosen.flatMap((r) => r.mediaIds),
-                })
-              }
-            >
-              Löschen ({chosen.length})
-            </button>
-            <button
-              type="button"
-              className="g-btn g-btn--plain"
-              onClick={() => setSelected(new Set())}
-            >
-              Auswahl aufheben
-            </button>
-          </div>
-        </div>
-      )}
-
-      {items === undefined && !loadError && <p className="g-hint">Bilder werden geladen …</p>}
-      {items && items.length === 0 && (
-        <p className="g-hint">Keine Aufnahmen. Neue Bilder erscheinen nach dem nächsten Kontakt.</p>
-      )}
-
-      {items && items.length > 0 && camId && (
-        <ul className="g-grid" aria-label="Aufnahmen">
-          {items.map((r) => (
-            <li
-              key={r.mediaId}
-              className={`g-card g-card--${r.state}${chosen.includes(r) ? ' g-card--chosen' : ''}`}
-            >
-              {selectable(r) && (
-                <label className="g-card__select">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.mediaId)}
-                    onChange={() => toggle(r.mediaId)}
-                  />
-                  Auswählen
-                </label>
-              )}
-              <img
-                src={r.thumbUrl}
-                alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
-              />
-              <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
-              <p className="g-card__files" title="Dateien auf der Kamera">
-                {r.cameraFiles.map((name) => (
-                  <span key={name}>{name}</span>
-                ))}
-              </p>
-              <p className="g-card__state">
-                {stateText(r.state, saved.has(r.mediaId), status?.nextContact, t)}
-                {r.state === 'failed' && r.failReason && ` – ${r.failReason}`}
-              </p>
-              <div className="g-card__actions">
-                {(r.state === 'new' || r.state === 'failed') && (
-                  <>
-                    {r.fileType === 2 && (
-                      <button
-                        type="button"
-                        className="g-btn"
-                        disabled={busy}
-                        onClick={() => void act(() => api.requestVideos(camId, [r.mediaId]))}
-                      >
-                        Video holen
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="g-btn g-btn--danger"
-                      disabled={busy}
-                      onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
-                    >
-                      Löschen
-                    </button>
-                  </>
-                )}
-                {(r.state === 'videoRequested' || r.state === 'deleteRequested') && (
-                  <button
-                    type="button"
-                    className="g-btn g-btn--plain"
-                    disabled={busy}
-                    onClick={() => void act(() => api.withdraw(camId, r))}
-                  >
-                    Zurücknehmen
-                  </button>
-                )}
-                {r.state === 'videoReady' && (
-                  <>
-                    <button type="button" className="g-btn" onClick={() => void saveOne(r)}>
-                      {saved.has(r.mediaId) ? 'Nochmal speichern' : 'Video speichern'}
-                    </button>
-                    <button
-                      type="button"
-                      className="g-btn g-btn--danger"
-                      disabled={busy}
-                      onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
-                    >
-                      Löschen
-                    </button>
-                  </>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {confirm && camId && (
-        <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-confirm">
-          <div className="g-dialog__box">
-            <p id="g-confirm">{confirm.question}</p>
-            <p className="g-hint">
-              Bis zum nächsten Kontakt mit dem Hub lässt sich das noch zurücknehmen.
+      {adminView ? (
+        <AdminView api={api} now={now} />
+      ) : (
+        <>
+          {api.isDemo && (
+            <p className="g-banner" role="note">
+              Vorführung: Beispielbilder, kein echter Hub. Der Hub „meldet sich“ hier alle 20
+              Sekunden.
             </p>
-            <div className="g-card__actions">
+          )}
+
+          <FolderBar
+            info={folderInfo}
+            onChoose={() => void pickFolder(false)}
+            onAllow={() => void pickFolder(true)}
+          />
+
+          {notice && (
+            <p className="g-notice" role="status">
+              {notice}
+              <button type="button" className="g-link" onClick={() => setNotice(undefined)}>
+                Ausblenden
+              </button>
+            </p>
+          )}
+
+          {loadError && (
+            <div className="g-error" role="alert">
+              <p>
+                {loadError === 'signin'
+                  ? 'Die Anmeldung gilt nicht mehr. Bitte den neuen Einrichtungslink öffnen.'
+                  : 'Die Bilder konnten nicht geladen werden. Ist der Laptop mit dem Internet verbunden?'}
+              </p>
+              <button type="button" className="g-btn" onClick={() => void reload()}>
+                Nochmal versuchen
+              </button>
+            </div>
+          )}
+
+          {status && status.cameras.length > 1 && (
+            <nav className="g-tabs" aria-label="Kameras">
+              {status.cameras.map((c) => (
+                <button
+                  key={c.camId}
+                  type="button"
+                  className={c.camId === camId ? 'g-tab g-tab--on' : 'g-tab'}
+                  aria-pressed={c.camId === camId}
+                  onClick={() => {
+                    setCamId(c.camId);
+                    setItems(undefined);
+                    setSelected(new Set());
+                  }}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </nav>
+          )}
+
+          {status && camId && (
+            <CameraHeading
+              key={camId}
+              name={cameraName}
+              disabled={busy}
+              onRename={(name) => renameCamera(camId, name)}
+            />
+          )}
+
+          {items && newOnes.length > 0 && (
+            <div className="g-toolbar">
               <button
                 type="button"
                 className="g-btn g-btn--danger"
-                onClick={() => {
-                  setConfirm(undefined);
-                  setSelected(new Set());
-                  void act(
-                    () => api.requestDelete(camId, confirm.mediaIds),
-                    'Die Aufnahmen werden beim nächsten Kontakt gelöscht.',
-                  );
-                }}
+                disabled={busy}
+                onClick={() =>
+                  setConfirm({
+                    question:
+                      newOnes.length === 1
+                        ? '1 neue Aufnahme löschen?'
+                        : `Alle ${newOnes.length} neuen Aufnahmen löschen?`,
+                    mediaIds: newOnes.flatMap((r) => r.mediaIds),
+                  })
+                }
               >
-                Ja, löschen
-              </button>
-              <button
-                type="button"
-                className="g-btn g-btn--plain"
-                onClick={() => setConfirm(undefined)}
-              >
-                Abbrechen
+                Alle neuen löschen ({newOnes.length})
               </button>
             </div>
-          </div>
-        </div>
+          )}
+
+          {camId && chosen.length > 0 && (
+            <div className="g-selbar" role="region" aria-label="Auswahl">
+              <p>
+                {chosen.length === 1
+                  ? '1 Aufnahme ausgewählt'
+                  : `${chosen.length} Aufnahmen ausgewählt`}
+              </p>
+              <div className="g-card__actions">
+                {chosenVideos.length > 0 && (
+                  <button
+                    type="button"
+                    className="g-btn"
+                    disabled={busy}
+                    onClick={() =>
+                      void act(async () => {
+                        await api.requestVideos(
+                          camId,
+                          chosenVideos.map((r) => r.mediaId),
+                        );
+                        setSelected(new Set());
+                      })
+                    }
+                  >
+                    Videos holen ({chosenVideos.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="g-btn g-btn--danger"
+                  disabled={busy}
+                  onClick={() =>
+                    setConfirm({
+                      question:
+                        chosen.length === 1
+                          ? '1 ausgewählte Aufnahme löschen?'
+                          : `${chosen.length} ausgewählte Aufnahmen löschen?`,
+                      mediaIds: chosen.flatMap((r) => r.mediaIds),
+                    })
+                  }
+                >
+                  Löschen ({chosen.length})
+                </button>
+                <button
+                  type="button"
+                  className="g-btn g-btn--plain"
+                  onClick={() => setSelected(new Set())}
+                >
+                  Auswahl aufheben
+                </button>
+              </div>
+            </div>
+          )}
+
+          {items === undefined && !loadError && <p className="g-hint">Bilder werden geladen …</p>}
+          {items && items.length === 0 && (
+            <p className="g-hint">
+              Keine Aufnahmen. Neue Bilder erscheinen nach dem nächsten Kontakt.
+            </p>
+          )}
+
+          {items && items.length > 0 && camId && (
+            <ul className="g-grid" aria-label="Aufnahmen">
+              {items.map((r) => (
+                <li
+                  key={r.mediaId}
+                  className={`g-card g-card--${r.state}${chosen.includes(r) ? ' g-card--chosen' : ''}`}
+                >
+                  {selectable(r) && (
+                    <label className="g-card__select">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.mediaId)}
+                        onChange={() => toggle(r.mediaId)}
+                      />
+                      Auswählen
+                    </label>
+                  )}
+                  <img
+                    src={r.thumbUrl}
+                    alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
+                  />
+                  <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
+                  <p className="g-card__files" title="Dateien auf der Kamera">
+                    {r.cameraFiles.map((name) => (
+                      <span key={name}>{name}</span>
+                    ))}
+                  </p>
+                  <p className="g-card__state">
+                    {stateText(r.state, saved.has(r.mediaId), status?.nextContact, t)}
+                    {r.state === 'failed' && r.failReason && ` – ${r.failReason}`}
+                  </p>
+                  <div className="g-card__actions">
+                    {(r.state === 'new' || r.state === 'failed') && (
+                      <>
+                        {r.fileType === 2 && (
+                          <button
+                            type="button"
+                            className="g-btn"
+                            disabled={busy}
+                            onClick={() => void act(() => api.requestVideos(camId, [r.mediaId]))}
+                          >
+                            Video holen
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="g-btn g-btn--danger"
+                          disabled={busy}
+                          onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
+                        >
+                          Löschen
+                        </button>
+                      </>
+                    )}
+                    {(r.state === 'videoRequested' || r.state === 'deleteRequested') && (
+                      <button
+                        type="button"
+                        className="g-btn g-btn--plain"
+                        disabled={busy}
+                        onClick={() => void act(() => api.withdraw(camId, r))}
+                      >
+                        Zurücknehmen
+                      </button>
+                    )}
+                    {r.state === 'videoReady' && (
+                      <>
+                        <button type="button" className="g-btn" onClick={() => void saveOne(r)}>
+                          {saved.has(r.mediaId) ? 'Nochmal speichern' : 'Video speichern'}
+                        </button>
+                        <button
+                          type="button"
+                          className="g-btn g-btn--danger"
+                          disabled={busy}
+                          onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
+                        >
+                          Löschen
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {confirm && camId && (
+            <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-confirm">
+              <div className="g-dialog__box">
+                <p id="g-confirm">{confirm.question}</p>
+                <p className="g-hint">
+                  Bis zum nächsten Kontakt mit dem Hub lässt sich das noch zurücknehmen.
+                </p>
+                <div className="g-card__actions">
+                  <button
+                    type="button"
+                    className="g-btn g-btn--danger"
+                    onClick={() => {
+                      setConfirm(undefined);
+                      setSelected(new Set());
+                      void act(
+                        () => api.requestDelete(camId, confirm.mediaIds),
+                        'Die Aufnahmen werden beim nächsten Kontakt gelöscht.',
+                      );
+                    }}
+                  >
+                    Ja, löschen
+                  </button>
+                  <button
+                    type="button"
+                    className="g-btn g-btn--plain"
+                    onClick={() => setConfirm(undefined)}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

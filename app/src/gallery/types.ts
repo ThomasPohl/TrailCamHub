@@ -1,3 +1,5 @@
+import type { Camera, HubSchedule, ScheduleConfig } from '../api/types';
+
 /**
  * The gallery's view of the backend (#258): one end user sorts recordings by
  * thumbnail on his laptop, asks for some videos and deletes the rest.
@@ -65,6 +67,26 @@ export interface GalleryStatus {
   cameras: GalleryCamera[];
 }
 
+/** Who is signed in; only the admin gets the admin view (#264). */
+export interface Me {
+  name: string;
+  admin: boolean;
+}
+
+/** A hub in the admin view (#264), as `GET /v1/admin/hubs` returns it. */
+export interface AdminHub {
+  hubId: string;
+  name: string;
+  firmware?: string;
+  batPercent?: number;
+  /** Last check-in, Unix seconds; 0 = never. */
+  lastSeen: number;
+  schedule?: HubSchedule;
+  scheduleConfig: ScheduleConfig;
+  cameras: Camera[];
+  users: Array<{ userId: number; name?: string; role?: 'user' | 'admin' }>;
+}
+
 export interface GalleryApi {
   readonly isDemo: boolean;
   status(): Promise<GalleryStatus>;
@@ -80,4 +102,11 @@ export interface GalleryApi {
   download(recording: Recording): Promise<Blob>;
   /** Gives the camera the name the user sees (#273); returns the stored name. */
   renameCamera(camId: string, name: string): Promise<string>;
+  me(): Promise<Me>;
+  /** Admin only: every hub with cameras and users. */
+  adminHubs(): Promise<AdminHub[]>;
+  /** Replaces the schedule set in the app; an empty object leaves it to the hub. */
+  setSchedule(hubId: string, config: ScheduleConfig): Promise<void>;
+  /** Asks the hub to read the camera at its next check-in. */
+  readCamera(camId: string): Promise<void>;
 }
