@@ -30,7 +30,7 @@ import type {
   ScheduleStretch,
   SdCardState,
 } from './model';
-import { ID_PATTERN, isMediaId } from './model';
+import { ID_PATTERN, isMediaId, MAX_CAMERA_NAME, validCameraName } from './model';
 import { createPairingCode, HUB_CODE_TTL_S, pairingLink } from './pairing';
 import {
   formatPlan,
@@ -93,6 +93,7 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'GET', pattern: '/v1/cameras/:camId/media', handler: listMedia },
   { method: 'POST', pattern: '/v1/cameras/:camId/commands', handler: createCommand },
   { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/withdraw', handler: withdrawMedia },
+  { method: 'POST', pattern: '/v1/cameras/:camId/name', handler: renameCameraByUser },
   { method: 'PUT', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
   { method: 'POST', pattern: '/v1/device/checkin', handler: checkin },
   { method: 'POST', pattern: '/v1/device/ack', handler: ack },
@@ -368,6 +369,22 @@ async function withdrawMedia(req: ApiRequest, params: Record<string, string>, de
   const result = await withdraw(camera, mediaId, deps);
   if (!result.ok) throw new HttpError(result.status, result.error);
   return json(200, { withdrawn: result.withdrawn });
+}
+
+/**
+ * Renames a camera. The end user decides what his cameras are called (#273),
+ * so every user linked to the camera's hub may do it, not only the admin.
+ * POST, because the Function URL's CORS allows only GET and POST.
+ */
+async function renameCameraByUser(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const camera = await authUserForCamera(req, params.camId ?? '', deps);
+  const body = parseJsonBody<{ name?: unknown } | null>(req);
+  const name = validCameraName(body?.name);
+  if (name === undefined) {
+    throw new HttpError(400, `name must be 1-${MAX_CAMERA_NAME} printable characters`);
+  }
+  await deps.store.renameCamera(camera.camId, name);
+  return json(200, { camId: camera.camId, name });
 }
 
 function commandResult(c: CommandRecord): CommandResult {

@@ -60,6 +60,28 @@ describe('GalleryApp', () => {
     expect(await screen.findByText(/Keine Aufnahmen/)).toBeInTheDocument();
   });
 
+  it('renames the camera', async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    fireEvent.click(screen.getByRole('button', { name: 'Umbenennen' }));
+
+    const input = screen.getByLabelText('Neuer Name der Kamera');
+    const save = screen.getByRole('button', { name: 'Speichern' });
+    expect(save).toBeDisabled(); // unchanged name
+    fireEvent.change(input, { target: { value: '   ' } });
+    expect(save).toBeDisabled();
+    fireEvent.change(input, { target: { value: ' Futterplatz ' } });
+    fireEvent.click(save);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Kamera „Futterplatz“' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Futterplatz' })).toBeInTheDocument(); // tab
+    expect(screen.getByText(/Die Kamera heißt jetzt „Futterplatz“/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Neuer Name der Kamera')).not.toBeInTheDocument();
+  });
+
   it('asks for a folder when none is chosen', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);

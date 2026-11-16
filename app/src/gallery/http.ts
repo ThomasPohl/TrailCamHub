@@ -209,6 +209,15 @@ export class HttpGalleryApi implements GalleryApi {
     return response.blob();
   }
 
+  async renameCamera(camId: string, name: string): Promise<string> {
+    const result = await this.request<{ name: string }>('POST', `${this.camera(camId)}/name`, {
+      name,
+    });
+    const camera = this.cameras.get(camId);
+    if (camera) this.cameras.set(camId, { ...camera, name: result.name });
+    return result.name;
+  }
+
   private camera(camId: string): string {
     return `/v1/cameras/${encodeURIComponent(camId)}`;
   }

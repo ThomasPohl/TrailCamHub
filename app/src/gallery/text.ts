@@ -34,6 +34,19 @@ export function cameraFile(num: number, fileType: number): string {
   return `${cameraFileName(num)}.${fileType === 2 ? 'AVI' : 'JPG'}`;
 }
 
+/**
+ * The sub-folder on the laptop for a camera's videos: its name without the
+ * characters Windows does not allow in a folder name (the user names the
+ * cameras himself, #273).
+ */
+export function folderName(cameraName: string): string {
+  const safe = cameraName
+    .replace(/[<>:"/\\|?*]+/g, '-')
+    .replace(/[. ]+$/, '')
+    .trim();
+  return safe || 'Kamera';
+}
+
 /** "Garten_2026-11-15_14-02_DSCF0036.mp4" from the camera wall clock. */
 export function videoFileName(cameraName: string, cameraSeconds: number, num: number): string {
   const d = new Date(cameraSeconds * 1000);

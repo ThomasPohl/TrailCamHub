@@ -132,6 +132,20 @@ describe('HttpGalleryApi', () => {
       mediaIds: [1, 2, 3],
     });
   });
+
+  it('renames a camera and uses the new name for the file names', async () => {
+    const { fn, calls } = fakeFetch({
+      'GET https://api/v1/cameras': [camera],
+      'POST https://api/v1/cameras/CAM1/name': { camId: 'CAM1', name: 'Futterplatz' },
+      'GET https://api/v1/cameras/CAM1/media': [item({ mediaId: 1, num: 1 })],
+    });
+    const api = new HttpGalleryApi('https://api', 't', fn);
+    await api.status();
+    expect(await api.renameCamera('CAM1', ' Futterplatz ')).toBe('Futterplatz');
+    expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({ name: ' Futterplatz ' });
+    const [recording] = await api.recordings('CAM1');
+    expect(recording?.fileName).toMatch(/^Futterplatz_/);
+  });
 });
 
 describe('pairing trace', () => {

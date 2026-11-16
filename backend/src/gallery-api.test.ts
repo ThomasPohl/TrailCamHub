@@ -217,4 +217,31 @@ describe('camera names (#273)', () => {
       false,
     );
   });
+  it('lets a user of the hub rename the camera in the gallery', async () => {
+    const { call, deps } = await galleryWorld();
+    const renamed = await call('POST', `/v1/cameras/${CAM_ID}/name`, { name: '  Futterplatz ' });
+    expect(renamed.statusCode).toBe(200);
+    expect(body(renamed)).toEqual({ camId: CAM_ID, name: 'Futterplatz' });
+    const cameras = body<Array<{ camId: string; name: string }>>(await call('GET', '/v1/cameras'));
+    expect(cameras[0]).toMatchObject({ camId: CAM_ID, name: 'Futterplatz' });
+
+    for (const name of ['', '   ', 'x'.repeat(41), 'a\nb', 42]) {
+      const bad = await call('POST', `/v1/cameras/${CAM_ID}/name`, { name });
+      expect(bad.statusCode).toBe(400);
+    }
+    expect((await call('POST', `/v1/cameras/${CAM_ID}/name`, null)).statusCode).toBe(400);
+    expect((await call('POST', '/v1/cameras/nope/name', { name: 'X' })).statusCode).toBe(404);
+
+    // A user without a link to the camera's hub gets the same 404.
+    const stranger = await createAppUser({ admin: 'createAppUser', name: 'Fremd' }, deps);
+    if (!stranger.ok) throw new Error(stranger.error);
+    const res = await handleRequest(
+      galleryRequest(stranger.token, 'POST', `/v1/cameras/${CAM_ID}/name`, { name: 'Meins' }),
+      deps,
+    );
+    expect(res.statusCode).toBe(404);
+    expect(body<Array<{ name: string }>>(await call('GET', '/v1/cameras'))[0]?.name).toBe(
+      'Futterplatz',
+    );
+  });
 });

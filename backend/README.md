@@ -47,6 +47,7 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | PUT    | `/v1/hubs/{hubId}/schedule`                    | `tma <initData>`       | Wake-up schedule of a hub (see below)          |
 | POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`        |
 | POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests          |
+| POST   | `/v1/cameras/{camId}/name`                     | app user               | `{"name":"Garten"}`, 1–40 characters           |
 | POST   | `/v1/device/checkin`                           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)       |
 | POST   | `/v1/device/ack`                               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands       |
 | POST   | `/v1/device/pairing-code`                      | `Bearer <hubId>.<key>` | One-time pairing link for the hub to show      |
@@ -72,8 +73,13 @@ new token (the old link stops working) and can link more hubs; `--admin` sets
 the admin role (used by the admin view, #264). There is no self-registration.
 
 **Camera names** (#273): a camera is called by its camId until it gets a
-name: `npm run name-camera -- --camera F4_C1_56_06_ED_3B --name "Garten"`.
-The gallery shows the name; the camId stays the key.
+name. The end user names his cameras in the gallery ("Umbenennen";
+`POST /v1/cameras/{camId}/name`, allowed for every user linked to the
+camera's hub). The admin can also set it:
+`npm run name-camera -- --camera F4_C1_56_06_ED_3B --name "Garten"`.
+The gallery shows the name and uses it for the folder and file names on the
+laptop; the camId stays the key. It is a POST because the Function URL's
+CORS allows only GET and POST.
 
 **Deleting** (#260): `deleteMedia` queues one command per recording; the hub
 gets it as `{"id", "type":"deleteMedia", "mediaId"}` and acknowledges it like
