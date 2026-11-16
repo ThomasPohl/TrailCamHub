@@ -133,3 +133,18 @@ describe('HttpGalleryApi', () => {
     });
   });
 });
+
+describe('pairing trace', () => {
+  it('says why a video stays alone', async () => {
+    const { groupRecordings } = await import('./http');
+    const rows: Record<string, unknown>[] = [];
+    groupRecordings(
+      [
+        item({ mediaId: 1, num: 1, fileType: 2, mediaTime: 1_000 }),
+        item({ mediaId: 2, num: 2, fileType: 0, mediaTime: 2_000 }),
+      ],
+      (r) => rows.push(...r),
+    );
+    expect(rows.map((r) => r.result)).toEqual(['too far apart', 'no photo']);
+  });
+});

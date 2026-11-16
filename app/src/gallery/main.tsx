@@ -27,7 +27,8 @@ function chooseApi(): GalleryApi | undefined {
     return new DemoGalleryApi();
   }
   const token = takeToken();
-  return token ? new HttpGalleryApi(baseUrl, token) : undefined;
+  const debug = new URLSearchParams(window.location.search).has('debug');
+  return token ? new HttpGalleryApi(baseUrl, token, undefined, debug) : undefined;
 }
 
 const api = chooseApi();
