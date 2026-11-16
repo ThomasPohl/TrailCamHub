@@ -28,7 +28,7 @@ describe('DemoGalleryApi', () => {
     const [first] = await api.recordings(camId);
 
     await api.requestDelete(camId, [first!.mediaId]);
-    await api.withdraw(camId, first!.mediaId);
+    await api.withdraw(camId, first!);
     expect((await api.recordings(camId))[0]?.state).toBe('new');
   });
 });

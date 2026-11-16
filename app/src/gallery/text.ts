@@ -21,13 +21,26 @@ export function clockTime(unixSeconds: number, nowSeconds: number): string {
   return today ? `${time} Uhr` : `${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${time} Uhr`;
 }
 
-/** "Garten_2026-11-15_14-02_100-36.mp4" from the camera wall clock. */
+/**
+ * The camera's name for a recording on its SD card, e.g. "DSCF0012" (#273).
+ * The TC100 names files DSCF + the 4-digit number of the media list.
+ */
+export function cameraFileName(num: number): string {
+  return `DSCF${String(num).padStart(4, '0')}`;
+}
+
+/** The suffix of a file of the camera: JPG for a photo, AVI for a video. */
+export function cameraSuffix(fileType: number): string {
+  return fileType === 2 ? 'AVI' : 'JPG';
+}
+
+/** "Garten_2026-11-15_14-02_DSCF0036.mp4" from the camera wall clock. */
 export function videoFileName(cameraName: string, cameraSeconds: number, num: number): string {
   const d = new Date(cameraSeconds * 1000);
   const safe = cameraName.replace(/[^A-Za-z0-9ÄÖÜäöüß_-]+/g, '-') || 'Kamera';
   const date = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
   const time = `${pad(d.getUTCHours())}-${pad(d.getUTCMinutes())}`;
-  return `${safe}_${date}_${time}_${num}.mp4`;
+  return `${safe}_${date}_${time}_${cameraFileName(num)}.mp4`;
 }
 
 export function stateText(

@@ -231,6 +231,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         </nav>
       )}
 
+      {status && camId && <h2 className="g-camera">Kamera „{cameraName}“</h2>}
+
       {items && newOnes.length > 0 && (
         <div className="g-toolbar">
           <button
@@ -253,8 +255,19 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         <ul className="g-grid" aria-label="Aufnahmen">
           {items.map((r) => (
             <li key={r.mediaId} className={`g-card g-card--${r.state}`}>
-              <img src={r.thumbUrl} alt={`Aufnahme vom ${cameraTime(r.mediaTime)}`} />
+              <img
+                src={r.thumbUrl}
+                alt={`Aufnahme ${r.cameraFile} vom ${cameraTime(r.mediaTime)}`}
+              />
               <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
+              <p className="g-card__file">
+                <span className="g-card__name">{r.cameraFile}</span>
+                {r.suffixes.map((suffix) => (
+                  <span key={suffix} className="g-chip">
+                    {suffix}
+                  </span>
+                ))}
+              </p>
               <p className="g-card__state">
                 {stateText(r.state, saved.has(r.mediaId), status?.nextContact, t)}
                 {r.state === 'failed' && r.failReason && ` – ${r.failReason}`}
@@ -276,7 +289,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                       type="button"
                       className="g-btn g-btn--danger"
                       disabled={busy}
-                      onClick={() => void act(() => api.requestDelete(camId, [r.mediaId]))}
+                      onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
                     >
                       Löschen
                     </button>
@@ -287,7 +300,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                     type="button"
                     className="g-btn g-btn--plain"
                     disabled={busy}
-                    onClick={() => void act(() => api.withdraw(camId, r.mediaId))}
+                    onClick={() => void act(() => api.withdraw(camId, r))}
                   >
                     Zurücknehmen
                   </button>
@@ -301,7 +314,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                       type="button"
                       className="g-btn g-btn--danger"
                       disabled={busy}
-                      onClick={() => void act(() => api.requestDelete(camId, [r.mediaId]))}
+                      onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
                     >
                       Löschen
                     </button>
@@ -334,7 +347,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                     () =>
                       api.requestDelete(
                         camId,
-                        newOnes.map((r) => r.mediaId),
+                        newOnes.flatMap((r) => r.mediaIds),
                       ),
                     'Die Aufnahmen werden beim nächsten Kontakt gelöscht.',
                   );
