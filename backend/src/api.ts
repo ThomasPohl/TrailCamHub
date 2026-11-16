@@ -257,7 +257,8 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
     const cameras = records
       .map((r) => toCamera(r.camera, hub, r.commands))
       .sort((a, b) => a.name.localeCompare(b.name));
-    const faults = hubFaults(hub, records, deps.now()).sort(
+    const firmwareChanges = await deps.store.listFirmwareChanges(hubId, 5);
+    const faults = hubFaults(hub, records, deps.now(), firmwareChanges).sort(
       (a, b) => Number(a.level === 'warning') - Number(b.level === 'warning'),
     );
     const users = await Promise.all(
@@ -277,6 +278,7 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
       cameras,
       users,
       faults,
+      firmwareChanges,
     });
   }
   return json(200, hubs);
@@ -649,10 +651,15 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
   const reports = parseCameraReports(body);
   const now = deps.now();
 
+  // Another firmware than last time: an update, a rollback or a USB flash (#149).
+  const firmware = optionalString(body.hubFirmware);
+  if (firmware && hub.firmware && firmware !== hub.firmware) {
+    await deps.store.addFirmwareChange(hub.hubId, { at: now, from: hub.firmware, to: firmware });
+  }
   await deps.store.updateHub(
     hub.hubId,
     {
-      firmware: optionalString(body.hubFirmware),
+      firmware,
       batPercent: optionalNumber(body.hubBatPercent),
       schedule: sanitizeSchedule(body.schedule, now),
     },

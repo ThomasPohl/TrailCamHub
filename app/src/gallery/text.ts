@@ -113,6 +113,12 @@ export function faultText(fault: Fault, camera: string | undefined, nowSeconds: 
       return `${who}: SD-Karte voll (${fault.value ?? 0} MB frei).`;
     case 'sdNearlyFull':
       return `${who}: SD-Karte fast voll (${fault.value ?? 0} MB frei).`;
+    case 'firmwareDowngrade':
+      return (
+        `Der Hub läuft wieder mit älterer Firmware (${fault.detail ?? '?'})` +
+        (fault.since ? `, seit ${clockTime(fault.since, nowSeconds)}` : '') +
+        ' – Update zurückgerollt?'
+      );
     case 'requestsFailed': {
       const n = fault.value ?? 1;
       return (

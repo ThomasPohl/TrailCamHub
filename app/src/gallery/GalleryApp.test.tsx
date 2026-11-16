@@ -166,6 +166,11 @@ describe('GalleryApp', () => {
     expect(await screen.findByText(/übernimmt den Plan/)).toBeInTheDocument();
     expect(await within(hub).findByText(/alle 1 h \(aus der App\)/)).toBeInTheDocument();
 
+    // Firmware changes (#149).
+    expect(within(hub).getByRole('list', { name: 'Firmware-Wechsel Garten' })).toHaveTextContent(
+      'v0.1.12 → v0.1.13',
+    );
+
     // Battery history (#76), loaded when asked for.
     fireEvent.click(within(hub).getByRole('button', { name: 'Akku-Verlauf (30 Tage)' }));
     expect(await within(hub).findByRole('img', { name: /^Hub: Akku/ })).toBeInTheDocument();

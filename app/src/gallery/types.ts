@@ -99,7 +99,8 @@ export interface Fault {
     | 'sdMissing'
     | 'sdFull'
     | 'sdNearlyFull'
-    | 'requestsFailed';
+    | 'requestsFailed'
+    | 'firmwareDowngrade';
   level: 'error' | 'warning';
   camId?: string;
   /** Percent, free MB, seconds overdue or number of failed requests. */
@@ -122,6 +123,8 @@ export interface AdminHub {
   users: Array<{ userId: number; name?: string; role?: 'user' | 'admin' }>;
   /** Errors first (#265). */
   faults: Fault[];
+  /** The last firmware changes, newest first (#149); absent on older backends. */
+  firmwareChanges?: Array<{ at: number; from: string; to: string }>;
 }
 
 export interface GalleryApi {

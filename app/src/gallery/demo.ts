@@ -168,6 +168,10 @@ export class DemoGalleryApi implements GalleryApi {
           { userId: 1_000_000_000_000_001, name: 'Anwender', role: 'user' },
           { userId: 1_000_000_000_000_002, name: 'Admin', role: 'admin' },
         ],
+        firmwareChanges: [
+          { at: this.lastCheckin - 3 * 86_400, from: 'v0.1.12', to: 'v0.1.13' },
+          { at: this.lastCheckin - 9 * 86_400, from: 'v0.1.11', to: 'v0.1.12' },
+        ],
         faults: [
           { kind: 'cameraBatteryLow', level: 'warning', camId: 'A1B2C3D4E5F6', value: 18 },
           { kind: 'sdNearlyFull', level: 'warning', camId: 'A1B2C3D4E5F6', value: 950 },

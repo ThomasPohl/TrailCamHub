@@ -335,6 +335,45 @@ describe('battery history (#76)', () => {
   });
 });
 
+describe('firmware changes (#149)', () => {
+  it('records each new version and warns about a step back', async () => {
+    const world = await galleryWorld();
+    let now = NOW;
+    world.deps.now = () => now;
+    const checkin = (hubFirmware: string) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, { hubFirmware, cameras: [] }),
+        world.deps,
+      );
+    await checkin('v0.1.12');
+    now += 60;
+    await checkin('v0.1.12');
+    now += 60;
+    await checkin('v0.1.13');
+    now += 60;
+    await checkin('v0.1.12');
+
+    const admin = await createAppUser(
+      { admin: 'createAppUser', name: 'Thomas', role: 'admin' },
+      world.deps,
+    );
+    if (!admin.ok) throw new Error(admin.error);
+    const hubs = body<
+      Array<{
+        hubId: string;
+        firmwareChanges: Array<{ from: string; to: string }>;
+        faults: Array<{ kind: string }>;
+      }>
+    >(await handleRequest(galleryRequest(admin.token, 'GET', '/v1/admin/hubs'), world.deps));
+    const hub = hubs.find((h) => h.hubId === HUB_ID);
+    expect(hub?.firmwareChanges.map((c) => `${c.from}>${c.to}`)).toEqual([
+      'v0.1.13>v0.1.12',
+      'v0.1.12>v0.1.13',
+    ]);
+    expect(hub?.faults.map((f) => f.kind)).toContain('firmwareDowngrade');
+  });
+});
+
 describe('camera names (#273)', () => {
   it('shows the name the admin gave the camera', async () => {
     const { call, deps } = await galleryWorld();

@@ -5,6 +5,7 @@ import type {
   HubRecord,
   MediaRecord,
   PairingCode,
+  FirmwareChange,
   Sample,
   SampleOwner,
   ScheduleConfig,
@@ -30,6 +31,7 @@ export class MemoryStore implements Store {
   private readonly appUsers = new Map<number, AppUser>();
   private readonly pairings = new Map<string, PairingCode>();
   private readonly samples = new Map<string, Sample[]>();
+  private readonly firmwareChanges = new Map<string, FirmwareChange[]>();
 
   async putHub(hub: HubRecord): Promise<void> {
     this.hubs.set(hub.hubId, { ...hub });
@@ -181,6 +183,19 @@ export class MemoryStore implements Store {
     return (this.samples.get(sampleKey(owner)) ?? [])
       .filter((s) => s.at >= since)
       .map((s) => ({ ...s }));
+  }
+
+  async addFirmwareChange(hubId: string, change: FirmwareChange): Promise<void> {
+    const list = this.firmwareChanges.get(hubId) ?? [];
+    list.push({ ...change });
+    this.firmwareChanges.set(hubId, list);
+  }
+
+  async listFirmwareChanges(hubId: string, limit: number): Promise<FirmwareChange[]> {
+    return [...(this.firmwareChanges.get(hubId) ?? [])]
+      .sort((a, b) => b.at - a.at)
+      .slice(0, limit)
+      .map((c) => ({ ...c }));
   }
 
   async putCommand(camId: string, command: CommandRecord): Promise<void> {

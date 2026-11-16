@@ -181,6 +181,17 @@ export interface Sample {
   temperature?: number;
 }
 
+/**
+ * The hub reported another firmware than at its check-in before (#149):
+ * an update, a rollback or a flash over USB.
+ */
+export interface FirmwareChange {
+  /** Check-in that reported the new version, Unix seconds. */
+  at: number;
+  from: string;
+  to: string;
+}
+
 /** Who a sample belongs to. */
 export type SampleOwner = { hubId: string } | { camId: string };
 
@@ -205,7 +216,8 @@ export interface Fault {
     | 'sdMissing'
     | 'sdFull'
     | 'sdNearlyFull'
-    | 'requestsFailed';
+    | 'requestsFailed'
+    | 'firmwareDowngrade';
   level: 'error' | 'warning';
   /** The camera it is about; absent for the hub. */
   camId?: string;
@@ -237,6 +249,8 @@ export interface AdminHub {
   users: Array<{ userId: number; name?: string; role?: 'user' | 'admin' }>;
   /** Errors first (#265). */
   faults: Fault[];
+  /** The last firmware changes, newest first (#149). */
+  firmwareChanges: FirmwareChange[];
 }
 
 export interface Camera {

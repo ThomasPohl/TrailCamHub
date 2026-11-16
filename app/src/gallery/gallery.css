@@ -474,3 +474,9 @@ body {
   stroke-width: 1;
   stroke-dasharray: 4 4;
 }
+
+.g-plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

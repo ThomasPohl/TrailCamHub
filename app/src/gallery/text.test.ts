@@ -46,5 +46,12 @@ describe('gallery texts', () => {
         now,
       ),
     ).toBe('Kamera „C1“: 2 Aufträge fehlgeschlagen – too large.');
+    expect(
+      faultText(
+        { kind: 'firmwareDowngrade', level: 'warning', detail: 'v0.1.13 → v0.1.12' },
+        undefined,
+        now,
+      ),
+    ).toBe('Der Hub läuft wieder mit älterer Firmware (v0.1.13 → v0.1.12) – Update zurückgerollt?');
   });
 });
