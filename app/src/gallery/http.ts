@@ -1,6 +1,6 @@
 import { ApiError } from '../api/http';
 import type { Camera, MediaItem } from '../api/types';
-import { cameraFileName, cameraSuffix, videoFileName } from './text';
+import { cameraFile, videoFileName } from './text';
 import type { GalleryApi, GalleryStatus, Recording, RecordingState } from './types';
 
 /** A reason from the hub or backend in words the user can understand. */
@@ -34,20 +34,47 @@ function toState(m: MediaItem): Pick<Recording, 'state' | 'failReason'> {
   return state === 'failed' ? { state, failReason: friendlyReason(m.videoError) } : { state };
 }
 
+/** At most this far apart (camera seconds) are a video and its photo. */
+const PAIR_WINDOW_S = 10;
+
 /**
- * The files of one recording: the camera keeps a photo and a video under the
- * same name (dir/num), and the user sees them as one (#273). Newest first,
- * like the backend's list.
+ * The files of one recording: the camera takes a photo with each video and
+ * stores both with neighbouring numbers in the same folder, e.g.
+ * DSCF0011.JPG and DSCF0012.AVI. A video is paired with a photo whose number
+ * is one off (the one before first) and that was taken within
+ * PAIR_WINDOW_S; files without a partner stay alone. Keeps the order of the
+ * backend's list (newest first).
  */
 export function groupRecordings(items: MediaItem[]): MediaItem[][] {
-  const groups = new Map<string, MediaItem[]>();
-  for (const m of items) {
-    const key = `${m.dir}/${m.num}`;
-    const group = groups.get(key);
-    if (group) group.push(m);
-    else groups.set(key, [m]);
+  const photos = new Map<string, MediaItem>();
+  for (const m of items) if (m.fileType !== 2) photos.set(`${m.dir}/${m.num}`, m);
+  const paired = new Map<number, MediaItem>(); // photo mediaId -> its video
+  const partner = new Map<number, MediaItem>(); // video mediaId -> its photo
+  for (const video of items) {
+    if (video.fileType !== 2) continue;
+    for (const num of [video.num - 1, video.num + 1]) {
+      const photo = photos.get(`${video.dir}/${num}`);
+      if (
+        photo &&
+        !paired.has(photo.mediaId) &&
+        Math.abs(photo.mediaTime - video.mediaTime) <= PAIR_WINDOW_S
+      ) {
+        paired.set(photo.mediaId, video);
+        partner.set(video.mediaId, photo);
+        break;
+      }
+    }
   }
-  return [...groups.values()];
+  const groups: MediaItem[][] = [];
+  for (const m of items) {
+    if (m.fileType === 2) {
+      const photo = partner.get(m.mediaId);
+      groups.push(photo ? [photo, m] : [m]);
+    } else if (!paired.has(m.mediaId)) {
+      groups.push([m]);
+    }
+  }
+  return groups;
 }
 
 /**
@@ -94,10 +121,7 @@ export class HttpGalleryApi implements GalleryApi {
         mediaIds: files.map((m) => m.mediaId),
         camId,
         fileType: video ? 2 : 0,
-        cameraFile: cameraFileName(main.num),
-        suffixes: [...new Set(files.map((m) => m.fileType).sort((a, b) => a - b))].map(
-          cameraSuffix,
-        ),
+        cameraFiles: files.map((m) => cameraFile(m.num, m.fileType)),
         mediaTime: main.mediaTime,
         thumbUrl: (photo ?? main).thumbUrl,
         videoUrl: video?.videoUrl,

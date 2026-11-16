@@ -237,23 +237,14 @@ body {
   font-size: 1.5rem;
 }
 
-.g-card__file {
+.g-card__files {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.g-card__name {
+  gap: 4px 16px;
   font-family: ui-monospace, Consolas, monospace;
   font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.g-chip {
-  padding: 1px 10px;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  background: #e2ddd2;
+  letter-spacing: 0.03em;
 }

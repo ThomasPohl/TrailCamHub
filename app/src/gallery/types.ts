@@ -21,8 +21,9 @@ export type RecordingState =
   | 'failed';
 
 /**
- * One recording as the user sees it: the files the camera stores under one
- * name, e.g. DSCF0012.JPG and DSCF0012.AVI (#273). The mediaIds stay the keys.
+ * One recording as the user sees it: a video and the photo the camera takes
+ * with it, which are two files with their own numbers, e.g. DSCF0011.JPG and
+ * DSCF0012.AVI. The mediaIds stay the keys.
  */
 export interface Recording {
   /** Key of the recording: the video's mediaId, else the photo's. */
@@ -32,10 +33,8 @@ export interface Recording {
   camId: string;
   /** 2 if the recording has a video, else 0 (photo only). */
   fileType: 0 | 2;
-  /** The name on the camera's SD card without suffix, e.g. "DSCF0012". */
-  cameraFile: string;
-  /** The suffixes the camera has under that name, e.g. ["JPG", "AVI"]. */
-  suffixes: string[];
+  /** The files' names on the camera's SD card, photo first, e.g. ["DSCF0011.JPG", "DSCF0012.AVI"]. */
+  cameraFiles: string[];
   /** Camera wall clock read as if it were UTC (docs/clock.md). */
   mediaTime: number;
   thumbUrl: string;

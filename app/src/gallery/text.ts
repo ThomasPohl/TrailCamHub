@@ -22,16 +22,16 @@ export function clockTime(unixSeconds: number, nowSeconds: number): string {
 }
 
 /**
- * The camera's name for a recording on its SD card, e.g. "DSCF0012" (#273).
- * The TC100 names files DSCF + the 4-digit number of the media list.
+ * The camera's name for a file on its SD card without suffix, e.g.
+ * "DSCF0012": DSCF + the 4-digit number of the media list.
  */
 export function cameraFileName(num: number): string {
   return `DSCF${String(num).padStart(4, '0')}`;
 }
 
-/** The suffix of a file of the camera: JPG for a photo, AVI for a video. */
-export function cameraSuffix(fileType: number): string {
-  return fileType === 2 ? 'AVI' : 'JPG';
+/** The full name of a file on the camera: DSCF0011.JPG (photo), DSCF0012.AVI (video). */
+export function cameraFile(num: number, fileType: number): string {
+  return `${cameraFileName(num)}.${fileType === 2 ? 'AVI' : 'JPG'}`;
 }
 
 /** "Garten_2026-11-15_14-02_DSCF0036.mp4" from the camera wall clock. */

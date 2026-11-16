@@ -28,8 +28,8 @@ describe('GalleryApp', () => {
     const cards = await screen.findAllByRole('listitem');
     expect(cards).toHaveLength(16);
     expect(screen.getByRole('heading', { name: 'Kamera „Garten“' })).toBeInTheDocument();
-    expect(within(cards[0]!).getByText('DSCF0060')).toBeInTheDocument();
-    expect(within(cards[0]!).getByText('AVI')).toBeInTheDocument();
+    expect(within(cards[0]!).getByText('DSCF0119.JPG')).toBeInTheDocument();
+    expect(within(cards[0]!).getByText('DSCF0120.AVI')).toBeInTheDocument();
     fireEvent.click(within(cards[0]!).getByRole('button', { name: 'Video holen' }));
     expect(await within(cards[0]!).findByText(/Video kommt/)).toBeInTheDocument();
 
@@ -37,7 +37,7 @@ describe('GalleryApp', () => {
     fireEvent.click(within(cards[0]!).getByRole('button', { name: 'Zurücknehmen' }));
     // Too late to withdraw: the hub already delivered it, and it gets saved.
     await waitFor(() => expect(folder.saved).toHaveLength(1));
-    expect(folder.saved[0]).toMatch(/^Garten\/Garten_.*_DSCF0060\.mp4$/);
+    expect(folder.saved[0]).toMatch(/^Garten\/Garten_.*_DSCF0120\.mp4$/);
     expect(await screen.findByText(/1 Video gespeichert/)).toBeInTheDocument();
   });
 
