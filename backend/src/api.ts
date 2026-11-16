@@ -35,7 +35,20 @@ import type {
   SdCardState,
 } from './model';
 import { hubFaults } from './faults';
-import { ID_PATTERN, isMediaId, MAX_CAMERA_NAME, validCameraName } from './model';
+import {
+  approvedAddresses,
+  parseDiscovered,
+  recordDiscovered,
+  recordRead,
+  sortForGallery,
+} from './found-cameras';
+import {
+  ID_PATTERN,
+  isMediaId,
+  MAX_CAMERA_NAME,
+  normalizeBleAddress,
+  validCameraName,
+} from './model';
 import { createPairingCode, HUB_CODE_TTL_S, pairingLink } from './pairing';
 import {
   formatPlan,
@@ -104,6 +117,12 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'PUT', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
   // The same as POST: the Function URL's CORS allows no PUT (#286).
   { method: 'POST', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
+  { method: 'GET', pattern: '/v1/hubs/:hubId/found-cameras', handler: listFoundCameras },
+  {
+    method: 'POST',
+    pattern: '/v1/hubs/:hubId/found-cameras/:address',
+    handler: decideFoundCamera,
+  },
   { method: 'GET', pattern: '/v1/admin/hubs', handler: adminHubs },
   { method: 'GET', pattern: '/v1/admin/hubs/:hubId/history', handler: adminHistory },
   { method: 'POST', pattern: '/v1/device/checkin', handler: checkin },
@@ -260,7 +279,12 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
       .map((r) => toCamera(r.camera, hub, r.commands))
       .sort((a, b) => a.name.localeCompare(b.name));
     const firmwareChanges = await deps.store.listFirmwareChanges(hubId, 5);
-    const faults = hubFaults(hub, records, deps.now(), firmwareChanges).sort(
+    const excluded = new Set(
+      (await deps.store.listFoundCameras(hubId))
+        .filter((c) => c.state === 'excluded' && c.camId)
+        .map((c) => c.camId as string),
+    );
+    const faults = hubFaults(hub, records, deps.now(), firmwareChanges, excluded).sort(
       (a, b) => Number(a.level === 'warning') - Number(b.level === 'warning'),
     );
     const users = await Promise.all(
@@ -435,6 +459,55 @@ async function createReadCommand(camera: CameraRecord, deps: Deps) {
  * field leaves that setting to the hub; the hub takes the change at its next
  * check-in.
  */
+/** The hub, if the signed-in user may use it; 404 otherwise. */
+async function userHub(req: ApiRequest, hubId: string, deps: Deps) {
+  const user = await authUser(req, deps);
+  const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
+  if (!hub || !(await mayUseHub(user, hubId, deps))) throw new HttpError(404, 'Hub not found');
+  return hub;
+}
+
+/** Cameras the hub found, for the gallery (#297, #298). */
+async function listFoundCameras(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const hub = await userHub(req, params.hubId ?? '', deps);
+  const found = sortForGallery(await deps.store.listFoundCameras(hub.hubId));
+  const result = await Promise.all(
+    found.map(async (c) => {
+      const camera = c.camId ? await deps.store.getCamera(c.camId) : undefined;
+      return { ...c, name: camera?.name ?? c.alias ?? c.advName ?? c.bleAddress };
+    }),
+  );
+  return json(200, result);
+}
+
+/**
+ * Approve a found camera (with a name), exclude it, or approve it again
+ * (#297). Every user linked to the hub may decide (decision 16 Nov 2026).
+ */
+async function decideFoundCamera(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const hub = await userHub(req, params.hubId ?? '', deps);
+  const bleAddress = normalizeBleAddress(params.address);
+  const known = bleAddress && (await deps.store.getFoundCamera(hub.hubId, bleAddress));
+  if (!bleAddress || !known) throw new HttpError(404, 'Camera not found');
+  const body = parseJsonBody<{ state?: unknown; name?: unknown } | null>(req);
+  const state = body?.state;
+  if (state !== 'approved' && state !== 'excluded') {
+    throw new HttpError(400, 'state must be approved or excluded');
+  }
+  let alias = known.alias;
+  if (body?.name !== undefined) {
+    const name = validCameraName(body.name);
+    if (name === undefined) {
+      throw new HttpError(400, `name must be 1-${MAX_CAMERA_NAME} printable characters`);
+    }
+    alias = name;
+    if (known.camId) await deps.store.renameCamera(known.camId, name);
+  }
+  const updated = { ...known, state, alias } as const;
+  await deps.store.putFoundCamera(hub.hubId, updated);
+  return json(200, updated);
+}
+
 async function setSchedule(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const user = await authUser(req, deps);
   const hubId = params.hubId ?? '';
@@ -644,7 +717,6 @@ function parseCameraReports(
   return reports;
 }
 
-/** When the hub read the camera: its own timestamp if plausible, else now. */
 /** At most one sample per hub or camera and hour (#76). */
 const SAMPLE_EVERY_S = 60 * 60;
 
@@ -655,6 +727,7 @@ async function recordSample(deps: Deps, owner: SampleOwner, sample: Sample): Pro
   await deps.store.addSample(owner, sample);
 }
 
+/** When the hub read the camera: its own timestamp if plausible, else now. */
 function readTime(readAt: unknown, now: number): number {
   const t = optionalNumber(readAt);
   return t !== undefined && t <= now + MAX_CLOCK_SKEW_S && t >= now - MAX_READ_AGE_S ? t : now;
@@ -665,6 +738,7 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
   const body = parseJsonBody<CheckinRequest>(req);
   const reports = parseCameraReports(body);
   const now = deps.now();
+  const discovered = parseDiscovered(body.discovered, now, readTime);
 
   // Another firmware than last time: an update, a rollback or a USB flash (#149).
   const firmware = optionalString(body.hubFirmware);
@@ -689,6 +763,10 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     },
   );
 
+  // Cameras heard in a scan, read or not (#296).
+  if (discovered) await recordDiscovered(deps.store, hub.hubId, discovered);
+  let reportsBle = discovered !== undefined;
+
   const results = new Map<string, CameraCheckin>();
   for (const report of reports) {
     const { camera, created } = await deps.store.claimCamera(report.camId, hub.hubId);
@@ -712,9 +790,24 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
         batType: optionalNumber(report.batType),
         bleVersion: optionalString(report.bleVersion),
         cameraName: optionalString(report.cameraName),
+        bleAddress: normalizeBleAddress(report.bleAddress),
       },
       readTime(report.readAt, now),
     );
+    // With its BLE address the camera joins the hub's found cameras (#297);
+    // a name given in the gallery before the first read becomes its name.
+    const bleAddress = normalizeBleAddress(report.bleAddress);
+    if (bleAddress) {
+      reportsBle = true;
+      const alias = await recordRead(
+        deps.store,
+        hub.hubId,
+        camera.camId,
+        bleAddress,
+        readTime(report.readAt, now),
+      );
+      if (alias && created) await deps.store.renameCamera(camera.camId, alias);
+    }
     // A report repeats the last read; its sample is stored only once.
     await recordSample(
       deps,
@@ -820,6 +913,8 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     // The schedule set in the app; without it the hub keeps its own.
     config: hub.scheduleConfig ?? {},
   };
+  // Only for firmware that reports BLE addresses; others read every camera.
+  if (reportsBle) response.approvedCameras = await approvedAddresses(deps.store, hub.hubId);
   return json(200, response);
 }
 

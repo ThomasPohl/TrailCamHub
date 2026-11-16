@@ -6,6 +6,7 @@ import type {
   MediaRecord,
   PairingCode,
   FirmwareChange,
+  FoundCamera,
   Sample,
   SampleOwner,
   ScheduleConfig,
@@ -32,6 +33,7 @@ export class MemoryStore implements Store {
   private readonly pairings = new Map<string, PairingCode>();
   private readonly samples = new Map<string, Sample[]>();
   private readonly firmwareChanges = new Map<string, FirmwareChange[]>();
+  private readonly found = new Map<string, Map<string, FoundCamera>>();
 
   async putHub(hub: HubRecord): Promise<void> {
     this.hubs.set(hub.hubId, { ...hub });
@@ -189,6 +191,23 @@ export class MemoryStore implements Store {
     return (this.samples.get(sampleKey(owner)) ?? [])
       .filter((s) => s.at >= since)
       .map((s) => ({ ...s }));
+  }
+
+  async getFoundCamera(hubId: string, bleAddress: string): Promise<FoundCamera | undefined> {
+    const camera = this.found.get(hubId)?.get(bleAddress);
+    return camera && { ...camera };
+  }
+
+  async putFoundCamera(hubId: string, camera: FoundCamera): Promise<void> {
+    const hub = this.found.get(hubId) ?? new Map<string, FoundCamera>();
+    hub.set(camera.bleAddress, { ...camera });
+    this.found.set(hubId, hub);
+  }
+
+  async listFoundCameras(hubId: string): Promise<FoundCamera[]> {
+    return [...(this.found.get(hubId)?.values() ?? [])]
+      .sort((a, b) => a.bleAddress.localeCompare(b.bleAddress))
+      .map((c) => ({ ...c }));
   }
 
   async addFirmwareChange(hubId: string, change: FirmwareChange): Promise<void> {

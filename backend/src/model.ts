@@ -81,6 +81,8 @@ export interface CameraRecord {
   name: string;
   /** Hidden in the gallery by a user (#273); the hub still reads it. */
   hidden?: boolean;
+  /** BLE address the hub reported with its last read (#296). */
+  bleAddress?: string;
   model?: string;
   firmware?: string;
   batPercent?: number;
@@ -219,7 +221,8 @@ export interface Fault {
     | 'sdFull'
     | 'sdNearlyFull'
     | 'requestsFailed'
-    | 'firmwareDowngrade';
+    | 'firmwareDowngrade'
+    | 'cameraNotRead';
   level: 'error' | 'warning';
   /** The camera it is about; absent for the hub. */
   camId?: string;
@@ -354,6 +357,8 @@ export interface CameraReport {
   bleVersion?: string;
   /** The name set on the camera itself (often a default such as "0000"). */
   cameraName?: string;
+  /** The camera's BLE address as the hub connected to it (#296). */
+  bleAddress?: string;
   /**
    * Media not reported before (delta). The backend only adds entries, so
    * sending an item again is harmless.
@@ -381,6 +386,46 @@ export interface CheckinRequest {
   maxThumbUploads?: number;
   schedule?: HubSchedule;
   cameras?: CameraReport[];
+  /**
+   * Cameras the hub heard advertising, read or not (#296). A hub that sends
+   * this (or a `bleAddress`) gets `approvedCameras` in the response.
+   */
+  discovered?: DiscoveredReport[];
+}
+
+/** A camera heard in a BLE scan without reading it (#296). */
+export interface DiscoveredReport {
+  bleAddress: string;
+  /** Advertised name, e.g. "TC100_ED3B". */
+  name?: string;
+  rssi?: number;
+  /** When the hub heard it last (hub clock, Unix seconds). */
+  seenAt?: number;
+}
+
+/** What the user decided about a camera a hub found (#297). */
+export type FoundCameraState = 'new' | 'approved' | 'excluded';
+
+/** A camera a hub found, keyed by hub and BLE address (#297). */
+export interface FoundCamera {
+  bleAddress: string;
+  state: FoundCameraState;
+  /** The camera's id once the hub has read it. */
+  camId?: string;
+  advName?: string;
+  rssi?: number;
+  firstSeen: number;
+  lastSeen: number;
+  /** Name given before the first read; becomes the camera's name then. */
+  alias?: string;
+}
+
+/** "AA:BB:CC:DD:EE:FF" from 12 hex digits with or without ':' or '-'. */
+export function normalizeBleAddress(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const hex = value.replace(/[:-]/g, '').toUpperCase();
+  if (!/^[0-9A-F]{12}$/.test(hex)) return undefined;
+  return (hex.match(/../g) ?? []).join(':');
 }
 
 export interface CameraCheckin {
@@ -407,6 +452,11 @@ export interface CheckinResponse {
   cameras: CameraCheckin[];
   /** Schedule set in the app; empty if none, so the hub uses its own. */
   config: ScheduleConfig;
+  /**
+   * BLE addresses of the cameras the hub may read (#297, used by #299). Only
+   * for hubs that report BLE addresses; absent: read every camera.
+   */
+  approvedCameras?: string[];
 }
 
 export interface CameraAck {

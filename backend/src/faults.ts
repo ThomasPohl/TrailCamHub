@@ -10,6 +10,8 @@ import type { CameraRecord, CommandRecord, Fault, FirmwareChange, HubRecord } fr
 export const SILENT_GRACE_S = 30 * 60;
 /** Without a planned check-in, a hub should report at least once a day. */
 const DEFAULT_EXPECTED_S = 24 * 60 * 60;
+/** A camera not read for this long while its hub checks in is unreachable. */
+export const NOT_READ_S = 24 * 60 * 60;
 /** Failed requests older than this are no news any more. */
 export const FAILED_WINDOW_S = 7 * 24 * 60 * 60;
 
@@ -51,6 +53,8 @@ export function hubFaults(
   cameras: Array<{ camera: CameraRecord; commands: CommandRecord[] }>,
   now: number,
   firmwareChanges: FirmwareChange[] = [],
+  /** Cameras the user stopped reading (#297): not reading them is no fault. */
+  excluded: ReadonlySet<string> = new Set(),
 ): Fault[] {
   const faults: Fault[] = [];
 
@@ -87,8 +91,27 @@ export function hubFaults(
     faults.push({ kind: 'hubBatteryLow', level: 'warning', value: bat });
   }
 
+  // Reading is planned at all: "off" means the hub only reads on request.
+  const reads = hub.schedule?.cameraPlan !== 'off';
+
   for (const { camera, commands } of cameras) {
     const camId = camera.camId;
+    // The hub keeps checking in, but this camera has not been read for a day
+    // (out of range, battery empty, switched off).
+    if (
+      reads &&
+      !excluded.has(camId) &&
+      camera.lastSeen > 0 &&
+      hub.lastSeen - camera.lastSeen > NOT_READ_S
+    ) {
+      faults.push({
+        kind: 'cameraNotRead',
+        level: 'warning',
+        camId,
+        value: hub.lastSeen - camera.lastSeen,
+        since: camera.lastSeen,
+      });
+    }
     const cbat = camera.batPercent;
     // 0 is what a camera reports before its first read; only a real read counts.
     if (camera.lastSeen > 0 && cbat !== undefined) {

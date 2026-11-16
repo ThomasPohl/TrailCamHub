@@ -137,4 +137,23 @@ describe('hub faults (#265)', () => {
     expect(hubFaults(hub(), [], NOW, [back, forward])).toEqual([]);
     expect(hubFaults(hub(), [], NOW, [{ ...back, at: NOW - FAILED_WINDOW_S - 1 }])).toEqual([]);
   });
+
+  it('notices a camera that is no longer read (#297)', () => {
+    const stale = camera({ lastSeen: NOW - 600 - 2 * 86_400 });
+    expect(hubFaults(hub(), [{ camera: stale, commands: [] }], NOW)).toEqual([
+      {
+        kind: 'cameraNotRead',
+        level: 'warning',
+        camId: 'C1',
+        value: 2 * 86_400,
+        since: NOW - 600 - 2 * 86_400,
+      },
+    ]);
+    // Excluded by the user, or a plan that reads only on request: no fault.
+    expect(hubFaults(hub(), [{ camera: stale, commands: [] }], NOW, [], new Set(['C1']))).toEqual(
+      [],
+    );
+    const off = hub({ schedule: { ...hub().schedule!, cameraPlan: 'off' } });
+    expect(hubFaults(off, [{ camera: stale, commands: [] }], NOW)).toEqual([]);
+  });
 });
