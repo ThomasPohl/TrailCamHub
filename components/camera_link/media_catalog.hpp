@@ -46,6 +46,12 @@ class MediaCatalog
         // A requested video cannot be fetched: it is not on the camera's
         // card any more, or its download failed kMaxVideoAttempts times.
         kVideoUnavailable = 1u << 5,
+        // Bits 6 and 7 count failed video downloads (see kAttemptShift).
+        // Not on the camera's card any more: missing from a complete media
+        // list, or deleted by the hub. Kept so the backend can be told.
+        kGone = 1u << 8,
+        // The backend was told that this item is gone (check-in accepted).
+        kGoneReported = 1u << 9,
     };
     // Failed downloads of a requested video, kept in two bits of the flags
     // (so the CSV format does not change); at this count it is given up.
@@ -107,6 +113,17 @@ class MediaCatalog
     // and not on the camera's card are marked kVideoUnavailable. Returns how
     // many were newly marked.
     std::size_t mark_unlisted_requests_unavailable();
+    // After a complete media list: every entry that is not listed is marked
+    // kGone. Returns how many were newly marked.
+    std::size_t mark_unlisted_gone();
+    // The item was deleted from the camera's card (by a hub action).
+    bool mark_gone(std::int64_t media_id);
+    // Up to `limit` items on the card the backend does not know yet: without
+    // kReported and kGone.
+    std::vector<CatalogEntry> unreported_present(std::size_t limit) const;
+    // Up to `limit` items the backend has not been told are gone: kGone
+    // without kGoneReported.
+    std::vector<std::int64_t> unreported_gone(std::size_t limit) const;
     // Failed downloads of a requested video so far.
     std::uint32_t video_attempts(std::int64_t media_id) const;
     // Counts a failed download of a requested video; at kMaxVideoAttempts it

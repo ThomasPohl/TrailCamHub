@@ -277,3 +277,19 @@ TEST_CASE("the check-in carries the memory headroom")
           "\"heapMin\":81234,\"psramMin\":3912345,\"stackSession\":2100,"
           "\"stackUplink\":5400,\"stackController\":3300},\"cameras\":[]}");
 }
+
+TEST_CASE("check-in body lists removed media only when there are some")
+{
+    CheckinRequest request;
+    request.hub_firmware = "dev";
+    CameraReport cam;
+    cam.cam_id = "AA";
+    request.cameras.push_back(cam);
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"cameras\":[{\"camId\":\"AA\","
+          "\"media\":[]}]}");
+    request.cameras[0].removed = {22, 33};
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"cameras\":[{\"camId\":\"AA\","
+          "\"media\":[],\"removedMedia\":[22,33]}]}");
+}

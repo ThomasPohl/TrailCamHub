@@ -124,7 +124,11 @@ request (and TLS handshake) however many cameras there are — important over LT
    ```
 
    - `media` is a **delta**: only recordings the hub has not reported before. The
-     backend only adds entries, so repeating one is harmless.
+     backend only adds entries, so repeating one is harmless. Recordings that are
+     no longer on the camera's card are never in `media`.
+   - `removedMedia` (optional): mediaIds no longer on the camera's card (deleted
+     on the camera or by a `deleteMedia` command). The backend drops these
+     recordings, so the gallery no longer shows them; repeating an id is harmless.
    - `readAt` (hub clock) becomes the camera's "last seen"; implausible values are
      replaced by the server time.
    - `sdCard`: the camera's SD card at the hub's last media list, `ok` or

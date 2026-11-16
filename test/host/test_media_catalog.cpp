@@ -349,3 +349,82 @@ TEST_CASE("camera work is ordered newest first, also across catalog order")
     CHECK(videos[0].media_id == 33);
     CHECK(videos[1].media_id == 11);
 }
+
+TEST_CASE("unlisted entries are gone after a complete list and reported once")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 0, 11), item(100, 2, 2, 22),
+                  item(100, 3, 0, 33)};
+    cat.merge(list);
+    REQUIRE(cat.set_flag(11, MediaCatalog::kReported));
+    REQUIRE(cat.set_flag(22, MediaCatalog::kReported));
+
+    // 22 was deleted on the camera.
+    list.files = {item(100, 1, 0, 11), item(100, 3, 0, 33)};
+    cat.merge(list);
+    CHECK(cat.mark_unlisted_gone() == 1);
+    CHECK(cat.mark_unlisted_gone() == 0);  // already marked
+    CHECK(cat.has_flag(22, MediaCatalog::kGone));
+
+    const auto present = cat.unreported_present(10);
+    REQUIRE(present.size() == 1);
+    CHECK(present[0].media_id == 33);
+    CHECK(cat.unreported_gone(10) == std::vector<std::int64_t>{22});
+
+    REQUIRE(cat.set_flag(22, MediaCatalog::kGoneReported));
+    CHECK(cat.unreported_gone(10).empty());
+
+    // After a resync the gone entry is not reported as media again.
+    cat.clear_flag_everywhere(MediaCatalog::kReported);
+    cat.clear_flag_everywhere(MediaCatalog::kGoneReported);
+    const auto again = cat.unreported_present(10);
+    CHECK(again.size() == 2);
+    for (const auto &e : again) {
+        CHECK(e.media_id != 22);
+    }
+    CHECK(cat.unreported_gone(10) == std::vector<std::int64_t>{22});
+}
+
+TEST_CASE("a deletion by the hub marks the entry gone")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 0, 11)};
+    cat.merge(list);
+    CHECK(cat.mark_gone(11));
+    CHECK_FALSE(cat.mark_gone(11));
+    CHECK_FALSE(cat.mark_gone(99));
+    CHECK(cat.unreported_present(10).empty());
+    CHECK(cat.unreported_gone(10) == std::vector<std::int64_t>{11});
+    CHECK(cat.missing_thumbnails().empty());
+}
+
+TEST_CASE("an entry listed again is no longer gone and is reported again")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 0, 11)};
+    cat.merge(list);
+    REQUIRE(cat.set_flag(11, MediaCatalog::kReported));
+    REQUIRE(cat.mark_gone(11));
+    REQUIRE(cat.set_flag(11, MediaCatalog::kGoneReported));
+    cat.merge(list);
+    CHECK_FALSE(cat.has_flag(11, MediaCatalog::kGone));
+    CHECK_FALSE(cat.has_flag(11, MediaCatalog::kGoneReported));
+    CHECK(cat.unreported_present(10).size() == 1);
+}
+
+TEST_CASE("the gone flags survive a save and load")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 0, 11)};
+    cat.merge(list);
+    REQUIRE(cat.mark_gone(11));
+    REQUIRE(cat.set_flag(11, MediaCatalog::kGoneReported));
+    MediaCatalog loaded;
+    REQUIRE(loaded.parse(cat.serialize()));
+    CHECK(loaded.has_flag(11, MediaCatalog::kGone));
+    CHECK(loaded.has_flag(11, MediaCatalog::kGoneReported));
+}

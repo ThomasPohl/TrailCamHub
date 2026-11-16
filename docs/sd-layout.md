@@ -53,6 +53,8 @@ Text, one line per recording, written by `MediaCatalog::serialize()`:
 | 4 | `kReported` | the destination knows the recording |
 | 5 | `kVideoUnavailable` | a requested video cannot be fetched |
 | 6–7 | attempts | failed downloads of a requested video (given up at 3) |
+| 8 | `kGone` | not on the camera's card any more (missing from a complete media list, or deleted by the hub) |
+| 9 | `kGoneReported` | the backend was told the recording is gone |
 
 Versions: v1 was keyed by `dir`/`num`, v2 by `mediaId` with files still named
 by `dir`/`num`; both have the same columns and are converted to v3 when
