@@ -426,6 +426,85 @@ describe('hiding a camera (#273)', () => {
   });
 });
 
+describe('found cameras (#296, #297)', () => {
+  const A = 'AA:BB:CC:00:00:01';
+  const B = 'F4:C1:56:06:ED:3B';
+
+  it('notes found cameras, approves read ones and answers with the approved list', async () => {
+    const world = await galleryWorld();
+    const checkin = async (data: Record<string, unknown>) =>
+      body<{ approvedCameras?: string[] }>(
+        await handleRequest(hubRequest('/v1/device/checkin', world.hubKey, data), world.deps),
+      );
+
+    // A hub without BLE addresses gets no list: it reads every camera.
+    expect((await checkin({ cameras: [] })).approvedCameras).toBeUndefined();
+
+    const first = await checkin({
+      discovered: [
+        { bleAddress: 'aa-bb-cc-00-00-01', name: 'TC100_0001', rssi: -70, seenAt: NOW - 30 },
+        { bleAddress: B, name: 'TC100_ED3B', rssi: -55 },
+      ],
+      cameras: [{ camId: CAM_ID, readAt: NOW - 20, bleAddress: B, media: [] }],
+    });
+    expect(first.approvedCameras).toEqual([B]);
+
+    const listed = body<Array<{ bleAddress: string; state: string; camId?: string; name: string }>>(
+      await world.call('GET', `/v1/hubs/${HUB_ID}/found-cameras`),
+    );
+    expect(listed.map((c) => [c.bleAddress, c.state, c.camId, c.name])).toEqual([
+      [A, 'new', undefined, 'TC100_0001'],
+      [B, 'approved', CAM_ID, CAM_ID],
+    ]);
+
+    // The user takes the new one in with a name; it becomes the camera's name at its first read.
+    const approve = await world.call('POST', `/v1/hubs/${HUB_ID}/found-cameras/${A}`, {
+      state: 'approved',
+      name: 'Futterplatz',
+    });
+    expect(approve.statusCode).toBe(200);
+    expect((await checkin({ discovered: [] })).approvedCameras).toEqual([A, B]);
+    await checkin({ cameras: [{ camId: 'CAM_A', readAt: NOW - 10, bleAddress: A, media: [] }] });
+    const cameras = body<Array<{ camId: string; name: string }>>(
+      await world.call('GET', '/v1/cameras'),
+    );
+    expect(cameras.find((c) => c.camId === 'CAM_A')?.name).toBe('Futterplatz');
+
+    // Stop reading one: it stays excluded even when an old hub reads it again.
+    await world.call('POST', `/v1/hubs/${HUB_ID}/found-cameras/${B.replace(/:/g, '')}`, {
+      state: 'excluded',
+    });
+    const after = await checkin({
+      cameras: [{ camId: CAM_ID, readAt: NOW - 5, bleAddress: B, media: [] }],
+    });
+    expect(after.approvedCameras).toEqual([A]);
+    // ... and can be taken in again later.
+    await world.call('POST', `/v1/hubs/${HUB_ID}/found-cameras/${B}`, { state: 'approved' });
+    expect((await checkin({ discovered: [] })).approvedCameras).toEqual([A, B]);
+  });
+
+  it('checks the input and who may decide', async () => {
+    const world = await galleryWorld();
+    const bad = await handleRequest(
+      hubRequest('/v1/device/checkin', world.hubKey, { discovered: [{ bleAddress: 'nope' }] }),
+      world.deps,
+    );
+    expect(bad.statusCode).toBe(400);
+    await handleRequest(
+      hubRequest('/v1/device/checkin', world.hubKey, { discovered: [{ bleAddress: A }] }),
+      world.deps,
+    );
+    const path = `/v1/hubs/${HUB_ID}/found-cameras/${A}`;
+    expect((await world.call('POST', path, { state: 'maybe' })).statusCode).toBe(400);
+    expect((await world.call('POST', path, { state: 'approved', name: '' })).statusCode).toBe(400);
+    expect(
+      (await world.call('POST', `/v1/hubs/${HUB_ID}/found-cameras/${B}`, { state: 'approved' }))
+        .statusCode,
+    ).toBe(404);
+    expect((await world.call('GET', '/v1/hubs/other-hub/found-cameras')).statusCode).toBe(404);
+  });
+});
+
 describe('camera names (#273)', () => {
   it('shows the name the admin gave the camera', async () => {
     const { call, deps } = await galleryWorld();

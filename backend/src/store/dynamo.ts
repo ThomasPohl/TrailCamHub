@@ -19,6 +19,7 @@ import type {
   MediaRecord,
   PairingCode,
   FirmwareChange,
+  FoundCamera,
   Sample,
   SampleOwner,
   ScheduleConfig,
@@ -43,6 +44,7 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
  *   HUB#<hubId>  / BAT#<at>               battery sample of the hub (ttl)
  *   CAM#<camId>  / BAT#<at>               battery/SD sample of a camera (ttl)
  *   HUB#<hubId>  / FW#<at>                firmware change of the hub (ttl)
+ *   HUB#<hubId>  / BLE#<address>          camera the hub found (#297)
  */
 const hubPk = (hubId: string) => `HUB#${hubId}`;
 const camPk = (camId: string) => `CAM#${camId}`;
@@ -346,6 +348,24 @@ export class DynamoStore implements Store {
       start = page.LastEvaluatedKey;
     } while (start);
     return samples;
+  }
+
+  async getFoundCamera(hubId: string, bleAddress: string): Promise<FoundCamera | undefined> {
+    return this.getItem<FoundCamera>(hubPk(hubId), `BLE#${bleAddress}`);
+  }
+
+  async putFoundCamera(hubId: string, camera: FoundCamera): Promise<void> {
+    await this.db.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: { PK: hubPk(hubId), SK: `BLE#${camera.bleAddress}`, ...camera },
+      }),
+    );
+  }
+
+  async listFoundCameras(hubId: string): Promise<FoundCamera[]> {
+    const items = await this.queryPrefix(hubPk(hubId), 'BLE#');
+    return items.map((item) => strip<FoundCamera>(item));
   }
 
   async addFirmwareChange(hubId: string, change: FirmwareChange): Promise<void> {

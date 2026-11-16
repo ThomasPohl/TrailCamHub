@@ -37,26 +37,28 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 
 ## API v1
 
-| Method | Path                                           | Auth                   | Purpose                                        |
-| ------ | ---------------------------------------------- | ---------------------- | ---------------------------------------------- |
-| GET    | `/v1/health`                                   | –                      | Liveness check                                 |
-| GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user            |
-| GET    | `/v1/me`                                       | app user               | `{userId, name, role}` of the signed-in user   |
-| GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults       |
-| GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)            |
-| POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT; the apps use it (CORS, #286)  |
-| GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails            |
-| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}` |
-| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"readCamera"}`                        |
-| PUT    | `/v1/hubs/{hubId}/schedule`                    | `tma <initData>`       | Wake-up schedule of a hub (see below)          |
-| POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`        |
-| POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests          |
-| POST   | `/v1/cameras/{camId}/name`                     | app user               | `{"name":"Garten"}`, 1–40 characters           |
-| POST   | `/v1/cameras/{camId}/hidden`                   | app user               | `{"hidden":true}`: hide in the gallery (#273)  |
-| POST   | `/v1/device/checkin`                           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)       |
-| POST   | `/v1/device/ack`                               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands       |
-| POST   | `/v1/device/pairing-code`                      | `Bearer <hubId>.<key>` | One-time pairing link for the hub to show      |
-| POST   | `/v1/telegram/webhook`                         | webhook secret token   | Updates from Telegram (bot messages, buttons)  |
+| Method | Path                                           | Auth                   | Purpose                                               |
+| ------ | ---------------------------------------------- | ---------------------- | ----------------------------------------------------- |
+| GET    | `/v1/health`                                   | –                      | Liveness check                                        |
+| GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user                   |
+| GET    | `/v1/me`                                       | app user               | `{userId, name, role}` of the signed-in user          |
+| GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults              |
+| GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)                   |
+| POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT; the apps use it (CORS, #286)         |
+| GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails                   |
+| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}`        |
+| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"readCamera"}`                               |
+| PUT    | `/v1/hubs/{hubId}/schedule`                    | `tma <initData>`       | Wake-up schedule of a hub (see below)                 |
+| POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`               |
+| POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests                 |
+| POST   | `/v1/cameras/{camId}/name`                     | app user               | `{"name":"Garten"}`, 1–40 characters                  |
+| POST   | `/v1/cameras/{camId}/hidden`                   | app user               | `{"hidden":true}`: hide in the gallery (#273)         |
+| GET    | `/v1/hubs/{hubId}/found-cameras`               | app user               | Cameras the hub found: new, approved, excluded (#297) |
+| POST   | `/v1/hubs/{hubId}/found-cameras/{bleAddress}`  | app user               | `{"state":"approved","name":"…"}` or `excluded`       |
+| POST   | `/v1/device/checkin`                           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)              |
+| POST   | `/v1/device/ack`                               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands              |
+| POST   | `/v1/device/pairing-code`                      | `Bearer <hubId>.<key>` | One-time pairing link for the hub to show             |
+| POST   | `/v1/telegram/webhook`                         | webhook secret token   | Updates from Telegram (bot messages, buttons)         |
 
 A recording is identified by its **`mediaId`** (per camera), not by `dir`/`num`:
 the camera reuses `dir`/`num` after its card was cleared. `dir`/`num` are only
@@ -435,3 +437,22 @@ billing more. In a classic account, set an AWS Budgets alert.
 
 Video upload (the bot's download button only queues the request), showing the
 hub's pairing code as a QR code on the hub, OTA manifest.
+
+## Found cameras (#296, #297)
+
+A hub with new firmware reports the cameras it heard in its BLE scan
+(`discovered`: BLE address, advertised name, RSSI, time) and the BLE address
+of every camera it read (`cameras[].bleAddress`). The backend keeps them per
+hub as `HUB#<id>` / `BLE#<address>` with a state:
+
+- **new**: heard, not decided yet; the gallery offers to take it in.
+- **approved**: the hub may read it. A camera read before any decision is
+  approved, so existing cameras keep working after the update.
+- **excluded**: the user stopped reading it; a later read does not change
+  that, but the user can approve it again at any time.
+
+Every user linked to the hub may decide (`POST …/found-cameras/{address}`).
+A name given before the first read becomes the camera's name then. A hub that
+reports BLE addresses gets `approvedCameras` (BLE addresses) in the check-in
+response; firmware that reads only these follows in #299. Older hubs get no
+list and read every camera.

@@ -102,7 +102,8 @@ export interface Fault {
     | 'sdFull'
     | 'sdNearlyFull'
     | 'requestsFailed'
-    | 'firmwareDowngrade';
+    | 'firmwareDowngrade'
+    | 'cameraNotRead';
   level: 'error' | 'warning';
   camId?: string;
   /** Percent, free MB, seconds overdue or number of failed requests. */

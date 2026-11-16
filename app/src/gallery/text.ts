@@ -113,6 +113,12 @@ export function faultText(fault: Fault, camera: string | undefined, nowSeconds: 
       return `${who}: SD-Karte voll (${fault.value ?? 0} MB frei).`;
     case 'sdNearlyFull':
       return `${who}: SD-Karte fast voll (${fault.value ?? 0} MB frei).`;
+    case 'cameraNotRead':
+      return (
+        `${who}: seit ${durationText(fault.value ?? 0)} nicht mehr gelesen` +
+        (fault.since ? ` (zuletzt ${clockTime(fault.since, nowSeconds)})` : '') +
+        ' – außer Reichweite, Akku leer oder ausgeschaltet?'
+      );
     case 'firmwareDowngrade':
       return (
         `Der Hub läuft wieder mit älterer Firmware (${fault.detail ?? '?'})` +

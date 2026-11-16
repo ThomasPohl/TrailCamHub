@@ -6,6 +6,7 @@ import type {
   MediaRecord,
   PairingCode,
   FirmwareChange,
+  FoundCamera,
   Sample,
   SampleOwner,
   ScheduleConfig,
@@ -30,6 +31,7 @@ export type CameraTelemetry = Partial<
     | 'batType'
     | 'bleVersion'
     | 'cameraName'
+    | 'bleAddress'
   >
 >;
 
@@ -85,6 +87,11 @@ export interface Store {
   addSample(owner: SampleOwner, sample: Sample): Promise<void>;
   /** Samples from `since` on, oldest first. */
   listSamples(owner: SampleOwner, since: number): Promise<Sample[]>;
+
+  /** Cameras a hub found, by BLE address (#297). */
+  getFoundCamera(hubId: string, bleAddress: string): Promise<FoundCamera | undefined>;
+  putFoundCamera(hubId: string, camera: FoundCamera): Promise<void>;
+  listFoundCameras(hubId: string): Promise<FoundCamera[]>;
 
   /** Records a firmware change of a hub (#149); kept for HISTORY_KEEP_S. */
   addFirmwareChange(hubId: string, change: FirmwareChange): Promise<void>;
