@@ -166,6 +166,13 @@ describe('GalleryApp', () => {
     expect(await screen.findByText(/übernimmt den Plan/)).toBeInTheDocument();
     expect(await within(hub).findByText(/alle 1 h \(aus der App\)/)).toBeInTheDocument();
 
+    // Battery history (#76), loaded when asked for.
+    fireEvent.click(within(hub).getByRole('button', { name: 'Akku-Verlauf (30 Tage)' }));
+    expect(await within(hub).findByRole('img', { name: /^Hub: Akku/ })).toBeInTheDocument();
+    expect(
+      within(hub).getByRole('img', { name: 'Kamera „Garten“: Akku 95 % → 66 %' }),
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: 'Zur Galerie' }));
     expect(await screen.findAllByRole('listitem')).toHaveLength(16);
   });

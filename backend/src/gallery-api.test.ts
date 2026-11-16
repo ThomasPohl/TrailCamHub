@@ -294,6 +294,47 @@ describe('delete batches (#261)', () => {
   });
 });
 
+describe('battery history (#76)', () => {
+  it('keeps one sample per hour for hub and camera and shows them to the admin', async () => {
+    const world = await galleryWorld();
+    let now = NOW;
+    world.deps.now = () => now;
+    const checkin = (readAt: number, batPercent: number, hubBatPercent: number) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, {
+          hubBatPercent,
+          cameras: [{ camId: CAM_ID, readAt, batPercent, sdFreeMB: 900, media: [] }],
+        }),
+        world.deps,
+      );
+    await checkin(now - 60, 80, 90);
+    now += 600; // same hour, same read: nothing new
+    await checkin(NOW - 60, 80, 89);
+    now += 3600;
+    await checkin(now - 30, 78, 85);
+
+    const admin = await createAppUser(
+      { admin: 'createAppUser', name: 'Thomas', role: 'admin' },
+      world.deps,
+    );
+    if (!admin.ok) throw new Error(admin.error);
+    const res = await handleRequest(
+      galleryRequest(admin.token, 'GET', `/v1/admin/hubs/${HUB_ID}/history`),
+      world.deps,
+    );
+    expect(res.statusCode).toBe(200);
+    const history = body<{
+      hub: Array<{ batPercent?: number }>;
+      cameras: Array<{ camId: string; samples: Array<{ batPercent?: number; sdFreeMB?: number }> }>;
+    }>(res);
+    expect(history.hub.map((s) => s.batPercent)).toEqual([90, 85]);
+    expect(history.cameras[0]?.camId).toBe(CAM_ID);
+    expect(history.cameras[0]?.samples.map((s) => s.batPercent)).toEqual([80, 78]);
+
+    expect((await world.call('GET', `/v1/admin/hubs/${HUB_ID}/history`)).statusCode).toBe(403);
+  });
+});
+
 describe('video requests on a hub without PSRAM (#244)', () => {
   it('hands out as many as thumbnail uploads the hub asks for', async () => {
     const world = await galleryWorld();

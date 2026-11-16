@@ -437,3 +437,40 @@ body {
 .g-notice--ok {
   display: block;
 }
+
+.g-history {
+  margin-top: 18px;
+}
+
+.g-history__charts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  margin-top: 12px;
+}
+
+.g-chart {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.g-chart svg {
+  display: block;
+  margin-top: 4px;
+  background: #f7f5ef;
+  border-radius: 6px;
+}
+
+.g-chart__line {
+  fill: none;
+  stroke: var(--g-accent);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+/* 25 %: below it the admin view reports a low battery (#265). */
+.g-chart__low {
+  stroke: #f2a900;
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}

@@ -23,9 +23,12 @@ import type {
   CommandRecord,
   CommandResult,
   HubRecord,
+  HubHistory,
   HubSchedule,
   MediaItem,
   MediaRecord,
+  Sample,
+  SampleOwner,
   ScheduleConfig,
   ScheduleOrigin,
   ScheduleStretch,
@@ -101,6 +104,7 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   // The same as POST: the Function URL's CORS allows no PUT (#286).
   { method: 'POST', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
   { method: 'GET', pattern: '/v1/admin/hubs', handler: adminHubs },
+  { method: 'GET', pattern: '/v1/admin/hubs/:hubId/history', handler: adminHistory },
   { method: 'POST', pattern: '/v1/device/checkin', handler: checkin },
   { method: 'POST', pattern: '/v1/device/ack', handler: ack },
   { method: 'POST', pattern: '/v1/device/pairing-code', handler: devicePairingCode },
@@ -276,6 +280,33 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
     });
   }
   return json(200, hubs);
+}
+
+/** How far back the admin view shows the battery history (#76). */
+const HISTORY_VIEW_S = 30 * 24 * 60 * 60;
+
+/** Battery and SD samples of a hub and its cameras, for the admin (#76). */
+async function adminHistory(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const user = await authUser(req, deps);
+  if (!user.admin) throw new HttpError(403, 'Only for the admin');
+  const hubId = params.hubId ?? '';
+  const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
+  if (!hub) throw new HttpError(404, 'Hub not found');
+  const since = deps.now() - HISTORY_VIEW_S;
+  const history: HubHistory = {
+    hub: await deps.store.listSamples({ hubId }, since),
+    cameras: [],
+  };
+  for (const camId of await deps.store.listHubCameraIds(hubId)) {
+    const camera = await deps.store.getCamera(camId);
+    if (!camera || camera.hubId !== hubId) continue;
+    history.cameras.push({
+      camId,
+      name: camera.name,
+      samples: await deps.store.listSamples({ camId }, since),
+    });
+  }
+  return json(200, history);
 }
 
 async function listCameras(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
@@ -597,6 +628,16 @@ function parseCameraReports(
 }
 
 /** When the hub read the camera: its own timestamp if plausible, else now. */
+/** At most one sample per hub or camera and hour (#76). */
+const SAMPLE_EVERY_S = 60 * 60;
+
+async function recordSample(deps: Deps, owner: SampleOwner, sample: Sample): Promise<void> {
+  if (sample.batPercent === undefined && sample.sdFreeMB === undefined) return;
+  const recent = await deps.store.listSamples(owner, sample.at - SAMPLE_EVERY_S + 1);
+  if (recent.length > 0) return;
+  await deps.store.addSample(owner, sample);
+}
+
 function readTime(readAt: unknown, now: number): number {
   const t = optionalNumber(readAt);
   return t !== undefined && t <= now + MAX_CLOCK_SKEW_S && t >= now - MAX_READ_AGE_S ? t : now;
@@ -616,6 +657,14 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       schedule: sanitizeSchedule(body.schedule, now),
     },
     now,
+  );
+  await recordSample(
+    deps,
+    { hubId: hub.hubId },
+    {
+      at: now,
+      batPercent: optionalNumber(body.hubBatPercent),
+    },
   );
 
   const results = new Map<string, CameraCheckin>();
@@ -643,6 +692,17 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
         cameraName: optionalString(report.cameraName),
       },
       readTime(report.readAt, now),
+    );
+    // A report repeats the last read; its sample is stored only once.
+    await recordSample(
+      deps,
+      { camId: camera.camId },
+      {
+        at: readTime(report.readAt, now),
+        batPercent: optionalNumber(report.batPercent),
+        sdFreeMB: optionalNumber(report.sdFreeMB),
+        temperature: optionalNumber(report.temperature),
+      },
     );
     // Only new recordings are written; existing ones keep their flags.
     await deps.store.addMedia(camera.camId, report.records);

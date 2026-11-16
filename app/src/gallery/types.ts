@@ -73,6 +73,20 @@ export interface Me {
   admin: boolean;
 }
 
+/** A battery/SD sample (#76). */
+export interface Sample {
+  at: number;
+  batPercent?: number;
+  sdFreeMB?: number;
+  temperature?: number;
+}
+
+/** The last 30 days of a hub and its cameras, oldest first. */
+export interface HubHistory {
+  hub: Sample[];
+  cameras: Array<{ camId: string; name: string; samples: Sample[] }>;
+}
+
 /** Something the admin should look at (#265); `faultText()` words it. */
 export interface Fault {
   kind:
@@ -128,6 +142,8 @@ export interface GalleryApi {
   me(): Promise<Me>;
   /** Admin only: every hub with cameras and users. */
   adminHubs(): Promise<AdminHub[]>;
+  /** Admin only: battery history of a hub and its cameras (#76). */
+  adminHistory(hubId: string): Promise<HubHistory>;
   /** Replaces the schedule set in the app; an empty object leaves it to the hub. */
   setSchedule(hubId: string, config: ScheduleConfig): Promise<void>;
   /** Asks the hub to read the camera at its next check-in. */

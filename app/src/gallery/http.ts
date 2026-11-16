@@ -2,7 +2,15 @@ import { ApiError } from '../api/http';
 import type { Camera, MediaItem } from '../api/types';
 import { cameraFile, videoFileName } from './text';
 import type { ScheduleConfig } from '../api/types';
-import type { AdminHub, GalleryApi, GalleryStatus, Me, Recording, RecordingState } from './types';
+import type {
+  AdminHub,
+  GalleryApi,
+  GalleryStatus,
+  HubHistory,
+  Me,
+  Recording,
+  RecordingState,
+} from './types';
 
 /** A reason from the hub or backend in words the user can understand. */
 export function friendlyReason(error: string | undefined): string | undefined {
@@ -232,6 +240,10 @@ export class HttpGalleryApi implements GalleryApi {
 
   adminHubs(): Promise<AdminHub[]> {
     return this.request<AdminHub[]>('GET', '/v1/admin/hubs');
+  }
+
+  adminHistory(hubId: string): Promise<HubHistory> {
+    return this.request<HubHistory>('GET', `/v1/admin/hubs/${encodeURIComponent(hubId)}/history`);
   }
 
   async setSchedule(hubId: string, config: ScheduleConfig): Promise<void> {

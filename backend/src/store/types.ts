@@ -5,6 +5,8 @@ import type {
   HubRecord,
   MediaRecord,
   PairingCode,
+  Sample,
+  SampleOwner,
   ScheduleConfig,
   UserSettings,
   VideoState,
@@ -75,6 +77,11 @@ export interface Store {
   removeMedia(camId: string, mediaIds: number[]): Promise<void>;
   markThumbPresent(camId: string, mediaId: number): Promise<void>;
   setVideoState(camId: string, mediaId: number, state: VideoState): Promise<void>;
+
+  /** Stores a battery/SD sample (#76); expires after HISTORY_KEEP_S. */
+  addSample(owner: SampleOwner, sample: Sample): Promise<void>;
+  /** Samples from `since` on, oldest first. */
+  listSamples(owner: SampleOwner, since: number): Promise<Sample[]>;
 
   putCommand(camId: string, command: CommandRecord): Promise<void>;
   getCommand(camId: string, id: string): Promise<CommandRecord | undefined>;
