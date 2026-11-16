@@ -125,6 +125,10 @@ export class DynamoStore implements Store {
     return this.getItem<CameraRecord>(camPk(camId), 'META');
   }
 
+  async renameCamera(camId: string, name: string): Promise<void> {
+    await this.updateFields(camPk(camId), 'META', { name });
+  }
+
   async updateCamera(camId: string, telemetry: CameraTelemetry, lastSeen: number): Promise<void> {
     await this.updateFields(camPk(camId), 'META', { ...telemetry, lastSeen });
   }
