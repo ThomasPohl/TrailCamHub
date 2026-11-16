@@ -61,7 +61,7 @@ describe('GalleryApp', () => {
   });
 
   it('fetches and deletes the chosen recordings together', async () => {
-    let now = 1_000_000;
+    const now = 1_000_000;
     const api = new DemoGalleryApi(() => now, 20);
     render(
       <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
