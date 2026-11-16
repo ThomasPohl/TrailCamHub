@@ -335,6 +335,34 @@ describe('battery history (#76)', () => {
   });
 });
 
+describe('video requests on a hub without PSRAM (#244)', () => {
+  it('hands out as many as thumbnail uploads the hub asks for', async () => {
+    const world = await galleryWorld();
+    for (const mediaId of [2035, 2037]) {
+      const res = await world.call('POST', `/v1/cameras/${CAM_ID}/commands`, {
+        type: 'requestVideo',
+        mediaId,
+      });
+      expect(res.statusCode).toBe(201);
+    }
+    const videos = async (extra: Record<string, unknown>) =>
+      (
+        body<CheckinResponse>(
+          await handleRequest(
+            hubRequest('/v1/device/checkin', world.hubKey, { cameras: [], ...extra }),
+            world.deps,
+          ),
+        ).cameras[0]?.commands ?? []
+      ).filter((c) => c.type === 'requestVideo');
+
+    const small = await videos({ maxThumbUploads: 1 });
+    expect(small).toHaveLength(1);
+    // The delivered one comes again first; at least one even with 0 uploads.
+    expect((await videos({ maxThumbUploads: 0 })).map((c) => c.id)).toEqual(small.map((c) => c.id));
+    expect(await videos({})).toHaveLength(2);
+  });
+});
+
 describe('camera names (#273)', () => {
   it('shows the name the admin gave the camera', async () => {
     const { call, deps } = await galleryWorld();
