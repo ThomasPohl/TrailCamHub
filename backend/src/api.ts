@@ -100,6 +100,7 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'POST', pattern: '/v1/cameras/:camId/commands', handler: createCommand },
   { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/withdraw', handler: withdrawMedia },
   { method: 'POST', pattern: '/v1/cameras/:camId/name', handler: renameCameraByUser },
+  { method: 'POST', pattern: '/v1/cameras/:camId/hidden', handler: hideCamera },
   { method: 'PUT', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
   // The same as POST: the Function URL's CORS allows no PUT (#286).
   { method: 'POST', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
@@ -205,6 +206,7 @@ function toCamera(
   return {
     camId: record.camId,
     name: record.name,
+    hidden: record.hidden || undefined,
     hubId: record.hubId,
     hubName: hub?.name ?? record.hubId,
     model: record.model ?? 'unknown',
@@ -493,6 +495,19 @@ async function renameCameraByUser(req: ApiRequest, params: Record<string, string
   }
   await deps.store.renameCamera(camera.camId, name);
   return json(200, { camId: camera.camId, name });
+}
+
+/**
+ * Hides a camera in the gallery or shows it again (#273). Reversible: the
+ * recordings stay in the backend and on the hub, and the hub keeps reading
+ * the camera. Every user linked to the hub may do it, like renaming.
+ */
+async function hideCamera(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const camera = await authUserForCamera(req, params.camId ?? '', deps);
+  const hidden = parseJsonBody<{ hidden?: unknown } | null>(req)?.hidden;
+  if (typeof hidden !== 'boolean') throw new HttpError(400, 'hidden must be true or false');
+  await deps.store.setCameraHidden(camera.camId, hidden);
+  return json(200, { camId: camera.camId, hidden });
 }
 
 function commandResult(c: CommandRecord): CommandResult {

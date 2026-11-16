@@ -163,6 +163,10 @@ export class DynamoStore implements Store {
     await this.updateFields(camPk(camId), 'META', { name });
   }
 
+  async setCameraHidden(camId: string, hidden: boolean): Promise<void> {
+    await this.updateFields(camPk(camId), 'META', { hidden });
+  }
+
   async updateCamera(camId: string, telemetry: CameraTelemetry, lastSeen: number): Promise<void> {
     await this.updateFields(camPk(camId), 'META', { ...telemetry, lastSeen });
   }

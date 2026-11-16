@@ -51,6 +51,8 @@ export interface Store {
   getCamera(camId: string): Promise<CameraRecord | undefined>;
   /** Sets the name the user sees (#273); the camId stays the key. */
   renameCamera(camId: string, name: string): Promise<void>;
+  /** Hides a camera in the gallery or shows it again (#273). */
+  setCameraHidden(camId: string, hidden: boolean): Promise<void>;
   updateCamera(camId: string, telemetry: CameraTelemetry, lastSeen: number): Promise<void>;
   listHubCameraIds(hubId: string): Promise<string[]>;
 

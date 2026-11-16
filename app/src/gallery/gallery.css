@@ -480,3 +480,20 @@ body {
   margin: 0;
   padding: 0;
 }
+
+.g-hidden-cams {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #ddd8cc;
+}
+
+.g-hidden-cams h2 {
+  font-size: 1.2rem;
+}
+
+.g-hidden-cams li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}

@@ -142,7 +142,7 @@ export class HttpGalleryApi implements GalleryApi {
       lastContact: latest?.hubLastSeen ?? 0,
       nextContact: latest?.hubSchedule?.nextCheckinAt,
       hubBatPercent: latest?.hubBatPercent,
-      cameras: cameras.map((c) => ({ camId: c.camId, name: c.name })),
+      cameras: cameras.map((c) => ({ camId: c.camId, name: c.name, hidden: c.hidden })),
     };
   }
 
@@ -231,6 +231,10 @@ export class HttpGalleryApi implements GalleryApi {
     const camera = this.cameras.get(camId);
     if (camera) this.cameras.set(camId, { ...camera, name: result.name });
     return result.name;
+  }
+
+  async setCameraHidden(camId: string, hidden: boolean): Promise<void> {
+    await this.request('POST', `${this.camera(camId)}/hidden`, { hidden });
   }
 
   async me(): Promise<Me> {
