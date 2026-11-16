@@ -88,8 +88,9 @@ struct CheckinRequest {
     std::string hub_variant;
     std::int64_t hub_bat_percent = -1;  // -1 = unknown
     // The most thumbnail uploads the backend should answer with; -1 leaves
-    // it to the backend (30). Each one is a presigned URL of about 650 B in
-    // the response.
+    // it to the backend (30). Each one is a presigned URL of about 1.8 KB in
+    // the response (measured on the WROOM-32D, #244). The backend hands out
+    // as many video requests as this (at least one), as they carry a URL too.
     std::int64_t max_thumb_uploads = -1;
     ScheduleReport schedule;
     MemoryReport memory;
