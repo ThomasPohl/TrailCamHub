@@ -34,15 +34,18 @@ function toState(m: MediaItem): Pick<Recording, 'state' | 'failReason'> {
   return state === 'failed' ? { state, failReason: friendlyReason(m.videoError) } : { state };
 }
 
-/** At most this far apart (camera seconds) are a video and its photo. */
-const PAIR_WINDOW_S = 10;
+/**
+ * At most this far apart (camera seconds) are a video and its photo. Seen on
+ * a TC100: 0-12 s, depending on the video's length.
+ */
+const PAIR_WINDOW_S = 120;
 
 /**
  * The files of one recording: the camera takes a photo with each video and
  * stores both with neighbouring numbers in the same folder, e.g.
- * DSCF0011.JPG and DSCF0012.AVI. A video is paired with a photo whose number
- * is one off (the one before first) and that was taken within
- * PAIR_WINDOW_S; files without a partner stay alone. Keeps the order of the
+ * DSCF0023.AVI and DSCF0024.JPG. A video is paired with a photo whose number
+ * is one off (the one after first, as the TC100 stores them) and that was
+ * taken within PAIR_WINDOW_S; files without a partner stay alone. Keeps the order of the
  * backend's list (newest first).
  */
 export function groupRecordings(items: MediaItem[]): MediaItem[][] {
@@ -52,7 +55,7 @@ export function groupRecordings(items: MediaItem[]): MediaItem[][] {
   const partner = new Map<number, MediaItem>(); // video mediaId -> its photo
   for (const video of items) {
     if (video.fileType !== 2) continue;
-    for (const num of [video.num - 1, video.num + 1]) {
+    for (const num of [video.num + 1, video.num - 1]) {
       const photo = photos.get(`${video.dir}/${num}`);
       if (
         photo &&
