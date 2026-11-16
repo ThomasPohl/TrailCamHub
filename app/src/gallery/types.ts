@@ -52,6 +52,9 @@ export interface GalleryCamera {
   name: string;
 }
 
+/** Longest camera name the backend accepts. */
+export const MAX_CAMERA_NAME = 40;
+
 export interface GalleryStatus {
   /** Last contact with the hub, Unix seconds; 0 = never. */
   lastContact: number;
@@ -75,4 +78,6 @@ export interface GalleryApi {
   withdraw(camId: string, recording: Recording): Promise<void>;
   /** The video file of a recording in state `videoReady`. */
   download(recording: Recording): Promise<Blob>;
+  /** Gives the camera the name the user sees (#273); returns the stored name. */
+  renameCamera(camId: string, name: string): Promise<string>;
 }

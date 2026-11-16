@@ -26,7 +26,8 @@ per recording (a video and the photo taken with it, e.g. `DSCF0023.AVI` and
 `DSCF0024.JPG`, are one recording; the mediaIds stay the keys), **Fetch video** and
 **Delete** per recording, "delete all
 new ones" with a confirmation, and a status line with the hub's last and next
-contact. The texts are German. It can be installed as an app (manifest and
+contact. The user renames a camera with "Umbenennen" next to its name (#273).
+The texts are German. It can be installed as an app (manifest and
 service worker in `public/`), and with Chrome or Edge it writes finished
 videos into a folder chosen once (File System Access API, `src/gallery/folder.ts`),
 one sub-folder per camera; other browsers download them.

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/http';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
-import { cameraTime, clockTime, stateText } from './text';
-import type { GalleryApi, GalleryStatus, Recording } from './types';
+import { cameraTime, clockTime, folderName, stateText } from './text';
+import { MAX_CAMERA_NAME, type GalleryApi, type GalleryStatus, type Recording } from './types';
 
 export interface FolderOps {
   folderState(): Promise<FolderState>;
@@ -102,7 +102,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       try {
         for (const r of pending) {
           const data = await api.download(r);
-          await folder.saveToFolder(cameraName, r.fileName, data);
+          await folder.saveToFolder(folderName(cameraName), r.fileName, data);
           done.push(r.mediaId);
         }
       } catch (error) {
@@ -139,7 +139,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     try {
       const data = await api.download(r);
       if (folderInfo.kind === 'ready') {
-        await folder.saveToFolder(cameraName, r.fileName, data);
+        await folder.saveToFolder(folderName(cameraName), r.fileName, data);
         setNotice(`Video gespeichert im Ordner „${folderInfo.name}“.`);
       } else {
         folder.downloadFile(r.fileName, data);
@@ -148,6 +148,24 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       markSaved([r.mediaId]);
     } catch (error) {
       setNotice(`Speichern hat nicht geklappt: ${errorText(error)}`);
+    }
+  };
+
+  // Returns whether the name was stored, so the form can close.
+  const renameCamera = async (id: string, name: string): Promise<boolean> => {
+    setBusy(true);
+    try {
+      const stored = await api.renameCamera(id, name);
+      setNotice(
+        `Die Kamera heißt jetzt „${stored}“. Neue Videos landen im Unterordner „${folderName(stored)}“.`,
+      );
+      await reload();
+      return true;
+    } catch (error) {
+      setNotice(`Umbenennen hat nicht geklappt: ${errorText(error)}`);
+      return false;
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -231,7 +249,14 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         </nav>
       )}
 
-      {status && camId && <h2 className="g-camera">Kamera „{cameraName}“</h2>}
+      {status && camId && (
+        <CameraHeading
+          key={camId}
+          name={cameraName}
+          disabled={busy}
+          onRename={(name) => renameCamera(camId, name)}
+        />
+      )}
 
       {items && newOnes.length > 0 && (
         <div className="g-toolbar">
@@ -364,6 +389,72 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         </div>
       )}
     </div>
+  );
+}
+
+/** The camera's name as heading, with a form to rename it (#273). */
+function CameraHeading({
+  name,
+  disabled,
+  onRename,
+}: {
+  name: string;
+  disabled: boolean;
+  onRename(name: string): Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+  const trimmed = value.trim();
+
+  if (!editing) {
+    return (
+      <div className="g-camera-row">
+        <h2 className="g-camera">Kamera „{name}“</h2>
+        <button
+          type="button"
+          className="g-btn g-btn--plain"
+          disabled={disabled}
+          onClick={() => {
+            setValue(name);
+            setEditing(true);
+          }}
+        >
+          Umbenennen
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form
+      className="g-camera-row g-rename"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void onRename(trimmed).then((ok) => {
+          if (ok) setEditing(false);
+        });
+      }}
+    >
+      <label htmlFor="g-rename-name">Neuer Name der Kamera</label>
+      <input
+        id="g-rename-name"
+        type="text"
+        value={value}
+        maxLength={MAX_CAMERA_NAME}
+        autoComplete="off"
+        autoFocus
+        onChange={(event) => setValue(event.target.value)}
+      />
+      <button
+        type="submit"
+        className="g-btn"
+        disabled={disabled || trimmed === '' || trimmed === name}
+      >
+        Speichern
+      </button>
+      <button type="button" className="g-btn g-btn--plain" onClick={() => setEditing(false)}>
+        Abbrechen
+      </button>
+    </form>
   );
 }
 
