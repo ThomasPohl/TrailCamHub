@@ -73,6 +73,27 @@ export interface Me {
   admin: boolean;
 }
 
+/** Something the admin should look at (#265); `faultText()` words it. */
+export interface Fault {
+  kind:
+    | 'hubNeverSeen'
+    | 'hubSilent'
+    | 'hubBatteryCritical'
+    | 'hubBatteryLow'
+    | 'cameraBatteryCritical'
+    | 'cameraBatteryLow'
+    | 'sdMissing'
+    | 'sdFull'
+    | 'sdNearlyFull'
+    | 'requestsFailed';
+  level: 'error' | 'warning';
+  camId?: string;
+  /** Percent, free MB, seconds overdue or number of failed requests. */
+  value?: number;
+  detail?: string;
+  since?: number;
+}
+
 /** A hub in the admin view (#264), as `GET /v1/admin/hubs` returns it. */
 export interface AdminHub {
   hubId: string;
@@ -85,6 +106,8 @@ export interface AdminHub {
   scheduleConfig: ScheduleConfig;
   cameras: Camera[];
   users: Array<{ userId: number; name?: string; role?: 'user' | 'admin' }>;
+  /** Errors first (#265). */
+  faults: Fault[];
 }
 
 export interface GalleryApi {

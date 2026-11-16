@@ -144,8 +144,12 @@ describe('GalleryApp', () => {
         pollMs={0}
       />,
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Verwaltung' }));
+    // Two hints in the demo: the button counts them (#265).
+    fireEvent.click(await screen.findByRole('button', { name: 'Verwaltung (2)' }));
+    expect(await screen.findByText(/2 Hinweise/)).toBeInTheDocument();
     const hub = await screen.findByRole('article', { name: 'Hub Garten' });
+    const faults = within(hub).getByRole('list', { name: 'Störungen Garten' });
+    expect(faults).toHaveTextContent('Kamera „Wiese“: Akku schwach (18 %).');
     expect(within(hub).getByText('84 %')).toBeInTheDocument();
     expect(within(hub).getByText(/Anwender, Admin \(Admin\)/)).toBeInTheDocument();
 

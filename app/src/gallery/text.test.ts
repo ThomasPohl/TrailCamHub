@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraFile, cameraTime, folderName, videoFileName } from './text';
+import { cameraFile, cameraTime, durationText, faultText, folderName, videoFileName } from './text';
 
 // 2026-11-15 14:02 on the camera's wall clock (read as UTC, docs/clock.md).
 const WALL = Date.UTC(2026, 10, 15, 14, 2) / 1000;
@@ -26,5 +26,25 @@ describe('gallery texts', () => {
   it("names the camera's files as on its SD card", () => {
     expect(cameraFile(11, 0)).toBe('DSCF0011.JPG');
     expect(cameraFile(12, 2)).toBe('DSCF0012.AVI');
+  });
+
+  it('words the faults for the admin', () => {
+    const now = WALL;
+    expect(durationText(45 * 60)).toBe('45 min');
+    expect(durationText(5 * 3600)).toBe('5 h');
+    expect(durationText(3 * 86400)).toBe('3 Tage');
+    expect(faultText({ kind: 'hubBatteryLow', level: 'warning', value: 20 }, undefined, now)).toBe(
+      'Hub-Akku schwach (20 %).',
+    );
+    expect(
+      faultText({ kind: 'sdFull', level: 'error', camId: 'C1', value: 150 }, 'Wiese', now),
+    ).toBe('Kamera „Wiese“: SD-Karte voll (150 MB frei).');
+    expect(
+      faultText(
+        { kind: 'requestsFailed', level: 'warning', camId: 'C1', value: 2, detail: 'too large' },
+        undefined,
+        now,
+      ),
+    ).toBe('Kamera „C1“: 2 Aufträge fehlgeschlagen – too large.');
   });
 });

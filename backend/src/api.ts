@@ -31,6 +31,7 @@ import type {
   ScheduleStretch,
   SdCardState,
 } from './model';
+import { hubFaults } from './faults';
 import { ID_PATTERN, isMediaId, MAX_CAMERA_NAME, validCameraName } from './model';
 import { createPairingCode, HUB_CODE_TTL_S, pairingLink } from './pairing';
 import {
@@ -242,14 +243,19 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
   for (const hubId of await deps.store.listHubIds()) {
     const hub = await deps.store.getHub(hubId);
     if (!hub) continue;
-    const cameras: Camera[] = [];
+    const records: Array<{ camera: CameraRecord; commands: CommandRecord[] }> = [];
     for (const camId of await deps.store.listHubCameraIds(hubId)) {
-      const record = await deps.store.getCamera(camId);
-      if (record && record.hubId === hubId) {
-        cameras.push(toCamera(record, hub, await deps.store.listCommands(camId)));
+      const camera = await deps.store.getCamera(camId);
+      if (camera && camera.hubId === hubId) {
+        records.push({ camera, commands: await deps.store.listCommands(camId) });
       }
     }
-    cameras.sort((a, b) => a.name.localeCompare(b.name));
+    const cameras = records
+      .map((r) => toCamera(r.camera, hub, r.commands))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const faults = hubFaults(hub, records, deps.now()).sort(
+      (a, b) => Number(a.level === 'warning') - Number(b.level === 'warning'),
+    );
     const users = await Promise.all(
       (await deps.store.listHubUserIds(hubId)).map(async (userId) => {
         const app = await deps.store.getAppUser(userId);
@@ -266,6 +272,7 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
       scheduleConfig: hub.scheduleConfig ?? {},
       cameras,
       users,
+      faults,
     });
   }
   return json(200, hubs);

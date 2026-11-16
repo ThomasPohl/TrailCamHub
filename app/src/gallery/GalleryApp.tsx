@@ -73,6 +73,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   // The admin gets a second view with every hub (#264).
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminView, setAdminView] = useState(false);
+  const [faultCount, setFaultCount] = useState(0);
   const saving = useRef(false);
 
   const reload = useCallback(async () => {
@@ -102,6 +103,15 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       () => setIsAdmin(false),
     );
   }, [api]);
+
+  // The admin sees at a glance whether a hub needs him (#265).
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.adminHubs().then(
+      (hubs) => setFaultCount(hubs.reduce((n, h) => n + h.faults.length, 0)),
+      () => setFaultCount(0),
+    );
+  }, [api, isAdmin, adminView]);
 
   useEffect(() => {
     folder.folderState().then(setFolderInfo, () => setFolderInfo({ kind: 'unsupported' }));
@@ -227,7 +237,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             aria-pressed={adminView}
             onClick={() => setAdminView((on) => !on)}
           >
-            {adminView ? 'Zur Galerie' : 'Verwaltung'}
+            {adminView
+              ? 'Zur Galerie'
+              : faultCount > 0
+                ? `Verwaltung (${faultCount})`
+                : 'Verwaltung'}
           </button>
         )}
         {status && (

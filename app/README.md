@@ -53,8 +53,9 @@ rsvg-convert -w 512 -h 512 public/gallery-icon-maskable.svg -o public/gallery-ic
 An **admin** (role `admin`, #259) gets a button "Verwaltung" with the admin
 view (#264, `src/gallery/AdminView.tsx`): every hub with last and next
 contact, battery, firmware, schedule and users, its cameras (battery, SD card,
-temperature, last read, "Jetzt lesen"), and the schedule set in the app. The
-demo shows it with `?demo=admin`.
+temperature, last read, "Jetzt lesen"), and the schedule set in the app. Faults
+(#265) stand at the top of each hub, the button shows their number
+("Verwaltung (2)"). The demo shows it with `?demo=admin`.
 
 ## Development
 

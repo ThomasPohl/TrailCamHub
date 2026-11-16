@@ -152,6 +152,11 @@ describe('admin view (#264)', () => {
     expect(hubs[0]?.cameras.map((c) => c.camId)).toEqual([CAM_ID]);
     expect(hubs[0]?.users.map((u) => u.name)).toContain('Opa');
     expect(hubs[1]?.cameras).toEqual([]);
+    // Faults (#265): the other hub never checked in.
+    const faults = body<Array<{ faults: Array<{ kind: string }> }>>(res).map((h) =>
+      h.faults.map((f) => f.kind),
+    );
+    expect(faults).toEqual([[], ['hubNeverSeen']]);
 
     expect((await world.call('GET', '/v1/admin/hubs')).statusCode).toBe(403);
   });
