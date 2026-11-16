@@ -44,6 +44,19 @@ function storeSaved(saved: Set<number>): void {
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/** Recordings the user can choose for a joint action (#262). */
+const selectable = (r: Recording) =>
+  r.state === 'new' || r.state === 'failed' || r.state === 'videoReady';
+
+/** Can still be asked for its video. */
+const videoWanted = (r: Recording) =>
+  r.fileType === 2 && (r.state === 'new' || r.state === 'failed');
+
+interface DeleteQuestion {
+  question: string;
+  mediaIds: number[];
+}
+
 export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 15_000 }: Props) {
   const [status, setStatus] = useState<GalleryStatus>();
   const [camId, setCamId] = useState<string>();
@@ -52,7 +65,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [folderInfo, setFolderInfo] = useState<FolderState>({ kind: 'none' });
   const [saved, setSaved] = useState<Set<number>>(loadSaved);
   const [notice, setNotice] = useState<string>();
-  const [confirmAll, setConfirmAll] = useState(false);
+  const [confirm, setConfirm] = useState<DeleteQuestion>();
+  // Chosen recordings by their key; ones that left the list are ignored.
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
 
@@ -177,8 +192,17 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     }
   };
 
+  const toggle = (mediaId: number) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(mediaId)) next.add(mediaId);
+      return next;
+    });
+
   const t = now();
   const newOnes = items?.filter((r) => r.state === 'new') ?? [];
+  const chosen = items?.filter((r) => selected.has(r.mediaId) && selectable(r)) ?? [];
+  const chosenVideos = chosen.filter(videoWanted);
 
   return (
     <div className="gallery">
@@ -241,6 +265,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               onClick={() => {
                 setCamId(c.camId);
                 setItems(undefined);
+                setSelected(new Set());
               }}
             >
               {c.name}
@@ -264,10 +289,71 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             type="button"
             className="g-btn g-btn--danger"
             disabled={busy}
-            onClick={() => setConfirmAll(true)}
+            onClick={() =>
+              setConfirm({
+                question:
+                  newOnes.length === 1
+                    ? '1 neue Aufnahme löschen?'
+                    : `Alle ${newOnes.length} neuen Aufnahmen löschen?`,
+                mediaIds: newOnes.flatMap((r) => r.mediaIds),
+              })
+            }
           >
             Alle neuen löschen ({newOnes.length})
           </button>
+        </div>
+      )}
+
+      {camId && chosen.length > 0 && (
+        <div className="g-selbar" role="region" aria-label="Auswahl">
+          <p>
+            {chosen.length === 1
+              ? '1 Aufnahme ausgewählt'
+              : `${chosen.length} Aufnahmen ausgewählt`}
+          </p>
+          <div className="g-card__actions">
+            {chosenVideos.length > 0 && (
+              <button
+                type="button"
+                className="g-btn"
+                disabled={busy}
+                onClick={() =>
+                  void act(async () => {
+                    await api.requestVideos(
+                      camId,
+                      chosenVideos.map((r) => r.mediaId),
+                    );
+                    setSelected(new Set());
+                  })
+                }
+              >
+                Videos holen ({chosenVideos.length})
+              </button>
+            )}
+            <button
+              type="button"
+              className="g-btn g-btn--danger"
+              disabled={busy}
+              onClick={() =>
+                setConfirm({
+                  question:
+                    chosen.length === 1
+                      ? '1 ausgewählte Aufnahme löschen?'
+                      : `${chosen.length} ausgewählte Aufnahmen löschen?`,
+                  mediaIds: chosen.flatMap((r) => r.mediaIds),
+                })
+              }
+            >
+              Löschen ({chosen.length})
+            </button>
+            <button
+              type="button"
+              className="g-btn g-btn--plain"
+              onClick={() => setSelected(new Set())}
+            >
+              Auswahl aufheben
+            </button>
+          </div>
         </div>
       )}
 
@@ -279,7 +365,20 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       {items && items.length > 0 && camId && (
         <ul className="g-grid" aria-label="Aufnahmen">
           {items.map((r) => (
-            <li key={r.mediaId} className={`g-card g-card--${r.state}`}>
+            <li
+              key={r.mediaId}
+              className={`g-card g-card--${r.state}${chosen.includes(r) ? ' g-card--chosen' : ''}`}
+            >
+              {selectable(r) && (
+                <label className="g-card__select">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(r.mediaId)}
+                    onChange={() => toggle(r.mediaId)}
+                  />
+                  Auswählen
+                </label>
+              )}
               <img
                 src={r.thumbUrl}
                 alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
@@ -348,14 +447,10 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         </ul>
       )}
 
-      {confirmAll && camId && (
+      {confirm && camId && (
         <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-confirm">
           <div className="g-dialog__box">
-            <p id="g-confirm">
-              {newOnes.length === 1
-                ? '1 neue Aufnahme löschen?'
-                : `Alle ${newOnes.length} neuen Aufnahmen löschen?`}
-            </p>
+            <p id="g-confirm">{confirm.question}</p>
             <p className="g-hint">
               Bis zum nächsten Kontakt mit dem Hub lässt sich das noch zurücknehmen.
             </p>
@@ -364,13 +459,10 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                 type="button"
                 className="g-btn g-btn--danger"
                 onClick={() => {
-                  setConfirmAll(false);
+                  setConfirm(undefined);
+                  setSelected(new Set());
                   void act(
-                    () =>
-                      api.requestDelete(
-                        camId,
-                        newOnes.flatMap((r) => r.mediaIds),
-                      ),
+                    () => api.requestDelete(camId, confirm.mediaIds),
                     'Die Aufnahmen werden beim nächsten Kontakt gelöscht.',
                   );
                 }}
@@ -380,7 +472,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               <button
                 type="button"
                 className="g-btn g-btn--plain"
-                onClick={() => setConfirmAll(false)}
+                onClick={() => setConfirm(undefined)}
               >
                 Abbrechen
               </button>

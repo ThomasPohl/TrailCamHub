@@ -34,6 +34,9 @@ function toState(m: MediaItem): Pick<Recording, 'state' | 'failReason'> {
   return state === 'failed' ? { state, failReason: friendlyReason(m.videoError) } : { state };
 }
 
+/** Most mediaIds in one delete request (MAX_DELETE_PER_REQUEST in the backend). */
+const DELETE_BATCH = 200;
+
 /**
  * At most this far apart (camera seconds) are a video and its photo. Seen on
  * a TC100: 0-12 s, depending on the video's length.
@@ -183,10 +186,13 @@ export class HttpGalleryApi implements GalleryApi {
   }
 
   async requestDelete(camId: string, mediaIds: number[]): Promise<void> {
-    await this.request('POST', `${this.camera(camId)}/commands`, {
-      type: 'deleteMedia',
-      mediaIds,
-    });
+    // The backend takes at most DELETE_BATCH ids per request.
+    for (let i = 0; i < mediaIds.length; i += DELETE_BATCH) {
+      await this.request('POST', `${this.camera(camId)}/commands`, {
+        type: 'deleteMedia',
+        mediaIds: mediaIds.slice(i, i + DELETE_BATCH),
+      });
+    }
   }
 
   async withdraw(camId: string, recording: Recording): Promise<void> {

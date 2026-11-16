@@ -211,6 +211,45 @@ body {
   border-color: #f2a900;
 }
 
+.g-card--chosen {
+  outline: 4px solid var(--g-accent);
+  outline-offset: 2px;
+}
+
+.g-card__select {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.g-card__select input {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  accent-color: var(--g-accent);
+  cursor: pointer;
+}
+
+.g-selbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--g-card);
+  box-shadow: 0 -2px 12px rgb(0 0 0 / 20%);
+  font-weight: 600;
+}
+
+.g-selbar .g-card__actions {
+  margin-top: 6px;
+}
+
 .g-dialog {
   position: fixed;
   inset: 0;

@@ -133,6 +133,17 @@ describe('HttpGalleryApi', () => {
     });
   });
 
+  it('splits a delete of more than 200 files', async () => {
+    const { fn, calls } = fakeFetch({ 'POST https://api/v1/cameras/CAM1/commands': [] });
+    const ids = Array.from({ length: 450 }, (_, i) => i + 1);
+    await new HttpGalleryApi('https://api', 't', fn).requestDelete('CAM1', ids);
+    const sent = calls.map(
+      (c) => (JSON.parse(String(c.init?.body)) as { mediaIds: number[] }).mediaIds,
+    );
+    expect(sent.map((list) => list.length)).toEqual([200, 200, 50]);
+    expect(sent.flat()).toEqual(ids);
+  });
+
   it('renames a camera and uses the new name for the file names', async () => {
     const { fn, calls } = fakeFetch({
       'GET https://api/v1/cameras': [camera],
