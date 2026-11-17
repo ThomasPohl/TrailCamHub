@@ -63,11 +63,15 @@ struct Faults {
     // -1 = as captured (battery 100 %, 20617 MB of 29998 MB free).
     int battery_percent = -1;
     int sd_free_mb = -1;
+    // Stop each bulk record (thumbnail, photo) after this many frames: the
+    // rest is never sent, as when the camera gives up mid-transfer. 0 = off.
+    unsigned abort_after_frames = 0;
 
     bool any() const
     {
         return drop_percent > 0 || duplicate_percent > 0 || ack_delay_ms > 0 ||
-               mute || battery_percent >= 0 || sd_free_mb >= 0;
+               mute || battery_percent >= 0 || sd_free_mb >= 0 ||
+               abort_after_frames > 0;
     }
 };
 
@@ -143,6 +147,7 @@ struct Stats {
     unsigned downloads = 0;
     unsigned bulk_frames_sent = 0;
     unsigned bulk_retransmissions = 0;
+    unsigned aborted_records = 0;
     // Requests by cmdId.
     std::map<int, unsigned> requests;
 };

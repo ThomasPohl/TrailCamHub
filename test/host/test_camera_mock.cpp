@@ -706,3 +706,46 @@ TEST_CASE("camera mock: identity (#122 stage 2)")
     CHECK(info.dev_id == "C6:1E:0D:E0:0C:42");
     CHECK(info.bat_percent == 100);
 }
+
+TEST_CASE("camera mock: a bulk record stops mid-transfer (#122 stage 2)")
+{
+    Faults faults;
+    std::string error;
+    REQUIRE(apply_fault_command(faults, {"abort", "2"}, error));
+    CHECK(faults.abort_after_frames == 2);
+    CHECK(describe(faults) == "bulk records stop after 2 frames");
+    CHECK_FALSE(apply_fault_command(faults, {"abort", "0"}, error));
+    REQUIRE(apply_fault_command(faults, {"abort", "off"}, error));
+    CHECK_FALSE(faults.any());
+
+    Bench bench;
+    bench.discover_and_login();
+    camera::artemis::MediaList list;
+    REQUIRE(camera::artemis::parse_media_list(
+        decrypt(fixtures::kMediaListPage0Response), list));
+    faults.abort_after_frames = 2;
+    bench.camera.set_faults(faults);
+    bench.hub.command(2,
+                      camera::artemis::build_thumbnail_request(
+                          list.files[0], fixtures::kCapturedToken),
+                      bench.now_ms);
+    bench.run(50);
+    // The answer and two frames arrive; the record never completes, and
+    // the hub has to give up on it (its stall check).
+    CHECK(bench.hub.responses.size() == 2);
+    CHECK(bench.hub.bulk_frames == 2);
+    CHECK(bench.hub.records.empty());
+    CHECK(bench.hub.thumbnail_bulk.header_ready());
+    CHECK(bench.camera.stats().aborted_records == 1);
+    CHECK(bench.camera.outstanding() == 0);
+
+    // Without the fault the next request works again.
+    bench.camera.set_faults(Faults());
+    bench.hub.thumbnail_bulk.reset();
+    bench.hub.command(3,
+                      camera::artemis::build_thumbnail_request(
+                          list.files[0], fixtures::kCapturedToken),
+                      bench.now_ms);
+    bench.run(30);
+    CHECK(bench.hub.records.size() == 1);
+}

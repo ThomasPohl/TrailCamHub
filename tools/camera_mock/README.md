@@ -130,6 +130,7 @@ Console command `fault`, shown in `status`:
 - `fault lateack <ms>`: acknowledge the hub's DATA late.
 - `fault mute on|off`: answer nothing after the login.
 - `fault battery <0-100>|off`, `fault sdfree <MB>|off`: patch the device info (512).
+- `fault abort <frames>|off`: stop every bulk record (thumbnail, photo) after that many frames; the rest is never sent.
 - `fault off`: all off.
 
 With `drop` the hub waits for a lost fragment instead of taking the later ones first (#313).
