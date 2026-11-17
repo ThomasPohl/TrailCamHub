@@ -188,6 +188,20 @@ describe('HttpGalleryApi', () => {
     });
   });
 
+  it('asks every hub for a scan (#308)', async () => {
+    const { fn } = fakeFetch({
+      'GET https://api/v1/me': {
+        name: 'Opa',
+        role: 'user',
+        hubs: [{ hubId: 'h1' }, { hubId: 'h2' }],
+      },
+      'POST https://api/v1/hubs/h1/scan': { requested: 2, nextCheckinAt: 500 },
+      'POST https://api/v1/hubs/h2/scan': { requested: 0 },
+    });
+    const api = new HttpGalleryApi('https://api', 't', fn);
+    expect(await api.requestScan()).toEqual({ requested: 2, nextContact: 500 });
+  });
+
   it('renames a camera and uses the new name for the file names', async () => {
     const { fn, calls } = fakeFetch({
       'GET https://api/v1/cameras': [camera],

@@ -37,28 +37,29 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 
 ## API v1
 
-| Method | Path                                           | Auth                   | Purpose                                               |
-| ------ | ---------------------------------------------- | ---------------------- | ----------------------------------------------------- |
-| GET    | `/v1/health`                                   | –                      | Liveness check                                        |
-| GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user                   |
-| GET    | `/v1/me`                                       | app user               | `{userId, name, role, hubs}` of the signed-in user    |
-| GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults              |
-| GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)                   |
-| POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT; the apps use it (CORS, #286)         |
-| GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails                   |
-| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}`        |
-| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"readCamera"}`                               |
-| PUT    | `/v1/hubs/{hubId}/schedule`                    | `tma <initData>`       | Wake-up schedule of a hub (see below)                 |
-| POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`               |
-| POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests                 |
-| POST   | `/v1/cameras/{camId}/name`                     | app user               | `{"name":"Garten"}`, 1–40 characters                  |
-| POST   | `/v1/cameras/{camId}/hidden`                   | app user               | `{"hidden":true}`: hide in the gallery (#273)         |
-| GET    | `/v1/hubs/{hubId}/found-cameras`               | app user               | Cameras the hub found: new, approved, excluded (#297) |
-| POST   | `/v1/hubs/{hubId}/found-cameras/{bleAddress}`  | app user               | `{"state":"approved","name":"…"}` or `excluded`       |
-| POST   | `/v1/device/checkin`                           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)              |
-| POST   | `/v1/device/ack`                               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands              |
-| POST   | `/v1/device/pairing-code`                      | `Bearer <hubId>.<key>` | One-time pairing link for the hub to show             |
-| POST   | `/v1/telegram/webhook`                         | webhook secret token   | Updates from Telegram (bot messages, buttons)         |
+| Method | Path                                           | Auth                   | Purpose                                                              |
+| ------ | ---------------------------------------------- | ---------------------- | -------------------------------------------------------------------- |
+| GET    | `/v1/health`                                   | –                      | Liveness check                                                       |
+| GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user                                  |
+| GET    | `/v1/me`                                       | app user               | `{userId, name, role, hubs}` of the signed-in user                   |
+| GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults                             |
+| GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)                                  |
+| POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT; the apps use it (CORS, #286)                        |
+| GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails                                  |
+| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}`                       |
+| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"readCamera"}`                                              |
+| PUT    | `/v1/hubs/{hubId}/schedule`                    | `tma <initData>`       | Wake-up schedule of a hub (see below)                                |
+| POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`                              |
+| POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests                                |
+| POST   | `/v1/cameras/{camId}/name`                     | app user               | `{"name":"Garten"}`, 1–40 characters                                 |
+| POST   | `/v1/cameras/{camId}/hidden`                   | app user               | `{"hidden":true}`: hide in the gallery (#273)                        |
+| GET    | `/v1/hubs/{hubId}/found-cameras`               | app user               | Cameras the hub found: new, approved, excluded (#297)                |
+| POST   | `/v1/hubs/{hubId}/scan`                        | app user               | Read the cameras at the next contact; the scan finds new ones (#308) |
+| POST   | `/v1/hubs/{hubId}/found-cameras/{bleAddress}`  | app user               | `{"state":"approved","name":"…"}` or `excluded`                      |
+| POST   | `/v1/device/checkin`                           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)                             |
+| POST   | `/v1/device/ack`                               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands                             |
+| POST   | `/v1/device/pairing-code`                      | `Bearer <hubId>.<key>` | One-time pairing link for the hub to show                            |
+| POST   | `/v1/telegram/webhook`                         | webhook secret token   | Updates from Telegram (bot messages, buttons)                        |
 
 A recording is identified by its **`mediaId`** (per camera), not by `dir`/`num`:
 the camera reuses `dir`/`num` after its card was cleared. `dir`/`num` are only

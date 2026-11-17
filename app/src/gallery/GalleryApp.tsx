@@ -162,6 +162,24 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     }
   };
 
+  const requestScan = async () => {
+    setBusy(true);
+    try {
+      const { requested, nextContact } = await api.requestScan();
+      setNotice(
+        requested > 0
+          ? `Der Hub sucht beim nächsten Kontakt${
+              nextContact ? ` (gegen ${clockTime(nextContact, now())})` : ''
+            } nach Kameras. Neue Kameras erscheinen danach hier unten.`
+          : 'Der Hub sucht bei jedem geplanten Lesen ohnehin nach Kameras. Neue erscheinen danach hier unten.',
+      );
+    } catch (error) {
+      setNotice(`Das hat nicht geklappt: ${errorText(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const setHidden = async (id: string, name: string, hidden: boolean) => {
     setBusy(true);
     try {
@@ -655,6 +673,19 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               now={now()}
               onDecide={(c, st, n) => void decide(c, st, n)}
             />
+          )}
+
+          {!adminView && status && (
+            <p className="g-scan">
+              <button
+                type="button"
+                className="g-btn g-btn--plain"
+                disabled={busy}
+                onClick={() => void requestScan()}
+              >
+                Nach Kameras suchen
+              </button>
+            </p>
           )}
 
           {hiddenCameras.length > 0 && !adminView && (

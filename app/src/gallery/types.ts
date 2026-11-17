@@ -171,6 +171,12 @@ export interface GalleryApi {
   setCameraHidden(camId: string, hidden: boolean): Promise<void>;
   /** Cameras the user's hubs heard, read or not (#298). */
   foundCameras(): Promise<FoundCamera[]>;
+  /**
+   * Asks every hub of the user to read its cameras at the next contact; the
+   * scan finds new ones (#308). `requested` = camera reads asked for; 0 if no
+   * hub has a camera yet (it scans at every planned read anyway).
+   */
+  requestScan(): Promise<{ requested: number; nextContact?: number }>;
   /** Take a found camera in (with a name) or stop reading it (#298). */
   decideCamera(
     hubId: string,

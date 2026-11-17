@@ -169,6 +169,12 @@ export class DemoGalleryApi implements GalleryApi {
     }));
   }
 
+  async requestScan(): Promise<{ requested: number; nextContact?: number }> {
+    this.catchUp();
+    for (const c of this.cameras) this.readRequested.add(c.camId);
+    return { requested: this.cameras.length, nextContact: this.lastCheckin + this.checkinS };
+  }
+
   async decideCamera(
     _hubId: string,
     bleAddress: string,

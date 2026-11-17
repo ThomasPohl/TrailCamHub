@@ -512,6 +512,36 @@ describe('found cameras (#296, #297)', () => {
   });
 });
 
+describe('asking the hub to look for cameras (#308)', () => {
+  it('asks for a read of every camera that is not excluded', async () => {
+    const world = await galleryWorld();
+    const res = await world.call('POST', `/v1/hubs/${HUB_ID}/scan`);
+    expect(res.statusCode).toBe(200);
+    expect(body<{ requested: number }>(res).requested).toBe(1);
+    const cameras = body<Array<{ readRequested: boolean }>>(await world.call('GET', '/v1/cameras'));
+    expect(cameras[0]?.readRequested).toBe(true);
+    // Asking again does not queue a second read.
+    expect(
+      body<{ requested: number }>(await world.call('POST', `/v1/hubs/${HUB_ID}/scan`)).requested,
+    ).toBe(1);
+
+    // An excluded camera is not read.
+    await handleRequest(
+      hubRequest('/v1/device/checkin', world.hubKey, {
+        cameras: [{ camId: CAM_ID, readAt: NOW - 5, bleAddress: 'F4:C1:56:06:ED:3B', media: [] }],
+      }),
+      world.deps,
+    );
+    await world.call('POST', `/v1/hubs/${HUB_ID}/found-cameras/F4C15606ED3B`, {
+      state: 'excluded',
+    });
+    expect(
+      body<{ requested: number }>(await world.call('POST', `/v1/hubs/${HUB_ID}/scan`)).requested,
+    ).toBe(0);
+    expect((await world.call('POST', '/v1/hubs/other-hub/scan')).statusCode).toBe(404);
+  });
+});
+
 describe('camera names (#273)', () => {
   it('shows the name the admin gave the camera', async () => {
     const { call, deps } = await galleryWorld();
