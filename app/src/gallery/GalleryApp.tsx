@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/http';
 import { AdminView } from './AdminView';
+import { FoundCameras } from './FoundCameras';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
 import { cameraTime, clockTime, folderName, stateText } from './text';
-import { MAX_CAMERA_NAME, type GalleryApi, type GalleryStatus, type Recording } from './types';
+import {
+  MAX_CAMERA_NAME,
+  type FoundCamera,
+  type GalleryApi,
+  type GalleryStatus,
+  type Recording,
+} from './types';
 
 export interface FolderOps {
   folderState(): Promise<FolderState>;
@@ -76,6 +83,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [faultCount, setFaultCount] = useState(0);
   // Asking before a camera is hidden (#273).
   const [hideAsk, setHideAsk] = useState(false);
+  // Cameras the hub heard (#298) and asking before one is no longer read.
+  const [found, setFound] = useState<FoundCamera[]>([]);
+  const [stopAsk, setStopAsk] = useState(false);
   const saving = useRef(false);
 
   const reload = useCallback(async () => {
@@ -87,6 +97,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       setCamId(id);
       setItems(id ? await api.recordings(id) : []);
       setLoadError(undefined);
+      // Older backends do not know found cameras: then the list stays empty.
+      api.foundCameras().then(setFound, () => setFound([]));
     } catch (error) {
       setLoadError(error instanceof ApiError && error.status === 401 ? 'signin' : errorText(error));
     }
@@ -123,6 +135,27 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const cameraName = status?.cameras.find((c) => c.camId === camId)?.name ?? 'Kamera';
   const shownCameras = status?.cameras.filter((c) => !c.hidden) ?? [];
   const hiddenCameras = status?.cameras.filter((c) => c.hidden) ?? [];
+
+  // The current camera's entry in the hub's list; absent for older firmware.
+  const foundCurrent = found.find((f) => f.camId === camId && f.state === 'approved');
+
+  const decide = async (camera: FoundCamera, state: 'approved' | 'excluded', name?: string) => {
+    setBusy(true);
+    try {
+      await api.decideCamera(camera.hubId, camera.bleAddress, state, name);
+      const shown = name ?? camera.name;
+      setNotice(
+        state === 'approved'
+          ? `Die Kamera „${shown}“ wird ab dem nächsten Kontakt mit dem Hub gelesen.`
+          : `Die Kamera „${shown}“ wird nicht mehr gelesen. Sie steht unten unter „Nicht abgefragte Kameras“.`,
+      );
+      await reload();
+    } catch (error) {
+      setNotice(`Das hat nicht geklappt: ${errorText(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const setHidden = async (id: string, name: string, hidden: boolean) => {
     setBusy(true);
@@ -350,6 +383,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               disabled={busy}
               onRename={(name) => renameCamera(camId, name)}
               onHide={() => setHideAsk(true)}
+              onStop={foundCurrent ? () => setStopAsk(true) : undefined}
             />
           )}
 
@@ -552,6 +586,47 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </div>
           )}
 
+          {stopAsk && camId && foundCurrent && (
+            <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-stop">
+              <div className="g-dialog__box">
+                <p id="g-stop">Kamera „{cameraName}“ nicht mehr abfragen?</p>
+                <p className="g-hint">
+                  Der Hub liest sie ab dem nächsten Kontakt nicht mehr. Die bisherigen Aufnahmen
+                  bleiben hier. Unten unter „Nicht abgefragte Kameras“ können Sie sie wieder
+                  aufnehmen.
+                </p>
+                <div className="g-card__actions">
+                  <button
+                    type="button"
+                    className="g-btn g-btn--danger"
+                    onClick={() => {
+                      setStopAsk(false);
+                      void decide(foundCurrent, 'excluded');
+                    }}
+                  >
+                    Ja, nicht mehr abfragen
+                  </button>
+                  <button
+                    type="button"
+                    className="g-btn g-btn--plain"
+                    onClick={() => setStopAsk(false)}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!adminView && (
+            <FoundCameras
+              found={found}
+              busy={busy}
+              now={now()}
+              onDecide={(c, st, n) => void decide(c, st, n)}
+            />
+          )}
+
           {hiddenCameras.length > 0 && !adminView && (
             <section className="g-hidden-cams" aria-label="Ausgeblendete Kameras">
               <h2>Ausgeblendete Kameras</h2>
@@ -618,11 +693,14 @@ function CameraHeading({
   disabled,
   onRename,
   onHide,
+  onStop,
 }: {
   name: string;
   disabled: boolean;
   onRename(name: string): Promise<boolean>;
   onHide(): void;
+  /** Absent if the hub cannot be told to stop reading this camera. */
+  onStop?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
@@ -646,6 +724,11 @@ function CameraHeading({
         <button type="button" className="g-btn g-btn--plain" disabled={disabled} onClick={onHide}>
           Ausblenden
         </button>
+        {onStop && (
+          <button type="button" className="g-btn g-btn--plain" disabled={disabled} onClick={onStop}>
+            Nicht mehr abfragen
+          </button>
+        )}
       </div>
     );
   }

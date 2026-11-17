@@ -75,6 +75,21 @@ export interface Me {
   admin: boolean;
 }
 
+/** A camera a hub heard in its scans (#297, #298). */
+export interface FoundCamera {
+  hubId: string;
+  bleAddress: string;
+  /** new: not decided; approved: the hub reads it; excluded: not read. */
+  state: 'new' | 'approved' | 'excluded';
+  /** Set once the hub has read it. */
+  camId?: string;
+  /** The camera's name, else the advertised name. */
+  name: string;
+  rssi?: number;
+  /** When the hub heard it last, Unix seconds. */
+  lastSeen: number;
+}
+
 /** A battery/SD sample (#76). */
 export interface Sample {
   at: number;
@@ -147,6 +162,15 @@ export interface GalleryApi {
   renameCamera(camId: string, name: string): Promise<string>;
   /** Hides the camera in the gallery or shows it again (#273). */
   setCameraHidden(camId: string, hidden: boolean): Promise<void>;
+  /** Cameras the user's hubs heard, read or not (#298). */
+  foundCameras(): Promise<FoundCamera[]>;
+  /** Take a found camera in (with a name) or stop reading it (#298). */
+  decideCamera(
+    hubId: string,
+    bleAddress: string,
+    state: 'approved' | 'excluded',
+    name?: string,
+  ): Promise<void>;
   me(): Promise<Me>;
   /** Admin only: every hub with cameras and users. */
   adminHubs(): Promise<AdminHub[]>;

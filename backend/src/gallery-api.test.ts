@@ -92,8 +92,11 @@ describe('admin role and locking out (#259)', () => {
     const asAdmin = (method: string, path: string, data?: unknown) =>
       handleRequest(galleryRequest(admin.token, method, path, data), world.deps);
 
-    const me = body<{ role: string; name: string }>(await asAdmin('GET', '/v1/me'));
+    const me = body<{ role: string; name: string; hubs: Array<{ hubId: string }> }>(
+      await asAdmin('GET', '/v1/me'),
+    );
     expect(me).toMatchObject({ role: 'admin', name: 'Thomas' });
+    expect(me.hubs.map((h) => h.hubId)).toEqual([HUB_ID, 'other-hub']);
     const ids = body<Array<{ camId: string }>>(await asAdmin('GET', '/v1/cameras')).map(
       (c) => c.camId,
     );
@@ -101,7 +104,11 @@ describe('admin role and locking out (#259)', () => {
     expect((await asAdmin('GET', `/v1/cameras/${CAM_ID}/media`)).statusCode).toBe(200);
 
     // A user without the admin role still sees only his own hub.
-    expect(body<{ role: string }>(await world.call('GET', '/v1/me')).role).toBe('user');
+    const userMe = body<{ role: string; hubs: Array<{ hubId: string }> }>(
+      await world.call('GET', '/v1/me'),
+    );
+    expect(userMe.role).toBe('user');
+    expect(userMe.hubs.map((h) => h.hubId)).toEqual([HUB_ID]);
     const own = body<Array<{ camId: string }>>(await world.call('GET', '/v1/cameras'));
     expect(own.map((c) => c.camId)).toEqual([CAM_ID]);
     expect((await world.call('GET', '/v1/cameras/CAM_OTHER/media')).statusCode).toBe(404);
