@@ -17,6 +17,7 @@ formats of the files other tools may read. The hub never formats its own card (i
   actions.csv             queue of camera actions (photo, video, delete, format)
   actions.csv.tmp         only while the queue is being saved
   found_cameras.csv       cameras heard in BLE scans, read or not (#296)
+  approved_cameras.txt    cameras approved in the gallery, one BLE address per line (#299)
   logs/log-NNNNN.txt      rotating log (sd_log)
   logs/cycles.jsonl       one line per cycle (cycle journal)
   logs/cycles.1.jsonl     the previous, full cycle journal
@@ -104,6 +105,17 @@ F4:C1:56:06:ED:3B,-55,1800000000,TC100_ED3B
 
 At most 16 cameras, the most recently heard; a camera not heard for 14 days
 is dropped (`camera::found::merge`).
+
+## `approved_cameras.txt`
+
+The BLE addresses of the cameras approved in the gallery (#297, #299), one
+per line, from the last check-in whose response carried `approvedCameras`.
+When a cycle starts, a hub that syncs with the backend connects only to
+these cameras; the others are still heard for `found_cameras.csv`. An empty
+file means none (the user stopped reading every camera). No file (never told,
+or an old backend), another mode (web UI on the hub, WebDAV), or a camera
+directory whose `camera.json` has no `bleAddress` yet (read before the
+update): every camera is read.
 
 ## `actions.csv`
 

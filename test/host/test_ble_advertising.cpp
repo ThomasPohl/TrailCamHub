@@ -156,3 +156,23 @@ TEST_CASE("SeenList keeps one entry per address with the latest values")
     seen.clear();
     CHECK(seen.size() == 0);
 }
+
+TEST_CASE(
+    "AllowList: unrestricted allows every camera, else only the listed ones")
+{
+    camera::ble::AllowList list;
+    const std::uint8_t a[6] = {0x3b, 0xed, 0x06, 0x56, 0xc1, 0xf4};
+    const std::uint8_t b[6] = {1, 0, 0, 0, 0, 0xaa};
+    CHECK_FALSE(list.restricted());
+    CHECK(list.allows(a));
+    const char *addresses[] = {"F4:C1:56:06:ED:3B", "short", nullptr};
+    CHECK(list.set(addresses, 3) == 1);
+    CHECK(list.allows(a));
+    CHECK_FALSE(list.allows(b));
+    // Restricted to nothing: the user stopped reading every camera.
+    CHECK(list.set(nullptr, 0) == 0);
+    CHECK(list.restricted());
+    CHECK_FALSE(list.allows(a));
+    list.clear();
+    CHECK(list.allows(b));
+}

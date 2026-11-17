@@ -527,6 +527,19 @@ body {
   margin: 0 0 8px;
 }
 
+.g-camera-state {
+  margin: 6px 0 0;
+  color: var(--g-hint);
+}
+
+.g-camera-hints p {
+  margin: 0;
+}
+
+.g-camera-hints p + p {
+  margin-top: 6px;
+}
+
 /* A recording large (#306). */
 .g-card__zoom {
   display: block;

@@ -143,6 +143,10 @@ struct CheckinResponse {
     bool has_camera_plan = false;
     std::string camera_plan;
     std::int64_t checkin_interval_s = -1;  // -1 = not set
+    // BLE addresses of the cameras approved in the gallery (#297, #299);
+    // absent (old backend) = leave the stored list as it is.
+    bool has_approved_cameras = false;
+    std::vector<std::string> approved_cameras;
     std::vector<CameraCheckin> cameras;
 };
 

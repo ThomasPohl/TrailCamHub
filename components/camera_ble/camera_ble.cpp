@@ -79,6 +79,8 @@ static bool s_have_last_camera;
 // Every camera heard advertising since the session controller last took the
 // list (#296), whether or not it is read.
 static camera::ble::SeenList s_seen;
+// Cameras the user approved in the gallery (#299); empty = every camera.
+static camera::ble::AllowList s_allowed;
 
 static GattProfile s_profile;
 static size_t s_discovery_service_index;
@@ -237,6 +239,10 @@ static void handle_advertisement(const struct ble_gap_disc_desc *disc)
     if (!s_activation_enabled || !connectable || s_connecting ||
         !camera_ble_is_candidate_advertisement(disc->data, disc->length_data) ||
         s_done.contains(disc->addr.type, disc->addr.val)) {
+        return;
+    }
+    // Not approved in the gallery: heard (above), but not read (#299).
+    if (!s_allowed.allows(disc->addr.val)) {
         return;
     }
 
@@ -787,6 +793,25 @@ void camera_ble_last_address(char *out, size_t size)
     char text[18];
     camera::ble::format_address(s_last_camera.val, text);
     snprintf(out, size, "%s", text);
+}
+
+size_t camera_ble_set_allowed(bool restrict_to_list,
+                              const char *const *addresses, size_t count)
+{
+    // Before camera_ble_start() there is no lock and no scan yet.
+    if (s_lock == NULL) {
+        if (!restrict_to_list) {
+            s_allowed.clear();
+            return 0;
+        }
+        return s_allowed.set(addresses, count);
+    }
+    BleLock lock;
+    if (!restrict_to_list) {
+        s_allowed.clear();
+        return 0;
+    }
+    return s_allowed.set(addresses, count);
 }
 
 size_t camera_ble_take_seen(camera_ble_seen_t *out, size_t max)

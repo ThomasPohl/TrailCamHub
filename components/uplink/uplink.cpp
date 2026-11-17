@@ -609,6 +609,11 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     remote.camera_plan = response.camera_plan;
     remote.checkin_interval_s = response.checkin_interval_s;
     schedule::apply_remote(remote);
+    // The cameras approved in the gallery: the next scans read only these
+    // (#299). An empty list keeps reading every camera.
+    if (response.has_approved_cameras) {
+        camera::store::save_approved_cameras(response.approved_cameras);
+    }
 
     AckRequest ack;
     // Videos have a lower size limit over the cellular modem.

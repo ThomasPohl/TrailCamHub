@@ -84,7 +84,15 @@ export class DemoGalleryApi implements GalleryApi {
       lastContact: this.lastCheckin,
       nextContact: this.lastCheckin + this.checkinS,
       hubBatPercent: 84,
-      cameras: this.cameras.map((c) => ({ ...c })),
+      cameras: this.cameras.map((c, i) => ({
+        ...c,
+        // Garten is fine; Wiese needs a look (#304).
+        batPercent: i === 0 ? 76 : 18,
+        sdCard: 'ok' as const,
+        sdFreeMB: i === 0 ? 28_400 : 950,
+        sdTotalMB: 30_500,
+        lastRead: this.lastCheckin - 300,
+      })),
     };
   }
 

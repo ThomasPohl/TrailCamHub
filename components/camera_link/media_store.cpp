@@ -547,6 +547,48 @@ std::vector<camera::found::Entry> load_found_cameras()
     return camera::found::parse(text);
 }
 
+namespace
+{
+const std::string kApprovedPath =
+    std::string(SD_CARD_MOUNT_POINT) + "/approved_cameras.txt";
+}
+
+bool save_approved_cameras(const std::vector<std::string> &addresses)
+{
+    std::string text;
+    for (const std::string &a : addresses) {
+        if (a.size() == 17 && a.find('\n') == std::string::npos) {
+            text += a + "\n";
+        }
+    }
+    std::string stored;
+    if (read_file(kApprovedPath, stored) && stored == text) {
+        return true;
+    }
+    return write_file(kApprovedPath, text.data(), text.size());
+}
+
+bool load_approved_cameras(std::vector<std::string> &addresses)
+{
+    addresses.clear();
+    std::string text;
+    if (!read_file(kApprovedPath, text)) {
+        return false;
+    }
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        std::size_t end = text.find('\n', pos);
+        if (end == std::string::npos) {
+            end = text.size();
+        }
+        if (end - pos == 17) {
+            addresses.push_back(text.substr(pos, 17));
+        }
+        pos = end + 1;
+    }
+    return true;
+}
+
 std::vector<std::string> list_cameras()
 {
     std::vector<std::string> ids;

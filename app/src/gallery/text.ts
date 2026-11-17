@@ -1,4 +1,4 @@
-import type { Fault, RecordingState } from './types';
+import type { Fault, GalleryCamera, RecordingState } from './types';
 
 /**
  * German texts and formatting for the gallery. The end user reads German;
@@ -135,4 +135,34 @@ export function faultText(fault: Fault, camera: string | undefined, nowSeconds: 
       );
     }
   }
+}
+
+/**
+ * What the end user should know about a camera (#304), in plain words; the
+ * thresholds are those of the admin's faults (#265).
+ */
+export function cameraHints(camera: GalleryCamera, hubLastContact: number): string[] {
+  const hints: string[] = [];
+  const bat = camera.batPercent;
+  const read = (camera.lastRead ?? 0) > 0;
+  if (read && bat !== undefined && bat <= 10) {
+    hints.push(`Der Akku der Kamera ist fast leer (${bat} %). Bitte bald laden oder tauschen.`);
+  } else if (read && bat !== undefined && bat <= 25) {
+    hints.push(`Der Akku der Kamera wird schwach (${bat} %).`);
+  }
+  if (camera.sdCard === 'missing') {
+    hints.push('In der Kamera steckt keine SD-Karte, oder sie ist defekt.');
+  } else if (camera.sdCard === 'ok' && camera.sdFreeMB !== undefined) {
+    const free = camera.sdFreeMB;
+    const total = camera.sdTotalMB;
+    if (free < 200) {
+      hints.push('Die SD-Karte der Kamera ist voll. Bitte alte Aufnahmen löschen.');
+    } else if (free < 1024 || (total !== undefined && free < total * 0.05)) {
+      hints.push('Die SD-Karte der Kamera ist fast voll. Bitte alte Aufnahmen löschen.');
+    }
+  }
+  if (read && hubLastContact - (camera.lastRead ?? 0) > 24 * 3600) {
+    hints.push('Die Kamera wurde seit über einem Tag nicht gelesen. Bitte die Kamera prüfen.');
+  }
+  return hints;
 }

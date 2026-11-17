@@ -256,6 +256,19 @@ describe('GalleryApp', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it("shows the camera's battery and what needs a look (#304)", async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    expect(screen.getByText(/^Akku 76 % · zuletzt gelesen/)).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Hinweise zur Kamera' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Wiese' }));
+    const hints = await screen.findByRole('status', { name: 'Hinweise zur Kamera' });
+    expect(hints).toHaveTextContent('Der Akku der Kamera wird schwach (18 %).');
+    expect(hints).toHaveTextContent('Die SD-Karte der Kamera ist fast voll.');
+  });
+
   it('asks for a folder when none is chosen', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
