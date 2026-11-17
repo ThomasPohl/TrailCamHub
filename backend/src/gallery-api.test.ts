@@ -382,6 +382,26 @@ describe('firmware changes (#149)', () => {
   });
 });
 
+describe('memory report (#149, #244)', () => {
+  it('stores a plausible report and warns about little heap', async () => {
+    const world = await galleryWorld();
+    const checkin = (memory: unknown) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, { cameras: [], memory }),
+        world.deps,
+      );
+    await checkin({ cycle: 12, heapMin: 6800, stackSession: 900, psramMin: -1, extra: 1 });
+    const hub = await world.deps.store.getHub(HUB_ID);
+    expect(hub?.memory).toEqual({ cycle: 12, heapMin: 6800, stackSession: 900 });
+    if (!hub) throw new Error('no hub');
+    expect(hubFaults(hub, [], NOW, []).find((f) => f.kind === 'hubMemoryLow')).toMatchObject({
+      value: 6800,
+    });
+    await checkin({ heapMin: 'lots' });
+    expect((await world.deps.store.getHub(HUB_ID))?.memory?.cycle).toBe(12);
+  });
+});
+
 describe('transport and modem signal (#149)', () => {
   it('stores them and shows the signal only over the modem', async () => {
     const world = await galleryWorld();

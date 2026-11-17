@@ -66,6 +66,8 @@ export interface HubRecord {
   uplink?: HubUplink;
   /** Modem signal when it connected, dBm; only meaningful with uplink "modem". */
   modemSignalDbm?: number;
+  /** Lowest free memory of the last reported cycle (#149, #244). */
+  memory?: HubMemory;
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   /** As reported at the last check-in. */
@@ -74,6 +76,19 @@ export interface HubRecord {
 }
 
 export type HubUplink = 'wifi' | 'modem' | 'ethernet';
+
+/** The hub's memory report, bytes (check-in `memory`, #236). */
+export interface HubMemory {
+  cycle: number;
+  /** Lowest free internal heap. */
+  heapMin: number;
+  /** Lowest free PSRAM; absent on boards without. */
+  psramMin?: number;
+  /** Lowest free stack of the tasks. */
+  stackSession?: number;
+  stackUplink?: number;
+  stackController?: number;
+}
 
 /**
  * The camera's SD card as the hub last saw it: `ok` when its media list was
@@ -248,6 +263,7 @@ export interface Fault {
     | 'requestsFailed'
     | 'firmwareDowngrade'
     | 'firmwareUpdateFailed'
+    | 'hubMemoryLow'
     | 'cameraNotRead';
   level: 'error' | 'warning';
   /** The camera it is about; absent for the hub. */
@@ -272,6 +288,7 @@ export interface AdminHub {
   uplink?: HubUplink;
   /** Only while the hub syncs over the modem. */
   modemSignalDbm?: number;
+  memory?: HubMemory;
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   /** As reported at the last check-in. */
@@ -410,6 +427,8 @@ export interface CheckinRequest {
   /** Transport of this check-in and the modem's signal in dBm (#149). */
   hubUplink?: HubUplink;
   modemSignalDbm?: number;
+  /** Raw; see HubMemory. */
+  memory?: unknown;
   /**
    * The most thumbnail uploads the hub takes from this check-in. A hub with
    * little memory keeps the response small with it; the backend's own limit

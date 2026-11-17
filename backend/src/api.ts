@@ -25,6 +25,7 @@ import type {
   FirmwareChange,
   FirmwareUpdateResult,
   HubRecord,
+  HubMemory,
   HubUplink,
   HubHistory,
   HubSchedule,
@@ -315,6 +316,7 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
       batPercent: hub.batPercent,
       uplink: hub.uplink,
       modemSignalDbm: hub.uplink === 'modem' ? hub.modemSignalDbm : undefined,
+      memory: hub.memory,
       lastSeen: hub.lastSeen,
       schedule: hub.schedule,
       scheduleConfig: hub.scheduleConfig ?? {},
@@ -767,6 +769,25 @@ async function recordSample(deps: Deps, owner: SampleOwner, sample: Sample): Pro
   await deps.store.addSample(owner, sample);
 }
 
+/** The check-in's memory report (#236) with plausible byte counts only. */
+export function parseMemory(raw: unknown): HubMemory | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const bytes = (v: unknown) => {
+    const n = optionalNumber(v);
+    return n !== undefined && Number.isInteger(n) && n >= 0 && n < 2 ** 31 ? n : undefined;
+  };
+  const cycle = bytes(r.cycle);
+  const heapMin = bytes(r.heapMin);
+  if (cycle === undefined || heapMin === undefined) return undefined;
+  const memory: HubMemory = { cycle, heapMin };
+  for (const key of ['psramMin', 'stackSession', 'stackUplink', 'stackController'] as const) {
+    const value = bytes(r[key]);
+    if (value !== undefined) memory[key] = value;
+  }
+  return memory;
+}
+
 const UPLINKS: readonly HubUplink[] = ['wifi', 'modem', 'ethernet'];
 
 /** Transport and modem signal of a check-in (#149); unknown values are left out. */
@@ -836,6 +857,7 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       batPercent: optionalNumber(body.hubBatPercent),
       schedule: sanitizeSchedule(body.schedule, now),
       ...uplinkOf(body),
+      memory: parseMemory(body.memory),
     },
     now,
   );

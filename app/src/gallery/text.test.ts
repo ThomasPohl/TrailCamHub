@@ -6,6 +6,7 @@ import {
   durationText,
   faultText,
   folderName,
+  memoryText,
   uplinkText,
   videoFileName,
 } from './text';
@@ -100,5 +101,14 @@ describe('hub connection (#149)', () => {
     expect(uplinkText('modem', -80)).toBe('Mobilfunk, Signal -80 dBm (gut)');
     expect(uplinkText('modem', -91)).toBe('Mobilfunk, Signal -91 dBm (mittel)');
     expect(uplinkText('modem', -110)).toBe('Mobilfunk, Signal -110 dBm (sehr schwach)');
+  });
+});
+
+describe('hub memory (#149)', () => {
+  it('words the lowest free memory', () => {
+    expect(memoryText({ heapMin: 6800 })).toBe('intern min. 6.6 KB frei');
+    expect(
+      memoryText({ heapMin: 41_200, psramMin: 3_250_000, stackSession: 1400, stackUplink: 2048 }),
+    ).toBe('intern min. 40.2 KB frei · PSRAM min. 3.1 MB · Stack: Sitzung 1.4 KB, Upload 2.0 KB');
   });
 });
