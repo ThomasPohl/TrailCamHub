@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { cameraFile, cameraTime, durationText, faultText, folderName, videoFileName } from './text';
+import {
+  cameraFile,
+  cameraHints,
+  cameraTime,
+  durationText,
+  faultText,
+  folderName,
+  videoFileName,
+} from './text';
 
 // 2026-11-15 14:02 on the camera's wall clock (read as UTC, docs/clock.md).
 const WALL = Date.UTC(2026, 10, 15, 14, 2) / 1000;
@@ -53,5 +61,20 @@ describe('gallery texts', () => {
         now,
       ),
     ).toBe('Der Hub läuft wieder mit älterer Firmware (v0.1.13 → v0.1.12) – Update zurückgerollt?');
+  });
+
+  it('words what needs a look at the camera (#304)', () => {
+    const base = { camId: 'C1', name: 'Wiese', lastRead: 1000, sdCard: 'ok' as const };
+    expect(cameraHints({ ...base, batPercent: 80, sdFreeMB: 20_000 }, 2000)).toEqual([]);
+    expect(cameraHints({ ...base, batPercent: 8, sdFreeMB: 150 }, 2000)).toEqual([
+      'Der Akku der Kamera ist fast leer (8 %). Bitte bald laden oder tauschen.',
+      'Die SD-Karte der Kamera ist voll. Bitte alte Aufnahmen löschen.',
+    ]);
+    expect(cameraHints({ ...base, sdCard: 'missing' }, 1000 + 2 * 86400)).toEqual([
+      'In der Kamera steckt keine SD-Karte, oder sie ist defekt.',
+      'Die Kamera wurde seit über einem Tag nicht gelesen. Bitte die Kamera prüfen.',
+    ]);
+    // Never read: a 0 % battery is no measurement.
+    expect(cameraHints({ camId: 'C2', name: 'Neu', batPercent: 0, lastRead: 0 }, 2000)).toEqual([]);
   });
 });

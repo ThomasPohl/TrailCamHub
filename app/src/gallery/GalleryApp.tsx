@@ -4,11 +4,12 @@ import { AdminView } from './AdminView';
 import { FoundCameras } from './FoundCameras';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
-import { cameraTime, clockTime, folderName, stateText } from './text';
+import { cameraHints, cameraTime, clockTime, folderName, stateText } from './text';
 import {
   MAX_CAMERA_NAME,
   type FoundCamera,
   type GalleryApi,
+  type GalleryCamera,
   type GalleryStatus,
   type Recording,
 } from './types';
@@ -134,6 +135,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
 
   const cameraName = status?.cameras.find((c) => c.camId === camId)?.name ?? 'Kamera';
   const shownCameras = status?.cameras.filter((c) => !c.hidden) ?? [];
+  const currentCamera = status?.cameras.find((c) => c.camId === camId);
   const hiddenCameras = status?.cameras.filter((c) => c.hidden) ?? [];
 
   // The current camera's entry in the hub's list; absent for older firmware.
@@ -312,7 +314,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               : 'Der Hub hat sich noch nicht gemeldet.'}
             {status.nextContact !== undefined &&
               ` · Nächster Kontakt: gegen ${clockTime(status.nextContact, t)}`}
-            {status.hubBatPercent !== undefined && ` · Akku ${status.hubBatPercent} %`}
+            {status.hubBatPercent !== undefined && ` · Akku des Hubs ${status.hubBatPercent} %`}
           </p>
         )}
       </header>
@@ -385,6 +387,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               onHide={() => setHideAsk(true)}
               onStop={foundCurrent ? () => setStopAsk(true) : undefined}
             />
+          )}
+          {status && camId && currentCamera && (
+            <CameraState camera={currentCamera} hubLastContact={status.lastContact} now={t} />
           )}
 
           {items && newOnes.length > 0 && (
@@ -684,6 +689,37 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         </>
       )}
     </div>
+  );
+}
+
+/** Battery and last read of the open camera, and what needs a look (#304). */
+function CameraState({
+  camera,
+  hubLastContact,
+  now,
+}: {
+  camera: GalleryCamera;
+  hubLastContact: number;
+  now: number;
+}) {
+  const facts = [
+    camera.batPercent !== undefined && (camera.lastRead ?? 0) > 0
+      ? `Akku ${camera.batPercent} %`
+      : '',
+    (camera.lastRead ?? 0) > 0 ? `zuletzt gelesen ${clockTime(camera.lastRead ?? 0, now)}` : '',
+  ].filter(Boolean);
+  const hints = cameraHints(camera, hubLastContact);
+  return (
+    <>
+      {facts.length > 0 && <p className="g-camera-state">{facts.join(' · ')}</p>}
+      {hints.length > 0 && (
+        <div className="g-banner g-camera-hints" role="status" aria-label="Hinweise zur Kamera">
+          {hints.map((h) => (
+            <p key={h}>{h}</p>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
