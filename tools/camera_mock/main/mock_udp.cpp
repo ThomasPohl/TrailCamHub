@@ -186,6 +186,10 @@ std::string status()
                std::to_string(entry.second);
     }
     out += "\n";
+    out += "faults: " + camera_mock::describe(s_camera->faults()) +
+           " (dropped " + std::to_string(stats.dropped) + ", duplicated " +
+           std::to_string(stats.duplicated) + ", unanswered " +
+           std::to_string(stats.muted) + ")\n";
     out += "actions: photos " + std::to_string(stats.photos) + ", deletions " +
            std::to_string(stats.deletions) + ", formats " +
            std::to_string(stats.formats) +
@@ -193,6 +197,20 @@ std::string status()
            (s_camera->formatted() ? ", card formatted (empty list)" : "") +
            "\n";
     return out;
+}
+
+camera_mock::Faults faults()
+{
+    std::lock_guard<std::mutex> guard(s_lock);
+    return s_camera != nullptr ? s_camera->faults() : camera_mock::Faults();
+}
+
+void set_faults(const camera_mock::Faults &faults)
+{
+    std::lock_guard<std::mutex> guard(s_lock);
+    if (s_camera != nullptr) {
+        s_camera->set_faults(faults);
+    }
 }
 
 void close_session()

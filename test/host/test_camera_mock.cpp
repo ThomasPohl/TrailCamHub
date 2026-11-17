@@ -113,11 +113,19 @@ struct Hub {
 struct Bench {
     Pipe to_hub;
     std::vector<std::string> log;
-    Camera camera{to_hub, [this](LogLevel, const std::string &text) {
-                      log.push_back(text);
-                  }};
+    Camera camera;
     Hub hub;
     std::int64_t now_ms = 1000;
+
+    explicit Bench(const Options &options = Options())
+        : camera(
+              to_hub,
+              [this](LogLevel, const std::string &text) {
+                  log.push_back(text);
+              },
+              options)
+    {
+    }
 
     // Lets packets go back and forth (and the camera's timers run).
     void run(int steps = 10)
@@ -419,4 +427,120 @@ TEST_CASE("camera mock: camera actions (#122 stage 3)")
     CHECK(list.files.empty());
     // After the format the file can be "deleted" again (the card is empty).
     CHECK(interpret(Type::delete_media, ask(file)).done);
+}
+
+TEST_CASE("camera mock: fault switches (#122 stage 2)")
+{
+    Faults faults;
+    CHECK(describe(faults) == "none");
+    faults.drop_percent = 30;
+    faults.battery_percent = 15;
+    faults.sd_free_mb = 120;
+    CHECK(describe(faults) == "drop 30 %, battery 15 %, SD free 120 MB");
+    CHECK(patch_device_info("{\"batPercent\":100,\"sdFreeMB\":20617}",
+                            faults) == "{\"batPercent\":15,\"sdFreeMB\":120}");
+
+    SUBCASE("battery and SD card in the device info")
+    {
+        Bench bench;
+        Faults low;
+        low.battery_percent = 15;
+        low.sd_free_mb = 120;
+        bench.camera.set_faults(low);
+        bench.discover_and_login();
+        bench.hub.command(2, "{\"cmdId\":512,\"token\":37817828}",
+                          bench.now_ms);
+        bench.run();
+        REQUIRE(bench.hub.responses.size() == 2);
+        camera::artemis::DeviceInfo info;
+        REQUIRE(
+            camera::artemis::parse_device_info(bench.hub.responses[1], info));
+        CHECK(info.dev_id == "C6:1E:0D:E0:0C:FB");
+        std::int64_t value = 0;
+        REQUIRE(find_int(bench.hub.responses[1], "batPercent", value));
+        CHECK(value == 15);
+        REQUIRE(find_int(bench.hub.responses[1], "sdFreeMB", value));
+        CHECK(value == 120);
+    }
+
+    SUBCASE("dropped and duplicated DATA: the session still completes")
+    {
+        // One packet in flight: a lost one is resent before the next, so
+        // nothing overtakes it. With a larger window the hub loses data
+        // (#313): its session takes a later index and then drops the
+        // resent earlier one as a duplicate.
+        Options in_order;
+        in_order.window = 1;
+        Bench bench(in_order);
+        Faults lossy;
+        lossy.drop_percent = 40;
+        lossy.duplicate_percent = 20;
+        bench.camera.set_faults(lossy);
+        bench.discover_and_login();
+        bench.run(200);
+        REQUIRE(bench.hub.responses.size() == 1);
+        bench.hub.command(2, "{\"cmdId\":512,\"token\":37817828}",
+                          bench.now_ms);
+        bench.run(1500);
+        for (int page = 0; page < 2; page++) {
+            bench.hub.command(
+                3 + page,
+                "{\"cmdId\":768,\"itemCntPerPage\":45,\"pageNo\":" +
+                    std::to_string(page) + ",\"token\":37817828}",
+                bench.now_ms);
+            bench.run(1500);
+        }
+        CHECK(bench.hub.responses.size() == 4);
+        CHECK(bench.camera.stats().dropped > 0);
+        CHECK(bench.camera.stats().duplicated > 0);
+        CHECK(bench.camera.stats().retransmissions > 0);
+    }
+
+    SUBCASE("mute: no answer after the login")
+    {
+        Bench bench;
+        Faults mute;
+        mute.mute = true;
+        bench.camera.set_faults(mute);
+        bench.discover_and_login();
+        REQUIRE(bench.hub.responses.size() == 1);  // the login is answered
+        bench.hub.command(2, "{\"cmdId\":512,\"token\":37817828}",
+                          bench.now_ms);
+        bench.run();
+        CHECK(bench.hub.responses.size() == 1);
+        CHECK(bench.camera.stats().muted == 1);
+    }
+
+    SUBCASE("late ACKs keep the hub's DATA outstanding")
+    {
+        Bench bench;
+        bench.discover_and_login();
+        Faults late;
+        late.ack_delay_ms = 500;
+        bench.camera.set_faults(late);
+        bench.hub.command(2, "{\"cmdId\":512,\"token\":37817828}",
+                          bench.now_ms);
+        bench.run(10);  // 100 ms
+        CHECK(bench.hub.session.outstanding_count() > 0);
+        bench.run(60);  // 600 ms more
+        CHECK(bench.hub.session.outstanding_count() == 0);
+        CHECK(bench.hub.responses.size() == 2);
+    }
+}
+
+TEST_CASE("camera mock: fault console command (#122 stage 2)")
+{
+    camera_mock::Faults f;
+    std::string err;
+    CHECK(camera_mock::apply_fault_command(f, {"drop", "10"}, err));
+    CHECK(f.drop_percent == 10);
+    CHECK(camera_mock::apply_fault_command(f, {"battery", "15"}, err));
+    CHECK(f.battery_percent == 15);
+    CHECK_FALSE(camera_mock::apply_fault_command(f, {"drop", "101"}, err));
+    CHECK(f.drop_percent == 10);
+    CHECK_FALSE(camera_mock::apply_fault_command(f, {"mute", "x"}, err));
+    CHECK(camera_mock::apply_fault_command(f, {"mute", "on"}, err));
+    CHECK(f.mute);
+    CHECK(camera_mock::apply_fault_command(f, {"off"}, err));
+    CHECK_FALSE(f.any());
 }

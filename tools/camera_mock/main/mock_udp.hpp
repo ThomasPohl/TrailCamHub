@@ -5,6 +5,8 @@
 
 #include <string>
 
+#include "mock_camera.hpp"
+
 #include "esp_err.h"
 
 namespace mock_udp
@@ -15,5 +17,8 @@ esp_err_t start();
 std::string status();
 // Ends the session from the camera side (CLOSE).
 void close_session();
+// The faults the mock injects (#122 stage 2); see camera_mock::Faults.
+camera_mock::Faults faults();
+void set_faults(const camera_mock::Faults &faults);
 
 }  // namespace mock_udp

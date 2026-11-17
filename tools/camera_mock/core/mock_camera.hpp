@@ -44,6 +44,46 @@ struct Options {
     std::int64_t discovery_merge_ms = 1000;
 };
 
+// Faults the mock injects, switchable at run time (stage 2 of #122). All off
+// by default. Random choices come from a fixed-seed generator, so a test
+// sees the same sequence every time.
+struct Faults {
+    // Share of DATA packets to the hub (first sends and retransmissions)
+    // that are not sent, in percent.
+    unsigned drop_percent = 0;
+    // Share of DATA packets sent twice, in percent.
+    unsigned duplicate_percent = 0;
+    // Acknowledge the hub's DATA this late (the real camera acknowledges up
+    // to 1.5-2 s late while streaming thumbnails, #281).
+    std::int64_t ack_delay_ms = 0;
+    // Answer no ARTEMIS request after the login (as a camera that is
+    // commanded before its session has settled).
+    bool mute = false;
+    // Values the device info (512) reports instead of the captured ones;
+    // -1 = as captured (battery 100 %, 20617 MB of 29998 MB free).
+    int battery_percent = -1;
+    int sd_free_mb = -1;
+
+    bool any() const
+    {
+        return drop_percent > 0 || duplicate_percent > 0 || ack_delay_ms > 0 ||
+               mute || battery_percent >= 0 || sd_free_mb >= 0;
+    }
+};
+
+// The console command `fault …` without the word "fault": "off",
+// "drop <0-100>", "dup <0-100>", "lateack <ms>", "mute on|off",
+// "battery <0-100>|off", "sdfree <MB>|off". Changes `faults`; false with a
+// message in `error` (and `faults` unchanged) if the command is not valid.
+bool apply_fault_command(Faults &faults, const std::vector<std::string> &args,
+                         std::string &error);
+
+// One line for the console: "drop 10 %, battery 15 %" or "none".
+std::string describe(const Faults &faults);
+
+// The device info with the faults' battery and SD values put in.
+std::string patch_device_info(const std::string &json, const Faults &faults);
+
 // Outgoing UDP datagrams to the hub.
 class Output
 {
@@ -70,6 +110,10 @@ struct Stats {
     unsigned alive_sent = 0;
     unsigned alive_acks = 0;
     unsigned responses = 0;
+    // Injected faults (#122 stage 2).
+    unsigned dropped = 0;
+    unsigned duplicated = 0;
+    unsigned muted = 0;
     // Camera actions answered (#122 stage 3).
     unsigned photos = 0;
     unsigned deletions = 0;
@@ -100,6 +144,15 @@ class Camera
     // Ends the session from the camera side (CLOSE), as the camera does
     // when it turns its Wi-Fi off.
     void close();
+
+    void set_faults(const Faults &faults)
+    {
+        faults_ = faults;
+    }
+    const Faults &faults() const
+    {
+        return faults_;
+    }
 
     State state() const
     {
@@ -154,6 +207,11 @@ class Camera
                     std::int64_t now_ms);
     void flush(std::int64_t now_ms);
     void send(const std::vector<std::uint8_t> &packet);
+    // A DATA packet, through the drop and duplicate faults.
+    void send_data(const std::vector<std::uint8_t> &packet);
+    void send_ack(std::uint16_t index, std::int64_t now_ms);
+    // 0..99 from a fixed-seed generator.
+    unsigned roll();
     void log(LogLevel level, const std::string &text);
 
     Output &output_;
@@ -172,6 +230,10 @@ class Camera
     std::vector<std::uint8_t> request_;
     std::size_t request_size_ = 0;
     Stats stats_;
+    Faults faults_;
+    std::uint32_t random_ = 0x2545F491u;
+    // ACKs held back by Faults::ack_delay_ms: index and when to send.
+    std::deque<std::pair<std::uint16_t, std::int64_t>> late_acks_;
     bool recording_ = false;
     bool formatted_ = false;
     // Recordings deleted with 773, as "fileType/dirNum/mediaNum".

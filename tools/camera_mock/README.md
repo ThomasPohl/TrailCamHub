@@ -121,3 +121,15 @@ answering when it is commanded before the session has settled
   - `capture_fixtures`: the captured responses.
 - `main/`: ESP-IDF glue: NimBLE peripheral (`mock_ble.c`), access point
   (`mock_ap`), UDP task (`mock_udp`), console (`mock_console`).
+
+## Fault injection (#122 stage 2)
+
+Console command `fault`, shown in `status`:
+
+- `fault drop <0-100>` / `fault dup <0-100>`: drop or duplicate outgoing DATA packets (percent).
+- `fault lateack <ms>`: acknowledge the hub's DATA late.
+- `fault mute on|off`: answer nothing after the login.
+- `fault battery <0-100>|off`, `fault sdfree <MB>|off`: patch the device info (512).
+- `fault off`: all off.
+
+Note: with `drop` and the default window the hub currently loses resent fragments (#313).

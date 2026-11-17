@@ -137,6 +137,136 @@ std::vector<std::uint8_t> artemis_response(std::uint32_t app_sequence,
     return out;
 }
 
+bool apply_fault_command(Faults &faults, const std::vector<std::string> &args,
+                         std::string &error)
+{
+    const char *usage = "usage: fault off | drop <0-100> | dup <0-100> | "
+                        "lateack <ms> | mute on|off | battery <0-100>|off | "
+                        "sdfree <MB>|off";
+    if (args.empty()) {
+        error = usage;
+        return false;
+    }
+    const std::string &what = args[0];
+    if (what == "off" && args.size() == 1) {
+        faults = Faults();
+        return true;
+    }
+    if (args.size() != 2) {
+        error = usage;
+        return false;
+    }
+    const std::string &arg = args[1];
+    long long number = -1;
+    bool is_number = !arg.empty();
+    for (char c : arg) {
+        is_number = is_number && c >= '0' && c <= '9';
+    }
+    if (is_number && arg.size() <= 9) {
+        number = std::stoll(arg);
+    }
+    Faults next = faults;
+    if (what == "drop" || what == "dup") {
+        if (number < 0 || number > 100) {
+            error = what + " takes a share in percent, 0-100";
+            return false;
+        }
+        (what == "drop" ? next.drop_percent : next.duplicate_percent) =
+            static_cast<unsigned>(number);
+    } else if (what == "lateack") {
+        if (number < 0 || number > 60000) {
+            error = "lateack takes a delay in ms, 0-60000";
+            return false;
+        }
+        next.ack_delay_ms = number;
+    } else if (what == "mute") {
+        if (arg != "on" && arg != "off") {
+            error = "usage: fault mute on|off";
+            return false;
+        }
+        next.mute = arg == "on";
+    } else if (what == "battery" || what == "sdfree") {
+        int &field = what == "battery" ? next.battery_percent : next.sd_free_mb;
+        if (arg == "off") {
+            field = -1;
+        } else if (number < 0 || (what == "battery" && number > 100) ||
+                   number > 10000000) {
+            error = what == "battery" ? "battery takes 0-100 or off"
+                                      : "sdfree takes MB or off";
+            return false;
+        } else {
+            field = static_cast<int>(number);
+        }
+    } else {
+        error = usage;
+        return false;
+    }
+    faults = next;
+    return true;
+}
+
+std::string describe(const Faults &faults)
+{
+    if (!faults.any()) {
+        return "none";
+    }
+    std::string out;
+    auto add = [&out](const std::string &part) {
+        out += (out.empty() ? "" : ", ") + part;
+    };
+    if (faults.drop_percent > 0) {
+        add("drop " + std::to_string(faults.drop_percent) + " %");
+    }
+    if (faults.duplicate_percent > 0) {
+        add("duplicate " + std::to_string(faults.duplicate_percent) + " %");
+    }
+    if (faults.ack_delay_ms > 0) {
+        add("ACKs " + std::to_string(faults.ack_delay_ms) + " ms late");
+    }
+    if (faults.mute) {
+        add("mute after login");
+    }
+    if (faults.battery_percent >= 0) {
+        add("battery " + std::to_string(faults.battery_percent) + " %");
+    }
+    if (faults.sd_free_mb >= 0) {
+        add("SD free " + std::to_string(faults.sd_free_mb) + " MB");
+    }
+    return out;
+}
+
+namespace
+{
+// Replaces the number after `"key":` in `json`; unchanged if it is missing.
+void replace_int(std::string &json, const char *key, int value)
+{
+    const std::string needle = std::string("\"") + key + "\":";
+    const std::size_t at = json.find(needle);
+    if (at == std::string::npos) {
+        return;
+    }
+    const std::size_t begin = at + needle.size();
+    std::size_t end = begin;
+    while (end < json.size() &&
+           (json[end] == '-' || (json[end] >= '0' && json[end] <= '9'))) {
+        end++;
+    }
+    json.replace(begin, end - begin, std::to_string(value));
+}
+}  // namespace
+
+std::string patch_device_info(const std::string &json, const Faults &faults)
+{
+    std::string out = json;
+    if (faults.battery_percent >= 0) {
+        replace_int(out, "batPercent", faults.battery_percent);
+    }
+    if (faults.sd_free_mb >= 0) {
+        replace_int(out, "sdFreeMB", faults.sd_free_mb);
+    }
+    return out;
+}
+
 std::string action_response(int cmd_id, const char *field, int value)
 {
     std::string json = "{";
@@ -265,9 +395,13 @@ void Camera::poll(std::int64_t now_ms)
     if (state_ != State::session) {
         return;
     }
+    while (!late_acks_.empty() && late_acks_.front().second <= now_ms) {
+        send(wire::ack(late_acks_.front().first));
+        late_acks_.pop_front();
+    }
     for (Outgoing &out : tx_) {
         if (out.sent && now_ms - out.last_sent_ms >= options_.retransmit_ms) {
-            send(out.packet);
+            send_data(out.packet);
             out.last_sent_ms = now_ms;
             stats_.retransmissions++;
         }
@@ -302,6 +436,7 @@ void Camera::start_session(std::int64_t now_ms)
     next_tx_index_ = 0;
     next_rx_index_ = 0;
     tx_.clear();
+    late_acks_.clear();
     request_.clear();
     request_size_ = 0;
     log(LogLevel::info, "Discovery answered; session " +
@@ -314,6 +449,7 @@ void Camera::end_session(const char *reason)
     state_ = State::idle;
     logged_in_ = false;
     tx_.clear();
+    late_acks_.clear();
     request_.clear();
     request_size_ = 0;
 }
@@ -347,7 +483,7 @@ void Camera::handle_data(const std::uint8_t *payload, std::size_t size,
     }
     stats_.data_received++;
     next_rx_index_ = static_cast<std::uint16_t>(index + 1);
-    send(wire::ack(index));
+    send_ack(index, now_ms);
 
     if (size >= kArtemisHeaderSize &&
         std::memcmp(payload, kArtemisSignature, sizeof(kArtemisSignature)) ==
@@ -403,6 +539,11 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
     if (cmd_id == 525) {
         return;  // heartbeat: only acknowledged, never answered
     }
+    if (faults_.mute) {
+        stats_.muted++;
+        log(LogLevel::info, "Fault: mute; request not answered");
+        return;
+    }
     std::int64_t token = 0;
     if (!logged_in_ || !find_int(message.json, "token", token) ||
         token != fixtures::kCapturedToken) {
@@ -415,6 +556,15 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
 
     switch (cmd_id) {
     case 512:
+        if (faults_.battery_percent >= 0 || faults_.sd_free_mb >= 0) {
+            std::string json;
+            if (camera::artemis::decode(
+                    cipher_, fixtures::kDeviceInfoResponse.base64, json)) {
+                respond_json(message.app_sequence,
+                             patch_device_info(json, faults_), now_ms);
+                return;
+            }
+        }
         respond(message.app_sequence, fixtures::kDeviceInfoResponse.base64,
                 fixtures::kDeviceInfoResponse.padding, now_ms);
         return;
@@ -564,13 +714,44 @@ void Camera::flush(std::int64_t now_ms)
             break;
         }
         if (!out.sent) {
-            send(out.packet);
+            send_data(out.packet);
             out.sent = true;
             out.last_sent_ms = now_ms;
             stats_.data_sent++;
         }
         in_flight++;
     }
+}
+
+void Camera::send_data(const std::vector<std::uint8_t> &packet)
+{
+    if (faults_.drop_percent > 0 && roll() < faults_.drop_percent) {
+        stats_.dropped++;
+        return;
+    }
+    send(packet);
+    if (faults_.duplicate_percent > 0 && roll() < faults_.duplicate_percent) {
+        stats_.duplicated++;
+        send(packet);
+    }
+}
+
+void Camera::send_ack(std::uint16_t index, std::int64_t now_ms)
+{
+    if (faults_.ack_delay_ms > 0) {
+        late_acks_.emplace_back(index, now_ms + faults_.ack_delay_ms);
+        return;
+    }
+    send(wire::ack(index));
+}
+
+unsigned Camera::roll()
+{
+    // xorshift32
+    random_ ^= random_ << 13;
+    random_ ^= random_ >> 17;
+    random_ ^= random_ << 5;
+    return random_ % 100;
 }
 
 void Camera::send(const std::vector<std::uint8_t> &packet)
