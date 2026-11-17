@@ -86,7 +86,7 @@ async function tryReopen() {
 function waitForPort() {
   clearInterval(retryTimer);
   retryTimer = setInterval(() => void tryReopen().catch(() => {}), RETRY_MS);
-  status.textContent = "Connection lost. Waiting for the hub to come back (asleep, reset or unplugged)…";
+  status.textContent = "Connection lost. Waiting for the hub to come back. If it sleeps, press reset on the board (or plug it in again).";
   connectButton.disabled = true;
   disconnectButton.disabled = false;
   disconnectButton.textContent = "Stop waiting";

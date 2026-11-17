@@ -18,7 +18,11 @@
   const refresh = document.getElementById("sd-refresh");
   const dialog = document.getElementById("sd-confirm");
   const diagOut = document.getElementById("sd-diag-output");
-  const diagButtons = [...panel.querySelectorAll("[data-sd-command]")];
+  const diagButtons = [
+    ...panel.querySelectorAll("[data-sd-command]"),
+    document.getElementById("sd-status-read"),
+  ];
+  const statusRows = document.getElementById("sd-status-rows");
 
   // Path below the card's root, "" for the root.
   let path = "";
@@ -161,12 +165,18 @@
     }
   }
 
-  async function checkAvailable() {
-    if (available !== null) {
-      return available;
+  let helpText = null;
+  async function hasCommand(name) {
+    if (helpText === null) {
+      helpText = (await serial().command("help", 10000)).join("\n");
     }
-    const help = (await serial().command("help", 10000)).join("\n");
-    available = /(^|\s)ls(\s|$)/m.test(help) && /(^|\s)cat(\s|$)/m.test(help);
+    return new RegExp(`(^|\\s)${name}(\\s|$)`, "m").test(helpText);
+  }
+
+  async function checkAvailable() {
+    if (available === null) {
+      available = (await hasCommand("ls")) && (await hasCommand("cat"));
+    }
     return available;
   }
 
@@ -324,10 +334,13 @@
     setBusy(true);
     diagOut.textContent = `> ${command}\n`;
     try {
-      const lines = await serial().command(
-        command,
-        command === "update" ? 180000 : 15000,
-      );
+      if (command === "sdbench" && !(await hasCommand("sdbench"))) {
+        diagOut.textContent +=
+          "This firmware has no SD write test (built without CONFIG_HUB_CONSOLE_DIAGNOSTICS).";
+        return;
+      }
+      const slow = command === "update" || command === "sdbench";
+      const lines = await serial().command(command, slow ? 180000 : 15000);
       diagOut.textContent += lines.join("\n") || "(no output)";
     } catch (error) {
       diagOut.textContent += `${(error.lines ?? []).join("\n")}\n${error.message}`;
@@ -336,14 +349,61 @@
     }
   }
 
+  // Every `status` line as item and value (#156): the dock shows only the
+  // main ones. "INFO camera C1 …" lines (#202) keep the camera in the item.
+  function parseStatus(lines) {
+    return lines
+      .filter((line) => line.startsWith("INFO "))
+      .map((line) => {
+        const text = line.slice(5);
+        const colon = text.indexOf(": ");
+        if (colon > 0 && colon < 40) {
+          return [text.slice(0, colon), text.slice(colon + 2)];
+        }
+        const words = text.split(" ");
+        const keep = words[0] === "camera" && words.length > 2 ? 2 : 1;
+        return [words.slice(0, keep).join(" "), words.slice(keep).join(" ")];
+      });
+  }
+
+  async function readStatus() {
+    if (busy || !serial()?.isConnected()) {
+      say("Connect to the hub first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const rows = parseStatus(await serial().command("status", 15000));
+      statusRows.replaceChildren(
+        ...rows.map(([item, value]) => {
+          const row = document.createElement("tr");
+          row.append(cell(item), cell(value));
+          return row;
+        }),
+      );
+      statusRows.closest("table").hidden = rows.length === 0;
+      say(rows.length ? "" : "The hub gave no status lines.");
+    } catch (error) {
+      say(
+        `No answer: ${error.message}. The hub may be asleep: press reset on the board.`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   refresh.addEventListener("click", () => open(path));
-  for (const button of diagButtons) {
+  document
+    .getElementById("sd-status-read")
+    .addEventListener("click", readStatus);
+  for (const button of diagButtons.filter((b) => b.dataset.sdCommand)) {
     button.addEventListener("click", () =>
       runDiagnostic(button.dataset.sdCommand),
     );
   }
   window.addEventListener("serial-connected", () => {
     available = null;
+    helpText = null;
     setBusy(false);
   });
   window.addEventListener("serial-disconnected", () => setBusy(false));

@@ -509,6 +509,18 @@
               <button class="secondary-button" type="button" data-sd-command="heap">Memory</button>
               <button class="secondary-button" type="button" data-sd-command="heap blocks">Memory blocks</button>
               <button class="secondary-button" type="button" data-sd-command="update" title="Sync, then read the firmware manifest now">Check for update</button>
+              <button class="secondary-button" type="button" data-sd-command="sdbench" title="Writes a 1 MB test file to the SD card and deletes it">SD write test</button>
+            </p>
+          </section>
+          <section aria-labelledby="sd-status-heading">
+            <h2 id="sd-status-heading">Full status</h2>
+            <p class="sd-diag-buttons">
+              <button id="sd-status-read" class="secondary-button" type="button">Read status</button>
+            </p>
+            <table class="sd-table" hidden>
+              <thead><tr><th scope="col">Item</th><th scope="col">Value</th></tr></thead>
+              <tbody id="sd-status-rows"></tbody>
+            </table>
             </p>
             <pre id="sd-diag-output" class="adv-answer" aria-live="polite"></pre>
           </section>
