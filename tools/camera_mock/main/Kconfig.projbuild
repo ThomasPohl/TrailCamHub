@@ -7,6 +7,16 @@ config CAMERA_MOCK_AP_PASSWORD
         WPA2 password (8-63 characters) that the mock hands out over BLE,
         like the camera's 8-digit password.
 
+config CAMERA_MOCK_DEV_ID
+    string "Camera MAC (devId)"
+    default "C6:1E:0D:E0:0C:FB"
+    help
+        The camera's identity: devId in the device info (512), the MAC in
+        the BLE advertising and the media headers; the BLE name is TC100_
+        and the last two bytes. Default: the captured TC100. Give a second
+        mock another MAC to stand for a second camera. The console command
+        `id <MAC>` overrides it (stored in NVS).
+
 config CAMERA_MOCK_AP_CHANNEL
     int "Wi-Fi channel of the access point"
     range 1 13

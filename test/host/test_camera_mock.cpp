@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -677,4 +678,31 @@ TEST_CASE("camera mock: thumbnails and photo download on the bulk channel "
         CHECK(bench.hub.records.empty());
         CHECK(bench.hub.bulk_frames == 0);
     }
+}
+
+TEST_CASE("camera mock: identity (#122 stage 2)")
+{
+    Identity id;
+    CHECK(mac_text(id) == "C6:1E:0D:E0:0C:FB");
+    CHECK(ble_name(id) == std::string(fixtures::kBleName));
+    CHECK(std::equal(id.dev_id, id.dev_id + 6, fixtures::kDevId));
+    REQUIRE(parse_mac("c6-1e-0d-e0-0c-42", id));
+    CHECK(mac_text(id) == "C6:1E:0D:E0:0C:42");
+    CHECK(ble_name(id) == "TC100_0C42");
+    CHECK_FALSE(parse_mac("C7:1E:0D:E0:0C:42", id));  // multicast
+    CHECK_FALSE(parse_mac("C6:1E:0D:E0:0C", id));
+    CHECK_FALSE(parse_mac("C6:1E:0D:E0:0C:4G", id));
+    CHECK(mac_text(id) == "C6:1E:0D:E0:0C:42");
+
+    // The hub reads the new MAC from 512 and from the media header.
+    Bench bench;
+    bench.camera.set_identity(id);
+    bench.discover_and_login();
+    bench.hub.command(2, "{\"cmdId\":512,\"token\":37817828}", bench.now_ms);
+    bench.run();
+    REQUIRE(bench.hub.responses.size() == 2);
+    camera::artemis::DeviceInfo info;
+    REQUIRE(camera::artemis::parse_device_info(bench.hub.responses[1], info));
+    CHECK(info.dev_id == "C6:1E:0D:E0:0C:42");
+    CHECK(info.bat_percent == 100);
 }
