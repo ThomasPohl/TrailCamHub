@@ -137,6 +137,17 @@ std::vector<std::uint8_t> artemis_response(std::uint32_t app_sequence,
     return out;
 }
 
+std::string action_response(int cmd_id, const char *field, int value)
+{
+    std::string json = "{";
+    if (field != nullptr && field[0] != '\0') {
+        json += std::string("\"") + field + "\":" + std::to_string(value) + ",";
+    }
+    json += value == 0 ? "\"errorMsg\":\"Success\"" : "\"errorMsg\":\"Failed\"";
+    json += ",\"result\":0,\"cmdId\":" + std::to_string(cmd_id) + "}";
+    return json;
+}
+
 std::string empty_media_list_page(int page_no)
 {
     return "{\"mediaFiles\":[],\"cnt\":0,\"pageNo\":" +
@@ -423,8 +434,9 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
                 format("itemCntPerPage %lld; the captured pages hold %lld",
                        per_page, fixtures::kCapturedItemsPerPage));
         }
+        // After a format the card is empty.
         const fixtures::CapturedResponse *page =
-            captured_page(static_cast<int>(page_no));
+            formatted_ ? nullptr : captured_page(static_cast<int>(page_no));
         if (page != nullptr) {
             respond(message.app_sequence, page->base64, page->padding, now_ms);
         } else {
@@ -436,6 +448,13 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
         }
         return;
     }
+    case 641:
+    case 643:
+    case 644:
+    case 773:
+    case 518:
+        handle_action(cmd_id, message.json, message.app_sequence, now_ms);
+        return;
     default:
         log(LogLevel::warn,
             format("cmdId %lld is not supported by the mock yet; not "
@@ -443,6 +462,70 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
                    cmd_id));
         return;
     }
+}
+
+void Camera::handle_action(std::int64_t cmd_id, const std::string &request,
+                           std::uint32_t app_sequence, std::int64_t now_ms)
+{
+    switch (cmd_id) {
+    case 641:
+        stats_.photos++;
+        respond_json(app_sequence, action_response(641, "snapRet", 0), now_ms);
+        return;
+    case 643:
+        recording_ = true;
+        respond_json(app_sequence, action_response(643, "recordRet", 0),
+                     now_ms);
+        return;
+    case 644:
+        recording_ = false;
+        respond_json(app_sequence, action_response(644, "", 0), now_ms);
+        return;
+    case 773: {
+        std::int64_t file_type = 0;
+        std::int64_t dir_num = 0;
+        std::int64_t media_num = 0;
+        if (!find_int(request, "fileType", file_type) ||
+            !find_int(request, "dirNum", dir_num) ||
+            !find_int(request, "mediaNum", media_num)) {
+            respond_json(app_sequence, action_response(773, "delRet", -1),
+                         now_ms);
+            return;
+        }
+        const std::string key = std::to_string(file_type) + "/" +
+                                std::to_string(dir_num) + "/" +
+                                std::to_string(media_num);
+        // A second deletion of the same file: "no such file" (-3). The
+        // replayed media list still shows deleted files (it is a capture).
+        for (const std::string &done : deleted_) {
+            if (done == key) {
+                respond_json(app_sequence, action_response(773, "delRet", -3),
+                             now_ms);
+                return;
+            }
+        }
+        deleted_.push_back(key);
+        stats_.deletions++;
+        respond_json(app_sequence, action_response(773, "delRet", 0), now_ms);
+        return;
+    }
+    case 518:
+        formatted_ = true;
+        deleted_.clear();
+        stats_.formats++;
+        respond_json(app_sequence, action_response(518, "formatRet", 0),
+                     now_ms);
+        return;
+    default:
+        return;
+    }
+}
+
+void Camera::respond_json(std::uint32_t app_sequence, const std::string &json,
+                          std::int64_t now_ms)
+{
+    respond(app_sequence, camera::artemis::encode(cipher_, json),
+            fixtures::kCapturedPadding, now_ms);
 }
 
 void Camera::respond(std::uint32_t app_sequence, const std::string &base64,

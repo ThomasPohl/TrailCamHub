@@ -14,6 +14,7 @@
 #include "artemis_message.hpp"
 #include "artemis_reassembler.hpp"
 #include "ble_frames.hpp"
+#include "camera_action.hpp"
 #include "camera_prelogin.hpp"
 #include "camera_udp_packets.hpp"
 #include "capture_fixtures.hpp"
@@ -375,4 +376,47 @@ TEST_CASE("camera mock: first DATA without PRE_LOGIN, ALIVE, retransmission")
     bench.now_ms += 31000;
     bench.camera.poll(bench.now_ms);
     CHECK(bench.camera.state() == Camera::State::idle);
+}
+
+TEST_CASE("camera mock: camera actions (#122 stage 3)")
+{
+    using camera::action::interpret;
+    using camera::action::Type;
+    Bench bench;
+    bench.discover_and_login();
+    REQUIRE(bench.hub.responses.size() == 1);
+    const std::string t = ",\"token\":37817828}";
+    std::uint32_t seq = 2;
+    auto ask = [&](const std::string &json) {
+        bench.hub.command(seq++, json, bench.now_ms);
+        bench.run();
+        REQUIRE(bench.hub.responses.size() == seq - 1);
+        return bench.hub.responses.back();
+    };
+
+    // The hub reads each answer with its own rules (camera_action.cpp).
+    CHECK(interpret(Type::photo, ask("{\"cmdId\":641" + t)).done);
+    CHECK(bench.camera.stats().photos == 1);
+    CHECK(interpret(Type::video_start, ask("{\"cmdId\":643" + t)).done);
+    CHECK(bench.camera.recording());
+    CHECK(interpret(Type::video_stop, ask("{\"cmdId\":644" + t)).done);
+    CHECK_FALSE(bench.camera.recording());
+
+    const std::string file =
+        "{\"cmdId\":773,\"fileType\":1,\"dirNum\":100,\"mediaNum\":36" + t;
+    CHECK(interpret(Type::delete_media, ask(file)).done);
+    const auto again = interpret(Type::delete_media, ask(file));
+    CHECK_FALSE(again.done);
+    CHECK(again.code == -3);  // no such file
+    CHECK_FALSE(interpret(Type::delete_media, ask("{\"cmdId\":773" + t)).done);
+    CHECK(bench.camera.stats().deletions == 1);
+
+    CHECK(interpret(Type::format_sd, ask("{\"cmdId\":518" + t)).done);
+    CHECK(bench.camera.formatted());
+    camera::artemis::MediaList list;
+    REQUIRE(camera::artemis::parse_media_list(
+        ask("{\"cmdId\":768,\"itemCntPerPage\":45,\"pageNo\":0" + t), list));
+    CHECK(list.files.empty());
+    // After the format the file can be "deleted" again (the card is empty).
+    CHECK(interpret(Type::delete_media, ask(file)).done);
 }

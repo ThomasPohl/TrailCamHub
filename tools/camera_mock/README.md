@@ -5,9 +5,11 @@ developed and tested on the bench without the real camera, its battery or the
 garden (#122). To the hub it looks like a camera: BLE peripheral, Wi-Fi access
 point and the PPPP/ARTEMIS session over UDP.
 
-**Stage 1** (this version): BLE wake-up → AP join → discovery → PRE_LOGIN →
-login → device info (512) → media list (768) → heartbeat (525) → CLOSE.
-Thumbnails (772), downloads and fault injection are stages 2 and 3.
+**Stage 1**: BLE wake-up → AP join → discovery → PRE_LOGIN → login → device
+info (512) → media list (768) → heartbeat (525) → CLOSE. **Camera actions**
+(part of stage 3): photo (641), video start/stop (643/644), delete (773) and
+format (518) are answered. Thumbnails (772), downloads and fault injection
+are still open (stages 2 and 3).
 
 ## Build and flash
 
@@ -88,6 +90,14 @@ code:
   (37817828) are acknowledged but not answered. What the camera does is
   unknown.
 - **DATA out of order** is not acknowledged, so the hub repeats it.
+- **Camera actions** (641, 643, 644, 773, 518): no capture holds an answer.
+  The mock answers with the command's own field (`snapRet`, `recordRet`,
+  `delRet`, `formatRet`; 644 only `result`), 0 for success, in the shape of
+  the other answers (`docs/camera-actions.md`). A second deletion of the same
+  `fileType/dirNum/mediaNum` answers `delRet` -3 ("no such file"); a
+  deletion without them -1. After a format the media list is empty. The
+  replayed list still shows deleted files and no new photo or video: it is
+  a capture. `status` counts the actions.
 - Timing: the mock retransmits unacknowledged DATA every 100 ms (the camera
   ~70 ms), sends ALIVE every 2 s and drops a session after 30 s without a
   packet from the hub.
