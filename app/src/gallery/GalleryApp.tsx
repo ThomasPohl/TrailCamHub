@@ -88,6 +88,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [hideAsk, setHideAsk] = useState<{ camId: string; name: string }>();
   // The tab "Kameras verwalten" instead of a camera's recordings.
   const [manage, setManage] = useState(false);
+  // The camera whose name is being edited, in its tab or in the manage table.
+  const [renaming, setRenaming] = useState<string>();
   // Cameras the hub heard (#298) and asking before one is no longer read.
   const [found, setFound] = useState<FoundCamera[]>([]);
   const [stopAsk, setStopAsk] = useState<FoundCamera>();
@@ -279,6 +281,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       setNotice(
         `Die Kamera heißt jetzt „${stored}“. Neue Videos landen im Unterordner „${folderName(stored)}“.`,
       );
+      setRenaming(undefined);
       await reload();
       return true;
     } catch (error) {
@@ -312,6 +315,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const newFound = found.filter((f) => f.state === 'new').length;
   const switchCamera = (id: string) => {
     setManage(false);
+    setRenaming(undefined);
     if (id !== camId) {
       setCamId(id);
       setItems(undefined);
@@ -390,24 +394,49 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
 
           {status && (
             <div className="g-tabs" role="tablist" aria-label="Kameras">
-              {shownCameras.map((c) => (
-                <button
-                  key={c.camId}
-                  type="button"
-                  role="tab"
-                  aria-selected={!manage && c.camId === camId}
-                  className="g-tab"
-                  onClick={() => switchCamera(c.camId)}
-                >
-                  {c.name}
-                </button>
-              ))}
+              {shownCameras.map((c) => {
+                const active = !manage && c.camId === camId;
+                if (active && renaming === c.camId) {
+                  return (
+                    <RenameForm
+                      key={c.camId}
+                      name={c.name}
+                      disabled={busy}
+                      onRename={(name) => renameCamera(c.camId, name)}
+                      onCancel={() => setRenaming(undefined)}
+                    />
+                  );
+                }
+                return (
+                  <span key={c.camId} className="g-tab-wrap">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className="g-tab"
+                      onClick={() => switchCamera(c.camId)}
+                    >
+                      {c.name}
+                    </button>
+                    {active && (
+                      <RenameButton
+                        label="Umbenennen"
+                        disabled={busy}
+                        onClick={() => setRenaming(c.camId)}
+                      />
+                    )}
+                  </span>
+                );
+              })}
               <button
                 type="button"
                 role="tab"
                 aria-selected={manage}
                 className="g-tab g-tab--manage"
-                onClick={() => setManage(true)}
+                onClick={() => {
+                  setManage(true);
+                  setRenaming(undefined);
+                }}
               >
                 Kameras verwalten
                 {newFound > 0 && (
@@ -458,7 +487,25 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                       ].filter(Boolean);
                       return (
                         <tr key={c.camId}>
-                          <th scope="row">{c.name}</th>
+                          <th scope="row">
+                            {renaming === c.camId ? (
+                              <RenameForm
+                                name={c.name}
+                                disabled={busy}
+                                onRename={(name) => renameCamera(c.camId, name)}
+                                onCancel={() => setRenaming(undefined)}
+                              />
+                            ) : (
+                              <span className="g-cams__name">
+                                {c.name}
+                                <RenameButton
+                                  label={`${c.name} umbenennen`}
+                                  disabled={busy}
+                                  onClick={() => setRenaming(c.camId)}
+                                />
+                              </span>
+                            )}
+                          </th>
                           <td>{state.join(' · ')}</td>
                           <td>
                             <div className="g-cams__actions">
@@ -522,12 +569,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
 
           {!manage && status && camId && (
             <div className="g-camera-bar">
-              <CameraHeading
-                key={camId}
-                name={cameraName}
-                disabled={busy}
-                onRename={(name) => renameCamera(camId, name)}
-              />
+              {/* The tab shows the name; the heading is for screen readers. */}
+              <h2 className="g-visually-hidden">Kamera „{cameraName}“</h2>
               {currentCamera && <CameraFacts camera={currentCamera} now={t} />}
               {items && newOnes.length > 0 && (
                 <button
@@ -892,55 +935,60 @@ function CameraHints({
   );
 }
 
-/** The camera's name as heading, with a form to rename it (#273). */
-function CameraHeading({
+/** The pencil next to a camera's name (#273). */
+function RenameButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick(): void;
+}) {
+  return (
+    <button
+      type="button"
+      className="g-icon-btn g-icon-btn--small"
+      aria-label={label}
+      title="Umbenennen"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <PencilIcon />
+    </button>
+  );
+}
+
+/** A camera's name in place, to change it (#273). */
+function RenameForm({
   name,
   disabled,
   onRename,
+  onCancel,
 }: {
   name: string;
   disabled: boolean;
   onRename(name: string): Promise<boolean>;
+  onCancel(): void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
   const trimmed = value.trim();
-
-  if (!editing) {
-    return (
-      <div className="g-camera-row">
-        <h2 className="g-camera">Kamera „{name}“</h2>
-        <button
-          type="button"
-          className="g-icon-btn"
-          aria-label="Umbenennen"
-          title="Umbenennen"
-          disabled={disabled}
-          onClick={() => {
-            setValue(name);
-            setEditing(true);
-          }}
-        >
-          <PencilIcon />
-        </button>
-      </div>
-    );
-  }
   return (
     <form
-      className="g-camera-row g-rename"
+      className="g-rename g-rename--inline"
       onSubmit={(event) => {
         event.preventDefault();
-        void onRename(trimmed).then((ok) => {
-          if (ok) setEditing(false);
-        });
+        void onRename(trimmed);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') onCancel();
       }}
     >
-      <label htmlFor="g-rename-name" className="g-visually-hidden">
+      <label htmlFor={`g-rename-${name}`} className="g-visually-hidden">
         Neuer Name der Kamera
       </label>
       <input
-        id="g-rename-name"
+        id={`g-rename-${name}`}
         type="text"
         value={value}
         maxLength={MAX_CAMERA_NAME}
@@ -950,12 +998,12 @@ function CameraHeading({
       />
       <button
         type="submit"
-        className="g-btn"
+        className="g-btn g-btn--small"
         disabled={disabled || trimmed === '' || trimmed === name}
       >
         Speichern
       </button>
-      <button type="button" className="g-btn g-btn--quiet" onClick={() => setEditing(false)}>
+      <button type="button" className="g-btn g-btn--small g-btn--quiet" onClick={onCancel}>
         Abbrechen
       </button>
     </form>
