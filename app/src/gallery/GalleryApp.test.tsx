@@ -182,6 +182,22 @@ describe('GalleryApp', () => {
     expect(await screen.findAllByRole('listitem')).toHaveLength(16);
   });
 
+  it('renames a camera in the manage tab (#273)', async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
+    const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Wiese umbenennen' }));
+    fireEvent.change(within(panel).getByLabelText('Neuer Name der Kamera'), {
+      target: { value: 'Hecke' },
+    });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Speichern' }));
+    expect(await screen.findByRole('tab', { name: 'Hecke' })).toBeInTheDocument();
+    expect(within(panel).getByRole('row', { name: /Hecke/ })).toBeInTheDocument();
+    expect(within(panel).queryByLabelText('Neuer Name der Kamera')).not.toBeInTheDocument();
+  });
+
   it('hides a camera and shows it again (#273)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
