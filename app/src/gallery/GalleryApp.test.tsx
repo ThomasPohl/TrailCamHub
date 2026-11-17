@@ -230,6 +230,32 @@ describe('GalleryApp', () => {
     expect(screen.queryByRole('region', { name: 'Gefundene Kameras' })).not.toBeInTheDocument();
   });
 
+  it('shows a recording large and plays its video (#306)', async () => {
+    let now = 1_000_000;
+    const api = new DemoGalleryApi(() => now, 20);
+    render(
+      <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
+    );
+    const [card] = await screen.findAllByRole('listitem');
+    fireEvent.click(within(card!).getByRole('button', { name: /^Groß anzeigen/ }));
+    const viewer = screen.getByRole('dialog', { name: /^Aufnahme vom/ });
+    expect(within(viewer).getByRole('img')).toBeInTheDocument();
+    fireEvent.keyDown(viewer, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(within(card!).getByRole('button', { name: 'Video holen' }));
+    await within(card!).findByText(/Video kommt/);
+    now += 20;
+    fireEvent.click(screen.getByRole('button', { name: 'Wiese' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Garten' }));
+    const [ready] = await screen.findAllByRole('listitem');
+    fireEvent.click(await within(ready!).findByRole('button', { name: 'Video ansehen' }));
+    const player = screen.getByRole('dialog', { name: /^Aufnahme vom/ });
+    expect(player).toHaveTextContent('In der Vorführung gibt es kein echtes Video.');
+    fireEvent.click(within(player).getByRole('button', { name: 'Schließen' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('asks for a folder when none is chosen', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);

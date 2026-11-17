@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/http';
 import { AdminView } from './AdminView';
 import { FoundCameras } from './FoundCameras';
+import { Viewer } from './Viewer';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
 import { cameraTime, clockTime, folderName, stateText } from './text';
@@ -86,6 +87,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   // Cameras the hub heard (#298) and asking before one is no longer read.
   const [found, setFound] = useState<FoundCamera[]>([]);
   const [stopAsk, setStopAsk] = useState(false);
+  // A recording shown large, with its video if asked for (#306).
+  const [viewing, setViewing] = useState<{ recording: Recording; video: boolean }>();
   const saving = useRef(false);
 
   const reload = useCallback(async () => {
@@ -485,10 +488,17 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                       Auswählen
                     </label>
                   )}
-                  <img
-                    src={r.thumbUrl}
-                    alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
-                  />
+                  <button
+                    type="button"
+                    className="g-card__zoom"
+                    aria-label={`Groß anzeigen: ${cameraTime(r.mediaTime)}`}
+                    onClick={() => setViewing({ recording: r, video: false })}
+                  >
+                    <img
+                      src={r.thumbUrl}
+                      alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
+                    />
+                  </button>
                   <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
                   <p className="g-card__files" title="Dateien auf der Kamera">
                     {r.cameraFiles.map((name) => (
@@ -534,6 +544,13 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                     )}
                     {r.state === 'videoReady' && (
                       <>
+                        <button
+                          type="button"
+                          className="g-btn"
+                          onClick={() => setViewing({ recording: r, video: true })}
+                        >
+                          Video ansehen
+                        </button>
                         <button type="button" className="g-btn" onClick={() => void saveOne(r)}>
                           {saved.has(r.mediaId) ? 'Nochmal speichern' : 'Video speichern'}
                         </button>
@@ -551,6 +568,14 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                 </li>
               ))}
             </ul>
+          )}
+
+          {viewing && (
+            <Viewer
+              recording={viewing.recording}
+              video={viewing.video}
+              onClose={() => setViewing(undefined)}
+            />
           )}
 
           {hideAsk && camId && (
