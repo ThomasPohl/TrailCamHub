@@ -497,3 +497,32 @@ body {
   gap: 12px;
   margin-bottom: 8px;
 }
+
+.g-found {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #ddd8cc;
+}
+
+.g-found h2 {
+  font-size: 1.2rem;
+}
+
+.g-found__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.g-found__item--new {
+  display: block;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--g-card);
+}
+
+.g-found__item--new p {
+  margin: 0 0 8px;
+}

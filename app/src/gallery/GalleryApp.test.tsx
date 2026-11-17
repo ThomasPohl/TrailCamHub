@@ -201,6 +201,35 @@ describe('GalleryApp', () => {
     expect(screen.queryByRole('region', { name: 'Ausgeblendete Kameras' })).not.toBeInTheDocument();
   });
 
+  it('takes a found camera in and stops reading one (#298)', async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    const fresh = await screen.findByRole('group', { name: 'Neue Kamera TC100_77A1' });
+    expect(fresh).toHaveTextContent('mittleres Signal');
+    fireEvent.change(within(fresh).getByLabelText(/Name der Kamera/), {
+      target: { value: ' Futterplatz ' },
+    });
+    fireEvent.click(within(fresh).getByRole('button', { name: 'Aufnehmen' }));
+    expect(
+      await screen.findByText(/„Futterplatz“ wird ab dem nächsten Kontakt mit dem Hub gelesen/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /Neue Kamera/ })).not.toBeInTheDocument();
+
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Nicht mehr abfragen' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Kamera „Garten“ nicht mehr abfragen?');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ja, nicht mehr abfragen' }));
+    const section = await screen.findByRole('region', { name: 'Gefundene Kameras' });
+    expect(await within(section).findByText('Nicht abgefragte Kameras')).toBeInTheDocument();
+    expect(section).toHaveTextContent('Garten');
+    expect(screen.queryByRole('button', { name: 'Nicht mehr abfragen' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(section).getByRole('button', { name: 'Doch aufnehmen' }));
+    expect(await screen.findByRole('button', { name: 'Nicht mehr abfragen' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Gefundene Kameras' })).not.toBeInTheDocument();
+  });
+
   it('asks for a folder when none is chosen', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);

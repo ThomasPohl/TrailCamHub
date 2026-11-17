@@ -253,10 +253,21 @@ function toCamera(
 /** Who is signed in, so the gallery can offer the admin view (#264). */
 async function me(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
   const user = await authUser(req, deps);
+  // The hubs, also those without a camera yet: the gallery asks each for the
+  // cameras it found (#298).
+  const hubIds = user.admin
+    ? await deps.store.listHubIds()
+    : await deps.store.listUserHubIds(user.userId);
+  const hubs = [];
+  for (const hubId of hubIds) {
+    const hub = await deps.store.getHub(hubId);
+    if (hub) hubs.push({ hubId, name: hub.name });
+  }
   return json(200, {
     userId: user.userId,
     name: user.name ?? '',
     role: user.admin ? 'admin' : 'user',
+    hubs,
   });
 }
 

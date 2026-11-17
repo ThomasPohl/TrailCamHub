@@ -4,6 +4,7 @@ import type { Camera, ScheduleConfig } from '../api/types';
 import type {
   AdminHub,
   GalleryApi,
+  FoundCamera,
   GalleryCamera,
   GalleryStatus,
   HubHistory,
@@ -54,6 +55,17 @@ export class DemoGalleryApi implements GalleryApi {
   private lastCheckin: number;
   private scheduleConfig: ScheduleConfig = {};
   private readonly readRequested = new Set<string>();
+  // The demo hub hears its two cameras and one more in range (#298).
+  private readonly found: FoundCamera[] = [
+    {
+      hubId: 'garten-hub',
+      bleAddress: 'AA:BB:CC:00:77:A1',
+      state: 'new',
+      name: 'TC100_77A1',
+      rssi: -78,
+      lastSeen: 0,
+    },
+  ];
 
   constructor(
     private readonly now: () => number = () => Math.floor(Date.now() / 1000),
@@ -127,6 +139,52 @@ export class DemoGalleryApi implements GalleryApi {
     const camera = this.cameras.find((c) => c.camId === camId);
     if (!camera) throw new Error(`Unbekannte Kamera ${camId}`);
     camera.hidden = hidden || undefined;
+  }
+
+  async foundCameras(): Promise<FoundCamera[]> {
+    this.catchUp();
+    const read: FoundCamera[] = this.cameras.map((c, i) => ({
+      hubId: 'garten-hub',
+      bleAddress: `F4:C1:56:06:ED:${(0x3b + i).toString(16).toUpperCase()}`,
+      state: 'approved',
+      camId: c.camId,
+      name: c.name,
+      rssi: -55 - 5 * i,
+      lastSeen: this.lastCheckin,
+    }));
+    // A decision about one of the own cameras replaces its entry.
+    const decided = (r: FoundCamera) => this.found.find((f) => f.bleAddress === r.bleAddress) ?? r;
+    const others = this.found.filter((f) => !read.some((r) => r.bleAddress === f.bleAddress));
+    return [...read.map(decided), ...others].map((f) => ({
+      ...f,
+      lastSeen: f.lastSeen || this.lastCheckin,
+    }));
+  }
+
+  async decideCamera(
+    _hubId: string,
+    bleAddress: string,
+    state: 'approved' | 'excluded',
+    name?: string,
+  ): Promise<void> {
+    const found = this.found.find((f) => f.bleAddress === bleAddress);
+    if (found) {
+      found.state = state;
+      if (name) found.name = name;
+      return;
+    }
+    // One of the demo hub's own cameras: stop reading it.
+    const index = Number.parseInt(bleAddress.slice(-2), 16) - 0x3b;
+    const camera = this.cameras[index];
+    if (!camera) throw new Error(`Unbekannte Kamera ${bleAddress}`);
+    this.found.push({
+      hubId: 'garten-hub',
+      bleAddress,
+      state,
+      camId: camera.camId,
+      name: name ?? camera.name,
+      lastSeen: this.lastCheckin,
+    });
   }
 
   async me(): Promise<Me> {

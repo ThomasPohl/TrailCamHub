@@ -5,6 +5,7 @@ import type { ScheduleConfig } from '../api/types';
 import type {
   AdminHub,
   GalleryApi,
+  FoundCamera,
   GalleryStatus,
   HubHistory,
   Me,
@@ -235,6 +236,32 @@ export class HttpGalleryApi implements GalleryApi {
 
   async setCameraHidden(camId: string, hidden: boolean): Promise<void> {
     await this.request('POST', `${this.camera(camId)}/hidden`, { hidden });
+  }
+
+  async foundCameras(): Promise<FoundCamera[]> {
+    const me = await this.request<{ hubs?: Array<{ hubId: string }> }>('GET', '/v1/me');
+    const found: FoundCamera[] = [];
+    for (const { hubId } of me.hubs ?? []) {
+      const list = await this.request<Array<Omit<FoundCamera, 'hubId'>>>(
+        'GET',
+        `/v1/hubs/${encodeURIComponent(hubId)}/found-cameras`,
+      );
+      for (const c of list) found.push({ ...c, hubId });
+    }
+    return found;
+  }
+
+  async decideCamera(
+    hubId: string,
+    bleAddress: string,
+    state: 'approved' | 'excluded',
+    name?: string,
+  ): Promise<void> {
+    await this.request(
+      'POST',
+      `/v1/hubs/${encodeURIComponent(hubId)}/found-cameras/${encodeURIComponent(bleAddress)}`,
+      name === undefined ? { state } : { state, name },
+    );
   }
 
   async me(): Promise<Me> {

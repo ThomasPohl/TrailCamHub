@@ -41,7 +41,7 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | ------ | ---------------------------------------------- | ---------------------- | ----------------------------------------------------- |
 | GET    | `/v1/health`                                   | –                      | Liveness check                                        |
 | GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user                   |
-| GET    | `/v1/me`                                       | app user               | `{userId, name, role}` of the signed-in user          |
+| GET    | `/v1/me`                                       | app user               | `{userId, name, role, hubs}` of the signed-in user    |
 | GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults              |
 | GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)                   |
 | POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT; the apps use it (CORS, #286)         |

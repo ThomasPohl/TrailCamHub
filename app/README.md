@@ -28,7 +28,11 @@ per recording (a video and the photo taken with it, e.g. `DSCF0023.AVI` and
 delete several at once (#262), "delete all new ones" with a confirmation, and
 a status line with the hub's last and next contact. The user renames a camera
 with "Umbenennen" next to its name and hides it with "Ausblenden"
-(shown again from the list at the bottom; #273). The texts are German. It can be
+(shown again from the list at the bottom; #273).
+Cameras the hub heard but does not read yet stand under "Neue Kameras
+gefunden" with "Aufnehmen" (and a name) or "Ignorieren"; "Nicht mehr
+abfragen" next to a camera's name stops reading it, "Doch aufnehmen" takes it
+back (#298). The texts are German. It can be
 installed as an app (manifest, PNG icons of 192 and 512 px plus a maskable
 one, and a service worker in `public/`), and with Chrome or Edge it writes finished
 videos into a folder chosen once (File System Access API, `src/gallery/folder.ts`),

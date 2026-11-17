@@ -163,6 +163,31 @@ describe('HttpGalleryApi', () => {
     expect(JSON.parse(String(calls[3]?.init?.body))).toEqual({ type: 'readCamera' });
   });
 
+  it('lists the cameras every hub found and sends a decision (#298)', async () => {
+    const { fn, calls } = fakeFetch({
+      'GET https://api/v1/me': { name: 'Opa', role: 'user', hubs: [{ hubId: 'h1' }] },
+      'GET https://api/v1/hubs/h1/found-cameras': [
+        { bleAddress: 'AA:BB:CC:00:00:01', state: 'new', name: 'TC100_0001', lastSeen: 5 },
+      ],
+      'POST https://api/v1/hubs/h1/found-cameras/AA%3ABB%3ACC%3A00%3A00%3A01': {},
+    });
+    const api = new HttpGalleryApi('https://api', 't', fn);
+    expect(await api.foundCameras()).toEqual([
+      {
+        hubId: 'h1',
+        bleAddress: 'AA:BB:CC:00:00:01',
+        state: 'new',
+        name: 'TC100_0001',
+        lastSeen: 5,
+      },
+    ]);
+    await api.decideCamera('h1', 'AA:BB:CC:00:00:01', 'approved', 'Futterplatz');
+    expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
+      state: 'approved',
+      name: 'Futterplatz',
+    });
+  });
+
   it('renames a camera and uses the new name for the file names', async () => {
     const { fn, calls } = fakeFetch({
       'GET https://api/v1/cameras': [camera],
