@@ -85,11 +85,13 @@ typedef struct {
 size_t camera_ble_take_seen(camera_ble_seen_t *out, size_t max);
 
 /*
- * The cameras the hub may read (#299), as "AA:BB:CC:DD:EE:FF"; copied. Count
- * 0 = every camera (the default). Others are still heard for the list above.
- * Returns how many addresses were kept (at most 32).
+ * The cameras the hub may read (#299), as "AA:BB:CC:DD:EE:FF"; copied.
+ * `restrict_to_list` false = every camera (the default); true with no
+ * address = none. Others are still heard for the list above. Returns how
+ * many addresses were kept (at most 32).
  */
-size_t camera_ble_set_allowed(const char *const *addresses, size_t count);
+size_t camera_ble_set_allowed(bool restrict_to_list,
+                              const char *const *addresses, size_t count);
 
 /*
  * Stops scanning and ignores further camera advertisements. With

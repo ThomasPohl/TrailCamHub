@@ -795,12 +795,22 @@ void camera_ble_last_address(char *out, size_t size)
     snprintf(out, size, "%s", text);
 }
 
-size_t camera_ble_set_allowed(const char *const *addresses, size_t count)
+size_t camera_ble_set_allowed(bool restrict_to_list,
+                              const char *const *addresses, size_t count)
 {
+    // Before camera_ble_start() there is no lock and no scan yet.
     if (s_lock == NULL) {
-        return s_allowed.set(addresses, count);  // before camera_ble_start()
+        if (!restrict_to_list) {
+            s_allowed.clear();
+            return 0;
+        }
+        return s_allowed.set(addresses, count);
     }
     BleLock lock;
+    if (!restrict_to_list) {
+        s_allowed.clear();
+        return 0;
+    }
     return s_allowed.set(addresses, count);
 }
 

@@ -111,9 +111,11 @@ is dropped (`camera::found::merge`).
 The BLE addresses of the cameras approved in the gallery (#297, #299), one
 per line, from the last check-in whose response carried `approvedCameras`.
 When a cycle starts, a hub that syncs with the backend connects only to
-these cameras; the others are still heard for `found_cameras.csv`. No file
-(never told, or an old backend), an empty file, or another mode (web UI on
-the hub, WebDAV): every camera is read.
+these cameras; the others are still heard for `found_cameras.csv`. An empty
+file means none (the user stopped reading every camera). No file (never told,
+or an old backend), another mode (web UI on the hub, WebDAV), or a camera
+directory whose `camera.json` has no `bleAddress` yet (read before the
+update): every camera is read.
 
 ## `actions.csv`
 

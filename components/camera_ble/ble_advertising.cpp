@@ -188,6 +188,7 @@ void SeenList::clear()
 
 std::size_t AllowList::set(const char *const *addresses, std::size_t count)
 {
+    restricted_ = true;
     size_ = 0;
     for (std::size_t i = 0; i < count && size_ < kMax; ++i) {
         if (addresses[i] == nullptr || std::strlen(addresses[i]) != 17) {
@@ -199,9 +200,20 @@ std::size_t AllowList::set(const char *const *addresses, std::size_t count)
     return size_;
 }
 
+void AllowList::clear()
+{
+    restricted_ = false;
+    size_ = 0;
+}
+
+bool AllowList::restricted() const
+{
+    return restricted_;
+}
+
 bool AllowList::allows(const std::uint8_t address[6]) const
 {
-    if (size_ == 0) {
+    if (!restricted_) {
         return true;
     }
     char text[18];
