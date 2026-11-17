@@ -19,7 +19,9 @@ export function isNewer(latest: string | undefined, running: string | undefined)
   const b = parseVersion(running);
   if (!a || !b) return false;
   for (let i = 0; i < 3; i++) {
-    if (a[i] !== b[i]) return a[i] > b[i];
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
   }
   return false;
 }
