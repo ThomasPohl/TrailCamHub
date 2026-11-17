@@ -320,3 +320,24 @@ TEST_CASE("the check-in carries BLE addresses and the cameras heard (#296)")
     CHECK(build_checkin_json(empty) ==
           "{\"hubFirmware\":\"\",\"cameras\":[],\"discovered\":[]}");
 }
+
+TEST_CASE("the check-in response carries the approved cameras (#299)")
+{
+    CheckinResponse response;
+    REQUIRE(parse_checkin_response(
+        "{\"serverTime\":1800000000,\"approvedCameras\":"
+        "[\"F4:C1:56:06:ED:3B\",\"AA:BB:CC:00:00:01\"],\"cameras\":[]}",
+        response));
+    CHECK(response.has_approved_cameras);
+    CHECK(response.approved_cameras ==
+          std::vector<std::string>{"F4:C1:56:06:ED:3B", "AA:BB:CC:00:00:01"});
+
+    REQUIRE(parse_checkin_response(
+        "{\"serverTime\":1,\"approvedCameras\":[],\"cameras\":[]}", response));
+    CHECK(response.has_approved_cameras);
+    CHECK(response.approved_cameras.empty());
+
+    REQUIRE(
+        parse_checkin_response("{\"serverTime\":1,\"cameras\":[]}", response));
+    CHECK_FALSE(response.has_approved_cameras);
+}

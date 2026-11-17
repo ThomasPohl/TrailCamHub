@@ -192,6 +192,13 @@ bool add_found_cameras(const std::vector<camera::found::Entry> &heard,
                        std::int64_t now);
 std::vector<camera::found::Entry> load_found_cameras();
 
+// The BLE addresses approved in the gallery (#299), from the last check-in
+// that carried them; /sdcard/approved_cameras.txt, one per line. Saving an
+// unchanged list does not write. Loading returns false if there is no file
+// (never told): then every camera is read.
+bool save_approved_cameras(const std::vector<std::string> &addresses);
+bool load_approved_cameras(std::vector<std::string> &addresses);
+
 // Ids (sanitized directory names) of all cameras with a camera.json.
 std::vector<std::string> list_cameras();
 

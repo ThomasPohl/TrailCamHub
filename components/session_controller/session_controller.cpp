@@ -700,6 +700,45 @@ bool is_session_end(session::Event event)
            event == session::Event::session_no_card;
 }
 
+// The cameras approved in the gallery (#299). Only a hub that syncs with the
+// backend gets such a list; the other modes (web UI on the hub, WebDAV) read
+// every camera, as before (decision 16 Nov 2026). No list yet (never told):
+// every camera; a told, empty list: none.
+void apply_approved_cameras()
+{
+    std::vector<std::string> approved;
+    const bool backend = hub_config::uplink_ready(s_settings) &&
+                         hub_config::mode(s_settings).destination ==
+                             hub_config::Destination::backend;
+    bool restrict_to_list =
+        backend && camera::store::load_approved_cameras(approved);
+    // A camera read before the update has no BLE address yet, so the backend
+    // could not approve it: read every camera until each was read once.
+    if (restrict_to_list) {
+        for (const std::string &id : camera::store::list_cameras()) {
+            if (camera::store::camera_ble_address(id).empty()) {
+                ESP_LOGI(TAG,
+                         "Camera %s has no BLE address yet: reading every "
+                         "camera this cycle",
+                         id.c_str());
+                restrict_to_list = false;
+                break;
+            }
+        }
+    }
+    std::vector<const char *> addresses;
+    addresses.reserve(approved.size());
+    for (const std::string &a : approved) {
+        addresses.push_back(a.c_str());
+    }
+    const size_t kept = camera_ble_set_allowed(
+        restrict_to_list, addresses.data(), addresses.size());
+    if (restrict_to_list) {
+        ESP_LOGI(TAG, "Reading only the %u camera(s) approved in the gallery",
+                 (unsigned)kept);
+    }
+}
+
 // Reads the stored settings when a cycle starts; the uplink only runs if
 // they are complete.
 void load_settings_for_cycle()
@@ -734,6 +773,7 @@ void load_settings_for_cycle()
 #endif
     // An actions-only cycle ends like a listing: one camera, no sync.
     s_fsm.set_listing(s_list_only || s_actions_only);
+    apply_approved_cameras();
 }
 
 void controller_task(void *arg)

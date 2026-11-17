@@ -186,4 +186,49 @@ void SeenList::clear()
     size_ = 0;
 }
 
+std::size_t AllowList::set(const char *const *addresses, std::size_t count)
+{
+    restricted_ = true;
+    size_ = 0;
+    for (std::size_t i = 0; i < count && size_ < kMax; ++i) {
+        if (addresses[i] == nullptr || std::strlen(addresses[i]) != 17) {
+            continue;
+        }
+        std::memcpy(addresses_[size_], addresses[i], 18);
+        ++size_;
+    }
+    return size_;
+}
+
+void AllowList::clear()
+{
+    restricted_ = false;
+    size_ = 0;
+}
+
+bool AllowList::restricted() const
+{
+    return restricted_;
+}
+
+bool AllowList::allows(const std::uint8_t address[6]) const
+{
+    if (!restricted_) {
+        return true;
+    }
+    char text[18];
+    format_address(address, text);
+    for (std::size_t i = 0; i < size_; ++i) {
+        if (std::strcmp(addresses_[i], text) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::size_t AllowList::size() const
+{
+    return size_;
+}
+
 }  // namespace camera::ble

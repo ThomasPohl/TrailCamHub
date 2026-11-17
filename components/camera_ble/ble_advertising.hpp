@@ -94,4 +94,28 @@ class SeenList
     std::size_t size_ = 0;
 };
 
+// The cameras the hub may connect to (#299): BLE addresses as
+// format_address() prints them. Not restricted (the default, and while the
+// backend has never sent a list) = every camera, as before. Restricted with
+// no address = none: the user stopped reading every camera.
+class AllowList
+{
+  public:
+    static constexpr std::size_t kMax = 32;
+
+    // Replaces the list and restricts to it; addresses beyond kMax are
+    // dropped. Returns the number kept.
+    std::size_t set(const char *const *addresses, std::size_t count);
+    // Every camera again.
+    void clear();
+    bool restricted() const;
+    bool allows(const std::uint8_t address[6]) const;
+    std::size_t size() const;
+
+  private:
+    char addresses_[kMax][18] = {};
+    std::size_t size_ = 0;
+    bool restricted_ = false;
+};
+
 }  // namespace camera::ble

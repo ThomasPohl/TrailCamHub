@@ -117,6 +117,41 @@ std::string object_of(const std::string &json, const std::string &key)
     return json.substr(open, close - open + 1);
 }
 
+// The strings of the array stored under `key` (no escapes inside them, as
+// for BLE addresses); false if the key or the array is missing.
+bool array_strings(const std::string &json, const std::string &key,
+                   std::vector<std::string> &out)
+{
+    out.clear();
+    const std::size_t key_pos = json.find("\"" + key + "\"");
+    if (key_pos == std::string::npos) {
+        return false;
+    }
+    const std::size_t open =
+        json.find_first_not_of(" \t\r\n:", key_pos + key.size() + 2);
+    if (open == std::string::npos || json[open] != '[') {
+        return false;
+    }
+    const std::size_t close = json.find(']', open);
+    if (close == std::string::npos) {
+        return false;
+    }
+    std::size_t pos = open + 1;
+    while (true) {
+        const std::size_t begin = json.find('"', pos);
+        if (begin == std::string::npos || begin > close) {
+            break;
+        }
+        const std::size_t end = json.find('"', begin + 1);
+        if (end == std::string::npos || end > close) {
+            break;
+        }
+        out.push_back(json.substr(begin + 1, end - begin - 1));
+        pos = end + 1;
+    }
+    return true;
+}
+
 // Reads a boolean field; leaves `out` unchanged if it is missing.
 void find_bool(const std::string &json, const std::string &key, bool &out)
 {
@@ -398,6 +433,9 @@ bool parse_checkin_response(const std::string &json, CheckinResponse &out)
             out.checkin_interval_s = -1;
         }
     }
+
+    out.has_approved_cameras =
+        array_strings(json, "approvedCameras", out.approved_cameras);
 
     for (const std::string &camera_json : array_objects(json, "cameras")) {
         CameraCheckin camera;
