@@ -74,6 +74,26 @@ export function hubFaults(
     });
   }
 
+  // The hub's own report of a failed or rolled-back update (#149).
+  const lastReport = [...firmwareChanges]
+    .filter((c) => c.result !== undefined)
+    .sort((a, b) => b.at - a.at)[0];
+  if (
+    lastReport &&
+    (lastReport.result === 'failed' || lastReport.result === 'rolledBack') &&
+    lastReport.at >= now - FAILED_WINDOW_S
+  ) {
+    faults.push({
+      kind: 'firmwareUpdateFailed',
+      level: 'warning',
+      value: lastReport.result === 'rolledBack' ? 1 : 0,
+      detail:
+        `${lastReport.from} → ${lastReport.to}` +
+        (lastReport.reason ? `: ${lastReport.reason}` : ''),
+      since: lastReport.at,
+    });
+  }
+
   if (hub.lastSeen <= 0) {
     faults.push({ kind: 'hubNeverSeen', level: 'warning' });
   } else {

@@ -22,6 +22,8 @@ import type {
   CheckinResponse,
   CommandRecord,
   CommandResult,
+  FirmwareChange,
+  FirmwareUpdateResult,
   HubRecord,
   HubHistory,
   HubSchedule,
@@ -762,6 +764,32 @@ async function recordSample(deps: Deps, owner: SampleOwner, sample: Sample): Pro
   await deps.store.addSample(owner, sample);
 }
 
+const UPDATE_RESULTS: readonly FirmwareUpdateResult[] = ['installed', 'rolledBack', 'failed'];
+
+/**
+ * The hub's update record (#149) as a firmware change; undefined if absent
+ * or malformed. The hub's time if plausible (its clock may not have been set
+ * at boot), else the check-in's.
+ */
+export function parseFirmwareUpdate(raw: unknown, now: number): FirmwareChange | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const from = optionalString(r.from)?.slice(0, 40);
+  const to = optionalString(r.to)?.slice(0, 40);
+  const result = UPDATE_RESULTS.find((x) => x === r.result);
+  if (!from || !to || !result) return undefined;
+  const reason = optionalString(r.reason)?.slice(0, 200);
+  const at = optionalNumber(r.at);
+  const change: FirmwareChange = {
+    at: at !== undefined && at <= now + MAX_CLOCK_SKEW_S && at >= now - MAX_READ_AGE_S ? at : now,
+    from,
+    to,
+    result,
+  };
+  if (reason) change.reason = reason;
+  return change;
+}
+
 /** When the hub read the camera: its own timestamp if plausible, else now. */
 function readTime(readAt: unknown, now: number): number {
   const t = optionalNumber(readAt);
@@ -775,9 +803,13 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
   const now = deps.now();
   const discovered = parseDiscovered(body.discovered, now, readTime);
 
-  // Another firmware than last time: an update, a rollback or a USB flash (#149).
+  // The hub's own record of its last update (#149), and another firmware
+  // than last time: an update, a rollback or a USB flash.
   const firmware = optionalString(body.hubFirmware);
-  if (firmware && hub.firmware && firmware !== hub.firmware) {
+  const update = parseFirmwareUpdate(body.firmwareUpdate, now);
+  if (update) await deps.store.addFirmwareChange(hub.hubId, update);
+  const reportedByHub = update?.result === 'installed' && update.to === firmware;
+  if (firmware && hub.firmware && firmware !== hub.firmware && !reportedByHub) {
     await deps.store.addFirmwareChange(hub.hubId, { at: now, from: hub.firmware, to: firmware });
   }
   await deps.store.updateHub(

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hubFaults } from './faults';
 import { createAppUser, revokeAppUser } from './admin';
 import { handleRequest } from './api';
 import type { ApiRequest, ApiResponse } from './http';
@@ -378,6 +379,58 @@ describe('firmware changes (#149)', () => {
       'v0.1.12>v0.1.13',
     ]);
     expect(hub?.faults.map((f) => f.kind)).toContain('firmwareDowngrade');
+  });
+});
+
+describe("the hub's own update record (#149)", () => {
+  it('stores each report once and warns about a rollback', async () => {
+    const world = await galleryWorld();
+    let now = NOW;
+    world.deps.now = () => now;
+    const checkin = (hubFirmware: string, firmwareUpdate?: unknown) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, {
+          hubFirmware,
+          firmwareUpdate,
+          cameras: [],
+        }),
+        world.deps,
+      );
+    await checkin('v0.1.12');
+    now += 60;
+    // Installed and reported by the hub: one entry, not two.
+    await checkin('v0.1.13', { from: 'v0.1.12', to: 'v0.1.13', result: 'installed', at: now - 5 });
+    now += 60;
+    // A rollback without a clock: the check-in's time.
+    await checkin('v0.1.13', {
+      from: 'v0.1.13',
+      to: 'v0.1.14',
+      result: 'rolledBack',
+      reason: 'no check-in',
+    });
+    now += 60;
+    // Malformed reports are ignored.
+    await checkin('v0.1.13', { from: 'v0.1.13', result: 'installed' });
+    await checkin('v0.1.13', { from: 'a', to: 'b', result: 'exploded' });
+
+    const changes = await world.deps.store.listFirmwareChanges(HUB_ID, 10);
+    expect(changes).toEqual([
+      {
+        at: NOW + 120,
+        from: 'v0.1.13',
+        to: 'v0.1.14',
+        result: 'rolledBack',
+        reason: 'no check-in',
+      },
+      { at: NOW + 55, from: 'v0.1.12', to: 'v0.1.13', result: 'installed' },
+    ]);
+    const hub = await world.deps.store.getHub(HUB_ID);
+    if (!hub) throw new Error('no hub');
+    const faults = hubFaults(hub, [], now, changes);
+    expect(faults.find((f) => f.kind === 'firmwareUpdateFailed')).toMatchObject({
+      value: 1,
+      detail: 'v0.1.13 → v0.1.14: no check-in',
+    });
   });
 });
 

@@ -259,3 +259,64 @@ TEST_CASE("a version that failed too often waits a day")
         CHECK(std::string(decision_text(d)).size() > 0);
     }
 }
+
+TEST_CASE("ota: update record (#149)")
+{
+    using ota::UpdateRecord;
+    using ota::UpdateResult;
+    UpdateRecord pending;
+    pending.result = UpdateResult::pending;
+    pending.from = "v1.2.0";
+    pending.to = "v1.3.0";
+    pending.at = 1763300000;
+
+    SUBCASE("encode and decode")
+    {
+        UpdateRecord failed = pending;
+        failed.result = UpdateResult::failed;
+        failed.reason = "image check | sha256";
+        const UpdateRecord back =
+            ota::decode_update_record(ota::encode(failed));
+        CHECK(back.result == UpdateResult::failed);
+        CHECK(back.from == "v1.2.0");
+        CHECK(back.to == "v1.3.0");
+        CHECK(back.at == 1763300000);
+        CHECK(back.reason == "image check | sha256");
+        CHECK_FALSE(back.reported);
+        CHECK(ota::encode(UpdateRecord{}).empty());
+        CHECK(ota::decode_update_record("").result == UpdateResult::none);
+        CHECK(ota::decode_update_record("1|weird|a|b|1|0|").result ==
+              UpdateResult::none);
+        CHECK(ota::decode_update_record("1|failed|a|b|x|0|").result ==
+              UpdateResult::none);
+    }
+
+    SUBCASE("the new firmware confirms itself")
+    {
+        UpdateRecord record = pending;
+        CHECK_FALSE(ota::update_record_at_boot(record, "v1.3.0", "", 5));
+        CHECK_FALSE(ota::update_record_reportable(record));
+        CHECK(ota::update_record_confirmed(record, "v1.3.0", 1763400000));
+        CHECK(record.result == UpdateResult::installed);
+        CHECK(record.at == 1763400000);
+        CHECK(ota::update_record_reportable(record));
+        CHECK(std::string(ota::update_result_name(record.result)) ==
+              "installed");
+        // Confirming again changes nothing.
+        CHECK_FALSE(ota::update_record_confirmed(record, "v1.3.0", 1));
+    }
+
+    SUBCASE("the bootloader went back to the old firmware")
+    {
+        UpdateRecord record = pending;
+        CHECK(ota::update_record_at_boot(record, "v1.2.0", "v1.3.0", 0));
+        CHECK(record.result == UpdateResult::rolled_back);
+        CHECK(std::string(ota::update_result_name(record.result)) ==
+              "rolledBack");
+        CHECK(ota::update_record_reportable(record));
+        CHECK_FALSE(ota::update_record_confirmed(record, "v1.2.0", 1));
+        record.reported = true;
+        CHECK_FALSE(ota::update_record_reportable(record));
+        CHECK(ota::decode_update_record(ota::encode(record)) == record);
+    }
+}

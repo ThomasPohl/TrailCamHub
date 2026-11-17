@@ -133,4 +133,44 @@ const char *decision_text(Decision decision);
 // Lowercase hex of a SHA-256 digest.
 std::string to_hex(const std::uint8_t *digest, std::size_t length);
 
+// The hub's record of its last firmware update (#149), kept in NVS and sent
+// once in a check-in. Written as `pending` before the restart into the new
+// firmware and completed after it: `installed` when the new firmware
+// confirmed itself (a successful check-in), `rolled_back` when the
+// bootloader went back to the old one. `failed` when the download or the
+// image check failed. Times are Unix seconds from the hub's clock, 0 if it
+// was not set yet.
+enum class UpdateResult { none, pending, installed, rolled_back, failed };
+
+struct UpdateRecord {
+    UpdateResult result = UpdateResult::none;
+    std::string from;
+    std::string to;
+    std::string reason;
+    std::int64_t at = 0;
+    bool reported = false;  // the backend has it
+};
+
+bool operator==(const UpdateRecord &a, const UpdateRecord &b);
+
+// "installed", "rolledBack", …: the names in the check-in.
+const char *update_result_name(UpdateResult result);
+
+// One line for NVS; decode() of anything else gives a `none` record.
+std::string encode(const UpdateRecord &record);
+UpdateRecord decode_update_record(const std::string &text);
+
+// At boot: a pending update whose old firmware runs again (or whose new one
+// the bootloader marked invalid) was rolled back. True if `record` changed.
+bool update_record_at_boot(UpdateRecord &record, const std::string &running,
+                           const std::string &rolled_back, std::int64_t now);
+
+// After the new firmware confirmed itself. True if `record` changed.
+bool update_record_confirmed(UpdateRecord &record, const std::string &running,
+                             std::int64_t now);
+
+// Whether the record goes into the next check-in: complete and not
+// reported yet.
+bool update_record_reportable(const UpdateRecord &record);
+
 }  // namespace ota

@@ -125,6 +125,7 @@ export interface Fault {
     | 'sdNearlyFull'
     | 'requestsFailed'
     | 'firmwareDowngrade'
+    | 'firmwareUpdateFailed'
     | 'cameraNotRead';
   level: 'error' | 'warning';
   camId?: string;
@@ -149,7 +150,14 @@ export interface AdminHub {
   /** Errors first (#265). */
   faults: Fault[];
   /** The last firmware changes, newest first (#149); absent on older backends. */
-  firmwareChanges?: Array<{ at: number; from: string; to: string }>;
+  /** Newest first; `result` only where the hub reported the update itself (#149). */
+  firmwareChanges?: Array<{
+    at: number;
+    from: string;
+    to: string;
+    result?: 'installed' | 'rolledBack' | 'failed';
+    reason?: string;
+  }>;
 }
 
 export interface GalleryApi {

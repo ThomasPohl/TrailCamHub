@@ -247,6 +247,19 @@ std::string build_checkin_json(const CheckinRequest &request)
         }
         out += schedule.sleeps ? ",\"sleeps\":true}" : ",\"sleeps\":false}";
     }
+    const FirmwareUpdateReport &update = request.firmware_update;
+    if (update.present) {
+        out += ",\"firmwareUpdate\":{\"from\":\"" + json_escape(update.from) +
+               "\",\"to\":\"" + json_escape(update.to) + "\",\"result\":\"" +
+               json_escape(update.result) + "\"";
+        if (!update.reason.empty()) {
+            out += ",\"reason\":\"" + json_escape(update.reason) + "\"";
+        }
+        if (update.at > 0) {
+            out += ",\"at\":" + std::to_string(update.at);
+        }
+        out += "}";
+    }
     const MemoryReport &memory = request.memory;
     if (memory.present) {
         out += ",\"memory\":{\"cycle\":" + std::to_string(memory.cycle) +

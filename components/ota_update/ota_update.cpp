@@ -51,6 +51,7 @@ const char *kCheckedAtKey = "checked_at";
 const char *kFailVersionKey = "fail_ver";
 const char *kFailCountKey = "fail_n";
 const char *kFailAtKey = "fail_at";
+const char *kUpdateRecordKey = "upd_rec";
 
 std::atomic<bool> s_restart_pending{false};
 std::atomic<bool> s_force_check{false};
@@ -237,6 +238,39 @@ void store_attempts(const Attempts &attempts)
         &attempts);
 }
 
+UpdateRecord load_update_record()
+{
+    nvs_handle_t handle;
+    if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) {
+        return UpdateRecord{};
+    }
+    char text[192] = {};
+    size_t length = sizeof(text);
+    const bool found =
+        nvs_get_str(handle, kUpdateRecordKey, text, &length) == ESP_OK;
+    nvs_close(handle);
+    return found ? decode_update_record(text) : UpdateRecord{};
+}
+
+void store_update_record(const UpdateRecord &record)
+{
+    const std::string text = encode(record).substr(0, 190);
+    store(
+        [](nvs_handle_t handle, const void *data) {
+            nvs_set_str(handle, kUpdateRecordKey,
+                        static_cast<const std::string *>(data)->c_str());
+        },
+        &text);
+}
+
+// The clock may not be set yet at boot: 0 then (the backend uses the
+// check-in time).
+std::int64_t record_time()
+{
+    const std::int64_t now = now_unix();
+    return now > 1700000000 ? now : 0;
+}
+
 Policy policy()
 {
     Policy policy;
@@ -413,6 +447,13 @@ void log_boot_state()
     if (!rolled_back.empty()) {
         ESP_LOGW(TAG, "Firmware %s was rolled back", rolled_back.c_str());
     }
+    UpdateRecord record = load_update_record();
+    if (update_record_at_boot(record, running_version(), rolled_back,
+                              record_time())) {
+        ESP_LOGW(TAG, "Update %s -> %s rolled back: %s", record.from.c_str(),
+                 record.to.c_str(), record.reason.c_str());
+        store_update_record(record);
+    }
 }
 
 void confirm_running()
@@ -431,6 +472,11 @@ void confirm_running()
         if (error == ESP_OK) {
             ESP_LOGI(TAG, "Firmware %s confirmed after a successful check-in",
                      running_version().c_str());
+            UpdateRecord record = load_update_record();
+            if (update_record_confirmed(record, running_version(),
+                                        record_time())) {
+                store_update_record(record);
+            }
         } else {
             ESP_LOGE(TAG, "Could not confirm the firmware: %s",
                      esp_err_to_name(error));
@@ -633,6 +679,13 @@ void check_for_update(const Conditions &conditions)
     if (install(offer, error) != ESP_OK) {
         record_failure(attempts, offer.version, now);
         store_attempts(attempts);
+        UpdateRecord failed;
+        failed.result = UpdateResult::failed;
+        failed.from = running;
+        failed.to = offer.version;
+        failed.reason = error;
+        failed.at = record_time();
+        store_update_record(failed);
         ESP_LOGE(TAG, "Update to %s failed (%u in a row): %s",
                  offer.version.c_str(), (unsigned)attempts.failures,
                  error.c_str());
@@ -640,6 +693,12 @@ void check_for_update(const Conditions &conditions)
         return;
     }
     store_attempts(Attempts{});
+    UpdateRecord pending;
+    pending.result = UpdateResult::pending;
+    pending.from = running;
+    pending.to = offer.version;
+    pending.at = record_time();
+    store_update_record(pending);
     set_last_check_text("release " + offer.version +
                         " installed; restarting after the cycle");
     s_restart_pending = true;
@@ -648,6 +707,21 @@ void check_for_update(const Conditions &conditions)
 void force_check()
 {
     s_force_check = true;
+}
+
+bool update_report(UpdateRecord &record)
+{
+    record = load_update_record();
+    return update_record_reportable(record);
+}
+
+void mark_update_reported(const UpdateRecord &sent)
+{
+    UpdateRecord record = load_update_record();
+    if (record == sent && !record.reported) {
+        record.reported = true;
+        store_update_record(record);
+    }
 }
 
 bool restart_pending()

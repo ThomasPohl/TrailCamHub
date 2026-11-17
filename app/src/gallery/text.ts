@@ -125,6 +125,11 @@ export function faultText(fault: Fault, camera: string | undefined, nowSeconds: 
         (fault.since ? `, seit ${clockTime(fault.since, nowSeconds)}` : '') +
         ' – Update zurückgerollt?'
       );
+    case 'firmwareUpdateFailed':
+      return (
+        `Firmware-Update ${fault.value === 1 ? 'zurückgerollt' : 'fehlgeschlagen'} (${fault.detail ?? '?'})` +
+        (fault.since ? `, ${clockTime(fault.since, nowSeconds)}` : '')
+      );
     case 'requestsFailed': {
       const n = fault.value ?? 1;
       return (

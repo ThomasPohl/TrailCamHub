@@ -9,6 +9,13 @@ import type { AdminHub, GalleryApi, HubHistory, Sample } from './types';
  * app as the gallery; users and hub links stay with `npm run add-user`.
  */
 
+/** The hub's own report of an update (#149). */
+const UPDATE_RESULT = {
+  installed: 'installiert',
+  rolledBack: 'zurückgerollt',
+  failed: 'fehlgeschlagen',
+} as const;
+
 const ORIGIN: Record<ScheduleOrigin, string> = {
   'built-in': 'Standard',
   local: 'am Hub eingestellt',
@@ -126,6 +133,8 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
                     {hub.firmwareChanges.map((c) => (
                       <li key={c.at}>
                         {c.from} → {c.to} ({clockTime(c.at, t)})
+                        {c.result && `, ${UPDATE_RESULT[c.result]}`}
+                        {c.reason && `: ${c.reason}`}
                       </li>
                     ))}
                   </ul>
