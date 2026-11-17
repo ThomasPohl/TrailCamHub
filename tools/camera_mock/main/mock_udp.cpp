@@ -186,6 +186,12 @@ std::string status()
                std::to_string(entry.second);
     }
     out += "\n";
+    out += "actions: photos " + std::to_string(stats.photos) + ", deletions " +
+           std::to_string(stats.deletions) + ", formats " +
+           std::to_string(stats.formats) +
+           (s_camera->recording() ? ", recording a video" : "") +
+           (s_camera->formatted() ? ", card formatted (empty list)" : "") +
+           "\n";
     return out;
 }
 

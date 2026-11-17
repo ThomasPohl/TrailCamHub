@@ -2,7 +2,9 @@
 
 // The camera side of a UDP session (stage 1 of #122): discovery, PRE_LOGIN,
 // the reliable DATA/ACK layer and the ARTEMIS commands login (0), device
-// info (512), media list (768) and heartbeat (525). Answers are replayed
+// info (512), media list (768) and heartbeat (525); since stage 3 also the
+// camera actions photo (641), video start/stop (643/644), delete (773) and
+// format (518). Answers are replayed
 // from captures (capture_fixtures.hpp). Only the low-level primitives are
 // shared with the hub: AES-128, Base64 and the parsing of the ARTEMIS
 // request header (components/camera_link/artemis_*).
@@ -68,6 +70,10 @@ struct Stats {
     unsigned alive_sent = 0;
     unsigned alive_acks = 0;
     unsigned responses = 0;
+    // Camera actions answered (#122 stage 3).
+    unsigned photos = 0;
+    unsigned deletions = 0;
+    unsigned formats = 0;
     // Requests by cmdId.
     std::map<int, unsigned> requests;
 };
@@ -107,6 +113,16 @@ class Camera
     {
         return tx_.size();
     }
+    // A video started with 643 and not stopped yet.
+    bool recording() const
+    {
+        return recording_;
+    }
+    // The card was erased with 518: the media list is empty from then on.
+    bool formatted() const
+    {
+        return formatted_;
+    }
     const Stats &stats() const
     {
         return stats_;
@@ -129,6 +145,11 @@ class Camera
                         std::int64_t now_ms);
     void respond(std::uint32_t app_sequence, const std::string &base64,
                  std::size_t padding, std::int64_t now_ms);
+    // Encrypts and answers a JSON the mock builds itself (no capture).
+    void respond_json(std::uint32_t app_sequence, const std::string &json,
+                      std::int64_t now_ms);
+    void handle_action(std::int64_t cmd_id, const std::string &request,
+                       std::uint32_t app_sequence, std::int64_t now_ms);
     void queue_data(const std::uint8_t *payload, std::size_t size,
                     std::int64_t now_ms);
     void flush(std::int64_t now_ms);
@@ -151,7 +172,17 @@ class Camera
     std::vector<std::uint8_t> request_;
     std::size_t request_size_ = 0;
     Stats stats_;
+    bool recording_ = false;
+    bool formatted_ = false;
+    // Recordings deleted with 773, as "fileType/dirNum/mediaNum".
+    std::vector<std::string> deleted_;
 };
+
+// The answer to a camera action (#122 stage 3). No capture holds one: the
+// shape follows the other answers (result field, errorMsg, result, cmdId)
+// and docs/camera-actions.md (snapRet, recordRet, delRet, formatRet; 644
+// has only result). `field` empty = only result.
+std::string action_response(int cmd_id, const char *field, int value);
 
 // Builds an ARTEMIS response (MsgType 3) the way the camera frames it:
 // header, Base64, then `padding` zero bytes, all counted in PayloadLen.
