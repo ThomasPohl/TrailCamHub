@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
+import { isNewer } from './release';
 import { clockTime, faultText } from './text';
 import type { AdminHub, GalleryApi, HubHistory, Sample } from './types';
 
@@ -47,6 +48,11 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [latest, setLatest] = useState<string>();
+
+  useEffect(() => {
+    api.latestFirmware().then(setLatest, () => setLatest(undefined));
+  }, [api]);
 
   const load = useCallback(async () => {
     try {
@@ -124,7 +130,15 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             <dt>Akku</dt>
             <dd>{hub.batPercent !== undefined ? `${hub.batPercent} %` : '–'}</dd>
             <dt>Firmware</dt>
-            <dd>{hub.firmware ?? '–'}</dd>
+            <dd>
+              {hub.firmware ?? '–'}
+              {isNewer(latest, hub.firmware) && (
+                <span className="g-update-available">
+                  {' '}
+                  · Update verfügbar: {latest} (installiert der Hub selbst beim nächsten Abruf)
+                </span>
+              )}
+            </dd>
             {hub.firmwareChanges && hub.firmwareChanges.length > 0 && (
               <>
                 <dt>Firmware-Wechsel</dt>

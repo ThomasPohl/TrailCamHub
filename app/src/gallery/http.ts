@@ -1,5 +1,6 @@
 import { ApiError } from '../api/http';
 import type { Camera, MediaItem } from '../api/types';
+import { fetchLatestRelease } from './release';
 import { cameraFile, videoFileName } from './text';
 import type { ScheduleConfig } from '../api/types';
 import type {
@@ -294,6 +295,10 @@ export class HttpGalleryApi implements GalleryApi {
   async me(): Promise<Me> {
     const me = await this.request<{ name: string; role: string }>('GET', '/v1/me');
     return { name: me.name, admin: me.role === 'admin' };
+  }
+
+  latestFirmware(): Promise<string | undefined> {
+    return fetchLatestRelease(this.fetchFn);
   }
 
   adminHubs(): Promise<AdminHub[]> {

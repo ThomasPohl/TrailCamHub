@@ -933,3 +933,8 @@ body {
   align-items: center;
   gap: 4px;
 }
+
+.g-update-available {
+  color: var(--g-accent);
+  font-weight: 600;
+}
