@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '../api/http';
 import { AdminView } from './AdminView';
 import { FoundCameras } from './FoundCameras';
+import { PencilIcon, PlayIcon, SaveIcon, SearchIcon, TrashIcon, UndoIcon } from './Icons';
 import { Viewer } from './Viewer';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
@@ -84,10 +85,12 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [adminView, setAdminView] = useState(false);
   const [faultCount, setFaultCount] = useState(0);
   // Asking before a camera is hidden (#273).
-  const [hideAsk, setHideAsk] = useState(false);
+  const [hideAsk, setHideAsk] = useState<{ camId: string; name: string }>();
+  // The tab "Kameras verwalten" instead of a camera's recordings.
+  const [manage, setManage] = useState(false);
   // Cameras the hub heard (#298) and asking before one is no longer read.
   const [found, setFound] = useState<FoundCamera[]>([]);
-  const [stopAsk, setStopAsk] = useState(false);
+  const [stopAsk, setStopAsk] = useState<FoundCamera>();
   // A recording shown large, with its video if asked for (#306).
   const [viewing, setViewing] = useState<{ recording: Recording; video: boolean }>();
   const saving = useRef(false);
@@ -139,10 +142,6 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const cameraName = status?.cameras.find((c) => c.camId === camId)?.name ?? 'Kamera';
   const shownCameras = status?.cameras.filter((c) => !c.hidden) ?? [];
   const currentCamera = status?.cameras.find((c) => c.camId === camId);
-  const hiddenCameras = status?.cameras.filter((c) => c.hidden) ?? [];
-
-  // The current camera's entry in the hub's list; absent for older firmware.
-  const foundCurrent = found.find((f) => f.camId === camId && f.state === 'approved');
 
   const decide = async (camera: FoundCamera, state: 'approved' | 'excluded', name?: string) => {
     setBusy(true);
@@ -310,24 +309,20 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const chosen = items?.filter((r) => selected.has(r.mediaId) && selectable(r)) ?? [];
   const chosenVideos = chosen.filter(videoWanted);
 
+  const newFound = found.filter((f) => f.state === 'new').length;
+  const switchCamera = (id: string) => {
+    setManage(false);
+    if (id !== camId) {
+      setCamId(id);
+      setItems(undefined);
+      setSelected(new Set());
+    }
+  };
+
   return (
     <div className="gallery">
       <header className="g-header">
         <h1>Wildkamera</h1>
-        {isAdmin && (
-          <button
-            type="button"
-            className="g-btn g-btn--plain g-header__switch"
-            aria-pressed={adminView}
-            onClick={() => setAdminView((on) => !on)}
-          >
-            {adminView
-              ? 'Zur Galerie'
-              : faultCount > 0
-                ? `Verwaltung (${faultCount})`
-                : 'Verwaltung'}
-          </button>
-        )}
         {status && (
           <p className="g-status">
             {status.lastContact > 0
@@ -338,12 +333,26 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             {status.hubBatPercent !== undefined && ` · Akku des Hubs ${status.hubBatPercent} %`}
           </p>
         )}
+        {isAdmin && (
+          <button
+            type="button"
+            className="g-btn g-btn--quiet g-header__switch"
+            aria-pressed={adminView}
+            onClick={() => setAdminView((on) => !on)}
+          >
+            {adminView
+              ? 'Zur Galerie'
+              : faultCount > 0
+                ? `Verwaltung (${faultCount})`
+                : 'Verwaltung'}
+          </button>
+        )}
       </header>
 
       {adminView ? (
         <AdminView api={api} now={now} />
       ) : (
-        <>
+        <main className="g-main">
           {api.isDemo && (
             <p className="g-banner" role="note">
               Vorführung: Beispielbilder, kein echter Hub. Der Hub „meldet sich“ hier alle 20
@@ -359,7 +368,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
 
           {notice && (
             <p className="g-notice" role="status">
-              {notice}
+              <span>{notice}</span>
               <button type="button" className="g-link" onClick={() => setNotice(undefined)}>
                 Ausblenden
               </button>
@@ -379,69 +388,179 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </div>
           )}
 
-          {shownCameras.length > 1 && (
-            <nav className="g-tabs" aria-label="Kameras">
+          {status && (
+            <div className="g-tabs" role="tablist" aria-label="Kameras">
               {shownCameras.map((c) => (
                 <button
                   key={c.camId}
                   type="button"
-                  className={c.camId === camId ? 'g-tab g-tab--on' : 'g-tab'}
-                  aria-pressed={c.camId === camId}
-                  onClick={() => {
-                    setCamId(c.camId);
-                    setItems(undefined);
-                    setSelected(new Set());
-                  }}
+                  role="tab"
+                  aria-selected={!manage && c.camId === camId}
+                  className="g-tab"
+                  onClick={() => switchCamera(c.camId)}
                 >
                   {c.name}
                 </button>
               ))}
-            </nav>
-          )}
-
-          {status && camId && (
-            <CameraHeading
-              key={camId}
-              name={cameraName}
-              disabled={busy}
-              onRename={(name) => renameCamera(camId, name)}
-              onHide={() => setHideAsk(true)}
-              onStop={foundCurrent ? () => setStopAsk(true) : undefined}
-            />
-          )}
-          {status && camId && currentCamera && (
-            <CameraState camera={currentCamera} hubLastContact={status.lastContact} now={t} />
-          )}
-
-          {items && newOnes.length > 0 && (
-            <div className="g-toolbar">
               <button
                 type="button"
-                className="g-btn g-btn--danger"
-                disabled={busy}
-                onClick={() =>
-                  setConfirm({
-                    question:
-                      newOnes.length === 1
-                        ? '1 neue Aufnahme löschen?'
-                        : `Alle ${newOnes.length} neuen Aufnahmen löschen?`,
-                    mediaIds: newOnes.flatMap((r) => r.mediaIds),
-                  })
-                }
+                role="tab"
+                aria-selected={manage}
+                className="g-tab g-tab--manage"
+                onClick={() => setManage(true)}
               >
-                Alle neuen löschen ({newOnes.length})
+                Kameras verwalten
+                {newFound > 0 && (
+                  <span className="g-count" aria-label={`${newFound} neu`}>
+                    {newFound}
+                  </span>
+                )}
               </button>
             </div>
           )}
 
-          {camId && chosen.length > 0 && (
+          {status && manage && (
+            <section className="g-panel g-manage" aria-label="Kameras verwalten">
+              <div className="g-section-head">
+                <h2>Ihre Kameras</h2>
+                <button
+                  type="button"
+                  className="g-btn g-btn--quiet"
+                  disabled={busy}
+                  onClick={() => void requestScan()}
+                >
+                  <SearchIcon /> Nach Kameras suchen
+                </button>
+              </div>
+              {status.cameras.length === 0 ? (
+                <p className="g-hint">Der Hub hat noch keine Kamera gelesen.</p>
+              ) : (
+                <table className="g-table g-cams">
+                  <thead>
+                    <tr>
+                      <th scope="col">Kamera</th>
+                      <th scope="col">Zustand</th>
+                      <th scope="col">
+                        <span className="g-visually-hidden">Aktionen</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {status.cameras.map((c) => {
+                      const entry = found.find((f) => f.camId === c.camId);
+                      const state = [
+                        c.hidden ? 'ausgeblendet' : 'in der Galerie',
+                        entry?.state === 'excluded'
+                          ? 'wird nicht abgefragt'
+                          : entry
+                            ? 'wird abgefragt'
+                            : '',
+                      ].filter(Boolean);
+                      return (
+                        <tr key={c.camId}>
+                          <th scope="row">{c.name}</th>
+                          <td>{state.join(' · ')}</td>
+                          <td>
+                            <div className="g-cams__actions">
+                              {c.hidden ? (
+                                <button
+                                  type="button"
+                                  className="g-btn g-btn--quiet"
+                                  disabled={busy}
+                                  onClick={() => void setHidden(c.camId, c.name, false)}
+                                >
+                                  Wieder anzeigen
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="g-btn g-btn--quiet"
+                                  disabled={busy}
+                                  onClick={() => setHideAsk({ camId: c.camId, name: c.name })}
+                                >
+                                  Ausblenden
+                                </button>
+                              )}
+                              {entry?.state === 'approved' && (
+                                <button
+                                  type="button"
+                                  className="g-btn g-btn--quiet"
+                                  disabled={busy}
+                                  onClick={() => setStopAsk({ ...entry, name: c.name })}
+                                >
+                                  Nicht mehr abfragen
+                                </button>
+                              )}
+                              {entry?.state === 'excluded' && (
+                                <button
+                                  type="button"
+                                  className="g-btn g-btn--quiet"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void decide({ ...entry, name: c.name }, 'approved')
+                                  }
+                                >
+                                  Doch aufnehmen
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+              <FoundCameras
+                found={found.filter((f) => !f.camId)}
+                busy={busy}
+                now={t}
+                onDecide={(c, st, n) => void decide(c, st, n)}
+              />
+            </section>
+          )}
+
+          {!manage && status && camId && (
+            <div className="g-camera-bar">
+              <CameraHeading
+                key={camId}
+                name={cameraName}
+                disabled={busy}
+                onRename={(name) => renameCamera(camId, name)}
+              />
+              {currentCamera && <CameraFacts camera={currentCamera} now={t} />}
+              {items && newOnes.length > 0 && (
+                <button
+                  type="button"
+                  className="g-btn g-btn--quiet g-btn--danger-text g-camera-bar__end"
+                  disabled={busy}
+                  onClick={() =>
+                    setConfirm({
+                      question:
+                        newOnes.length === 1
+                          ? '1 neue Aufnahme löschen?'
+                          : `Alle ${newOnes.length} neuen Aufnahmen löschen?`,
+                      mediaIds: newOnes.flatMap((r) => r.mediaIds),
+                    })
+                  }
+                >
+                  <TrashIcon /> Alle neuen löschen ({newOnes.length})
+                </button>
+              )}
+            </div>
+          )}
+          {!manage && status && currentCamera && (
+            <CameraHints camera={currentCamera} hubLastContact={status.lastContact} />
+          )}
+
+          {!manage && camId && chosen.length > 0 && (
             <div className="g-selbar" role="region" aria-label="Auswahl">
               <p>
                 {chosen.length === 1
                   ? '1 Aufnahme ausgewählt'
                   : `${chosen.length} Aufnahmen ausgewählt`}
               </p>
-              <div className="g-card__actions">
+              <div className="g-selbar__actions">
                 {chosenVideos.length > 0 && (
                   <button
                     type="button"
@@ -478,7 +597,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                 </button>
                 <button
                   type="button"
-                  className="g-btn g-btn--plain"
+                  className="g-btn g-btn--quiet"
                   onClick={() => setSelected(new Set())}
                 >
                   Auswahl aufheben
@@ -487,106 +606,112 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </div>
           )}
 
-          {items === undefined && !loadError && <p className="g-hint">Bilder werden geladen …</p>}
-          {items && items.length === 0 && (
-            <p className="g-hint">
+          {!manage && items === undefined && !loadError && (
+            <p className="g-hint">Bilder werden geladen …</p>
+          )}
+          {!manage && items && items.length === 0 && (
+            <p className="g-empty">
               Keine Aufnahmen. Neue Bilder erscheinen nach dem nächsten Kontakt.
             </p>
           )}
 
-          {items && items.length > 0 && camId && (
+          {!manage && items && items.length > 0 && camId && (
             <ul className="g-grid" aria-label="Aufnahmen">
               {items.map((r) => (
                 <li
                   key={r.mediaId}
                   className={`g-card g-card--${r.state}${chosen.includes(r) ? ' g-card--chosen' : ''}`}
                 >
-                  {selectable(r) && (
-                    <label className="g-card__select">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(r.mediaId)}
-                        onChange={() => toggle(r.mediaId)}
+                  <div className="g-card__media">
+                    <button
+                      type="button"
+                      className="g-card__zoom"
+                      aria-label={`Groß anzeigen: ${cameraTime(r.mediaTime)}`}
+                      onClick={() => setViewing({ recording: r, video: false })}
+                    >
+                      <img
+                        src={r.thumbUrl}
+                        alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
                       />
-                      Auswählen
-                    </label>
-                  )}
-                  <button
-                    type="button"
-                    className="g-card__zoom"
-                    aria-label={`Groß anzeigen: ${cameraTime(r.mediaTime)}`}
-                    onClick={() => setViewing({ recording: r, video: false })}
-                  >
-                    <img
-                      src={r.thumbUrl}
-                      alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
-                    />
-                  </button>
-                  <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
-                  <p className="g-card__files" title="Dateien auf der Kamera">
-                    {r.cameraFiles.map((name) => (
-                      <span key={name}>{name}</span>
-                    ))}
-                  </p>
-                  <p className="g-card__state">
-                    {stateText(r.state, saved.has(r.mediaId), status?.nextContact, t)}
-                    {r.state === 'failed' && r.failReason && ` – ${r.failReason}`}
-                  </p>
-                  <div className="g-card__actions">
-                    {(r.state === 'new' || r.state === 'failed') && (
-                      <>
-                        {r.fileType === 2 && (
-                          <button
-                            type="button"
-                            className="g-btn"
-                            disabled={busy}
-                            onClick={() => void act(() => api.requestVideos(camId, [r.mediaId]))}
-                          >
-                            Video holen
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="g-btn g-btn--danger"
-                          disabled={busy}
-                          onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
-                        >
-                          Löschen
-                        </button>
-                      </>
-                    )}
-                    {(r.state === 'videoRequested' || r.state === 'deleteRequested') && (
-                      <button
-                        type="button"
-                        className="g-btn g-btn--plain"
-                        disabled={busy}
-                        onClick={() => void act(() => api.withdraw(camId, r))}
-                      >
-                        Zurücknehmen
-                      </button>
+                    </button>
+                    {selectable(r) && (
+                      <label className="g-card__select" title="Auswählen">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(r.mediaId)}
+                          onChange={() => toggle(r.mediaId)}
+                        />
+                        <span className="g-visually-hidden">Auswählen</span>
+                      </label>
                     )}
                     {r.state === 'videoReady' && (
-                      <>
+                      <button
+                        type="button"
+                        className="g-card__play"
+                        aria-label="Video ansehen"
+                        title="Video ansehen"
+                        onClick={() => setViewing({ recording: r, video: true })}
+                      >
+                        <PlayIcon />
+                      </button>
+                    )}
+                    {r.fileType === 2 && r.state !== 'videoReady' && (
+                      <span className="g-card__kind" title="Aufnahme mit Video">
+                        Video
+                      </span>
+                    )}
+                  </div>
+                  <div className="g-card__body">
+                    <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
+                    <p className="g-card__files" title="Dateien auf der Kamera">
+                      {r.cameraFiles.map((name) => (
+                        <span key={name}>{name}</span>
+                      ))}
+                    </p>
+                    <p className={`g-card__state g-pill g-pill--${r.state}`}>
+                      {stateText(r.state, saved.has(r.mediaId), status?.nextContact, t)}
+                      {r.state === 'failed' && r.failReason && ` – ${r.failReason}`}
+                    </p>
+                    <div className="g-card__actions">
+                      {(r.state === 'new' || r.state === 'failed') && r.fileType === 2 && (
                         <button
                           type="button"
-                          className="g-btn"
-                          onClick={() => setViewing({ recording: r, video: true })}
+                          className="g-btn g-btn--small"
+                          disabled={busy}
+                          onClick={() => void act(() => api.requestVideos(camId, [r.mediaId]))}
                         >
-                          Video ansehen
+                          Video holen
                         </button>
-                        <button type="button" className="g-btn" onClick={() => void saveOne(r)}>
-                          {saved.has(r.mediaId) ? 'Nochmal speichern' : 'Video speichern'}
-                        </button>
-                        <button
-                          type="button"
-                          className="g-btn g-btn--danger"
+                      )}
+                      <span className="g-card__spacer" />
+                      {r.state === 'videoReady' && (
+                        <IconButton
+                          label={saved.has(r.mediaId) ? 'Nochmal speichern' : 'Video speichern'}
+                          onClick={() => void saveOne(r)}
+                        >
+                          <SaveIcon />
+                        </IconButton>
+                      )}
+                      {(r.state === 'videoRequested' || r.state === 'deleteRequested') && (
+                        <IconButton
+                          label="Zurücknehmen"
+                          disabled={busy}
+                          onClick={() => void act(() => api.withdraw(camId, r))}
+                        >
+                          <UndoIcon />
+                        </IconButton>
+                      )}
+                      {(r.state === 'new' || r.state === 'failed' || r.state === 'videoReady') && (
+                        <IconButton
+                          label="Löschen"
+                          danger
                           disabled={busy}
                           onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
                         >
-                          Löschen
-                        </button>
-                      </>
-                    )}
+                          <TrashIcon />
+                        </IconButton>
+                      )}
+                    </div>
                   </div>
                 </li>
               ))}
@@ -601,112 +726,72 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             />
           )}
 
-          {hideAsk && camId && (
+          {hideAsk && (
             <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-hide">
               <div className="g-dialog__box">
-                <p id="g-hide">Kamera „{cameraName}“ ausblenden?</p>
+                <p id="g-hide">Kamera „{hideAsk.name}“ ausblenden?</p>
                 <p className="g-hint">
-                  Ihre Aufnahmen bleiben gespeichert, und der Hub liest sie weiter. Unten auf der
-                  Seite können Sie die Kamera wieder anzeigen.
+                  Ihre Aufnahmen bleiben gespeichert, und der Hub liest sie weiter. Unter „Kameras
+                  verwalten“ können Sie die Kamera wieder anzeigen.
                 </p>
-                <div className="g-card__actions">
+                <div className="g-dialog__actions">
+                  <button
+                    type="button"
+                    className="g-btn g-btn--quiet"
+                    onClick={() => setHideAsk(undefined)}
+                  >
+                    Abbrechen
+                  </button>
                   <button
                     type="button"
                     className="g-btn g-btn--danger"
                     onClick={() => {
-                      setHideAsk(false);
-                      setItems(undefined);
-                      setSelected(new Set());
-                      void setHidden(camId, cameraName, true);
+                      const { camId: id, name } = hideAsk;
+                      setHideAsk(undefined);
+                      if (id === camId) {
+                        setItems(undefined);
+                        setSelected(new Set());
+                      }
+                      void setHidden(id, name, true);
                     }}
                   >
                     Ja, ausblenden
                   </button>
-                  <button
-                    type="button"
-                    className="g-btn g-btn--plain"
-                    onClick={() => setHideAsk(false)}
-                  >
-                    Abbrechen
-                  </button>
                 </div>
               </div>
             </div>
           )}
 
-          {stopAsk && camId && foundCurrent && (
+          {stopAsk && (
             <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-stop">
               <div className="g-dialog__box">
-                <p id="g-stop">Kamera „{cameraName}“ nicht mehr abfragen?</p>
+                <p id="g-stop">Kamera „{stopAsk.name}“ nicht mehr abfragen?</p>
                 <p className="g-hint">
                   Der Hub liest sie ab dem nächsten Kontakt nicht mehr. Die bisherigen Aufnahmen
-                  bleiben hier. Unten unter „Nicht abgefragte Kameras“ können Sie sie wieder
-                  aufnehmen.
+                  bleiben hier. Unter „Kameras verwalten“ können Sie sie wieder aufnehmen.
                 </p>
-                <div className="g-card__actions">
+                <div className="g-dialog__actions">
+                  <button
+                    type="button"
+                    className="g-btn g-btn--quiet"
+                    onClick={() => setStopAsk(undefined)}
+                  >
+                    Abbrechen
+                  </button>
                   <button
                     type="button"
                     className="g-btn g-btn--danger"
                     onClick={() => {
-                      setStopAsk(false);
-                      void decide(foundCurrent, 'excluded');
+                      const camera = stopAsk;
+                      setStopAsk(undefined);
+                      void decide(camera, 'excluded');
                     }}
                   >
                     Ja, nicht mehr abfragen
                   </button>
-                  <button
-                    type="button"
-                    className="g-btn g-btn--plain"
-                    onClick={() => setStopAsk(false)}
-                  >
-                    Abbrechen
-                  </button>
                 </div>
               </div>
             </div>
-          )}
-
-          {!adminView && (
-            <FoundCameras
-              found={found}
-              busy={busy}
-              now={now()}
-              onDecide={(c, st, n) => void decide(c, st, n)}
-            />
-          )}
-
-          {!adminView && status && (
-            <p className="g-scan">
-              <button
-                type="button"
-                className="g-btn g-btn--plain"
-                disabled={busy}
-                onClick={() => void requestScan()}
-              >
-                Nach Kameras suchen
-              </button>
-            </p>
-          )}
-
-          {hiddenCameras.length > 0 && !adminView && (
-            <section className="g-hidden-cams" aria-label="Ausgeblendete Kameras">
-              <h2>Ausgeblendete Kameras</h2>
-              <ul className="g-plain-list">
-                {hiddenCameras.map((c) => (
-                  <li key={c.camId}>
-                    {c.name}{' '}
-                    <button
-                      type="button"
-                      className="g-btn g-btn--plain"
-                      disabled={busy}
-                      onClick={() => void setHidden(c.camId, c.name, false)}
-                    >
-                      Wieder anzeigen
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
           )}
 
           {confirm && camId && (
@@ -716,7 +801,14 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                 <p className="g-hint">
                   Bis zum nächsten Kontakt mit dem Hub lässt sich das noch zurücknehmen.
                 </p>
-                <div className="g-card__actions">
+                <div className="g-dialog__actions">
+                  <button
+                    type="button"
+                    className="g-btn g-btn--quiet"
+                    onClick={() => setConfirm(undefined)}
+                  >
+                    Abbrechen
+                  </button>
                   <button
                     type="button"
                     className="g-btn g-btn--danger"
@@ -731,51 +823,72 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                   >
                     Ja, löschen
                   </button>
-                  <button
-                    type="button"
-                    className="g-btn g-btn--plain"
-                    onClick={() => setConfirm(undefined)}
-                  >
-                    Abbrechen
-                  </button>
                 </div>
               </div>
             </div>
           )}
-        </>
+        </main>
       )}
     </div>
   );
 }
 
-/** Battery and last read of the open camera, and what needs a look (#304). */
-function CameraState({
-  camera,
-  hubLastContact,
-  now,
+/** A small button with an icon only; the label is its name and tooltip. */
+function IconButton({
+  label,
+  danger,
+  disabled,
+  onClick,
+  children,
 }: {
-  camera: GalleryCamera;
-  hubLastContact: number;
-  now: number;
+  label: string;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick(): void;
+  children: ReactNode;
 }) {
+  return (
+    <button
+      type="button"
+      className={danger ? 'g-icon-btn g-icon-btn--danger' : 'g-icon-btn'}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Battery and last read of the open camera (#304). */
+function CameraFacts({ camera, now }: { camera: GalleryCamera; now: number }) {
   const facts = [
     camera.batPercent !== undefined && (camera.lastRead ?? 0) > 0
       ? `Akku ${camera.batPercent} %`
       : '',
     (camera.lastRead ?? 0) > 0 ? `zuletzt gelesen ${clockTime(camera.lastRead ?? 0, now)}` : '',
   ].filter(Boolean);
+  if (facts.length === 0) return null;
+  return <p className="g-camera-state">{facts.join(' · ')}</p>;
+}
+
+/** What needs a look at the open camera (#304). */
+function CameraHints({
+  camera,
+  hubLastContact,
+}: {
+  camera: GalleryCamera;
+  hubLastContact: number;
+}) {
   const hints = cameraHints(camera, hubLastContact);
+  if (hints.length === 0) return null;
   return (
-    <>
-      {facts.length > 0 && <p className="g-camera-state">{facts.join(' · ')}</p>}
-      {hints.length > 0 && (
-        <div className="g-banner g-camera-hints" role="status" aria-label="Hinweise zur Kamera">
-          {hints.map((h) => (
-            <p key={h}>{h}</p>
-          ))}
-        </div>
-      )}
-    </>
+    <div className="g-banner g-camera-hints" role="status" aria-label="Hinweise zur Kamera">
+      {hints.map((h) => (
+        <p key={h}>{h}</p>
+      ))}
+    </div>
   );
 }
 
@@ -784,15 +897,10 @@ function CameraHeading({
   name,
   disabled,
   onRename,
-  onHide,
-  onStop,
 }: {
   name: string;
   disabled: boolean;
   onRename(name: string): Promise<boolean>;
-  onHide(): void;
-  /** Absent if the hub cannot be told to stop reading this camera. */
-  onStop?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
@@ -804,23 +912,17 @@ function CameraHeading({
         <h2 className="g-camera">Kamera „{name}“</h2>
         <button
           type="button"
-          className="g-btn g-btn--plain"
+          className="g-icon-btn"
+          aria-label="Umbenennen"
+          title="Umbenennen"
           disabled={disabled}
           onClick={() => {
             setValue(name);
             setEditing(true);
           }}
         >
-          Umbenennen
+          <PencilIcon />
         </button>
-        <button type="button" className="g-btn g-btn--plain" disabled={disabled} onClick={onHide}>
-          Ausblenden
-        </button>
-        {onStop && (
-          <button type="button" className="g-btn g-btn--plain" disabled={disabled} onClick={onStop}>
-            Nicht mehr abfragen
-          </button>
-        )}
       </div>
     );
   }
@@ -834,7 +936,9 @@ function CameraHeading({
         });
       }}
     >
-      <label htmlFor="g-rename-name">Neuer Name der Kamera</label>
+      <label htmlFor="g-rename-name" className="g-visually-hidden">
+        Neuer Name der Kamera
+      </label>
       <input
         id="g-rename-name"
         type="text"
@@ -851,7 +955,7 @@ function CameraHeading({
       >
         Speichern
       </button>
-      <button type="button" className="g-btn g-btn--plain" onClick={() => setEditing(false)}>
+      <button type="button" className="g-btn g-btn--quiet" onClick={() => setEditing(false)}>
         Abbrechen
       </button>
     </form>
