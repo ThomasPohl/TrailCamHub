@@ -34,8 +34,8 @@ directory that has a `camera.json`.
 Text, one line per recording, written by `MediaCatalog::serialize()`:
 
 ```
-# trailcamhub-catalog v3
-<dir>,<num>,<mediaId>,<fileType>,<mediaTime>,<flags>
+# trailcamhub-catalog v4
+<dir>,<num>,<mediaId>,<fileType>,<mediaTime>,<flags>,<durationMs>
 ```
 
 | Column | Meaning |
@@ -45,6 +45,7 @@ Text, one line per recording, written by `MediaCatalog::serialize()`:
 | `fileType` | 0 = photo, 2 = video, as in the media list |
 | `mediaTime` | the camera's wall clock as Unix seconds, not UTC ([clock.md](clock.md)) |
 | `flags` | decimal bit field, see below |
+| `durationMs` | length of a video from the media list, 0 if unknown; over the modem a clearly too long video is refused before the camera read (#160) |
 
 | Bit | Flag | Meaning |
 |---|---|---|
@@ -60,7 +61,9 @@ Text, one line per recording, written by `MediaCatalog::serialize()`:
 
 Versions: v1 was keyed by `dir`/`num`, v2 by `mediaId` with files still named
 by `dir`/`num`; both have the same columns and are converted to v3 when
-loaded. Rows without a valid `mediaId` and repeated `mediaId`s are dropped. A
+loaded. v3 is v4 without `durationMs` and is read as is (duration 0). A
+firmware from before v4 does not know the v4 header and starts with an empty
+catalog after a rollback: thumbnails are fetched and reported again. Rows without a valid `mediaId` and repeated `mediaId`s are dropped. A
 file with an unknown header is ignored and the catalog starts empty.
 
 The catalog is saved by writing `catalog.csv.tmp` and renaming it. Whether a

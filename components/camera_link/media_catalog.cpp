@@ -8,8 +8,10 @@ namespace camera::artemis
 
 namespace
 {
+// v4: v3 plus the video's duration in ms (#160).
+constexpr char kHeader[] = "# trailcamhub-catalog v4";
 // v3: keyed by mediaId, files on the SD card named by mediaId.
-constexpr char kHeader[] = "# trailcamhub-catalog v3";
+constexpr char kHeaderV3[] = "# trailcamhub-catalog v3";
 // v2: keyed by mediaId, files still named by dir/num.
 constexpr char kHeaderV2[] = "# trailcamhub-catalog v2";
 // v1: keyed by dir/num (before #85). All versions have the same columns.
@@ -59,6 +61,8 @@ std::size_t MediaCatalog::merge_page(const MediaList &page)
             e->media_num = item.num;
             e->media_time = item.time;
             e->file_type = item.file_type;
+            if (item.duration_ms > 0)
+                e->duration_ms = item.duration_ms;
             e->listed = true;
             if ((e->flags & kGone) != 0) {
                 // Back on the card (should not happen, a mediaId is unique):
@@ -75,6 +79,7 @@ std::size_t MediaCatalog::merge_page(const MediaList &page)
         n.media_id = item.id;
         n.file_type = item.file_type;
         n.media_time = item.time;
+        n.duration_ms = item.duration_ms > 0 ? item.duration_ms : 0;
         n.flags = 0;
         n.listed = true;
         entries_.push_back(n);
@@ -336,6 +341,8 @@ std::string MediaCatalog::serialize() const
         out += std::to_string(e.media_time);
         out += ',';
         out += std::to_string(e.flags);
+        out += ',';
+        out += std::to_string(e.duration_ms);
         out += '\n';
     }
     return out;
@@ -359,6 +366,8 @@ bool MediaCatalog::parse(const std::string &text)
             continue;
         if (line[0] == '#') {
             if (line == kHeader)
+                version_ = 4;
+            else if (line == kHeaderV3)
                 version_ = 3;
             else if (line == kHeaderV2)
                 version_ = 2;
@@ -368,12 +377,12 @@ bool MediaCatalog::parse(const std::string &text)
             continue;
         }
 
-        // Parse exactly six comma-separated integer fields.
-        std::int64_t field[6];
+        // Six comma-separated integer fields, a seventh (duration) from v4.
+        std::int64_t field[7] = {};
         int fi = 0;
         std::size_t fp = 0;
         bool ok = true;
-        while (fi < 6) {
+        while (fi < 7) {
             std::size_t comma = line.find(',', fp);
             std::string tok =
                 line.substr(fp, comma == std::string::npos ? std::string::npos
@@ -393,7 +402,7 @@ bool MediaCatalog::parse(const std::string &text)
                 break;
             fp = comma + 1;
         }
-        if (!ok || fi != 6)
+        if (!ok || fi < 6)
             continue;  // skip malformed rows rather than failing the load
         // Without a valid mediaId a row cannot be addressed; a repeated one
         // can only come from a damaged file. Keep the first.
@@ -407,6 +416,7 @@ bool MediaCatalog::parse(const std::string &text)
         e.file_type = field[3];
         e.media_time = field[4];
         e.flags = static_cast<std::uint32_t>(field[5]);
+        e.duration_ms = fi == 7 && field[6] > 0 ? field[6] : 0;
         entries_.push_back(e);
     }
     return header_seen;

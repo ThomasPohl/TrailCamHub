@@ -171,10 +171,10 @@ TEST_CASE("serialize/parse round-trips the catalog")
     cat.set_flag(222, MediaCatalog::kVideoRequested);
 
     const std::string text = cat.serialize();
-    CHECK(text.rfind("# trailcamhub-catalog v3\n", 0) == 0);
+    CHECK(text.rfind("# trailcamhub-catalog v4\n", 0) == 0);
     MediaCatalog loaded;
     REQUIRE(loaded.parse(text));
-    CHECK(loaded.format_version() == 3);
+    CHECK(loaded.format_version() == 4);
     REQUIRE(loaded.size() == 2);
     const CatalogEntry *e = loaded.find(2180198780);
     REQUIRE(e != nullptr);
@@ -218,7 +218,7 @@ TEST_CASE("parse reads a v1 catalog")
     CHECK(cat.has_flag(222, MediaCatalog::kReported));
 
     // Saved again as the current version.
-    CHECK(cat.serialize().rfind("# trailcamhub-catalog v3\n", 0) == 0);
+    CHECK(cat.serialize().rfind("# trailcamhub-catalog v4\n", 0) == 0);
 }
 
 TEST_CASE("parse reports the version it read")
@@ -237,7 +237,7 @@ TEST_CASE("parse rejects an unknown header and skips bad rows")
 {
     MediaCatalog cat;
     CHECK_FALSE(cat.parse("garbage\n1,2,3,4,5,6\n"));
-    CHECK_FALSE(cat.parse("# trailcamhub-catalog v4\n100,1,111,0,0,0\n"));
+    CHECK_FALSE(cat.parse("# trailcamhub-catalog v5\n100,1,111,0,0,0\n"));
     CHECK(cat.format_version() == 0);
 
     MediaCatalog cat2;
@@ -427,4 +427,35 @@ TEST_CASE("the gone flags survive a save and load")
     REQUIRE(loaded.parse(cat.serialize()));
     CHECK(loaded.has_flag(11, MediaCatalog::kGone));
     CHECK(loaded.has_flag(11, MediaCatalog::kGoneReported));
+}
+
+TEST_CASE("the video duration is kept, v3 rows are read without it (#160)")
+{
+    MediaCatalog cat;
+    MediaList list;
+    MediaItem video = item(100, 7, 2, 555, 1000);
+    video.duration_ms = 20000;
+    list.files.push_back(video);
+    list.files.push_back(item(100, 8, 0, 556, 1001));
+    cat.merge(list);
+    REQUIRE(cat.find(555) != nullptr);
+    CHECK(cat.find(555)->duration_ms == 20000);
+    CHECK(cat.find(556)->duration_ms == 0);
+
+    // A later list without a duration keeps the known one.
+    list.files[0].duration_ms = 0;
+    cat.merge(list);
+    CHECK(cat.find(555)->duration_ms == 20000);
+
+    MediaCatalog loaded;
+    REQUIRE(loaded.parse(cat.serialize()));
+    CHECK(loaded.format_version() == 4);
+    CHECK(loaded.find(555)->duration_ms == 20000);
+
+    MediaCatalog old;
+    REQUIRE(old.parse("# trailcamhub-catalog v3\n100,7,555,2,1000,3\n"));
+    CHECK(old.format_version() == 3);
+    REQUIRE(old.find(555) != nullptr);
+    CHECK(old.find(555)->duration_ms == 0);
+    CHECK(old.find(555)->flags == 3);
 }

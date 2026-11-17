@@ -455,13 +455,28 @@ bool handle_video_command(SyncCamera *camera, const std::string &cam_id,
         camera != nullptr ? &camera->catalog : nullptr, command.media_id,
         kDownloadsVideos, !command.upload_url.empty());
     switch (decision.step) {
-    case VideoStep::request:
+    case VideoStep::request: {
+        // Clearly too long for the modem: refused without a camera read.
+        VideoLimits limits;
+        limits.wifi_bytes = kMaxVideoBytes;
+        limits.modem_bytes = kMaxVideoBytesModem;
+        const camera::artemis::CatalogEntry *entry =
+            camera->catalog.find(command.media_id);
+        const std::string too_long = video_estimate_failure(
+            entry != nullptr ? entry->duration_ms : 0, limits, over_modem);
+        if (!too_long.empty()) {
+            out.error = too_long;
+            ESP_LOGW(TAG, "Video %lld of %s: %s", (long long)command.media_id,
+                     cam_id.c_str(), out.error.c_str());
+            return true;
+        }
         camera->changed |= camera->catalog.set_flag(
             command.media_id, MediaCatalog::kVideoRequested);
         ESP_LOGI(TAG, "Video %lld of %s requested", (long long)command.media_id,
                  cam_id.c_str());
         schedule::request_camera_read("a video was requested");
         return false;
+    }
     case VideoStep::wait:
         return false;
     case VideoStep::done:

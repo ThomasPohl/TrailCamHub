@@ -28,6 +28,9 @@ struct CatalogEntry {
     std::int64_t file_type = 0;  // 0 = photo, 2 = video (per the media list)
     std::int64_t media_time = 0;
     std::uint32_t flags = 0;
+    // Length of a video as the camera's media list says ("durationMs"), 0 if
+    // unknown (photos, catalogs before v4, or the camera reports none).
+    std::int64_t duration_ms = 0;
     // In the media list of the current camera session (set by merge(), not
     // persisted). Only these entries are on the camera's card right now, so
     // only these may be requested from the camera by dir/num.
@@ -161,6 +164,8 @@ class MediaCatalog
     {
         return version_;
     }
+    // Below this version the files on the SD card are still named by
+    // dir/num and are renamed when loading (v4 only adds a column).
     static constexpr int kFormatVersion = 3;
     void clear()
     {
