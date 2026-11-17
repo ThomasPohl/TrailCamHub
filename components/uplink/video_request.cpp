@@ -84,6 +84,23 @@ std::string megabytes(std::uint64_t bytes)
 
 }  // namespace
 
+std::string video_estimate_failure(std::int64_t duration_ms,
+                                   const VideoLimits &limits, bool over_modem)
+{
+    if (!over_modem || limits.modem_bytes == 0 || duration_ms <= 0) {
+        return "";
+    }
+    const std::uint64_t estimate = static_cast<std::uint64_t>(duration_ms) *
+                                   kEstimatedVideoBytesPerSecond / 1000u;
+    if (estimate <= limits.modem_bytes) {
+        return "";
+    }
+    return "the video is too large for the cellular uplink (" +
+           std::to_string((long long)((duration_ms + 999) / 1000)) +
+           " s, about " + megabytes(estimate) + " MB, at most " +
+           megabytes(limits.modem_bytes) + " MB)";
+}
+
 std::string video_size_failure(std::uint64_t size, const VideoLimits &limits,
                                bool over_modem)
 {

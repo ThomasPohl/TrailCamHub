@@ -68,4 +68,17 @@ struct VideoLimits {
 std::string video_size_failure(std::uint64_t size, const VideoLimits &limits,
                                bool over_modem);
 
+// Rough MP4 size per second of video, kept on the low side so that a guess
+// never refuses a video that would have fitted (measured ~650 KB/s for
+// 1080p, #151).
+constexpr std::uint64_t kEstimatedVideoBytesPerSecond = 520u * 1024u;
+
+// Checked before a requested video is fetched from the camera (#160): over
+// the modem, a video whose duration (from the camera's media list) makes it
+// clearly larger than the limit is refused right away, without a camera
+// read. Empty if it may be fetched (or the duration is unknown); the exact
+// check on the MP4 size (video_size_failure) stays.
+std::string video_estimate_failure(std::int64_t duration_ms,
+                                   const VideoLimits &limits, bool over_modem);
+
 }  // namespace uplink

@@ -247,3 +247,23 @@ TEST_CASE("mp4::FileSource reads a file at any offset")
     CHECK_FALSE(missing.exists());
     CHECK_FALSE(missing.read(0, buffer, 1));
 }
+
+TEST_CASE(
+    "a clearly too long video is refused over the modem before the read (#160)")
+{
+    constexpr std::uint64_t kMB = 1024 * 1024;
+    uplink::VideoLimits limits;
+    limits.wifi_bytes = 50 * kMB;
+    limits.modem_bytes = 15 * kMB;
+
+    // Unknown duration, Wi-Fi, or within the estimate: fetched.
+    CHECK(uplink::video_estimate_failure(0, limits, true).empty());
+    CHECK(uplink::video_estimate_failure(120000, limits, false).empty());
+    CHECK(uplink::video_estimate_failure(20000, limits, true).empty());
+    CHECK(uplink::video_estimate_failure(120000, uplink::VideoLimits{}, true)
+              .empty());
+    // 30 s at 520 KB/s is about 15.2 MB: refused.
+    CHECK(uplink::video_estimate_failure(30000, limits, true) ==
+          "the video is too large for the cellular uplink (30 s, about 16 MB, "
+          "at most 15 MB)");
+}
