@@ -68,5 +68,9 @@ std::vector<std::uint8_t> data(std::uint16_t index, const std::uint8_t *payload,
 // Single-index ACK on channel 0, the camera's usual form:
 // F1 D1 00 06 D1 00 00 01 <index:2>.
 std::vector<std::uint8_t> ack(std::uint16_t index);
+// A frame on the bulk channel: F1 D0 <len:2> D1 <subtype> <seq:2> <payload>
+// (subtype 0x03 photo, 0x04 thumbnail; docs/udp-protocol.md).
+std::vector<std::uint8_t> bulk(std::uint8_t subtype, std::uint16_t seq,
+                               const std::uint8_t *payload, std::size_t size);
 
 }  // namespace camera_mock::wire

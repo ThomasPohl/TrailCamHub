@@ -100,6 +100,14 @@ std::vector<std::uint8_t> data(std::uint16_t index, const std::uint8_t *payload,
     return out;
 }
 
+std::vector<std::uint8_t> bulk(std::uint8_t subtype, std::uint16_t seq,
+                               const std::uint8_t *payload, std::size_t size)
+{
+    std::vector<std::uint8_t> out = data(seq, payload, size);
+    out[5] = subtype;
+    return out;
+}
+
 std::vector<std::uint8_t> ack(std::uint16_t index)
 {
     std::vector<std::uint8_t> out = {kMagic, kAck, 0x00, 0x06,
