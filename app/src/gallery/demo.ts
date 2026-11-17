@@ -205,6 +205,10 @@ export class DemoGalleryApi implements GalleryApi {
     return { name: this.admin ? 'Admin (Vorführung)' : 'Vorführung', admin: this.admin };
   }
 
+  async latestFirmware(): Promise<string | undefined> {
+    return 'v0.1.14';
+  }
+
   async adminHubs(): Promise<AdminHub[]> {
     this.catchUp();
     if (!this.admin) throw new Error('Nur für den Admin');

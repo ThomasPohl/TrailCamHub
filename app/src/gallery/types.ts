@@ -205,4 +205,6 @@ export interface GalleryApi {
   setSchedule(hubId: string, config: ScheduleConfig): Promise<void>;
   /** Asks the hub to read the camera at its next check-in. */
   readCamera(camId: string): Promise<void>;
+  /** Tag of the newest firmware release, undefined if unknown (#149). */
+  latestFirmware(): Promise<string | undefined>;
 }
