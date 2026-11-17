@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '../api/http';
 import { AdminView } from './AdminView';
+import { showFaultBadge } from './badge';
 import { FoundCameras } from './FoundCameras';
 import { PencilIcon, PlayIcon, SaveIcon, SearchIcon, TrashIcon, UndoIcon } from './Icons';
 import { Viewer } from './Viewer';
@@ -136,6 +137,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       () => setFaultCount(0),
     );
   }, [api, isAdmin, adminView]);
+
+  // …and on the app icon, if the browser can (#265).
+  useEffect(() => {
+    if (isAdmin) showFaultBadge(faultCount);
+  }, [isAdmin, faultCount]);
 
   useEffect(() => {
     folder.folderState().then(setFolderInfo, () => setFolderInfo({ kind: 'unsupported' }));
