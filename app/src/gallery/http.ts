@@ -260,6 +260,24 @@ export class HttpGalleryApi implements GalleryApi {
     return found;
   }
 
+  async requestScan(): Promise<{ requested: number; nextContact?: number }> {
+    const me = await this.request<{ hubs?: Array<{ hubId: string }> }>('GET', '/v1/me');
+    let requested = 0;
+    let nextContact: number | undefined;
+    for (const { hubId } of me.hubs ?? []) {
+      const result = await this.request<{ requested: number; nextCheckinAt?: number }>(
+        'POST',
+        `/v1/hubs/${encodeURIComponent(hubId)}/scan`,
+        {},
+      );
+      requested += result.requested;
+      if (result.nextCheckinAt !== undefined) {
+        nextContact = Math.min(nextContact ?? Infinity, result.nextCheckinAt);
+      }
+    }
+    return { requested, nextContact };
+  }
+
   async decideCamera(
     hubId: string,
     bleAddress: string,

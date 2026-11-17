@@ -269,6 +269,15 @@ describe('GalleryApp', () => {
     expect(hints).toHaveTextContent('Die SD-Karte der Kamera ist fast voll.');
   });
 
+  it('asks the hub to look for cameras (#308)', async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nach Kameras suchen' }));
+    expect(
+      await screen.findByText(/Der Hub sucht beim nächsten Kontakt \(gegen .*\) nach Kameras/),
+    ).toBeInTheDocument();
+  });
+
   it('asks for a folder when none is chosen', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);

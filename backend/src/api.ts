@@ -118,6 +118,7 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   // The same as POST: the Function URL's CORS allows no PUT (#286).
   { method: 'POST', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
   { method: 'GET', pattern: '/v1/hubs/:hubId/found-cameras', handler: listFoundCameras },
+  { method: 'POST', pattern: '/v1/hubs/:hubId/scan', handler: requestScan },
   {
     method: 'POST',
     pattern: '/v1/hubs/:hubId/found-cameras/:address',
@@ -465,11 +466,6 @@ async function createReadCommand(camera: CameraRecord, deps: Deps) {
   return json(201, commandResult(command));
 }
 
-/**
- * Sets the schedule of a hub (replaces it as a whole). A missing or null
- * field leaves that setting to the hub; the hub takes the change at its next
- * check-in.
- */
 /** The hub, if the signed-in user may use it; 404 otherwise. */
 async function userHub(req: ApiRequest, hubId: string, deps: Deps) {
   const user = await authUser(req, deps);
@@ -519,6 +515,34 @@ async function decideFoundCamera(req: ApiRequest, params: Record<string, string>
   return json(200, updated);
 }
 
+/**
+ * Asks the hub to read its cameras at the next contact (#308): the read's
+ * BLE scan notes every camera in range (#296), and the check-in after it
+ * reports them. Excluded cameras are left out. A hub without a camera read
+ * yet scans at every planned read anyway: `requested` is 0 then.
+ */
+async function requestScan(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const hub = await userHub(req, params.hubId ?? '', deps);
+  const excluded = new Set(
+    (await deps.store.listFoundCameras(hub.hubId))
+      .filter((c) => c.state === 'excluded' && c.camId)
+      .map((c) => c.camId),
+  );
+  let requested = 0;
+  for (const camId of await deps.store.listHubCameraIds(hub.hubId)) {
+    const camera = await deps.store.getCamera(camId);
+    if (!camera || camera.hubId !== hub.hubId || excluded.has(camId)) continue;
+    await createReadCommand(camera, deps);
+    requested++;
+  }
+  return json(200, { requested, nextCheckinAt: hub.schedule?.nextCheckinAt });
+}
+
+/**
+ * Sets the schedule of a hub (replaces it as a whole). A missing or null
+ * field leaves that setting to the hub; the hub takes the change at its next
+ * check-in.
+ */
 async function setSchedule(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const user = await authUser(req, deps);
   const hubId = params.hubId ?? '';
