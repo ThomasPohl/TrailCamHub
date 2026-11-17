@@ -14,12 +14,14 @@
 #include "artemis_message.hpp"
 #include "artemis_reassembler.hpp"
 #include "ble_frames.hpp"
+#include "bulk_reassembler.hpp"
 #include "camera_action.hpp"
 #include "camera_prelogin.hpp"
 #include "camera_udp_packets.hpp"
 #include "capture_fixtures.hpp"
 #include "device_info.hpp"
 #include "media_list.hpp"
+#include "media_transfer.hpp"
 #include "mock_camera.hpp"
 #include "mock_wire.hpp"
 #include "pppp_session.hpp"
@@ -69,10 +71,60 @@ struct Hub {
     std::vector<std::string> responses;
     std::vector<std::uint16_t> data_indices;
     bool closed = false;
+    // Bulk channel (#122 stage 2/3): one reassembler per subtype, as in
+    // the firmware; every frame is acknowledged.
+    camera::artemis::BulkReassembler thumbnail_bulk;
+    camera::artemis::BulkReassembler photo_bulk;
+    struct Record {
+        std::uint8_t subtype = 0;
+        camera::artemis::MediaRecordHeader header;
+        std::vector<std::uint8_t> file;
+    };
+    std::vector<Record> records;
+    unsigned bulk_frames = 0;
+    bool ack_bulk = true;
+
+    void receive_bulk(const Datagram &packet)
+    {
+        const std::uint8_t subtype = packet[5];
+        const std::uint16_t seq =
+            static_cast<std::uint16_t>((packet[6] << 8) | packet[7]);
+        bulk_frames++;
+        if (ack_bulk) {
+            camera::ArtemisBulkAckRequest ack;
+            REQUIRE(ack.build(subtype, &seq, 1));
+            to_camera.send(ack.data(), ack.size(), "BULK ACK");
+        }
+        camera::artemis::BulkReassembler &bulk =
+            subtype == 0x04 ? thumbnail_bulk : photo_bulk;
+        const auto status =
+            bulk.feed(seq, packet.data() + 8, packet.size() - 8);
+        if (status == camera::artemis::BulkReassembler::Status::complete) {
+            Record record;
+            record.subtype = subtype;
+            std::size_t offset = 0;
+            std::size_t size = 0;
+            REQUIRE(camera::artemis::parse_media_record(
+                bulk.payload(), bulk.record_len(), record.header, offset,
+                size));
+            record.file.assign(bulk.payload() + offset,
+                               bulk.payload() + offset + size);
+            records.push_back(std::move(record));
+            bulk.reset();
+        } else if (status ==
+                   camera::artemis::BulkReassembler::Status::invalid) {
+            bulk.reset();
+        }
+    }
 
     void receive(const std::vector<Datagram> &packets)
     {
         for (const Datagram &packet : packets) {
+            if (packet.size() > 8 && packet[0] == 0xf1 && packet[1] == 0xd0 &&
+                packet[5] != 0) {
+                receive_bulk(packet);
+                continue;
+            }
             const auto event =
                 session.handle_packet(packet.data(), packet.size());
             if (event.type == camera::pppp::Session::Event::Type::close) {
@@ -539,4 +591,90 @@ TEST_CASE("camera mock: fault console command (#122 stage 2)")
     CHECK(f.mute);
     CHECK(camera_mock::apply_fault_command(f, {"off"}, err));
     CHECK_FALSE(f.any());
+}
+
+TEST_CASE("camera mock: thumbnails and photo download on the bulk channel "
+          "(#122)")
+{
+    Bench bench;
+    bench.discover_and_login();
+    REQUIRE(bench.hub.responses.size() == 1);
+    camera::artemis::MediaList list;
+    REQUIRE(camera::artemis::parse_media_list(
+        decrypt(fixtures::kMediaListPage0Response), list));
+    REQUIRE(list.files.size() >= 3);
+    std::uint32_t seq = 2;
+
+    SUBCASE("three thumbnails in a row, as the hub's scan asks for them")
+    {
+        for (int i = 0; i < 3; i++) {
+            const camera::artemis::MediaItem &item = list.files[i];
+            bench.hub.command(seq++,
+                              camera::artemis::build_thumbnail_request(
+                                  item, fixtures::kCapturedToken),
+                              bench.now_ms);
+            bench.run(30);
+            REQUIRE(bench.hub.records.size() ==
+                    static_cast<std::size_t>(i + 1));
+            const auto &record = bench.hub.records.back();
+            CHECK(record.subtype == 0x04);
+            CHECK(record.header.dir_num == item.dir_num);
+            CHECK(record.header.media_num == item.num);
+            CHECK(record.header.media_id == item.id);
+            REQUIRE(record.file.size() >= 3000);
+            CHECK(record.file[0] == 0xff);
+            CHECK(record.file[1] == 0xd8);
+            CHECK(record.file.back() == 0xd9);
+        }
+        CHECK(bench.hub.responses.size() == 4);
+        CHECK(bench.hub.responses.back().find("\"cmdId\":772") !=
+              std::string::npos);
+        CHECK(bench.camera.stats().thumbnails == 3);
+        CHECK(bench.camera.stats().bulk_retransmissions == 0);
+    }
+
+    SUBCASE("a photo (1285) on subtype 0x03")
+    {
+        const camera::artemis::MediaItem &item = list.files[0];
+        bench.hub.command(seq++,
+                          camera::artemis::build_download_request(
+                              item, fixtures::kCapturedToken),
+                          bench.now_ms);
+        bench.run(40);
+        REQUIRE(bench.hub.records.size() == 1);
+        CHECK(bench.hub.records[0].subtype == 0x03);
+        CHECK(bench.hub.records[0].header.media_num == item.num);
+        CHECK(bench.hub.records[0].file.size() >= 40000);
+        CHECK(bench.camera.stats().downloads == 1);
+    }
+
+    SUBCASE("unacknowledged frames are sent again; drops are recovered")
+    {
+        Faults lossy;
+        lossy.drop_percent = 30;
+        bench.camera.set_faults(lossy);
+        // A photo: about 40 frames, so some are lost.
+        bench.hub.command(seq++,
+                          camera::artemis::build_download_request(
+                              list.files[1], fixtures::kCapturedToken),
+                          bench.now_ms);
+        bench.run(400);
+        REQUIRE(bench.hub.records.size() == 1);
+        CHECK(bench.hub.records[0].header.media_num == list.files[1].num);
+        CHECK(bench.camera.stats().dropped > 0);
+        CHECK(bench.camera.stats().bulk_retransmissions > 0);
+        CHECK(bench.camera.outstanding() == 0);
+    }
+
+    SUBCASE("a file that is not on the card: answer, no data")
+    {
+        bench.hub.command(seq++,
+                          camera::artemis::build_thumbnail_request(
+                              1, 999, 1, fixtures::kCapturedToken),
+                          bench.now_ms);
+        bench.run(20);
+        CHECK(bench.hub.responses.size() == 2);
+        CHECK(bench.hub.records.empty());
+        CHECK(bench.hub.bulk_frames == 0);
+    }
 }

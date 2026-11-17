@@ -133,3 +133,7 @@ Console command `fault`, shown in `status`:
 - `fault off`: all off.
 
 With `drop` the hub waits for a lost fragment instead of taking the later ones first (#313).
+
+## Thumbnails and photos (#122 stages 2 and 3)
+
+`772` (thumbnail) and `1285` (photo download) are answered with `{"cmdRet":0,"result":0,"cmdId":…}` and then one media record on the bulk channel (subtype `0x04` thumbnail, `0x03` photo; 1024-byte frames, one 16-bit sequence for the whole bulk channel, window and retransmission as for DATA). The record is the 20-byte ARTEMIS header, the 72-byte media header (camera MAC, dir, num, length, mediaId from the captured list) and a synthetic JPEG (SOI, filler, EOI): about 3–7 KB for a thumbnail, 40–52 KB for a photo. No capture holds a real one yet. Files that are not in the captured list, deleted or formatted get the answer but no data, as on the real camera. `drop`/`dup` also apply to bulk frames.

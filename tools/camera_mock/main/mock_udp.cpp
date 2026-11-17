@@ -190,6 +190,10 @@ std::string status()
            " (dropped " + std::to_string(stats.dropped) + ", duplicated " +
            std::to_string(stats.duplicated) + ", unanswered " +
            std::to_string(stats.muted) + ")\n";
+    out += "bulk: thumbnails " + std::to_string(stats.thumbnails) +
+           ", photo downloads " + std::to_string(stats.downloads) +
+           ", frames " + std::to_string(stats.bulk_frames_sent) + ", resent " +
+           std::to_string(stats.bulk_retransmissions) + "\n";
     out += "actions: photos " + std::to_string(stats.photos) + ", deletions " +
            std::to_string(stats.deletions) + ", formats " +
            std::to_string(stats.formats) +

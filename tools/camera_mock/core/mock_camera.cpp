@@ -137,6 +137,80 @@ std::vector<std::uint8_t> artemis_response(std::uint32_t app_sequence,
     return out;
 }
 
+std::vector<std::uint8_t> media_record(std::int64_t dir_num,
+                                       std::int64_t media_num,
+                                       std::int64_t media_id,
+                                       std::size_t file_size)
+{
+    std::vector<std::uint8_t> file(file_size < 4 ? 4 : file_size, 0x5a);
+    file[0] = 0xff;
+    file[1] = 0xd8;
+    file[file.size() - 2] = 0xff;
+    file[file.size() - 1] = 0xd9;
+    for (std::size_t i = 2; i + 2 < file.size(); i++) {
+        file[i] = static_cast<std::uint8_t>((i * 31 + media_num) & 0x7f);
+    }
+
+    std::vector<std::uint8_t> header(72, 0);
+    char mac[18];
+    std::snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+                  fixtures::kDevId[0], fixtures::kDevId[1], fixtures::kDevId[2],
+                  fixtures::kDevId[3], fixtures::kDevId[4],
+                  fixtures::kDevId[5]);
+    std::memcpy(header.data(), mac, 17);
+    const auto put = [&header](std::size_t at, std::uint32_t value, int bytes) {
+        for (int i = 0; i < bytes; i++) {
+            header[at + i] = static_cast<std::uint8_t>(value >> (8 * i));
+        }
+    };
+    put(0x20, static_cast<std::uint32_t>(dir_num), 2);
+    put(0x22, static_cast<std::uint32_t>(media_num), 2);
+    put(0x24, static_cast<std::uint32_t>(file.size()), 4);
+    put(0x28, static_cast<std::uint32_t>(media_id), 4);
+
+    std::vector<std::uint8_t> out(
+        kArtemisSignature, kArtemisSignature + sizeof(kArtemisSignature));
+    append_u32_le(out, kMsgResponse);
+    append_u32_le(out, 0);
+    append_u32_le(out, static_cast<std::uint32_t>(header.size() + file.size()));
+    out.insert(out.end(), header.begin(), header.end());
+    out.insert(out.end(), file.begin(), file.end());
+    return out;
+}
+
+std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
+                               std::int64_t file_type, std::int64_t dir_num,
+                               std::int64_t media_num)
+{
+    const fixtures::CapturedResponse *pages[] = {
+        &fixtures::kMediaListPage0Response, &fixtures::kMediaListPage1Response};
+    for (const fixtures::CapturedResponse *page : pages) {
+        std::string json;
+        if (!camera::artemis::decode(cipher, page->base64, json)) {
+            continue;
+        }
+        std::size_t at = 0;
+        while ((at = json.find('{', at + 1)) != std::string::npos) {
+            const std::size_t end = json.find('}', at);
+            if (end == std::string::npos) {
+                break;
+            }
+            const std::string item = json.substr(at, end - at + 1);
+            std::int64_t type = -1;
+            std::int64_t dir = -1;
+            std::int64_t num = -1;
+            std::int64_t id = 0;
+            if (find_int(item, "fileType", type) && type == file_type &&
+                find_int(item, "mediaDirNum", dir) && dir == dir_num &&
+                find_int(item, "mediaNum", num) && num == media_num &&
+                find_int(item, "mediaId", id)) {
+                return id;
+            }
+        }
+    }
+    return 0;
+}
+
 bool apply_fault_command(Faults &faults, const std::vector<std::string> &args,
                          std::string &error)
 {
@@ -349,7 +423,17 @@ bool Camera::handle_packet(const std::uint8_t *bytes, std::size_t size,
         break;
     case Kind::ack:
         if (packet.channel != 0) {
-            break;  // bulk-stream ACKs: stage 2
+            for (std::uint16_t seq : packet.acked) {
+                for (auto it = bulk_tx_.begin(); it != bulk_tx_.end(); ++it) {
+                    if (it->frame.sent && it->subtype == packet.channel &&
+                        it->frame.index == seq) {
+                        bulk_tx_.erase(it);
+                        break;
+                    }
+                }
+            }
+            flush_bulk(now_ms);
+            break;
         }
         for (std::uint16_t index : packet.acked) {
             for (auto it = tx_.begin(); it != tx_.end(); ++it) {
@@ -407,6 +491,15 @@ void Camera::poll(std::int64_t now_ms)
         }
     }
     flush(now_ms);
+    for (BulkOutgoing &out : bulk_tx_) {
+        if (out.frame.sent &&
+            now_ms - out.frame.last_sent_ms >= options_.retransmit_ms) {
+            send_data(out.frame.packet);
+            out.frame.last_sent_ms = now_ms;
+            stats_.bulk_retransmissions++;
+        }
+    }
+    flush_bulk(now_ms);
     if (now_ms - last_alive_ms_ >= options_.alive_interval_ms) {
         send(wire::control(wire::kAlive));
         last_alive_ms_ = now_ms;
@@ -436,6 +529,7 @@ void Camera::start_session(std::int64_t now_ms)
     next_tx_index_ = 0;
     next_rx_index_ = 0;
     tx_.clear();
+    bulk_tx_.clear();
     late_acks_.clear();
     request_.clear();
     request_size_ = 0;
@@ -449,6 +543,7 @@ void Camera::end_session(const char *reason)
     state_ = State::idle;
     logged_in_ = false;
     tx_.clear();
+    bulk_tx_.clear();
     late_acks_.clear();
     request_.clear();
     request_size_ = 0;
@@ -605,6 +700,10 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
     case 518:
         handle_action(cmd_id, message.json, message.app_sequence, now_ms);
         return;
+    case 772:
+    case 1285:
+        handle_media(cmd_id, message.json, message.app_sequence, now_ms);
+        return;
     default:
         log(LogLevel::warn,
             format("cmdId %lld is not supported by the mock yet; not "
@@ -668,6 +767,91 @@ void Camera::handle_action(std::int64_t cmd_id, const std::string &request,
         return;
     default:
         return;
+    }
+}
+
+void Camera::handle_media(std::int64_t cmd_id, const std::string &request,
+                          std::uint32_t app_sequence, std::int64_t now_ms)
+{
+    // The answer to 772 and 1285 seen on hardware, also for a file that is
+    // gone (docs/camera-media-delete.md): no data follows then.
+    respond_json(app_sequence,
+                 "{\"cmdRet\":0,\"result\":0,\"cmdId\":" +
+                     std::to_string((long long)cmd_id) + "}",
+                 now_ms);
+    std::int64_t file_type = 0;
+    std::int64_t dir_num = 0;
+    std::int64_t media_num = 0;
+    if (!find_int(request, "fileType", file_type) ||
+        !find_int(request, "dirNum", dir_num) ||
+        !find_int(request, "mediaNum", media_num)) {
+        log(LogLevel::warn, format("%lld without fileType/dirNum/mediaNum; no "
+                                   "data",
+                                   cmd_id));
+        return;
+    }
+    const std::string key = std::to_string(file_type) + "/" +
+                            std::to_string(dir_num) + "/" +
+                            std::to_string(media_num);
+    bool gone = formatted_;
+    for (const std::string &done : deleted_) {
+        gone = gone || done == key;
+    }
+    const std::int64_t media_id =
+        captured_media_id(cipher_, file_type, dir_num, media_num);
+    if (gone || media_id == 0) {
+        log(LogLevel::info, std::to_string((long long)cmd_id) + " for " + key +
+                                ": no such file; no data");
+        return;
+    }
+    // Thumbnails are a few KB; a photo is bigger. Sizes vary with the
+    // number so that records end at different frame offsets.
+    const bool thumbnail = cmd_id == 772;
+    const std::size_t size =
+        thumbnail ? 3000 + static_cast<std::size_t>(media_num % 7) * 700
+                  : 40000 + static_cast<std::size_t>(media_num % 5) * 3000;
+    if (thumbnail) {
+        stats_.thumbnails++;
+    } else {
+        stats_.downloads++;
+    }
+    queue_bulk_record(thumbnail ? 0x04 : 0x03,
+                      media_record(dir_num, media_num, media_id, size), now_ms);
+}
+
+void Camera::queue_bulk_record(std::uint8_t subtype,
+                               const std::vector<std::uint8_t> &record,
+                               std::int64_t now_ms)
+{
+    for (std::size_t offset = 0; offset < record.size();
+         offset += wire::kMaxDataPayload) {
+        const std::size_t chunk = record.size() - offset < wire::kMaxDataPayload
+                                      ? record.size() - offset
+                                      : wire::kMaxDataPayload;
+        BulkOutgoing out;
+        out.subtype = subtype;
+        out.frame.index = next_bulk_seq_++;
+        out.frame.packet =
+            wire::bulk(subtype, out.frame.index, record.data() + offset, chunk);
+        bulk_tx_.push_back(std::move(out));
+    }
+    flush_bulk(now_ms);
+}
+
+void Camera::flush_bulk(std::int64_t now_ms)
+{
+    std::size_t in_flight = 0;
+    for (BulkOutgoing &out : bulk_tx_) {
+        if (in_flight >= options_.window) {
+            break;
+        }
+        if (!out.frame.sent) {
+            send_data(out.frame.packet);
+            out.frame.sent = true;
+            out.frame.last_sent_ms = now_ms;
+            stats_.bulk_frames_sent++;
+        }
+        in_flight++;
     }
 }
 

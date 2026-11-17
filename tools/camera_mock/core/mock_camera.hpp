@@ -118,6 +118,11 @@ struct Stats {
     unsigned photos = 0;
     unsigned deletions = 0;
     unsigned formats = 0;
+    // Bulk channel (#122 stage 2/3): thumbnails (772), photos (1285).
+    unsigned thumbnails = 0;
+    unsigned downloads = 0;
+    unsigned bulk_frames_sent = 0;
+    unsigned bulk_retransmissions = 0;
     // Requests by cmdId.
     std::map<int, unsigned> requests;
 };
@@ -205,6 +210,14 @@ class Camera
                        std::uint32_t app_sequence, std::int64_t now_ms);
     void queue_data(const std::uint8_t *payload, std::size_t size,
                     std::int64_t now_ms);
+    // 772 and 1285: the JSON answer, then the media record on the bulk
+    // channel.
+    void handle_media(std::int64_t cmd_id, const std::string &request,
+                      std::uint32_t app_sequence, std::int64_t now_ms);
+    void queue_bulk_record(std::uint8_t subtype,
+                           const std::vector<std::uint8_t> &record,
+                           std::int64_t now_ms);
+    void flush_bulk(std::int64_t now_ms);
     void flush(std::int64_t now_ms);
     void send(const std::vector<std::uint8_t> &packet);
     // A DATA packet, through the drop and duplicate faults.
@@ -226,6 +239,13 @@ class Camera
     std::uint16_t next_tx_index_ = 0;
     std::uint16_t next_rx_index_ = 0;
     std::deque<Outgoing> tx_;
+    // Bulk frames not acknowledged yet; `index` is the frame's sequence.
+    struct BulkOutgoing {
+        std::uint8_t subtype = 0;
+        Outgoing frame;
+    };
+    std::deque<BulkOutgoing> bulk_tx_;
+    std::uint16_t next_bulk_seq_ = 0;
     // ARTEMIS request being reassembled from DATA payloads.
     std::vector<std::uint8_t> request_;
     std::size_t request_size_ = 0;
@@ -245,6 +265,21 @@ class Camera
 // and docs/camera-actions.md (snapRet, recordRet, delRet, formatRet; 644
 // has only result). `field` empty = only result.
 std::string action_response(int cmd_id, const char *field, int value);
+
+// The bytes a bulk media record carries after its 20-byte ARTEMIS header
+// (media_transfer.hpp in the hub, from a dump of a real TC100, #105): a
+// 72-byte media header (camera MAC as text, dir and num as u16, data length
+// and mediaId as u32, little-endian) and the file. The file is synthetic, a
+// valid JPEG frame of SOI, filler and EOI; no capture holds a thumbnail.
+std::vector<std::uint8_t> media_record(std::int64_t dir_num,
+                                       std::int64_t media_num,
+                                       std::int64_t media_id,
+                                       std::size_t file_size);
+
+// The mediaId of a file in the captured media list; 0 if it is not there.
+std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
+                               std::int64_t file_type, std::int64_t dir_num,
+                               std::int64_t media_num);
 
 // Builds an ARTEMIS response (MsgType 3) the way the camera frames it:
 // header, Base64, then `padding` zero bytes, all counted in PayloadLen.
