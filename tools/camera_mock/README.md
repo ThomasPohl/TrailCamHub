@@ -132,4 +132,4 @@ Console command `fault`, shown in `status`:
 - `fault battery <0-100>|off`, `fault sdfree <MB>|off`: patch the device info (512).
 - `fault off`: all off.
 
-Note: with `drop` and the default window the hub currently loses resent fragments (#313).
+With `drop` the hub waits for a lost fragment instead of taking the later ones first (#313).

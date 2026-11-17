@@ -147,6 +147,10 @@ bool log_session_event(const camera::pppp::Session::Event &event,
     case Type::duplicate_data:
         ESP_LOGD(TAG, "Acknowledged repeated DATA index %u", event.index);
         break;
+    case Type::early_data:
+        ESP_LOGD(TAG, "DATA index %u after a gap, waiting for the missing one",
+                 event.index);
+        break;
     case Type::ack:
         ESP_LOGD(TAG, "Camera acknowledged index %u", event.index);
         break;

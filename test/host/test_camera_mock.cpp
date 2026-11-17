@@ -465,13 +465,9 @@ TEST_CASE("camera mock: fault switches (#122 stage 2)")
 
     SUBCASE("dropped and duplicated DATA: the session still completes")
     {
-        // One packet in flight: a lost one is resent before the next, so
-        // nothing overtakes it. With a larger window the hub loses data
-        // (#313): its session takes a later index and then drops the
-        // resent earlier one as a duplicate.
-        Options in_order;
-        in_order.window = 1;
-        Bench bench(in_order);
+        // Window 8: lost packets are overtaken by later ones; the hub
+        // waits for the missing one (#313).
+        Bench bench;
         Faults lossy;
         lossy.drop_percent = 40;
         lossy.duplicate_percent = 20;
