@@ -119,6 +119,37 @@ TEST_CASE("received DATA is acknowledged and duplicates are filtered")
     CHECK(event.index == 1);
 }
 
+TEST_CASE("DATA after a lost packet waits for it (#313)")
+{
+    FakeTransport transport;
+    Session session(transport);
+
+    CHECK(receive(session, data_packet(0, "a")).type == Type::data);
+    // Index 1 is lost; 2 arrives first: not acknowledged, not delivered.
+    Session::Event event = receive(session, data_packet(2, "c"));
+    CHECK(event.type == Type::early_data);
+    CHECK(event.payload == nullptr);
+    CHECK(transport.sent.size() == 1);
+    // The camera resends 1, then 2: both delivered in order.
+    event = receive(session, data_packet(1, "b"));
+    CHECK(event.type == Type::data);
+    CHECK(event.index == 1);
+    event = receive(session, data_packet(2, "c"));
+    CHECK(event.type == Type::data);
+    CHECK(event.index == 2);
+    CHECK(transport.sent.size() == 3);
+}
+
+TEST_CASE("the first DATA of a session sets the expected index")
+{
+    FakeTransport transport;
+    Session session(transport);
+    Session::Event event = receive(session, data_packet(7, "x"));
+    CHECK(event.type == Type::data);
+    CHECK(receive(session, data_packet(8, "y")).type == Type::data);
+    CHECK(receive(session, data_packet(7, "x")).type == Type::duplicate_data);
+}
+
 TEST_CASE("ALIVE is answered, CLOSE and discovery replies are reported")
 {
     FakeTransport transport;

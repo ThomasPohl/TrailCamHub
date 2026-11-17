@@ -50,6 +50,10 @@ class Session
             data,
             // A DATA packet that was already received; acknowledged again.
             duplicate_data,
+            // DATA after a gap (an earlier packet was lost): neither
+            // acknowledged nor delivered, so the camera sends it again
+            // after the missing one (#313).
+            early_data,
             // ACK; `acked_count` outstanding packets were acknowledged.
             ack,
             // ALIVE from the camera, answered with ALIVE_ACK.
@@ -111,6 +115,8 @@ class Session
     std::array<Outstanding, kMaxOutstanding> outstanding_{};
     std::uint16_t next_tx_index_ = 0;
     std::uint16_t next_rx_index_ = 0;
+    // No DATA yet in this session: the first index starts the count.
+    bool rx_started_ = false;
     ArtemisRudpPacket received_;
     std::uint32_t send_failures_ = 0;
     bool transport_failed_ = false;

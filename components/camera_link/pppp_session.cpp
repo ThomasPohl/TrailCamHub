@@ -15,6 +15,7 @@ void Session::reset()
     }
     next_tx_index_ = 0;
     next_rx_index_ = 0;
+    rx_started_ = false;
     send_failures_ = 0;
     transport_failed_ = false;
 }
@@ -151,15 +152,28 @@ Session::Event Session::handle_packet(const std::uint8_t *bytes,
 
     if (received_.is_data()) {
         event.index = received_.index();
+        if (!rx_started_) {
+            rx_started_ = true;
+            next_rx_index_ = event.index;
+        }
+        // Only the next expected index (modulo 2^16) is new. Earlier ones
+        // are retransmissions already delivered and are acknowledged again.
+        // Later ones come after a lost packet: taking them would skip the
+        // lost one, which then looked like a retransmission and was dropped
+        // (#313). They stay unacknowledged; the camera resends them.
+        const std::uint16_t ahead =
+            static_cast<std::uint16_t>(event.index - next_rx_index_);
+        if (ahead != 0 && ahead < 0x8000) {
+            event.type = Event::Type::early_data;
+            event.payload = nullptr;
+            event.payload_size = 0;
+            return event;
+        }
         ArtemisAckRequest ack;
         if (ack.build(event.index)) {
             send(ack, "DATA ACK");
         }
-        // Indices at or after the next expected one (modulo 2^16) are new;
-        // earlier ones are retransmissions already delivered.
-        const std::uint16_t ahead =
-            static_cast<std::uint16_t>(event.index - next_rx_index_);
-        if (ahead < 0x8000) {
+        if (ahead == 0) {
             next_rx_index_ = static_cast<std::uint16_t>(event.index + 1);
             event.type = Event::Type::data;
             event.payload = received_.data() + ArtemisRudpPacket::kHeaderSize;
