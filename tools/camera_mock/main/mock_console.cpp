@@ -2,6 +2,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "esp_console.h"
 #include "esp_log.h"
@@ -58,6 +60,20 @@ int cmd_ap(int argc, char **argv)
     return 0;
 }
 
+int cmd_fault(int argc, char **argv)
+{
+    std::vector<std::string> args(argv + 1, argv + argc);
+    camera_mock::Faults faults = mock_udp::faults();
+    std::string error;
+    if (!camera_mock::apply_fault_command(faults, args, error)) {
+        std::printf("%s\n", error.c_str());
+        return 1;
+    }
+    mock_udp::set_faults(faults);
+    std::printf("faults: %s\n", camera_mock::describe(faults).c_str());
+    return 0;
+}
+
 esp_err_t add(const char *name, const char *help, const char *hint,
               esp_console_cmd_func_t func)
 {
@@ -90,6 +106,11 @@ esp_err_t start()
     add("close", "end the session from the camera side (CLOSE)", nullptr,
         cmd_close);
     add("ap", "turn the access point on or off", "on|off", cmd_ap);
+    add("fault",
+        "inject faults: drop/dup DATA (percent), late ACKs (ms), mute after "
+        "login, battery and SD free space in the device info; 'fault off'",
+        "off|drop N|dup N|lateack MS|mute on|off|battery N|off|sdfree MB|off",
+        cmd_fault);
     return esp_console_start_repl(repl);
 }
 
