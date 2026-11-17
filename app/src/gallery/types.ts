@@ -54,6 +54,13 @@ export interface GalleryCamera {
   name: string;
   /** Hidden by the user (#273); listed only to show it again. */
   hidden?: boolean;
+  /** The camera's state at its last read (#304); absent if unknown. */
+  batPercent?: number;
+  sdCard?: 'ok' | 'missing' | 'unknown';
+  sdFreeMB?: number;
+  sdTotalMB?: number;
+  /** Last read, Unix seconds; 0 = never. */
+  lastRead?: number;
 }
 
 /** Longest camera name the backend accepts. */
