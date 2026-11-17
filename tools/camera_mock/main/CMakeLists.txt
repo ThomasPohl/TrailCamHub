@@ -4,7 +4,7 @@ set(core_dir ${CMAKE_CURRENT_LIST_DIR}/../core)
 set(link_dir ${CMAKE_CURRENT_LIST_DIR}/../../../components/camera_link)
 
 idf_component_register(SRCS "main.cpp" "mock_ap.cpp" "mock_ble.c"
-                            "mock_console.cpp" "mock_udp.cpp"
+                            "mock_console.cpp" "mock_identity.cpp" "mock_udp.cpp"
                             "${core_dir}/ble_frames.cpp"
                             "${core_dir}/capture_fixtures.cpp"
                             "${core_dir}/mock_camera.cpp"

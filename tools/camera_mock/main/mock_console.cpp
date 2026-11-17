@@ -10,6 +10,7 @@
 
 #include "mock_ap.hpp"
 #include "mock_ble.h"
+#include "mock_identity.hpp"
 #include "mock_udp.hpp"
 
 namespace mock_console
@@ -60,6 +61,27 @@ int cmd_ap(int argc, char **argv)
     return 0;
 }
 
+int cmd_id(int argc, char **argv)
+{
+    if (argc == 1) {
+        const camera_mock::Identity identity = mock_udp::identity();
+        std::printf("%s (%s)\n", camera_mock::mac_text(identity).c_str(),
+                    camera_mock::ble_name(identity).c_str());
+        return 0;
+    }
+    if (argc == 2 && std::strcmp(argv[1], "default") == 0) {
+        mock_identity::clear();
+        std::printf("Back to CONFIG_CAMERA_MOCK_DEV_ID after a reset\n");
+        return 0;
+    }
+    if (argc != 2 || !mock_identity::save(argv[1])) {
+        std::printf("usage: id [<MAC like C6:1E:0D:E0:0C:42> | default]\n");
+        return 1;
+    }
+    std::printf("Stored; press reset to use it (BLE name and MAC)\n");
+    return 0;
+}
+
 int cmd_fault(int argc, char **argv)
 {
     std::vector<std::string> args(argv + 1, argv + argc);
@@ -106,6 +128,8 @@ esp_err_t start()
     add("close", "end the session from the camera side (CLOSE)", nullptr,
         cmd_close);
     add("ap", "turn the access point on or off", "on|off", cmd_ap);
+    add("id", "show or set the camera MAC (after a reset)", "[MAC|default]",
+        cmd_id);
     add("fault",
         "inject faults: drop/dup DATA (percent), late ACKs (ms), mute after "
         "login, battery and SD free space in the device info; 'fault off'",

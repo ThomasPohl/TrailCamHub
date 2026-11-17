@@ -19,6 +19,7 @@
 #include "mock_ap.hpp"
 #include "mock_ble.h"
 #include "mock_console.hpp"
+#include "mock_identity.hpp"
 #include "mock_udp.hpp"
 
 namespace
@@ -86,7 +87,10 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     ESP_ERROR_CHECK(mock_ap::init());
-    ESP_ERROR_CHECK(mock_udp::start());
+    // Static: the BLE stack keeps the name pointer.
+    static const camera_mock::Identity identity = mock_identity::load();
+    static const std::string name = camera_mock::ble_name(identity);
+    ESP_ERROR_CHECK(mock_udp::start(identity));
 
     s_wake_queue = xQueueCreate(1, sizeof(uint16_t));
     if (s_wake_queue == nullptr || xTaskCreate(wake_task, "mock_wake", 4096,
@@ -96,12 +100,13 @@ extern "C" void app_main(void)
     }
 
     const std::vector<std::uint8_t> adv = camera_mock::ble::advertising_data(
-        camera_mock::fixtures::kDevId, camera_mock::fixtures::kProductId,
-        camera_mock::fixtures::kBleName);
-    ESP_ERROR_CHECK(mock_ble_start(
-        adv.data(), adv.size(), camera_mock::fixtures::kBleName, on_ble_write));
-    ESP_LOGI(TAG, "Camera mock ready as %s; Wi-Fi \"%s\" after BLE wake-up",
-             camera_mock::fixtures::kBleName, mock_ap::ssid().c_str());
+        identity.dev_id, camera_mock::fixtures::kProductId, name.c_str());
+    ESP_ERROR_CHECK(
+        mock_ble_start(adv.data(), adv.size(), name.c_str(), on_ble_write));
+    ESP_LOGI(TAG,
+             "Camera mock ready as %s (%s); Wi-Fi \"%s\" after BLE wake-up",
+             name.c_str(), camera_mock::mac_text(identity).c_str(),
+             mock_ap::ssid().c_str());
 
 #if CONFIG_CAMERA_MOCK_AP_ALWAYS_ON
     mock_ap::start();

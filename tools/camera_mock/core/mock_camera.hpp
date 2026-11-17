@@ -71,6 +71,26 @@ struct Faults {
     }
 };
 
+// The camera's identity (#122 stage 2): its MAC ("devId" in 512, the BLE
+// manufacturer data, the media header) and the BLE name derived from it.
+// Default: the captured TC100. A second mock with another MAC stands for a
+// second camera (#57).
+struct Identity {
+    std::uint8_t dev_id[6] = {0xc6, 0x1e, 0x0d, 0xe0, 0x0c, 0xfb};
+
+    bool operator==(const Identity &other) const;
+};
+
+// "C6:1E:0D:E0:0C:FB".
+std::string mac_text(const Identity &identity);
+// "TC100_0CFB": as the camera, the last two bytes of the MAC.
+std::string ble_name(const Identity &identity);
+// Six hex bytes separated by ':' or '-'; false (and `identity` unchanged)
+// otherwise. A multicast MAC (lowest bit of the first byte) is refused.
+bool parse_mac(const std::string &text, Identity &identity);
+// The device info with "devId" set to the identity's MAC.
+std::string patch_identity(const std::string &json, const Identity &identity);
+
 // The console command `fault …` without the word "fault": "off",
 // "drop <0-100>", "dup <0-100>", "lateack <ms>", "mute on|off",
 // "battery <0-100>|off", "sdfree <MB>|off". Changes `faults`; false with a
@@ -157,6 +177,14 @@ class Camera
     const Faults &faults() const
     {
         return faults_;
+    }
+    void set_identity(const Identity &identity)
+    {
+        identity_ = identity;
+    }
+    const Identity &identity() const
+    {
+        return identity_;
     }
 
     State state() const
@@ -251,6 +279,7 @@ class Camera
     std::size_t request_size_ = 0;
     Stats stats_;
     Faults faults_;
+    Identity identity_;
     std::uint32_t random_ = 0x2545F491u;
     // ACKs held back by Faults::ack_delay_ms: index and when to send.
     std::deque<std::pair<std::uint16_t, std::int64_t>> late_acks_;
@@ -271,7 +300,8 @@ std::string action_response(int cmd_id, const char *field, int value);
 // 72-byte media header (camera MAC as text, dir and num as u16, data length
 // and mediaId as u32, little-endian) and the file. The file is synthetic, a
 // valid JPEG frame of SOI, filler and EOI; no capture holds a thumbnail.
-std::vector<std::uint8_t> media_record(std::int64_t dir_num,
+std::vector<std::uint8_t> media_record(const Identity &identity,
+                                       std::int64_t dir_num,
                                        std::int64_t media_num,
                                        std::int64_t media_id,
                                        std::size_t file_size);

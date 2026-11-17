@@ -118,7 +118,7 @@ void udp_task(void *arg)
 
 }  // namespace
 
-esp_err_t start()
+esp_err_t start(const camera_mock::Identity &identity)
 {
     const int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (fd < 0) {
@@ -141,6 +141,7 @@ esp_err_t start()
 
     s_output.fd = fd;
     s_camera = new camera_mock::Camera(s_output, log_line);
+    s_camera->set_identity(identity);
     if (xTaskCreate(udp_task, "mock_udp", 6144, nullptr, 5, nullptr) !=
         pdPASS) {
         return ESP_ERR_NO_MEM;
@@ -201,6 +202,12 @@ std::string status()
            (s_camera->formatted() ? ", card formatted (empty list)" : "") +
            "\n";
     return out;
+}
+
+camera_mock::Identity identity()
+{
+    std::lock_guard<std::mutex> guard(s_lock);
+    return s_camera != nullptr ? s_camera->identity() : camera_mock::Identity();
 }
 
 camera_mock::Faults faults()

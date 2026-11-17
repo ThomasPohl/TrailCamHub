@@ -137,7 +137,8 @@ std::vector<std::uint8_t> artemis_response(std::uint32_t app_sequence,
     return out;
 }
 
-std::vector<std::uint8_t> media_record(std::int64_t dir_num,
+std::vector<std::uint8_t> media_record(const Identity &identity,
+                                       std::int64_t dir_num,
                                        std::int64_t media_num,
                                        std::int64_t media_id,
                                        std::size_t file_size)
@@ -152,12 +153,8 @@ std::vector<std::uint8_t> media_record(std::int64_t dir_num,
     }
 
     std::vector<std::uint8_t> header(72, 0);
-    char mac[18];
-    std::snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
-                  fixtures::kDevId[0], fixtures::kDevId[1], fixtures::kDevId[2],
-                  fixtures::kDevId[3], fixtures::kDevId[4],
-                  fixtures::kDevId[5]);
-    std::memcpy(header.data(), mac, 17);
+    const std::string mac = mac_text(identity);
+    std::memcpy(header.data(), mac.data(), 17);
     const auto put = [&header](std::size_t at, std::uint32_t value, int bytes) {
         for (int i = 0; i < bytes; i++) {
             header[at + i] = static_cast<std::uint8_t>(value >> (8 * i));
@@ -209,6 +206,78 @@ std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
         }
     }
     return 0;
+}
+
+bool Identity::operator==(const Identity &other) const
+{
+    return std::memcmp(dev_id, other.dev_id, sizeof(dev_id)) == 0;
+}
+
+std::string mac_text(const Identity &identity)
+{
+    char text[18];
+    std::snprintf(text, sizeof(text), "%02X:%02X:%02X:%02X:%02X:%02X",
+                  identity.dev_id[0], identity.dev_id[1], identity.dev_id[2],
+                  identity.dev_id[3], identity.dev_id[4], identity.dev_id[5]);
+    return text;
+}
+
+std::string ble_name(const Identity &identity)
+{
+    char text[11];
+    std::snprintf(text, sizeof(text), "TC100_%02X%02X", identity.dev_id[4],
+                  identity.dev_id[5]);
+    return text;
+}
+
+bool parse_mac(const std::string &text, Identity &identity)
+{
+    if (text.size() != 17) {
+        return false;
+    }
+    Identity parsed;
+    for (int i = 0; i < 6; i++) {
+        const char sep = i < 5 ? text[i * 3 + 2] : ':';
+        if (sep != ':' && sep != '-') {
+            return false;
+        }
+        unsigned value = 0;
+        for (int k = 0; k < 2; k++) {
+            const char c = text[i * 3 + k];
+            unsigned digit = 0;
+            if (c >= '0' && c <= '9') {
+                digit = static_cast<unsigned>(c - '0');
+            } else if (c >= 'a' && c <= 'f') {
+                digit = static_cast<unsigned>(c - 'a' + 10);
+            } else if (c >= 'A' && c <= 'F') {
+                digit = static_cast<unsigned>(c - 'A' + 10);
+            } else {
+                return false;
+            }
+            value = value * 16 + digit;
+        }
+        parsed.dev_id[i] = static_cast<std::uint8_t>(value);
+    }
+    if ((parsed.dev_id[0] & 0x01) != 0) {
+        return false;
+    }
+    identity = parsed;
+    return true;
+}
+
+std::string patch_identity(const std::string &json, const Identity &identity)
+{
+    const std::string key = "\"devId\":\"";
+    const std::size_t at = json.find(key);
+    if (at == std::string::npos) {
+        return json;
+    }
+    const std::size_t start = at + key.size();
+    const std::size_t end = json.find('"', start);
+    if (end == std::string::npos) {
+        return json;
+    }
+    return json.substr(0, start) + mac_text(identity) + json.substr(end);
 }
 
 bool apply_fault_command(Faults &faults, const std::vector<std::string> &args,
@@ -651,12 +720,15 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
 
     switch (cmd_id) {
     case 512:
-        if (faults_.battery_percent >= 0 || faults_.sd_free_mb >= 0) {
+        if (faults_.battery_percent >= 0 || faults_.sd_free_mb >= 0 ||
+            !(identity_ == Identity())) {
             std::string json;
             if (camera::artemis::decode(
                     cipher_, fixtures::kDeviceInfoResponse.base64, json)) {
-                respond_json(message.app_sequence,
-                             patch_device_info(json, faults_), now_ms);
+                respond_json(
+                    message.app_sequence,
+                    patch_identity(patch_device_info(json, faults_), identity_),
+                    now_ms);
                 return;
             }
         }
@@ -815,8 +887,9 @@ void Camera::handle_media(std::int64_t cmd_id, const std::string &request,
     } else {
         stats_.downloads++;
     }
-    queue_bulk_record(thumbnail ? 0x04 : 0x03,
-                      media_record(dir_num, media_num, media_id, size), now_ms);
+    queue_bulk_record(
+        thumbnail ? 0x04 : 0x03,
+        media_record(identity_, dir_num, media_num, media_id, size), now_ms);
 }
 
 void Camera::queue_bulk_record(std::uint8_t subtype,
