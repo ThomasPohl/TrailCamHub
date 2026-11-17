@@ -62,12 +62,18 @@ export interface HubRecord {
   keyHash: string;
   firmware?: string;
   batPercent?: number;
+  /** How the last check-in came in (#149). */
+  uplink?: HubUplink;
+  /** Modem signal when it connected, dBm; only meaningful with uplink "modem". */
+  modemSignalDbm?: number;
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   /** As reported at the last check-in. */
   schedule?: HubSchedule;
   scheduleConfig?: ScheduleConfig;
 }
+
+export type HubUplink = 'wifi' | 'modem' | 'ethernet';
 
 /**
  * The camera's SD card as the hub last saw it: `ok` when its media list was
@@ -263,6 +269,9 @@ export interface AdminHub {
   name: string;
   firmware?: string;
   batPercent?: number;
+  uplink?: HubUplink;
+  /** Only while the hub syncs over the modem. */
+  modemSignalDbm?: number;
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   /** As reported at the last check-in. */
@@ -398,6 +407,9 @@ export interface CheckinRequest {
   hubBoard?: string;
   hubVariant?: string;
   hubBatPercent?: number;
+  /** Transport of this check-in and the modem's signal in dBm (#149). */
+  hubUplink?: HubUplink;
+  modemSignalDbm?: number;
   /**
    * The most thumbnail uploads the hub takes from this check-in. A hub with
    * little memory keeps the response small with it; the backend's own limit

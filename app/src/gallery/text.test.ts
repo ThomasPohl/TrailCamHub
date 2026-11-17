@@ -6,6 +6,7 @@ import {
   durationText,
   faultText,
   folderName,
+  uplinkText,
   videoFileName,
 } from './text';
 
@@ -88,5 +89,16 @@ describe('gallery texts', () => {
     ]);
     // Never read: a 0 % battery is no measurement.
     expect(cameraHints({ camId: 'C2', name: 'Neu', batPercent: 0, lastRead: 0 }, 2000)).toEqual([]);
+  });
+});
+
+describe('hub connection (#149)', () => {
+  it('names the transport and rates the modem signal', () => {
+    expect(uplinkText('wifi')).toBe('WLAN');
+    expect(uplinkText('ethernet', -60)).toBe('Ethernet');
+    expect(uplinkText('modem')).toBe('Mobilfunk');
+    expect(uplinkText('modem', -80)).toBe('Mobilfunk, Signal -80 dBm (gut)');
+    expect(uplinkText('modem', -91)).toBe('Mobilfunk, Signal -91 dBm (mittel)');
+    expect(uplinkText('modem', -110)).toBe('Mobilfunk, Signal -110 dBm (sehr schwach)');
   });
 });

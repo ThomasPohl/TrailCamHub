@@ -14,7 +14,9 @@ import type {
   VideoState,
 } from '../model';
 
-export type HubTelemetry = Partial<Pick<HubRecord, 'firmware' | 'batPercent' | 'schedule'>>;
+export type HubTelemetry = Partial<
+  Pick<HubRecord, 'firmware' | 'batPercent' | 'schedule' | 'uplink' | 'modemSignalDbm'>
+>;
 export type CameraTelemetry = Partial<
   Pick<
     CameraRecord,

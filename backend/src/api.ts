@@ -25,6 +25,7 @@ import type {
   FirmwareChange,
   FirmwareUpdateResult,
   HubRecord,
+  HubUplink,
   HubHistory,
   HubSchedule,
   MediaItem,
@@ -312,6 +313,8 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
       name: hub.name,
       firmware: hub.firmware,
       batPercent: hub.batPercent,
+      uplink: hub.uplink,
+      modemSignalDbm: hub.uplink === 'modem' ? hub.modemSignalDbm : undefined,
       lastSeen: hub.lastSeen,
       schedule: hub.schedule,
       scheduleConfig: hub.scheduleConfig ?? {},
@@ -764,6 +767,20 @@ async function recordSample(deps: Deps, owner: SampleOwner, sample: Sample): Pro
   await deps.store.addSample(owner, sample);
 }
 
+const UPLINKS: readonly HubUplink[] = ['wifi', 'modem', 'ethernet'];
+
+/** Transport and modem signal of a check-in (#149); unknown values are left out. */
+export function uplinkOf(body: CheckinRequest): { uplink?: HubUplink; modemSignalDbm?: number } {
+  const uplink = UPLINKS.find((u) => u === body.hubUplink);
+  const signal = optionalNumber(body.modemSignalDbm);
+  const out: { uplink?: HubUplink; modemSignalDbm?: number } = {};
+  if (uplink) out.uplink = uplink;
+  if (uplink === 'modem' && signal !== undefined && signal < 0 && signal > -150) {
+    out.modemSignalDbm = Math.round(signal);
+  }
+  return out;
+}
+
 const UPDATE_RESULTS: readonly FirmwareUpdateResult[] = ['installed', 'rolledBack', 'failed'];
 
 /**
@@ -818,6 +835,7 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       firmware,
       batPercent: optionalNumber(body.hubBatPercent),
       schedule: sanitizeSchedule(body.schedule, now),
+      ...uplinkOf(body),
     },
     now,
   );

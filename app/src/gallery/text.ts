@@ -171,3 +171,19 @@ export function cameraHints(camera: GalleryCamera, hubLastContact: number): stri
   }
   return hints;
 }
+
+const UPLINK = { wifi: 'WLAN', modem: 'Mobilfunk', ethernet: 'Ethernet' } as const;
+
+/** "Mobilfunk, Signal -87 dBm (gut)" (#149). */
+export function uplinkText(uplink: keyof typeof UPLINK, signalDbm?: number): string {
+  if (uplink !== 'modem' || signalDbm === undefined) return UPLINK[uplink];
+  const quality =
+    signalDbm >= -85
+      ? 'gut'
+      : signalDbm >= -95
+        ? 'mittel'
+        : signalDbm >= -105
+          ? 'schwach'
+          : 'sehr schwach';
+  return `${UPLINK.modem}, Signal ${signalDbm} dBm (${quality})`;
+}

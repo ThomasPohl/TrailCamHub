@@ -358,3 +358,16 @@ TEST_CASE("uplink: firmware update in the check-in (#149)")
               "\"result\":\"installed\",\"at\":1763400000}") !=
           std::string::npos);
 }
+
+TEST_CASE("uplink: transport and modem signal in the check-in (#149)")
+{
+    CheckinRequest request;
+    std::string json = build_checkin_json(request);
+    CHECK(json.find("hubUplink") == std::string::npos);
+    CHECK(json.find("modemSignalDbm") == std::string::npos);
+    request.hub_uplink = "modem";
+    request.modem_signal_dbm = -87;
+    json = build_checkin_json(request);
+    CHECK(json.find("\"hubUplink\":\"modem\"") != std::string::npos);
+    CHECK(json.find("\"modemSignalDbm\":-87") != std::string::npos);
+}

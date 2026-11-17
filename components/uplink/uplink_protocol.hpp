@@ -108,6 +108,12 @@ struct CheckinRequest {
     std::string hub_board;
     std::string hub_variant;
     std::int64_t hub_bat_percent = -1;  // -1 = unknown
+    // How this check-in reaches the backend (#149): "wifi", "modem" or
+    // "ethernet"; left out when empty.
+    std::string hub_uplink;
+    // Modem signal measured when connecting, dBm; left out when 0 (unknown
+    // or no modem).
+    int modem_signal_dbm = 0;
     // The most thumbnail uploads the backend should answer with; -1 leaves
     // it to the backend (30). Each one is a presigned URL of about 1.8 KB in
     // the response (measured on the WROOM-32D, #244). The backend hands out

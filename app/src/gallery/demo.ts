@@ -230,6 +230,8 @@ export class DemoGalleryApi implements GalleryApi {
         hubId: 'garten-hub',
         name: 'Garten',
         firmware: 'v0.1.13',
+        uplink: 'modem',
+        modemSignalDbm: -91,
         batPercent: 84,
         lastSeen: this.lastCheckin,
         schedule: {
