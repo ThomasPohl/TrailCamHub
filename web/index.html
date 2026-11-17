@@ -15,6 +15,7 @@
     <script src="./wizard.js" defer></script>
     <script src="./advanced.js" defer></script>
     <script src="./camera.js" defer></script>
+    <script src="./sd-card.js" defer></script>
     <script src="./shell.js" defer></script>
   </head>
   <body data-view="wizard">
@@ -233,6 +234,7 @@
           <button id="adv-tab-firmware" type="button" role="tab" data-tab="firmware" aria-controls="adv-panel-firmware" aria-selected="true">Firmware</button>
           <button id="adv-tab-settings" type="button" role="tab" data-tab="settings" aria-controls="adv-panel-settings" aria-selected="false" tabindex="-1">Settings</button>
           <button id="adv-tab-camera" type="button" role="tab" data-tab="camera" aria-controls="adv-panel-camera" aria-selected="false" tabindex="-1">Camera</button>
+          <button id="adv-tab-sd" type="button" role="tab" data-tab="sd" aria-controls="adv-panel-sd" aria-selected="false" tabindex="-1">SD card</button>
           <button id="adv-tab-protocol" type="button" role="tab" data-tab="protocol" aria-controls="adv-panel-protocol" aria-selected="false" tabindex="-1">Protocol</button>
           <button id="adv-tab-console" type="button" role="tab" data-tab="console" aria-controls="adv-panel-console" aria-selected="false" tabindex="-1">Console</button>
         </div>
@@ -482,6 +484,41 @@
               <div class="wz-nav">
                 <button class="secondary-button" type="submit" value="cancel">Cancel</button>
                 <button class="primary-button danger-fill" type="submit" value="ok"></button>
+              </div>
+            </form>
+          </dialog>
+        </div>
+
+        <div id="adv-panel-sd" class="adv-panel" role="tabpanel" aria-labelledby="adv-tab-sd" data-tab="sd" hidden>
+          <p id="sd-status" class="cam-status" role="status" aria-live="polite"></p>
+          <section aria-labelledby="sd-heading">
+            <h2 id="sd-heading">Files on the hub's SD card</h2>
+            <div class="sd-bar">
+              <nav id="sd-path" class="sd-path" aria-label="Directory"></nav>
+              <button id="sd-refresh" class="secondary-button" type="button">Read</button>
+            </div>
+            <table class="sd-table">
+              <thead><tr><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Changed (UTC)</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+              <tbody id="sd-files"><tr><td colspan="4">Press "Read" to list the card.</td></tr></tbody>
+            </table>
+            <p class="note">Large files (videos) take a while: the console moves about 10–20 KB per second.</p>
+          </section>
+          <section aria-labelledby="sd-diag-heading">
+            <h2 id="sd-diag-heading">Diagnostics</h2>
+            <p class="sd-diag-buttons">
+              <button class="secondary-button" type="button" data-sd-command="heap">Memory</button>
+              <button class="secondary-button" type="button" data-sd-command="heap blocks">Memory blocks</button>
+              <button class="secondary-button" type="button" data-sd-command="update" title="Sync, then read the firmware manifest now">Check for update</button>
+            </p>
+            <pre id="sd-diag-output" class="adv-answer" aria-live="polite"></pre>
+          </section>
+          <dialog id="sd-confirm" class="cam-dialog" aria-labelledby="sd-confirm-title">
+            <form method="dialog">
+              <h3 id="sd-confirm-title">Delete from the SD card</h3>
+              <p></p>
+              <div class="wz-nav">
+                <button class="secondary-button" type="submit" value="cancel">Cancel</button>
+                <button class="primary-button danger-fill" type="submit" value="ok">Delete</button>
               </div>
             </form>
           </dialog>

@@ -1201,3 +1201,51 @@ body[data-view="advanced"] {
   opacity: 0.5;
   cursor: default;
 }
+
+/* SD card tab (#156) */
+.sd-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.sd-path {
+  overflow-wrap: anywhere;
+}
+
+.link-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.sd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.sd-table th,
+.sd-table td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+  text-align: left;
+}
+
+.sd-actions {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: flex-end;
+}
+
+.sd-diag-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
