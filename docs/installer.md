@@ -54,7 +54,10 @@ download), **Settings** (every single setting, in groups; "Reset" next to a stor
 value erases it with `config unset`, after a second click), **Camera** (take
 a photo or a video, list the recordings on the camera, delete one, erase the
 camera's SD card, and the queue of these actions with their results; see
-[camera-actions.md](camera-actions.md)), **Protocol** (the
+[camera-actions.md](camera-actions.md)), **SD card** (browse the hub's
+SD card, download any file, delete files and directories after a
+confirmation; memory view and "check for update"; needs a build with
+`CONFIG_HUB_CONSOLE_DIAGNOSTICS`), **Protocol** (the
 live protocol view, including the first thumbnail of a session) and
 **Console** (the serial log at 115200 baud).
 
@@ -125,6 +128,8 @@ exactly these commands.
 | `config show` | List the settings |
 | `config set <key> <value>` / `config set-hex <key> <hex>` | Store a setting (all keys: `help`; modes and destinations: [modes.md](modes.md)) |
 | `config unset <key>` / `config clear` | Erase one or all settings |
+| `update` | Sync, then read the firmware manifest now |
+| `heap [blocks]`, `ls [path]`, `cat <path> [offset [len]]`, `rm [-r] <path>`, `sdbench` | Diagnostics (only with `CONFIG_HUB_CONSOLE_DIAGNOSTICS`); the SD card tab uses them |
 
 ## Phone app (Telegram Mini App)
 
