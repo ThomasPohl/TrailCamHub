@@ -133,7 +133,8 @@ esp_err_t start()
     add("fault",
         "inject faults: drop/dup DATA (percent), late ACKs (ms), mute after "
         "login, battery and SD free space in the device info; 'fault off'",
-        "off|drop N|dup N|lateack MS|mute on|off|battery N|off|sdfree MB|off",
+        "off|drop N|dup N|lateack MS|mute on|off|battery N|off|sdfree MB|off|"
+        "abort N|off",
         cmd_fault);
     return esp_console_start_repl(repl);
 }

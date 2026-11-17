@@ -285,7 +285,7 @@ bool apply_fault_command(Faults &faults, const std::vector<std::string> &args,
 {
     const char *usage = "usage: fault off | drop <0-100> | dup <0-100> | "
                         "lateack <ms> | mute on|off | battery <0-100>|off | "
-                        "sdfree <MB>|off";
+                        "sdfree <MB>|off | abort <frames>|off";
     if (args.empty()) {
         error = usage;
         return false;
@@ -316,6 +316,15 @@ bool apply_fault_command(Faults &faults, const std::vector<std::string> &args,
         }
         (what == "drop" ? next.drop_percent : next.duplicate_percent) =
             static_cast<unsigned>(number);
+    } else if (what == "abort") {
+        if (arg == "off") {
+            next.abort_after_frames = 0;
+        } else if (number < 1 || number > 10000) {
+            error = "abort takes a number of frames (1-10000) or off";
+            return false;
+        } else {
+            next.abort_after_frames = static_cast<unsigned>(number);
+        }
     } else if (what == "lateack") {
         if (number < 0 || number > 60000) {
             error = "lateack takes a delay in ms, 0-60000";
@@ -374,6 +383,10 @@ std::string describe(const Faults &faults)
     }
     if (faults.sd_free_mb >= 0) {
         add("SD free " + std::to_string(faults.sd_free_mb) + " MB");
+    }
+    if (faults.abort_after_frames > 0) {
+        add("bulk records stop after " +
+            std::to_string(faults.abort_after_frames) + " frames");
     }
     return out;
 }
@@ -901,6 +914,14 @@ void Camera::queue_bulk_record(std::uint8_t subtype,
         const std::size_t chunk = record.size() - offset < wire::kMaxDataPayload
                                       ? record.size() - offset
                                       : wire::kMaxDataPayload;
+        if (faults_.abort_after_frames > 0 &&
+            offset / wire::kMaxDataPayload >= faults_.abort_after_frames) {
+            stats_.aborted_records++;
+            log(LogLevel::info,
+                format("Fault: abort; record stopped after %lld frames",
+                       faults_.abort_after_frames));
+            break;
+        }
         BulkOutgoing out;
         out.subtype = subtype;
         out.frame.index = next_bulk_seq_++;
