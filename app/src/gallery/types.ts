@@ -141,6 +141,10 @@ export interface AdminHub {
   name: string;
   firmware?: string;
   batPercent?: number;
+  /** How the last check-in came in (#149). */
+  uplink?: 'wifi' | 'modem' | 'ethernet';
+  /** Modem signal in dBm, only while the hub syncs over the modem. */
+  modemSignalDbm?: number;
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   schedule?: HubSchedule;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
 import { isNewer } from './release';
-import { clockTime, faultText } from './text';
+import { clockTime, faultText, uplinkText } from './text';
 import type { AdminHub, GalleryApi, HubHistory, Sample } from './types';
 
 /**
@@ -129,6 +129,12 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             )}
             <dt>Akku</dt>
             <dd>{hub.batPercent !== undefined ? `${hub.batPercent} %` : '–'}</dd>
+            {hub.uplink && (
+              <>
+                <dt>Verbindung</dt>
+                <dd>{uplinkText(hub.uplink, hub.modemSignalDbm)}</dd>
+              </>
+            )}
             <dt>Firmware</dt>
             <dd>
               {hub.firmware ?? '–'}

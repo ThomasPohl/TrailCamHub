@@ -579,6 +579,18 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     request.max_thumb_uploads = kMaxThumbUploads;
     request.schedule = schedule_report();
     request.memory = memory_report();
+    switch (hub_config::uplink_transport(settings)) {
+    case hub_config::Transport::wifi:
+        request.hub_uplink = "wifi";
+        break;
+    case hub_config::Transport::modem:
+        request.hub_uplink = "modem";
+        request.modem_signal_dbm = modem_uplink::signal_dbm();
+        break;
+    case hub_config::Transport::ethernet:
+        request.hub_uplink = "ethernet";
+        break;
+    }
     // The last firmware update, once (#149).
     ota::UpdateRecord update;
     const bool has_update = ota::update_report(update);

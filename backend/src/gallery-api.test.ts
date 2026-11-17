@@ -382,6 +382,26 @@ describe('firmware changes (#149)', () => {
   });
 });
 
+describe('transport and modem signal (#149)', () => {
+  it('stores them and shows the signal only over the modem', async () => {
+    const world = await galleryWorld();
+    const checkin = (body: Record<string, unknown>) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, { cameras: [], ...body }),
+        world.deps,
+      );
+    await checkin({ hubUplink: 'modem', modemSignalDbm: -87 });
+    let hub = await world.deps.store.getHub(HUB_ID);
+    expect(hub).toMatchObject({ uplink: 'modem', modemSignalDbm: -87 });
+    await checkin({ hubUplink: 'satellite', modemSignalDbm: 5 });
+    hub = await world.deps.store.getHub(HUB_ID);
+    expect(hub).toMatchObject({ uplink: 'modem', modemSignalDbm: -87 });
+    await checkin({ hubUplink: 'wifi' });
+    hub = await world.deps.store.getHub(HUB_ID);
+    expect(hub?.uplink).toBe('wifi');
+  });
+});
+
 describe("the hub's own update record (#149)", () => {
   it('stores each report once and warns about a rollback', async () => {
     const world = await galleryWorld();
