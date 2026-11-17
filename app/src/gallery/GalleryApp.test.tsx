@@ -55,8 +55,8 @@ describe('GalleryApp', () => {
     expect(await screen.findAllByText('Wird gelöscht')).toHaveLength(16);
 
     now += 20;
-    fireEvent.click(screen.getByRole('button', { name: 'Wiese' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Garten' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Wiese' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Garten' }));
     expect(await screen.findByText(/Keine Aufnahmen/)).toBeInTheDocument();
   });
 
@@ -121,7 +121,7 @@ describe('GalleryApp', () => {
     expect(
       await screen.findByRole('heading', { name: 'Kamera „Futterplatz“' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Futterplatz' })).toBeInTheDocument(); // tab
+    expect(screen.getByRole('tab', { name: 'Futterplatz' })).toBeInTheDocument();
     expect(screen.getByText(/Die Kamera heißt jetzt „Futterplatz“/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Neuer Name der Kamera')).not.toBeInTheDocument();
   });
@@ -186,24 +186,36 @@ describe('GalleryApp', () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
     await screen.findByRole('heading', { name: 'Kamera „Garten“' });
-    fireEvent.click(screen.getByRole('button', { name: 'Ausblenden' }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
+    const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
+    const garten = within(panel).getByRole('row', { name: /Garten/ });
+    fireEvent.click(within(garten).getByRole('button', { name: 'Ausblenden' }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveTextContent('Kamera „Garten“ ausblenden?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ja, ausblenden' }));
 
+    expect(await within(garten).findByText(/ausgeblendet/)).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Garten' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Wiese' }));
     expect(await screen.findByRole('heading', { name: 'Kamera „Wiese“' })).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Kameras' })).not.toBeInTheDocument();
-    const hidden = screen.getByRole('region', { name: 'Ausgeblendete Kameras' });
-    expect(hidden).toHaveTextContent('Garten');
 
-    fireEvent.click(within(hidden).getByRole('button', { name: 'Wieder anzeigen' }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
+    const again = within(screen.getByRole('region', { name: 'Kameras verwalten' })).getByRole(
+      'row',
+      { name: /Garten/ },
+    );
+    fireEvent.click(within(again).getByRole('button', { name: 'Wieder anzeigen' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Garten' }));
     expect(await screen.findByRole('heading', { name: 'Kamera „Garten“' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Ausgeblendete Kameras' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Garten' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('takes a found camera in and stops reading one (#298)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    // The tab counts the new camera.
+    fireEvent.click(await screen.findByRole('tab', { name: /^Kameras verwalten.*1 neu/ }));
     const fresh = await screen.findByRole('group', { name: 'Neue Kamera TC100_77A1' });
     expect(fresh).toHaveTextContent('mittleres Signal');
     fireEvent.change(within(fresh).getByLabelText(/Name der Kamera/), {
@@ -215,19 +227,18 @@ describe('GalleryApp', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: /Neue Kamera/ })).not.toBeInTheDocument();
 
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
-    fireEvent.click(await screen.findByRole('button', { name: 'Nicht mehr abfragen' }));
+    const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
+    const garten = within(panel).getByRole('row', { name: /Garten/ });
+    fireEvent.click(within(garten).getByRole('button', { name: 'Nicht mehr abfragen' }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveTextContent('Kamera „Garten“ nicht mehr abfragen?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ja, nicht mehr abfragen' }));
-    const section = await screen.findByRole('region', { name: 'Gefundene Kameras' });
-    expect(await within(section).findByText('Nicht abgefragte Kameras')).toBeInTheDocument();
-    expect(section).toHaveTextContent('Garten');
-    expect(screen.queryByRole('button', { name: 'Nicht mehr abfragen' })).not.toBeInTheDocument();
+    expect(await within(garten).findByText(/wird nicht abgefragt/)).toBeInTheDocument();
 
-    fireEvent.click(within(section).getByRole('button', { name: 'Doch aufnehmen' }));
-    expect(await screen.findByRole('button', { name: 'Nicht mehr abfragen' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Gefundene Kameras' })).not.toBeInTheDocument();
+    fireEvent.click(within(garten).getByRole('button', { name: 'Doch aufnehmen' }));
+    expect(
+      await within(garten).findByRole('button', { name: 'Nicht mehr abfragen' }),
+    ).toBeInTheDocument();
   });
 
   it('shows a recording large and plays its video (#306)', async () => {
@@ -246,8 +257,8 @@ describe('GalleryApp', () => {
     fireEvent.click(within(card!).getByRole('button', { name: 'Video holen' }));
     await within(card!).findByText(/Video kommt/);
     now += 20;
-    fireEvent.click(screen.getByRole('button', { name: 'Wiese' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Garten' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Wiese' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Garten' }));
     const [ready] = await screen.findAllByRole('listitem');
     fireEvent.click(await within(ready!).findByRole('button', { name: 'Video ansehen' }));
     const player = screen.getByRole('dialog', { name: /^Aufnahme vom/ });
@@ -263,7 +274,7 @@ describe('GalleryApp', () => {
     expect(screen.getByText(/^Akku 76 % · zuletzt gelesen/)).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Hinweise zur Kamera' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Wiese' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Wiese' }));
     const hints = await screen.findByRole('status', { name: 'Hinweise zur Kamera' });
     expect(hints).toHaveTextContent('Der Akku der Kamera wird schwach (18 %).');
     expect(hints).toHaveTextContent('Die SD-Karte der Kamera ist fast voll.');
@@ -272,6 +283,8 @@ describe('GalleryApp', () => {
   it('asks the hub to look for cameras (#308)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Nach Kameras suchen' }));
     expect(
       await screen.findByText(/Der Hub sucht beim nächsten Kontakt \(gegen .*\) nach Kameras/),
