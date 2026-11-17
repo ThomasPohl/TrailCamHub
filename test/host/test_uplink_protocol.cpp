@@ -341,3 +341,20 @@ TEST_CASE("the check-in response carries the approved cameras (#299)")
         parse_checkin_response("{\"serverTime\":1,\"cameras\":[]}", response));
     CHECK_FALSE(response.has_approved_cameras);
 }
+
+TEST_CASE("uplink: firmware update in the check-in (#149)")
+{
+    CheckinRequest request;
+    request.hub_firmware = "v1.3.0";
+    CHECK(build_checkin_json(request).find("firmwareUpdate") ==
+          std::string::npos);
+    request.firmware_update.present = true;
+    request.firmware_update.from = "v1.2.0";
+    request.firmware_update.to = "v1.3.0";
+    request.firmware_update.result = "installed";
+    request.firmware_update.at = 1763400000;
+    CHECK(build_checkin_json(request).find(
+              "\"firmwareUpdate\":{\"from\":\"v1.2.0\",\"to\":\"v1.3.0\","
+              "\"result\":\"installed\",\"at\":1763400000}") !=
+          std::string::npos);
+}

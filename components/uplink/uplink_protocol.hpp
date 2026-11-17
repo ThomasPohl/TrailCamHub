@@ -83,6 +83,16 @@ struct MemoryReport {
     std::int64_t stack_controller = -1;
 };
 
+// The hub's last firmware update (#149), sent once.
+struct FirmwareUpdateReport {
+    bool present = false;
+    std::string from;
+    std::string to;
+    std::string result;   // installed, rolledBack, failed
+    std::string reason;   // left out when empty
+    std::int64_t at = 0;  // Unix seconds; left out when 0 (clock not set)
+};
+
 // A camera heard advertising (#296).
 struct DiscoveredCamera {
     std::string ble_address;
@@ -105,6 +115,7 @@ struct CheckinRequest {
     std::int64_t max_thumb_uploads = -1;
     ScheduleReport schedule;
     MemoryReport memory;
+    FirmwareUpdateReport firmware_update;
     std::vector<CameraReport> cameras;
     // Cameras heard in BLE scans, read or not (#296). Sent as "discovered"
     // when `report_discovered` is set, even if empty, so the backend knows

@@ -194,6 +194,25 @@ export interface FirmwareChange {
   at: number;
   from: string;
   to: string;
+  /**
+   * The hub's own record of an update (#149); absent for a change the
+   * backend noticed between two check-ins (e.g. a USB flash).
+   */
+  result?: FirmwareUpdateResult;
+  /** Why it failed or was rolled back, as the hub said. */
+  reason?: string;
+}
+
+export type FirmwareUpdateResult = 'installed' | 'rolledBack' | 'failed';
+
+/** The hub's last firmware update, sent once in a check-in (#149). */
+export interface FirmwareUpdateReport {
+  from: string;
+  to: string;
+  result: FirmwareUpdateResult;
+  reason?: string;
+  /** Unix seconds from the hub's clock; absent if it was not set. */
+  at?: number;
 }
 
 /** Who a sample belongs to. */
@@ -222,6 +241,7 @@ export interface Fault {
     | 'sdNearlyFull'
     | 'requestsFailed'
     | 'firmwareDowngrade'
+    | 'firmwareUpdateFailed'
     | 'cameraNotRead';
   level: 'error' | 'warning';
   /** The camera it is about; absent for the hub. */
@@ -385,6 +405,8 @@ export interface CheckinRequest {
    */
   maxThumbUploads?: number;
   schedule?: HubSchedule;
+  /** The hub's last firmware update, once (#149). */
+  firmwareUpdate?: FirmwareUpdateReport;
   cameras?: CameraReport[];
   /**
    * Cameras the hub heard advertising, read or not (#296). A hub that sends

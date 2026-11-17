@@ -54,6 +54,13 @@ void force_check();
 // next restart boots it. `error` explains a failure.
 esp_err_t install(const Offer &offer, std::string &error);
 
+// The last update for the next check-in (#149): true and `record` if one
+// is complete and not reported yet.
+bool update_report(UpdateRecord &record);
+// The backend took `sent` (the check-in succeeded). A record that changed
+// since stays to be reported.
+void mark_update_reported(const UpdateRecord &sent);
+
 // A new firmware is installed and waits for the restart.
 bool restart_pending();
 

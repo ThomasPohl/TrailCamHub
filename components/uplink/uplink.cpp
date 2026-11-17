@@ -564,6 +564,17 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     request.max_thumb_uploads = kMaxThumbUploads;
     request.schedule = schedule_report();
     request.memory = memory_report();
+    // The last firmware update, once (#149).
+    ota::UpdateRecord update;
+    const bool has_update = ota::update_report(update);
+    if (has_update) {
+        request.firmware_update.present = true;
+        request.firmware_update.from = update.from;
+        request.firmware_update.to = update.to;
+        request.firmware_update.result = ota::update_result_name(update.result);
+        request.firmware_update.reason = update.reason;
+        request.firmware_update.at = update.at;
+    }
     std::vector<SyncCamera> cameras;
     SentMedia sent;
     collect_cameras(request, cameras, sent);
@@ -601,6 +612,9 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     }
     std::string().swap(checkin.body);
     report.server_time = response.server_time;
+    if (has_update) {
+        ota::mark_update_reported(update);
+    }
     // The firmware can reach the backend: a new one is kept.
     ota::confirm_running();
     set_clock(response.server_time);

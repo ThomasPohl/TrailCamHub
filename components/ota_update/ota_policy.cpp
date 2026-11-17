@@ -387,4 +387,131 @@ std::string to_hex(const std::uint8_t *digest, std::size_t length)
     return out;
 }
 
+bool operator==(const UpdateRecord &a, const UpdateRecord &b)
+{
+    return a.result == b.result && a.from == b.from && a.to == b.to &&
+           a.reason == b.reason && a.at == b.at && a.reported == b.reported;
+}
+
+const char *update_result_name(UpdateResult result)
+{
+    switch (result) {
+    case UpdateResult::pending:
+        return "pending";
+    case UpdateResult::installed:
+        return "installed";
+    case UpdateResult::rolled_back:
+        return "rolledBack";
+    case UpdateResult::failed:
+        return "failed";
+    case UpdateResult::none:
+        break;
+    }
+    return "none";
+}
+
+namespace
+{
+
+// Fields are separated by '|'; the reason (last) may hold one, the
+// versions never do.
+std::string clean(const std::string &text)
+{
+    std::string out = text;
+    for (char &c : out) {
+        if (c == '|' || c == '\n') {
+            c = ' ';
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+std::string encode(const UpdateRecord &record)
+{
+    if (record.result == UpdateResult::none) {
+        return "";
+    }
+    return std::string("1|") + update_result_name(record.result) + "|" +
+           clean(record.from) + "|" + clean(record.to) + "|" +
+           std::to_string((long long)record.at) + "|" +
+           (record.reported ? "1" : "0") + "|" + record.reason;
+}
+
+UpdateRecord decode_update_record(const std::string &text)
+{
+    std::string fields[7];
+    std::size_t start = 0;
+    for (int i = 0; i < 6; i++) {
+        const std::size_t bar = text.find('|', start);
+        if (bar == std::string::npos) {
+            return UpdateRecord{};
+        }
+        fields[i] = text.substr(start, bar - start);
+        start = bar + 1;
+    }
+    fields[6] = text.substr(start);
+    if (fields[0] != "1") {
+        return UpdateRecord{};
+    }
+    UpdateRecord record;
+    const UpdateResult results[] = {
+        UpdateResult::pending, UpdateResult::installed,
+        UpdateResult::rolled_back, UpdateResult::failed};
+    for (UpdateResult result : results) {
+        if (fields[1] == update_result_name(result)) {
+            record.result = result;
+        }
+    }
+    if (record.result == UpdateResult::none || fields[4].empty() ||
+        fields[4].find_first_not_of("0123456789") != std::string::npos ||
+        fields[4].size() > 12 || (fields[5] != "0" && fields[5] != "1")) {
+        return UpdateRecord{};
+    }
+    record.from = fields[2];
+    record.to = fields[3];
+    record.at = std::stoll(fields[4]);
+    record.reported = fields[5] == "1";
+    record.reason = fields[6];
+    return record;
+}
+
+bool update_record_at_boot(UpdateRecord &record, const std::string &running,
+                           const std::string &rolled_back, std::int64_t now)
+{
+    if (record.result != UpdateResult::pending) {
+        return false;
+    }
+    if (running == record.to && rolled_back != record.to) {
+        return false;  // the new firmware runs; waits for its check-in
+    }
+    record.result = UpdateResult::rolled_back;
+    record.reason = rolled_back == record.to
+                        ? "the new firmware did not confirm itself"
+                        : "running " + running + " instead";
+    record.at = now;
+    record.reported = false;
+    return true;
+}
+
+bool update_record_confirmed(UpdateRecord &record, const std::string &running,
+                             std::int64_t now)
+{
+    if (record.result != UpdateResult::pending || running != record.to) {
+        return false;
+    }
+    record.result = UpdateResult::installed;
+    record.at = now;
+    record.reported = false;
+    return true;
+}
+
+bool update_record_reportable(const UpdateRecord &record)
+{
+    return !record.reported && (record.result == UpdateResult::installed ||
+                                record.result == UpdateResult::rolled_back ||
+                                record.result == UpdateResult::failed);
+}
+
 }  // namespace ota

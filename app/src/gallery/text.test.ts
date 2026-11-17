@@ -61,6 +61,18 @@ describe('gallery texts', () => {
         now,
       ),
     ).toBe('Der Hub läuft wieder mit älterer Firmware (v0.1.13 → v0.1.12) – Update zurückgerollt?');
+    expect(
+      faultText(
+        {
+          kind: 'firmwareUpdateFailed',
+          level: 'warning',
+          value: 1,
+          detail: 'v0.1.13 → v0.1.14: no check-in',
+        },
+        undefined,
+        now,
+      ),
+    ).toBe('Firmware-Update zurückgerollt (v0.1.13 → v0.1.14: no check-in)');
   });
 
   it('words what needs a look at the camera (#304)', () => {
