@@ -126,6 +126,7 @@ export interface Fault {
     | 'requestsFailed'
     | 'firmwareDowngrade'
     | 'firmwareUpdateFailed'
+    | 'hubMemoryLow'
     | 'cameraNotRead';
   level: 'error' | 'warning';
   camId?: string;
@@ -145,6 +146,15 @@ export interface AdminHub {
   uplink?: 'wifi' | 'modem' | 'ethernet';
   /** Modem signal in dBm, only while the hub syncs over the modem. */
   modemSignalDbm?: number;
+  /** Lowest free memory of the last reported cycle, bytes (#149). */
+  memory?: {
+    cycle: number;
+    heapMin: number;
+    psramMin?: number;
+    stackSession?: number;
+    stackUplink?: number;
+    stackController?: number;
+  };
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   schedule?: HubSchedule;

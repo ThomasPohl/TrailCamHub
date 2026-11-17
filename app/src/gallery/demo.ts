@@ -236,6 +236,7 @@ export class DemoGalleryApi implements GalleryApi {
         firmware: 'v0.1.13',
         uplink: 'modem',
         modemSignalDbm: -91,
+        memory: { cycle: 412, heapMin: 41_200, psramMin: 3_250_000, stackSession: 1_400 },
         batPercent: 84,
         lastSeen: this.lastCheckin,
         schedule: {

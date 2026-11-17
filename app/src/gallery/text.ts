@@ -125,6 +125,8 @@ export function faultText(fault: Fault, camera: string | undefined, nowSeconds: 
         (fault.since ? `, seit ${clockTime(fault.since, nowSeconds)}` : '') +
         ' – Update zurückgerollt?'
       );
+    case 'hubMemoryLow':
+      return `Der Hub hatte zuletzt wenig freien Speicher (${kilobytes(fault.value ?? 0)}); Kontakte können scheitern.`;
     case 'firmwareUpdateFailed':
       return (
         `Firmware-Update ${fault.value === 1 ? 'zurückgerollt' : 'fehlgeschlagen'} (${fault.detail ?? '?'})` +
@@ -186,4 +188,32 @@ export function uplinkText(uplink: keyof typeof UPLINK, signalDbm?: number): str
           ? 'schwach'
           : 'sehr schwach';
   return `${UPLINK.modem}, Signal ${signalDbm} dBm (${quality})`;
+}
+
+/** Bytes as "6.6 KB" or "3.1 MB". */
+export function kilobytes(bytes: number): string {
+  return bytes >= 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    : `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+/** The hub's lowest free memory in one line (#149, #244). */
+export function memoryText(m: {
+  heapMin: number;
+  psramMin?: number;
+  stackSession?: number;
+  stackUplink?: number;
+  stackController?: number;
+}): string {
+  const parts = [`intern min. ${kilobytes(m.heapMin)} frei`];
+  if (m.psramMin !== undefined) parts.push(`PSRAM min. ${kilobytes(m.psramMin)}`);
+  const stacks = [
+    ['Sitzung', m.stackSession],
+    ['Upload', m.stackUplink],
+    ['Steuerung', m.stackController],
+  ]
+    .filter((s): s is [string, number] => s[1] !== undefined)
+    .map(([name, bytes]) => `${name} ${kilobytes(bytes)}`);
+  if (stacks.length > 0) parts.push(`Stack: ${stacks.join(', ')}`);
+  return parts.join(' · ');
 }

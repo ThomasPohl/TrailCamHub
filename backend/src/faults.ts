@@ -20,6 +20,8 @@ const HUB_BATTERY_LOW = 25;
 const CAMERA_BATTERY_CRITICAL = 10;
 const CAMERA_BATTERY_LOW = 25;
 const SD_FULL_MB = 200;
+/** Free internal heap below which a check-in may fail (TLS needs ~6 KB, #244). */
+export const HUB_HEAP_LOW = 10 * 1024;
 const SD_LOW_MB = 1024;
 const SD_LOW_SHARE = 0.05;
 
@@ -71,6 +73,16 @@ export function hubFaults(
       level: 'warning',
       detail: `${lastChange.from} → ${lastChange.to}`,
       since: lastChange.at,
+    });
+  }
+
+  // Little free heap in the last cycle: TLS and large responses fail
+  // first (#244).
+  if (hub.memory && hub.memory.heapMin < HUB_HEAP_LOW) {
+    faults.push({
+      kind: 'hubMemoryLow',
+      level: 'warning',
+      value: hub.memory.heapMin,
     });
   }
 
