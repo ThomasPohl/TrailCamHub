@@ -29,6 +29,10 @@ struct Options {
     // The camera retransmits unacknowledged DATA quickly: ~70 ms in the
     // captures (the hub uses 800 ms).
     std::int64_t retransmit_ms = 100;
+    // Recordings in the media list. 90 = the captured list, byte for byte;
+    // other sizes keep the first captured entries and invent the rest
+    // (#122). 0 = an empty card.
+    std::size_t media_count = 90;
     // DATA packets in flight before the next one waits for an ACK. The camera
     // sent up to 7 response fragments at once in the captures.
     std::size_t window = 8;
@@ -183,6 +187,14 @@ class Camera
     {
         return faults_;
     }
+    void set_media_count(std::size_t count)
+    {
+        options_.media_count = count;
+    }
+    std::size_t media_count() const
+    {
+        return options_.media_count;
+    }
     void set_identity(const Identity &identity)
     {
         identity_ = identity;
@@ -311,10 +323,23 @@ std::vector<std::uint8_t> media_record(const Identity &identity,
                                        std::int64_t media_id,
                                        std::size_t file_size);
 
-// The mediaId of a file in the captured media list; 0 if it is not there.
+// The mediaId of a file in the media list of `count` entries (see
+// Options::media_count); 0 if it is not there.
 std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
                                std::int64_t file_type, std::int64_t dir_num,
-                               std::int64_t media_num);
+                               std::int64_t media_num, std::size_t count = 90);
+
+// Entries of the captured list (page 0 and 1).
+constexpr std::size_t kCapturedMediaCount = 90;
+// The most the mock lists; the hub keeps a few hundred at most (#211).
+constexpr std::size_t kMaxMediaCount = 1000;
+
+// A media-list page (768) of a list with `count` entries, `per_page` to a
+// page: the captured entries first (as captured), then invented ones (photo
+// and video alternate, numbers count down from 436, 300 to a directory).
+// Past the end the page is empty.
+std::string media_list_page(const camera::artemis::Aes128 &cipher,
+                            std::size_t count, int page_no, int per_page);
 
 // Builds an ARTEMIS response (MsgType 3) the way the camera frames it:
 // header, Base64, then `padding` zero bytes, all counted in PayloadLen.

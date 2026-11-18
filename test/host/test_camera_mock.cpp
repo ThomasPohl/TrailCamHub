@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -748,4 +749,74 @@ TEST_CASE("camera mock: a bulk record stops mid-transfer (#122 stage 2)")
                       bench.now_ms);
     bench.run(30);
     CHECK(bench.hub.records.size() == 1);
+}
+
+TEST_CASE("camera mock: size of the media list (#122)")
+{
+    const camera::artemis::Aes128 cipher = camera::artemis::command_cipher();
+
+    auto page = [&](std::size_t count, int page_no) {
+        camera::artemis::MediaList list;
+        REQUIRE(camera::artemis::parse_media_list(
+            media_list_page(cipher, count, page_no, 45), list));
+        return list;
+    };
+
+    SUBCASE("the captured size gives the captured entries")
+    {
+        camera::artemis::MediaList captured;
+        REQUIRE(camera::artemis::parse_media_list(
+            decrypt(fixtures::kMediaListPage1Response), captured));
+        const auto list = page(90, 1);
+        REQUIRE(list.files.size() == captured.files.size());
+        for (std::size_t i = 0; i < list.files.size(); i++) {
+            CHECK(list.files[i].id == captured.files[i].id);
+            CHECK(list.files[i].num == captured.files[i].num);
+        }
+    }
+
+    SUBCASE("fewer entries cut the list")
+    {
+        CHECK(page(50, 0).files.size() == 45);
+        CHECK(page(50, 1).files.size() == 5);
+        CHECK(page(50, 2).files.empty());
+        CHECK(page(0, 0).files.empty());
+    }
+
+    SUBCASE("more entries go on with invented ones")
+    {
+        std::set<std::int64_t> ids;
+        std::set<std::string> keys;
+        std::size_t total = 0;
+        for (int p = 0; p < 20; p++) {
+            const auto list = page(700, p);
+            for (const auto &item : list.files) {
+                ids.insert(item.id);
+                keys.insert(std::to_string(item.file_type) + "/" +
+                            std::to_string(item.dir_num) + "/" +
+                            std::to_string(item.num));
+                CHECK(item.id != 0);
+                CHECK(item.num > 0);
+            }
+            total += list.files.size();
+        }
+        CHECK(total == 700);
+        CHECK(ids.size() == 700);
+        CHECK(keys.size() == 700);
+    }
+
+    SUBCASE("a thumbnail request finds an invented entry, not one past the "
+            "end")
+    {
+        const auto list = page(100, 2);
+        REQUIRE(list.files.size() == 10);
+        for (std::size_t i = 0; i < list.files.size(); i++) {
+            const auto &item = list.files[i];
+            CHECK(captured_media_id(cipher, item.file_type, item.dir_num,
+                                    item.num, 100) == item.id);
+            // Entries 90-94 stay in a list of 95, entries 95-99 do not.
+            CHECK(captured_media_id(cipher, item.file_type, item.dir_num,
+                                    item.num, 95) == (i < 5 ? item.id : 0));
+        }
+    }
 }

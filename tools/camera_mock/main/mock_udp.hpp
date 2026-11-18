@@ -21,5 +21,8 @@ camera_mock::Identity identity();
 // The faults the mock injects (#122 stage 2); see camera_mock::Faults.
 camera_mock::Faults faults();
 void set_faults(const camera_mock::Faults &faults);
+// Recordings in the media list (#122); see camera_mock::Options.
+size_t media_count();
+void set_media_count(size_t count);
 
 }  // namespace mock_udp

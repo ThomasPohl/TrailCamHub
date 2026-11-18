@@ -175,10 +175,13 @@ std::vector<std::uint8_t> media_record(const Identity &identity,
     return out;
 }
 
-std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
-                               std::int64_t file_type, std::int64_t dir_num,
-                               std::int64_t media_num)
+namespace
 {
+
+// The entries of both captured pages as JSON objects.
+std::vector<std::string> captured_entries(const camera::artemis::Aes128 &cipher)
+{
+    std::vector<std::string> entries;
     const fixtures::CapturedResponse *pages[] = {
         &fixtures::kMediaListPage0Response, &fixtures::kMediaListPage1Response};
     for (const fixtures::CapturedResponse *page : pages) {
@@ -192,20 +195,105 @@ std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
             if (end == std::string::npos) {
                 break;
             }
-            const std::string item = json.substr(at, end - at + 1);
-            std::int64_t type = -1;
-            std::int64_t dir = -1;
-            std::int64_t num = -1;
-            std::int64_t id = 0;
-            if (find_int(item, "fileType", type) && type == file_type &&
-                find_int(item, "mediaDirNum", dir) && dir == dir_num &&
-                find_int(item, "mediaNum", num) && num == media_num &&
-                find_int(item, "mediaId", id)) {
-                return id;
-            }
+            entries.push_back(json.substr(at, end - at + 1));
+            at = end;
+        }
+    }
+    return entries;
+}
+
+constexpr std::int64_t kFirstDir = 102;
+constexpr std::int64_t kFirstNum = 436;
+constexpr std::int64_t kPerDir = 300;
+constexpr std::int64_t kFirstTime = 1770385736;
+
+struct Entry {
+    std::int64_t file_type = 0;
+    std::int64_t dir_num = 0;
+    std::int64_t media_num = 0;
+    std::int64_t duration_ms = 0;
+    std::int64_t media_id = 0;
+    std::int64_t media_time = 0;
+};
+
+// The invented entry `index` (>= 90): continues the captured numbering.
+Entry invented_entry(std::size_t index)
+{
+    const std::int64_t i = static_cast<std::int64_t>(index);
+    Entry e;
+    e.file_type = i % 2;
+    e.dir_num = kFirstDir - i / kPerDir;
+    e.media_num = kFirstNum - i % kPerDir;
+    e.duration_ms = e.file_type == 1 ? 8000 + (i % 7) * 500 : 0;
+    // Never 0 (the hub reads 0 as "not there"), spread over 32 bits.
+    e.media_id = static_cast<std::int64_t>(
+        (static_cast<std::uint32_t>(i) * 2654435761u) | 1u);
+    e.media_time = kFirstTime - i * 300;
+    return e;
+}
+
+std::string entry_json(const Entry &e)
+{
+    return "{\"fileType\":" + std::to_string(e.file_type) +
+           ",\"mediaDirNum\":" + std::to_string(e.dir_num) +
+           ",\"mediaNum\":" + std::to_string(e.media_num) +
+           ",\"durationMs\":" + std::to_string(e.duration_ms) +
+           ",\"mediaId\":" + std::to_string(e.media_id) +
+           ",\"mediaTime\":" + std::to_string(e.media_time) + "}";
+}
+
+}  // namespace
+
+std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
+                               std::int64_t file_type, std::int64_t dir_num,
+                               std::int64_t media_num, std::size_t count)
+{
+    const std::vector<std::string> captured = captured_entries(cipher);
+    for (std::size_t i = 0; i < captured.size() && i < count; i++) {
+        std::int64_t type = -1;
+        std::int64_t dir = -1;
+        std::int64_t num = -1;
+        std::int64_t id = 0;
+        if (find_int(captured[i], "fileType", type) && type == file_type &&
+            find_int(captured[i], "mediaDirNum", dir) && dir == dir_num &&
+            find_int(captured[i], "mediaNum", num) && num == media_num &&
+            find_int(captured[i], "mediaId", id)) {
+            return id;
+        }
+    }
+    for (std::size_t i = captured.size(); i < count; i++) {
+        const Entry e = invented_entry(i);
+        if (e.file_type == file_type && e.dir_num == dir_num &&
+            e.media_num == media_num) {
+            return e.media_id;
         }
     }
     return 0;
+}
+
+std::string media_list_page(const camera::artemis::Aes128 &cipher,
+                            std::size_t count, int page_no, int per_page)
+{
+    const std::vector<std::string> captured = captured_entries(cipher);
+    std::string items;
+    int in_page = 0;
+    if (page_no >= 0 && per_page > 0) {
+        const std::size_t first = static_cast<std::size_t>(page_no) *
+                                  static_cast<std::size_t>(per_page);
+        for (std::size_t i = first; i < count && in_page < per_page; i++) {
+            if (!items.empty()) {
+                items += ",";
+            }
+            items += i < captured.size() ? captured[i]
+                                         : entry_json(invented_entry(i));
+            in_page++;
+        }
+    }
+    return "{\"mediaFiles\":[" + items +
+           "],\"cnt\":" + std::to_string(in_page) +
+           ",\"pageNo\":" + std::to_string(page_no) +
+           ",\"getMediaListRet\":0,\"errorMsg\":\"Success\",\"result\":0,"
+           "\"cmdId\":768}";
 }
 
 bool Identity::operator==(const Identity &other) const
@@ -766,15 +854,21 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
         }
         // After a format the card is empty.
         const fixtures::CapturedResponse *page =
-            formatted_ ? nullptr : captured_page(static_cast<int>(page_no));
+            formatted_ || options_.media_count != kCapturedMediaCount
+                ? nullptr
+                : captured_page(static_cast<int>(page_no));
         if (page != nullptr) {
             respond(message.app_sequence, page->base64, page->padding, now_ms);
         } else {
-            respond(
-                message.app_sequence,
-                camera::artemis::encode(
-                    cipher_, empty_media_list_page(static_cast<int>(page_no))),
-                fixtures::kCapturedPadding, now_ms);
+            const std::string json =
+                formatted_ || options_.media_count == 0
+                    ? empty_media_list_page(static_cast<int>(page_no))
+                    : media_list_page(cipher_, options_.media_count,
+                                      static_cast<int>(page_no),
+                                      static_cast<int>(per_page));
+            respond(message.app_sequence,
+                    camera::artemis::encode(cipher_, json),
+                    fixtures::kCapturedPadding, now_ms);
         }
         return;
     }
@@ -882,8 +976,8 @@ void Camera::handle_media(std::int64_t cmd_id, const std::string &request,
     for (const std::string &done : deleted_) {
         gone = gone || done == key;
     }
-    const std::int64_t media_id =
-        captured_media_id(cipher_, file_type, dir_num, media_num);
+    const std::int64_t media_id = captured_media_id(
+        cipher_, file_type, dir_num, media_num, options_.media_count);
     if (gone || media_id == 0) {
         log(LogLevel::info, std::to_string((long long)cmd_id) + " for " + key +
                                 ": no such file; no data");
