@@ -14,6 +14,11 @@
 #include "mock_camera.hpp"
 #include "mock_wire.hpp"
 
+extern const uint8_t thumbnail_start[] asm("_binary_thumbnail_jpg_start");
+extern const uint8_t thumbnail_end[] asm("_binary_thumbnail_jpg_end");
+extern const uint8_t photo_start[] asm("_binary_photo_jpg_start");
+extern const uint8_t photo_end[] asm("_binary_photo_jpg_end");
+
 namespace mock_udp
 {
 
@@ -142,6 +147,11 @@ esp_err_t start(const camera_mock::Identity &identity)
     s_output.fd = fd;
     camera_mock::Options options;
     options.media_count = CONFIG_CAMERA_MOCK_MEDIA_COUNT;
+    // The pictures embedded in the image (fixtures/make_images.py).
+    options.thumbnail_jpeg = thumbnail_start;
+    options.thumbnail_jpeg_size = thumbnail_end - thumbnail_start;
+    options.photo_jpeg = photo_start;
+    options.photo_jpeg_size = photo_end - photo_start;
     s_camera = new camera_mock::Camera(s_output, log_line, options);
     s_camera->set_identity(identity);
     if (xTaskCreate(udp_task, "mock_udp", 6144, nullptr, 5, nullptr) !=

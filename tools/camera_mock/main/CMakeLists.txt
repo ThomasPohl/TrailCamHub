@@ -13,6 +13,8 @@ idf_component_register(SRCS "main.cpp" "mock_ap.cpp" "mock_ble.c"
                             "${link_dir}/artemis_crypto.cpp"
                             "${link_dir}/artemis_message.cpp"
                        INCLUDE_DIRS "." "${core_dir}" "${link_dir}"
+                       EMBED_FILES "${CMAKE_CURRENT_LIST_DIR}/../fixtures/thumbnail.jpg"
+                                   "${CMAKE_CURRENT_LIST_DIR}/../fixtures/photo.jpg"
                        PRIV_REQUIRES bt console esp_event esp_netif esp_timer
                                      esp_wifi lwip nvs_flash)
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror

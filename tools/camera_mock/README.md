@@ -143,4 +143,6 @@ With `drop` the hub waits for a lost fragment instead of taking the later ones f
 
 The camera MAC (`devId` in 512, BLE manufacturer data, media headers) comes from `CONFIG_CAMERA_MOCK_DEV_ID` (default: the captured `C6:1E:0D:E0:0C:FB`) or from the console: `id` shows it, `id C6:1E:0D:E0:0C:42` stores another one in NVS, `id default` goes back to the Kconfig value; both take effect after a reset. The BLE name follows the MAC (`TC100_0C42`). Two mocks with different MACs stand for two cameras (#57).
 
+Thumbnails (772) and photos (1285) are real JPEG files from the flash image: `fixtures/thumbnail.jpg` (320x180, about 4 KB) and `fixtures/photo.jpg` (1280x720, about 23 KB), embedded by the build. They are drawn by `fixtures/make_images.py` (a generic landscape, not from a camera) and the hub's gallery shows them. Every listed recording gets the same picture; without the files (host tests) the mock falls back to a synthetic JPEG frame.
+
 The media list holds 90 recordings, the captured list byte for byte (`CONFIG_CAMERA_MOCK_MEDIA_COUNT`). `media` shows the size, `media <0-1000>` sets it until the next reset: fewer entries cut the captured list, more continue the numbering with invented entries (photo and video alternate, 300 per directory), `media 0` is an empty card. Thumbnails and photos work for every listed entry.

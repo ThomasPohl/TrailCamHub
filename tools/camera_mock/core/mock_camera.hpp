@@ -33,6 +33,13 @@ struct Options {
     // other sizes keep the first captured entries and invent the rest
     // (#122). 0 = an empty card.
     std::size_t media_count = 90;
+    // The JPEG files served for thumbnails (772) and photos (1285), e.g.
+    // embedded in the flash image (fixtures/thumbnail.jpg, photo.jpg). Not
+    // set: a synthetic JPEG frame of a few KB / tens of KB.
+    const std::uint8_t *thumbnail_jpeg = nullptr;
+    std::size_t thumbnail_jpeg_size = 0;
+    const std::uint8_t *photo_jpeg = nullptr;
+    std::size_t photo_jpeg_size = 0;
     // DATA packets in flight before the next one waits for an ACK. The camera
     // sent up to 7 response fragments at once in the captures.
     std::size_t window = 8;
@@ -322,6 +329,12 @@ std::vector<std::uint8_t> media_record(const Identity &identity,
                                        std::int64_t media_num,
                                        std::int64_t media_id,
                                        std::size_t file_size);
+
+// The same record around a given file (a real JPEG) instead of a synthetic one.
+std::vector<std::uint8_t>
+media_record_for_file(const Identity &identity, std::int64_t dir_num,
+                      std::int64_t media_num, std::int64_t media_id,
+                      const std::uint8_t *file, std::size_t file_size);
 
 // The mediaId of a file in the media list of `count` entries (see
 // Options::media_count); 0 if it is not there.
