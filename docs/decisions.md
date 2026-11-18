@@ -49,8 +49,8 @@ hub's parsers against it. (#122)
 - The hardware is fixed, the mode is chosen at run time: Kconfig says what a
   board can do (capabilities, `boards.json`), NVS holds the chosen mode
   (power, push/pull, transport, destination). One image per board.
-- Telegram directly only for the self-sufficient modem case; in the home
-  network the web UI (pull) or WebDAV (push).
+- Telegram was removed again (#266): with a modem the hub pushes to the own
+  backend; in the home network the web UI (pull) or WebDAV (push).
 - The hub reads `ota.json` straight from the GitHub releases.
 - Rejected: a native phone app (a sleeping hub still needs a reachable
   relay; push needs server credentials; store fees) and a backend shared by

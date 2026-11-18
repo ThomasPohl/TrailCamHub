@@ -129,14 +129,14 @@ per action, newest last:
 ```
 id,type,mediaId,source,state,created,finished,notified,key,reason
 7,delete,2653775860,console,done,1794500000,1794500123,1,,
-8,photo,0,telegram,failed,1794500100,1794500140,0,tg:4711,the camera answered snapRet -2
+8,photo,0,backend,failed,1794500100,1794500140,0,bk:4711,the camera answered snapRet -2
 ```
 
 | Column | Meaning |
 |---|---|
 | `type` | `photo`, `video-start`, `video-stop`, `delete`, `format` |
 | `mediaId` | only for `delete`, else 0 |
-| `source` | `console`, `web`, `telegram`, `backend` |
+| `source` | `console`, `web`, `backend` |
 | `state` | `pending`, `running` (sent, no answer yet), `done`, `failed` |
 | `created`, `finished` | Unix seconds, 0 = clock not set |
 | `notified` | 1 once the front end that asked was told the result |
@@ -161,7 +161,7 @@ what a hub did can be read without piecing it together from the log:
 | `cycle` | number of the cycle; goes on across deep sleep, crashes and restarts (RTC memory) and starts again at 1 after a power loss |
 | `start` | Unix seconds when the cycle started; left out while the clock is not set |
 | `kind` | `scan` (camera read, then sync), `list`, `actions` or `checkin` (sync only) |
-| `trigger` | `schedule`, or `request` (console, button, web UI, backend, Telegram) |
+| `trigger` | `schedule`, or `request` (console, button, web UI, backend) |
 | `result` | the controller's result, as in the console's `done …` line (`uplink-done`, `camera-unreachable`, …) |
 | `durationS` | seconds from leaving idle to the end of the cycle |
 | `camerasDone`, `camerasRead` | cameras handled in the cycle and, of those, the ones read |

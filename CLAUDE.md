@@ -2,7 +2,7 @@
 
 TrailCamHub: ESP32 firmware that wakes TC100 trail cameras over BLE, reads
 them over their Wi-Fi (PPPP/ARTEMIS), stores media on SD and syncs to an AWS
-backend with a Telegram Mini App. Protocol and design notes live in `docs/`.
+backend with a gallery web app. Protocol and design notes live in `docs/`.
 
 ## Working economically
 

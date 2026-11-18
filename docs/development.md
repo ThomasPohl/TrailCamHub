@@ -142,7 +142,7 @@ CI uses the clang-tidy of Ubuntu 24.04 (18).
 | Workflow | What it does |
 |---|---|
 | **Firmware Package** | builds every board (development and release), the camera mock, runs the host tests (also with ASan/UBSan), clang-tidy on the files of the host tests and the clang-format check, reports size per component (on PRs compared with the target branch, warning below 10 % free) and the static RAM of every board (see below), publishes the installer from `main` and releases from tags |
-| **App** | lints, tests and builds the Telegram Mini App |
+| **App** | lints, tests and builds the gallery web app |
 | **Backend** | tests and deploys the optional AWS backend |
 | **Badges** | updates the README badges |
 

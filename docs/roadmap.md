@@ -30,7 +30,7 @@ data, and TrailCamHub does not bypass security mechanisms.
 | 3 | BLE-controlled camera Wi-Fi and first API requests | done |
 | 4 | Single media download with an integrity check | thumbnails, photos, videos |
 | 5 | Persistent queue and resumable uploads | catalog on the SD card |
-| 6 | First cloud destination, end-to-end tests | own backend, WebDAV, Telegram |
+| 6 | First cloud destination, end-to-end tests | own backend, WebDAV |
 | 7 | Setup, diagnostics, more cameras, security | in progress |
 
 ## Lowering the barrier
@@ -49,11 +49,12 @@ roughly in order of impact:
 - **Quick start with a bill of materials and wiring pictures** — removes most
   of the hardware uncertainty.
 - **Downlink by polling on wake** — done: the sleeping hub picks up requests
-  at each check-in (videos, schedule, Telegram commands) and looks for
+  at each check-in (videos, schedule, commands) and looks for
   updates itself, instead of keeping a connection open.
 - **No own cloud needed** — done: the earlier idea of a copy-paste cloud relay
   (Google Apps Script) gave way to destinations that need no server of ours:
-  Telegram directly, WebDAV, or the web UI on the hub (#150).
+  WebDAV, or the web UI on the hub (#150). A Telegram destination was
+  tried and removed again (#266).
 
 Realistic target: from "1–3 hours for a tinkerer" to "about 30 minutes for a
 technically minded user", with the hard constraints (camera compatibility,

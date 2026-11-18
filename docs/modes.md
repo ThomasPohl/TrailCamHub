@@ -9,7 +9,7 @@ time and stored on the hub (NVS), without another firmware image (concept:
 | `power`       | `mains`, `battery`            | battery on the S3-A7670E, mains elsewhere          | `config set power battery`       |
 | `direction`   | `push`, `pull`                | push on the S3-A7670E, pull elsewhere              | `config set direction push`      |
 | `transport`   | `wifi`, `ethernet`, `modem`   | Ethernet if the board has it, else the home Wi-Fi if one is set, otherwise the modem | `config set transport modem` |
-| `destination` | `backend`, `webdav`, `telegram` | `backend`                                       | `config set destination webdav`  |
+| `destination` | `backend`, `webdav`             | `backend`                                       | `config set destination webdav`  |
 
 `config clear` (or the installer's "Erase") returns everything to the preset.
 
@@ -27,7 +27,7 @@ time and stored on the hub (NVS), without another firmware image (concept:
   cellular modem. The hub's own access point follows with the web UI as a
   station (#150).
 - **destination** is where push goes: the own backend (AWS, optional), a
-  WebDAV folder, or a Telegram bot directly. See "Destinations" below.
+  or a WebDAV folder. See "Destinations" below.
 
 The web installer's setup assistant asks for the mode in plain words and sets
 these settings (and the transport's and destination's own settings) for you.
@@ -50,7 +50,7 @@ switching the destination later does not send those items again.
 
 ### Own backend (`backend`)
 
-`api_url` and `device_key`; the check-in, the Telegram Mini App and the bot
+`api_url` and `device_key`; the check-in and the gallery web app
 of the backend (`backend/README.md`). Optional; it is not extended further
 (#150).
 
@@ -79,37 +79,6 @@ videos for WebDAV, `home` is the default. `https://` checks
 the server certificate against the public CAs: a NAS with a self-signed
 certificate needs `http://` (unencrypted: only in a network you trust).
 
-### Telegram directly (`telegram`)
-
-Only on a board with a modem (decision in #150; at home use WebDAV or the web
-UI). Needs no server:
-
-1. Create a bot with @BotFather and set its token:
-   `config set telegram_token 123456789:AA...`, `config set destination telegram`.
-2. Send `/start` to the bot. At the next check-in the hub stores this chat as
-   the only one it talks to (`telegram_chat`; a group works too) and answers.
-
-At each check-in the hub reads the commands and button presses since the
-last one (`getUpdates`), then sends new thumbnails as photos (at most 20 per
-check-in, the rest follow) with a **Get video** button under videos, and the
-videos that were asked for (as MP4, up to the modem's size limit). Commands:
-`/status` (batteries, next read and check-in), `/scan` (read the cameras now),
-`/photo`, `/video_start` and `/video_stop` ([camera actions](camera-actions.md): queued,
-run at the next read, which starts now; the result follows with the next
-check-in), `/help`.
-
-Limits:
-
-- A sleeping hub answers at its next check-in only; the check-in interval is
-  capped at 12 hours with Telegram, since Telegram keeps updates for about a
-  day.
-- The token is stored on the hub; if the hub is stolen, revoke it with
-  @BotFather.
-- One bot per hub: a bot with a webhook (the backend's bot) cannot be read
-  with `getUpdates` (`409`).
-- Compared with the backend's bot there is no Mini App (gallery, camera
-  choice, plan card) and no warning when the hub stops reporting.
-
 ## Pull: the web UI
 
 With `direction pull` people fetch thumbnails and media from the hub's web UI
@@ -135,8 +104,8 @@ Every board with the web UI also answers as **http://trailcamhub.local**
 `health_url` is called after every sync: `<url>` after a successful one,
 `<url>/fail` after a failed one (the convention of healthchecks.io, which has
 a free plan; other services ignore the suffix). When the calls stop — the hub
-is broken, has no power or no network — the service warns by e-mail,
-Telegram or otherwise. This replaces the backend's warning without a server
+is broken, has no power or no network — the service warns by e-mail
+or otherwise. This replaces the backend's warning without a server
 of one's own.
 
 ```

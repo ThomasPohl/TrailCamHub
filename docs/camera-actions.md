@@ -6,9 +6,9 @@ how that works from every front end. The camera commands are described in
 
 | Action | Command | Camera command | Allowed from |
 |---|---|---|---|
-| `photo` | take a photo | 641 | console, web UI, Telegram, backend |
-| `video-start` | start a video | 643 | console, web UI, Telegram, backend |
-| `video-stop` | stop it | 644 | console, web UI, Telegram, backend |
+| `photo` | take a photo | 641 | console, web UI, backend |
+| `video-start` | start a video | 643 | console, web UI, backend |
+| `video-stop` | stop it | 644 | console, web UI, backend |
 | `delete` | delete one recording by `mediaId` | 773 | console, web UI, backend |
 | `format` | erase the camera's SD card | 518 | console, web UI |
 
@@ -19,7 +19,7 @@ doing it exists (#197); live video (258/259) is parked (#198).
 ## One path for every front end
 
 ```
-console / web UI / Telegram ──submit──▶ queue (actions.csv) ──▶ camera session ──▶ camera
+console / web UI / backend ──submit──▶ queue (actions.csv) ──▶ camera session ──▶ camera
                      ◀─────── result (done / failed + reason) ◀──────┘
 ```
 
@@ -70,8 +70,7 @@ the catalog, so no thumbnail or download is requested for it.
   actions, CLOSE. No thumbnails, no downloads, no sync, and it does not count
   as a read of the camera for the schedule. The media list is read only if a
   deletion waits.
-- **With the next scan** (also what happens when a cycle is already running,
-  and for actions from Telegram on a hub on battery): the queued actions run
+- **With the next scan** (also what happens when a cycle is already running): the queued actions run
   right after the device info, so a new photo is in the media list that
   follows, then the deletions with the fresh list, then thumbnails and
   downloads as usual. `photo` on the console starts a scan for that reason.
@@ -86,8 +85,8 @@ restarted or the camera was silent for 15 s) is **not repeated**: it ends as
 remove a newer recording that took the number. An action that waited more than
 24 h for a camera read is dropped. At most 40 actions wait, 64 entries are kept
 (the gallery deletes in batches, #261).
-A command that arrives twice (a Telegram update delivered again after a crash)
-is queued once when the front end gives a key such as `tg:<update id>`.
+A command that arrives twice (a backend command delivered again after a crash)
+is queued once when the front end gives a key.
 
 ## Console
 
@@ -109,7 +108,7 @@ the list of `actions`. Deleting and erasing ask in a dialog first (erasing
 wants the word "erase" typed); the page then sends the command, takes the
 code from the hub's answer and sends the confirmation.
 
-## Web UI and Telegram
+## Web UI
 
 - **Web UI:** the card *Camera actions* has buttons for photo and video, a
   field for the `mediaId` (the file names under `media/` and `thumb/` are the
@@ -118,11 +117,6 @@ code from the hub's answer and sends the confirmation.
   request with `&code=` from the first answer). It lists the last actions
   with their results (`GET /api/actions`). The console and the page share
   `session_actions::request()`: checks, confirmation, queue, session.
-- **Telegram:** `/photo`, `/video_start`, `/video_stop`. The update id is the
-  key, so a command that `getUpdates` delivers again is queued once. The hub
-  requests a camera read at once; at the check-in after it, the chat is told
-  how each action ended (once). Deleting and formatting are not available in
-  a chat.
 - **Backend (gallery, #260):** a `deleteMedia` command (`mediaId`) becomes a
   `delete` for that camera (an action carries the camera's `devId`, so it
   runs only in that camera's session), keyed `be:<command id>`, so the
@@ -148,9 +142,5 @@ Not tested on a camera yet (CI compiles only):
   refused.
 - Web UI: each button; the confirmation for delete and format; the list
   under the buttons shows `done` or `failed: …` after the session.
-- Telegram `/photo` over the modem: the read starts, the photo arrives with
-  the thumbnails of that check-in, and "Photo taken" with the result; the same
-  command delivered twice (restart before the offset is saved) takes one
-  photo.
 - Power off the hub right after sending (`running` in `actions.csv`): after
   the restart the action is `failed`, not repeated.

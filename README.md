@@ -18,7 +18,7 @@
 **Get the pictures off your trail camera without walking to it.** TrailCamHub
 is open-source firmware for a small ESP32 board that sits near a Wi-Fi trail
 camera, wakes it over Bluetooth, copies new pictures to an SD card and sends
-them on: to your phone via Telegram, to a NAS, or over 4G from places without
+them on: to a NAS, to your own backend, or over 4G from places without
 any Wi-Fi.
 
 > [!NOTE]
@@ -38,9 +38,8 @@ flowchart LR
     end
     Cam -->|"① BLE: wake up,<br>get Wi-Fi key"| Hub
     Cam -->|"② camera Wi-Fi:<br>media list, thumbnails,<br>photos, videos"| Hub
-    Hub -->|"③ push"| TG["💬 Telegram"]
     Hub -->|"③ push"| NAS["🗄️ WebDAV / NAS"]
-    Hub -->|"③ push (optional)"| BE["☁️ own backend<br>+ Mini App"]
+    Hub -->|"③ push (optional)"| BE["☁️ own backend<br>+ gallery app"]
     Phone["📱 Browser"] -.->|"③ pull: web UI"| Hub
 ```
 
@@ -104,12 +103,12 @@ are likely to work but are not tested yet — reports are welcome.
 
 | You have … | Push (hub sends) | Pull (you fetch) |
 |---|---|---|
-| **no Wi-Fi at the camera** (4G modem) | **Telegram** bot, optionally your own backend | — |
+| **no Wi-Fi at the camera** (4G modem) | **own backend** (AWS, optional) | — |
 | **home Wi-Fi or Ethernet** | **WebDAV** (Nextcloud, Synology, …), optionally your own backend | **web UI** on the hub |
 | **nothing** (hub's own access point) | — | **web UI** on the hub |
 
 No shared cloud and no running costs: every user either needs no server or
-runs their own. The optional AWS backend with a Telegram Mini App is in
+runs their own. The optional AWS backend with a gallery web app is in
 [`backend/`](backend/README.md) and [`app/`](app/README.md).
 
 ## Documentation
