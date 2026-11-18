@@ -17,6 +17,16 @@ config CAMERA_MOCK_DEV_ID
         mock another MAC to stand for a second camera. The console command
         `id <MAC>` overrides it (stored in NVS).
 
+config CAMERA_MOCK_MEDIA_COUNT
+    int "Recordings in the media list"
+    range 0 1000
+    default 90
+    help
+        90 is the captured list of a real TC100, byte for byte. Fewer
+        entries cut it; more continue the numbering with invented entries
+        (photo and video alternate). 0 is an empty card. The console
+        command `media <N>` changes it until the next reset.
+
 config CAMERA_MOCK_AP_CHANNEL
     int "Wi-Fi channel of the access point"
     range 1 13

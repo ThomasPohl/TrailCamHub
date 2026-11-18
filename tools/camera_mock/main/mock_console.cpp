@@ -1,6 +1,7 @@
 #include "mock_console.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -96,6 +97,26 @@ int cmd_fault(int argc, char **argv)
     return 0;
 }
 
+int cmd_media(int argc, char **argv)
+{
+    if (argc == 1) {
+        std::printf("%u recordings\n",
+                    static_cast<unsigned>(mock_udp::media_count()));
+        return 0;
+    }
+    char *end = nullptr;
+    const long count = argc == 2 ? std::strtol(argv[1], &end, 10) : -1;
+    if (argc != 2 || end == argv[1] || *end != '\0' || count < 0 ||
+        count > static_cast<long>(camera_mock::kMaxMediaCount)) {
+        std::printf("usage: media [<0-%u>]\n",
+                    static_cast<unsigned>(camera_mock::kMaxMediaCount));
+        return 1;
+    }
+    mock_udp::set_media_count(static_cast<size_t>(count));
+    std::printf("%ld recordings (until the next reset)\n", count);
+    return 0;
+}
+
 esp_err_t add(const char *name, const char *help, const char *hint,
               esp_console_cmd_func_t func)
 {
@@ -130,6 +151,8 @@ esp_err_t start()
     add("ap", "turn the access point on or off", "on|off", cmd_ap);
     add("id", "show or set the camera MAC (after a reset)", "[MAC|default]",
         cmd_id);
+    add("media", "show or set the number of recordings in the media list",
+        "[N]", cmd_media);
     add("fault",
         "inject faults: drop/dup DATA (percent), late ACKs (ms), mute after "
         "login, battery and SD free space in the device info; 'fault off'",

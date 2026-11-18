@@ -140,7 +140,9 @@ esp_err_t start(const camera_mock::Identity &identity)
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
     s_output.fd = fd;
-    s_camera = new camera_mock::Camera(s_output, log_line);
+    camera_mock::Options options;
+    options.media_count = CONFIG_CAMERA_MOCK_MEDIA_COUNT;
+    s_camera = new camera_mock::Camera(s_output, log_line, options);
     s_camera->set_identity(identity);
     if (xTaskCreate(udp_task, "mock_udp", 6144, nullptr, 5, nullptr) !=
         pdPASS) {
@@ -221,6 +223,20 @@ void set_faults(const camera_mock::Faults &faults)
     std::lock_guard<std::mutex> guard(s_lock);
     if (s_camera != nullptr) {
         s_camera->set_faults(faults);
+    }
+}
+
+size_t media_count()
+{
+    std::lock_guard<std::mutex> guard(s_lock);
+    return s_camera != nullptr ? s_camera->media_count() : 0;
+}
+
+void set_media_count(size_t count)
+{
+    std::lock_guard<std::mutex> guard(s_lock);
+    if (s_camera != nullptr) {
+        s_camera->set_media_count(count);
     }
 }
 
