@@ -149,6 +149,9 @@ struct Stats {
     // Bulk channel (#122 stage 2/3): thumbnails (772), photos (1285).
     unsigned thumbnails = 0;
     unsigned downloads = 0;
+    // Video playback (769): streams started, records sent (video + audio).
+    unsigned playbacks = 0;
+    unsigned playback_records = 0;
     unsigned bulk_frames_sent = 0;
     unsigned bulk_retransmissions = 0;
     unsigned aborted_records = 0;
@@ -263,6 +266,13 @@ class Camera
                            const std::vector<std::uint8_t> &record,
                            std::int64_t now_ms);
     void flush_bulk(std::int64_t now_ms);
+    // 769 and 770: the playback stream of a video (#122 stage 3).
+    void handle_playback(std::int64_t cmd_id, const std::string &request,
+                         std::uint32_t app_sequence, std::int64_t now_ms);
+    // Generates the next records while the bulk queue is short, so that a
+    // long video never sits in RAM at once.
+    void refill_playback(std::int64_t now_ms);
+    void stop_playback();
     void flush(std::int64_t now_ms);
     void send(const std::vector<std::uint8_t> &packet);
     // A DATA packet, through the drop and duplicate faults.
@@ -302,6 +312,14 @@ class Camera
     std::deque<std::pair<std::uint16_t, std::int64_t>> late_acks_;
     bool recording_ = false;
     bool formatted_ = false;
+    // The playback stream (769): records are cut into bulk frames as the
+    // queue empties. `play_stream_` holds bytes not yet in a frame.
+    bool playing_ = false;
+    std::uint32_t play_session_ = 0;
+    std::size_t play_frame_ = 0;        // next video frame to generate
+    std::size_t play_frames_ = 0;       // video frames in the video
+    std::size_t play_bulk_frames_ = 0;  // bulk frames queued so far
+    std::vector<std::uint8_t> play_stream_;
     // Recordings deleted with 773, as "fileType/dirNum/mediaNum".
     std::vector<std::string> deleted_;
 };
@@ -322,6 +340,22 @@ std::vector<std::uint8_t> media_record(const Identity &identity,
                                        std::int64_t media_num,
                                        std::int64_t media_id,
                                        std::size_t file_size);
+
+// A playback record (the cmdId 769 stream, ARTEMIS version 4, docs/video-
+// download.md): 20-byte ARTEMIS header, 108-byte header, then the frame data,
+// whose first 0x60 bytes of every 0x1000-byte page are AES-128-CBC encrypted
+// (zero IV). `video` selects H.264 (Annex-B; a key frame carries SPS, PPS and
+// IDR) or AAC (ADTS). The frame's content is synthetic.
+std::vector<std::uint8_t> playback_record(const camera::artemis::Aes128 &cipher,
+                                          bool video, bool key_frame,
+                                          std::uint32_t pts_ms,
+                                          std::uint32_t session_no,
+                                          std::size_t data_size);
+
+// The mock streams 25 frames per second; a video without a duration in the
+// list gets 100 frames.
+constexpr std::uint32_t kPlaybackFrameMs = 40;
+std::size_t playback_frame_count(std::int64_t duration_ms);
 
 // The mediaId of a file in the media list of `count` entries (see
 // Options::media_count); 0 if it is not there.

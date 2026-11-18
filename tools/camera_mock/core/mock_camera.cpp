@@ -244,31 +244,50 @@ std::string entry_json(const Entry &e)
 
 }  // namespace
 
-std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
-                               std::int64_t file_type, std::int64_t dir_num,
-                               std::int64_t media_num, std::size_t count)
+namespace
+{
+
+// The entry of a file in the media list of `count` entries.
+bool find_entry(const camera::artemis::Aes128 &cipher, std::int64_t file_type,
+                std::int64_t dir_num, std::int64_t media_num, std::size_t count,
+                Entry &out)
 {
     const std::vector<std::string> captured = captured_entries(cipher);
     for (std::size_t i = 0; i < captured.size() && i < count; i++) {
-        std::int64_t type = -1;
-        std::int64_t dir = -1;
-        std::int64_t num = -1;
-        std::int64_t id = 0;
-        if (find_int(captured[i], "fileType", type) && type == file_type &&
-            find_int(captured[i], "mediaDirNum", dir) && dir == dir_num &&
-            find_int(captured[i], "mediaNum", num) && num == media_num &&
-            find_int(captured[i], "mediaId", id)) {
-            return id;
+        Entry e;
+        if (find_int(captured[i], "fileType", e.file_type) &&
+            e.file_type == file_type &&
+            find_int(captured[i], "mediaDirNum", e.dir_num) &&
+            e.dir_num == dir_num &&
+            find_int(captured[i], "mediaNum", e.media_num) &&
+            e.media_num == media_num &&
+            find_int(captured[i], "mediaId", e.media_id)) {
+            find_int(captured[i], "durationMs", e.duration_ms);
+            out = e;
+            return true;
         }
     }
     for (std::size_t i = captured.size(); i < count; i++) {
         const Entry e = invented_entry(i);
         if (e.file_type == file_type && e.dir_num == dir_num &&
             e.media_num == media_num) {
-            return e.media_id;
+            out = e;
+            return true;
         }
     }
-    return 0;
+    return false;
+}
+
+}  // namespace
+
+std::int64_t captured_media_id(const camera::artemis::Aes128 &cipher,
+                               std::int64_t file_type, std::int64_t dir_num,
+                               std::int64_t media_num, std::size_t count)
+{
+    Entry e;
+    return find_entry(cipher, file_type, dir_num, media_num, count, e)
+               ? e.media_id
+               : 0;
 }
 
 std::string media_list_page(const camera::artemis::Aes128 &cipher,
@@ -522,6 +541,108 @@ std::string action_response(int cmd_id, const char *field, int value)
     return json;
 }
 
+std::size_t playback_frame_count(std::int64_t duration_ms)
+{
+    return duration_ms > 0
+               ? static_cast<std::size_t>(duration_ms) / kPlaybackFrameMs
+               : 100;
+}
+
+std::vector<std::uint8_t> playback_record(const camera::artemis::Aes128 &cipher,
+                                          bool video, bool key_frame,
+                                          std::uint32_t pts_ms,
+                                          std::uint32_t session_no,
+                                          std::size_t data_size)
+{
+    // Filler without zero bytes, so that it never forms a start code.
+    std::uint32_t seed = pts_ms + 1;
+    const auto filler = [&seed]() {
+        seed = seed * 1103515245u + 12345u;
+        return static_cast<std::uint8_t>(0x10 + (seed >> 16) % 0x70);
+    };
+    std::vector<std::uint8_t> data;
+    const auto start_code = [&data](std::uint8_t nal) {
+        const std::uint8_t code[5] = {0, 0, 0, 1, nal};
+        data.insert(data.end(), code, code + sizeof(code));
+    };
+    const auto fill = [&data, &filler](std::size_t until) {
+        while (data.size() < until) {
+            data.push_back(filler());
+        }
+    };
+    if (video) {
+        if (data_size < 64) {
+            data_size = 64;
+        }
+        if (key_frame) {
+            start_code(0x67);  // SPS
+            fill(5 + 19);
+            start_code(0x68);  // PPS
+            fill(5 + 19 + 5 + 7);
+            start_code(0x65);  // IDR slice
+        } else {
+            start_code(0x41);  // P slice
+        }
+        fill(data_size);
+    } else {
+        if (data_size < 16) {
+            data_size = 16;
+        }
+        // ADTS: AAC LC, 16 kHz, mono; the frame length counts the header.
+        const std::uint8_t header[7] = {
+            0xff,
+            0xf1,
+            0x60,
+            static_cast<std::uint8_t>(0x40 | ((data_size >> 11) & 3)),
+            static_cast<std::uint8_t>((data_size >> 3) & 0xff),
+            static_cast<std::uint8_t>(((data_size & 7) << 5) | 0x1f),
+            0xfc};
+        data.assign(header, header + sizeof(header));
+        fill(data_size);
+    }
+
+    // The app's encryption: the first 0x60 bytes of each 0x1000-byte page
+    // (only when more than 0x5f remain), CBC with a zero IV.
+    constexpr std::size_t kBlock = camera::artemis::Aes128::kBlockSize;
+    for (std::size_t page = 0; page < data.size(); page += 0x1000) {
+        if (data.size() - page < 0x60) {
+            continue;
+        }
+        std::uint8_t previous[kBlock] = {};
+        for (std::size_t block = 0; block < 0x60; block += kBlock) {
+            std::uint8_t *at = data.data() + page + block;
+            for (std::size_t i = 0; i < kBlock; i++) {
+                at[i] ^= previous[i];
+            }
+            cipher.encrypt_block(at, at);
+            std::memcpy(previous, at, kBlock);
+        }
+    }
+
+    std::vector<std::uint8_t> header(108, 0);
+    const auto put = [&header](std::size_t at, std::uint32_t value) {
+        for (int i = 0; i < 4; i++) {
+            header[at + i] = static_cast<std::uint8_t>(value >> (8 * i));
+        }
+    };
+    put(8, pts_ms);
+    put(video ? 16 : 20, static_cast<std::uint32_t>(data.size()));
+    if (video) {
+        put(28, 1920);
+        put(32, 1080);
+    }
+    put(48, session_no);
+
+    std::vector<std::uint8_t> out(
+        kArtemisSignature, kArtemisSignature + sizeof(kArtemisSignature));
+    append_u32_le(out, 4);  // version
+    append_u32_le(out, 0);
+    append_u32_le(out, static_cast<std::uint32_t>(header.size() + data.size()));
+    out.insert(out.end(), header.begin(), header.end());
+    out.insert(out.end(), data.begin(), data.end());
+    return out;
+}
+
 std::string empty_media_list_page(int page_no)
 {
     return "{\"mediaFiles\":[],\"cnt\":0,\"pageNo\":" +
@@ -602,6 +723,7 @@ bool Camera::handle_packet(const std::uint8_t *bytes, std::size_t size,
                     }
                 }
             }
+            refill_playback(now_ms);
             flush_bulk(now_ms);
             break;
         }
@@ -669,6 +791,7 @@ void Camera::poll(std::int64_t now_ms)
             stats_.bulk_retransmissions++;
         }
     }
+    refill_playback(now_ms);
     flush_bulk(now_ms);
     if (now_ms - last_alive_ms_ >= options_.alive_interval_ms) {
         send(wire::control(wire::kAlive));
@@ -700,6 +823,8 @@ void Camera::start_session(std::int64_t now_ms)
     next_rx_index_ = 0;
     tx_.clear();
     bulk_tx_.clear();
+    playing_ = false;
+    play_stream_.clear();
     late_acks_.clear();
     request_.clear();
     request_size_ = 0;
@@ -714,6 +839,8 @@ void Camera::end_session(const char *reason)
     logged_in_ = false;
     tx_.clear();
     bulk_tx_.clear();
+    playing_ = false;
+    play_stream_.clear();
     late_acks_.clear();
     request_.clear();
     request_size_ = 0;
@@ -883,6 +1010,10 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
     case 1285:
         handle_media(cmd_id, message.json, message.app_sequence, now_ms);
         return;
+    case 769:
+    case 770:
+        handle_playback(cmd_id, message.json, message.app_sequence, now_ms);
+        return;
     default:
         log(LogLevel::warn,
             format("cmdId %lld is not supported by the mock yet; not "
@@ -947,6 +1078,138 @@ void Camera::handle_action(std::int64_t cmd_id, const std::string &request,
     default:
         return;
     }
+}
+
+void Camera::handle_playback(std::int64_t cmd_id, const std::string &request,
+                             std::uint32_t app_sequence, std::int64_t now_ms)
+{
+    if (cmd_id == 770) {
+        // The camera does not answer; the stream just stops.
+        log(LogLevel::info, "770: playback stopped");
+        stop_playback();
+        return;
+    }
+    std::int64_t file_type = 0;
+    std::int64_t dir_num = 0;
+    std::int64_t media_num = 0;
+    std::int64_t session_no = 0;
+    if (!find_int(request, "fileType", file_type) ||
+        !find_int(request, "dirNum", dir_num) ||
+        !find_int(request, "mediaNum", media_num) ||
+        !find_int(request, "sessionNo", session_no)) {
+        log(LogLevel::warn,
+            "769 without fileType/dirNum/mediaNum/sessionNo; not answered");
+        return;
+    }
+    // A new request replaces a running stream.
+    stop_playback();
+    const std::string key = std::to_string(file_type) + "/" +
+                            std::to_string(dir_num) + "/" +
+                            std::to_string(media_num);
+    Entry entry;
+    bool gone = formatted_;
+    for (const std::string &done : deleted_) {
+        gone = gone || done == key;
+    }
+    // Only a recording under its list entry's own file type, and not a photo
+    // (0), can be played; the camera answers startPbRet -3 otherwise (as it
+    // does to the app's fileType 1 when its list says 2,
+    // docs/video-download.md).
+    const bool found = !gone && file_type != 0 &&
+                       find_entry(cipher_, file_type, dir_num, media_num,
+                                  options_.media_count, entry);
+    if (!found) {
+        log(LogLevel::info, "769 for " + key + ": refused (startPbRet -3)");
+        respond_json(app_sequence,
+                     "{\"startPbRet\":-3,\"errorMsg\":\"Failed\",\"result\":0,"
+                     "\"cmdId\":769}",
+                     now_ms);
+        return;
+    }
+    play_frames_ = playback_frame_count(entry.duration_ms);
+    play_frame_ = 0;
+    play_bulk_frames_ = 0;
+    play_stream_.clear();
+    play_session_ = static_cast<std::uint32_t>(session_no);
+    playing_ = true;
+    stats_.playbacks++;
+    respond_json(app_sequence,
+                 "{\"startPbRet\":0,\"videoWidth\":1920,\"videoHeight\":1080,"
+                 "\"totalFrame\":" +
+                     std::to_string(play_frames_) + ",\"totalTime\":" +
+                     std::to_string(play_frames_ * kPlaybackFrameMs) +
+                     ",\"errorMsg\":\"Success\",\"result\":0,\"cmdId\":769}",
+                 now_ms);
+    refill_playback(now_ms);
+}
+
+void Camera::stop_playback()
+{
+    playing_ = false;
+    play_stream_.clear();
+    // Frames not sent yet are never sent; those in flight are not repeated.
+    bulk_tx_.clear();
+}
+
+void Camera::refill_playback(std::int64_t now_ms)
+{
+    // Frames waiting in the bulk queue; enough to keep the window full. The
+    // records are made as the queue empties, so a long video never sits in
+    // RAM at once.
+    constexpr std::size_t kQueued = 32;
+    while ((playing_ || !play_stream_.empty()) && bulk_tx_.size() < kQueued) {
+        if (play_stream_.size() < wire::kMaxDataPayload) {
+            if (play_frame_ >= play_frames_) {
+                // The last bytes, then the camera just stops sending.
+                playing_ = false;
+                if (play_stream_.empty()) {
+                    break;
+                }
+            } else {
+                const std::size_t i = play_frame_++;
+                const std::uint32_t pts =
+                    static_cast<std::uint32_t>(i) * kPlaybackFrameMs;
+                const bool key = i % 25 == 0;
+                const std::size_t video_size =
+                    key ? 9000 : 1500 + (i % 5) * 400;
+                const auto video = playback_record(cipher_, true, key, pts,
+                                                   play_session_, video_size);
+                play_stream_.insert(play_stream_.end(), video.begin(),
+                                    video.end());
+                stats_.playback_records++;
+                if (i % 2 == 0) {
+                    const auto audio = playback_record(cipher_, false, false,
+                                                       pts, play_session_, 200);
+                    play_stream_.insert(play_stream_.end(), audio.begin(),
+                                        audio.end());
+                    stats_.playback_records++;
+                }
+                continue;
+            }
+        }
+        if (faults_.abort_after_frames > 0 &&
+            play_bulk_frames_ >= faults_.abort_after_frames) {
+            stats_.aborted_records++;
+            log(LogLevel::info,
+                format("Fault: abort; playback stopped after %lld frames",
+                       faults_.abort_after_frames));
+            playing_ = false;
+            play_stream_.clear();
+            break;
+        }
+        const std::size_t chunk = play_stream_.size() < wire::kMaxDataPayload
+                                      ? play_stream_.size()
+                                      : wire::kMaxDataPayload;
+        BulkOutgoing out;
+        out.subtype = 0x02;
+        out.frame.index = next_bulk_seq_++;
+        out.frame.packet =
+            wire::bulk(0x02, out.frame.index, play_stream_.data(), chunk);
+        bulk_tx_.push_back(std::move(out));
+        play_stream_.erase(play_stream_.begin(), play_stream_.begin() + chunk);
+        play_bulk_frames_++;
+    }
+    flush_bulk(now_ms);
 }
 
 void Camera::handle_media(std::int64_t cmd_id, const std::string &request,
