@@ -59,10 +59,6 @@ const char *key_name(Key key)
         return "webdav_user";
     case Key::webdav_password:
         return "webdav_password";
-    case Key::telegram_token:
-        return "telegram_token";
-    case Key::telegram_chat:
-        return "telegram_chat";
     case Key::health_url:
         return "health_url";
     case Key::webdav_videos:
@@ -92,8 +88,7 @@ bool is_secret(Key key)
 {
     return key == Key::wifi_password || key == Key::device_key ||
            key == Key::sim_pin || key == Key::webdav_password ||
-           key == Key::telegram_token || key == Key::web_password ||
-           key == Key::camera_password;
+           key == Key::web_password || key == Key::camera_password;
 }
 
 std::string &field(Settings &settings, Key key)
@@ -127,10 +122,6 @@ std::string &field(Settings &settings, Key key)
         return settings.webdav_user;
     case Key::webdav_password:
         return settings.webdav_password;
-    case Key::telegram_token:
-        return settings.telegram_token;
-    case Key::telegram_chat:
-        return settings.telegram_chat;
     case Key::health_url:
         return settings.health_url;
     case Key::web_password:
@@ -257,9 +248,9 @@ std::string validate(Key key, const std::string &value)
                    ? ""
                    : "direction must be push or pull";
     case Key::destination:
-        return value == "backend" || value == "webdav" || value == "telegram"
+        return value == "backend" || value == "webdav"
                    ? ""
-                   : "destination must be backend, webdav or telegram";
+                   : "destination must be backend or webdav";
     case Key::webdav_videos:
         return value == "home" || value == "all" || value == "none"
                    ? ""
@@ -286,23 +277,6 @@ std::string validate(Key key, const std::string &value)
             return "WebDAV password must be up to 128 characters";
         }
         return "";
-    case Key::telegram_token: {
-        // <bot id>:<secret>, e.g. 123456789:AAH...
-        const std::size_t colon = value.find(':');
-        if (colon == std::string::npos || colon == 0 || colon > 20 ||
-            value.size() - colon - 1 < 30 || value.size() > 100) {
-            return "bot token must look like 123456789:AA... (from "
-                   "@BotFather)";
-        }
-        for (std::size_t i = 0; i < value.size(); i++) {
-            const char c = value[i];
-            if (i < colon ? (c < '0' || c > '9')
-                          : (i != colon && !is_key_char(c))) {
-                return "bot token contains invalid characters";
-            }
-        }
-        return "";
-    }
     case Key::health_url:
         if ((value.rfind("https://", 0) != 0 &&
              value.rfind("http://", 0) != 0) ||
@@ -332,20 +306,6 @@ std::string validate(Key key, const std::string &value)
                    " must be up to 32 characters";
         }
         return "";
-    case Key::telegram_chat: {
-        // A chat id: a user (positive) or a group (negative).
-        std::size_t i = value.size() > 1 && value[0] == '-' ? 1 : 0;
-        if (value.size() - i < 1 || value.size() > 20) {
-            return "Telegram chat must be a chat id (digits, - for groups)";
-        }
-        for (; i < value.size(); i++) {
-            if (value[i] < '0' || value[i] > '9') {
-                return "Telegram chat must be a chat id (digits, - for "
-                       "groups)";
-            }
-        }
-        return "";
-    }
     }
     return "unknown setting";
 }
@@ -356,9 +316,9 @@ std::string display_value(Key key, const std::string &value)
         return key == Key::camera_plan || key == Key::checkin_min ||
                        key == Key::transport || key == Key::apn ||
                        key == Key::power || key == Key::direction ||
-                       key == Key::destination || key == Key::telegram_chat ||
-                       key == Key::web_password || key == Key::camera_user ||
-                       key == Key::camera_password || key == Key::webdav_videos
+                       key == Key::destination || key == Key::web_password ||
+                       key == Key::camera_user || key == Key::camera_password ||
+                       key == Key::webdav_videos
                    ? "(default)"
                    : "(not set)";
     }
@@ -366,10 +326,6 @@ std::string display_value(Key key, const std::string &value)
         key == Key::webdav_password || key == Key::web_password ||
         key == Key::camera_password) {
         return "(set)";
-    }
-    if (key == Key::telegram_token) {
-        // The bot id is not secret and tells two bots apart.
-        return value.substr(0, value.find(':')) + ":*** (set)";
     }
     if (key == Key::device_key) {
         const std::size_t dot = value.find('.');
@@ -403,9 +359,6 @@ Destination destination(const Settings &settings)
     if (settings.destination == "webdav") {
         return Destination::webdav;
     }
-    if (settings.destination == "telegram") {
-        return Destination::telegram;
-    }
     return Destination::backend;
 }
 
@@ -423,8 +376,6 @@ bool destination_configured(const Settings &settings)
     switch (destination(settings)) {
     case Destination::webdav:
         return validate(Key::webdav_url, settings.webdav_url).empty();
-    case Destination::telegram:
-        return validate(Key::telegram_token, settings.telegram_token).empty();
     case Destination::backend:
         break;
     }
@@ -576,8 +527,6 @@ const char *destination_name(Destination destination)
     switch (destination) {
     case Destination::webdav:
         return "webdav";
-    case Destination::telegram:
-        return "telegram";
     case Destination::backend:
         break;
     }
@@ -620,12 +569,6 @@ std::string capability_problem(Key key, const std::string &value,
     }
     if (key == Key::transport && value == "ethernet" && !caps.ethernet) {
         return "this board has no Ethernet";
-    }
-    // Decision in #150: Telegram directly only where nothing else reaches
-    // the hub (cellular modem); at home WebDAV or the web UI.
-    if (key == Key::destination && value == "telegram" && !caps.modem) {
-        return "Telegram directly needs a board with a modem; at home use "
-               "webdav or the web UI";
     }
     if (key == Key::direction && value == "pull" && !caps.web_ui) {
         return "pull needs the web UI, which this build does not have";

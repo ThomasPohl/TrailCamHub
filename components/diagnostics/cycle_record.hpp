@@ -26,7 +26,7 @@ struct Record {
     std::int64_t start = 0;
     // "scan", "list", "actions" or "checkin".
     std::string kind;
-    // "schedule", or "request" (console, button, web UI, backend, Telegram).
+    // "schedule", or "request" (console, button, web UI, backend).
     std::string trigger;
     // The controller's result name, e.g. "uplink-done".
     std::string result;

@@ -813,9 +813,7 @@ esp_err_t run_destination(const hub_config::Settings &settings, Report &report)
     report = Report{};
     const bool over_modem =
         hub_config::uplink_transport(settings) == hub_config::Transport::modem;
-    const esp_err_t error = destination == hub_config::Destination::webdav
-                                ? push_webdav(settings, over_modem, report)
-                                : push_telegram(settings, over_modem, report);
+    const esp_err_t error = push_webdav(settings, over_modem, report);
     if (error == ESP_OK) {
         // The firmware reached its destination: a new one is kept. Then a
         // newer firmware, last, as with the backend.

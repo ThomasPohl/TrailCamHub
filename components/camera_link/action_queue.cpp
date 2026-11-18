@@ -51,7 +51,7 @@ std::optional<State> parse_state(const std::string &name)
 std::optional<Source> parse_source(const std::string &name)
 {
     for (const Source source :
-         {Source::console, Source::web_ui, Source::telegram, Source::backend}) {
+         {Source::console, Source::web_ui, Source::backend}) {
         if (name == source_name(source)) {
             return source;
         }

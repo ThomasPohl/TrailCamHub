@@ -70,8 +70,6 @@ const char *source_name(Source source)
         return "console";
     case Source::web_ui:
         return "web";
-    case Source::telegram:
-        return "telegram";
     case Source::backend:
         return "backend";
     }
@@ -86,7 +84,7 @@ bool allowed(Type type, Source source)
     case Type::video_stop:
         return true;
     case Type::delete_media:
-        return source != Source::telegram;
+        return true;
     case Type::format_sd:
         return source == Source::console || source == Source::web_ui;
     }

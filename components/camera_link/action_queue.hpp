@@ -5,7 +5,7 @@
 // after the hub slept; its result goes back later. So the queue is kept on the
 // SD card and must survive a restart at any point:
 //   - every action has an id, and an optional key from the front end (e.g. the
-//     id of a Telegram update) so that a command delivered twice, after a
+//     id of a backend command) so that a command delivered twice, after a
 //     crash before the offset was saved, is queued once;
 //   - an action that was running when the power failed is NOT repeated: it may
 //     have been done already (a delete retried after a new recording took the

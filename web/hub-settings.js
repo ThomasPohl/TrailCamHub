@@ -7,7 +7,7 @@
   "use strict";
 
   // Never shown, never read back from the hub.
-  const SECRETS = ["wifi_password", "device_key", "sim_pin", "webdav_password", "telegram_token", "web_password", "camera_password"];
+  const SECRETS = ["wifi_password", "device_key", "sim_pin", "webdav_password", "web_password", "camera_password"];
 
   // Passwords may legitimately contain spaces at the ends; every other
   // value is trimmed.
@@ -28,7 +28,6 @@
     camera_plan: [(v) => /^(off|((\d\d:\d\d-\d\d:\d\d|\*)=\d{1,4}[,; ]*)+)$/.test(v), "The camera plan must look like 05:00-09:00=30,*=120 (or off)."],
     checkin_min: [(v) => /^\d{1,4}$/.test(v) && Number(v) <= 1440, "The check-in interval must be 0 to 1440 minutes."],
     webdav_url: [(v) => /^https?:\/\/\S+$/.test(v), "The WebDAV folder URL must start with https:// or http://."],
-    telegram_token: [(v) => /^\d{1,20}:[A-Za-z0-9_-]{30,}$/.test(v), "The bot token looks like 123456789:AA… (from @BotFather)."],
     health_url: [(v) => /^https?:\/\/\S+$/.test(v), "The health check URL must start with https:// or http://."],
     web_password: [(v) => v.length >= 8 && v.length <= 63, "The web UI password must have 8 to 63 characters."],
   };

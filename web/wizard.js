@@ -336,9 +336,7 @@
     }
 
     const allowed = new Set();
-    if (goal === "telegram") {
-      allowed.add("modem");
-    } else if (goal === "pull") {
+    if (goal === "pull") {
       allowed.add("wifi");
       allowed.add("ap");
       if (has("ethernet")) allowed.add("ethernet");
@@ -367,7 +365,6 @@
       wifi: transport === "wifi",
       modem: transport === "modem",
       webdav: goal === "webdav",
-      telegram: goal === "telegram",
       backend: goal === "backend",
       push: Boolean(goal) && goal !== "pull",
     };
@@ -428,9 +425,6 @@
         need("webdav_url", "Enter the URL of the WebDAV folder.");
         optional("webdav_user");
         optional("webdav_password");
-      }
-      if (goal === "telegram") {
-        need("telegram_token", "Paste the bot token from @BotFather.");
       }
       if (goal === "backend") {
         need("api_url", "Enter the backend's API URL.");
@@ -590,13 +584,6 @@
       }
     } catch (error) {
       settings.fail(error.message);
-    }
-    if (goal === "telegram") {
-      const item = document.createElement("p");
-      item.className = "note";
-      item.textContent =
-        "Now send /start to your bot in Telegram. The hub pairs with your chat at its next check-in (the camera search below does one).";
-      $("#wz-next").append(item);
     }
   }
 
