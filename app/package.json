@@ -2,7 +2,7 @@
   "name": "trailcamhub-app",
   "private": true,
   "version": "0.1.0",
-  "description": "TrailCamHub Telegram Mini App (also runs as a plain web app)",
+  "description": "TrailCamHub gallery web app",
   "type": "module",
   "engines": {
     "node": ">=22"

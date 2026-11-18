@@ -115,23 +115,3 @@ export interface MediaItem {
   deleteState?: 'requested' | 'delivered' | 'failed';
   deleteError?: string;
 }
-
-export type CommandType = 'requestVideo' | 'readCamera';
-
-export interface CommandResult {
-  id: string;
-  type: CommandType;
-  state: 'queued' | 'delivered' | 'done' | 'failed';
-}
-
-export interface ApiClient {
-  /** True if the client returns demo data instead of talking to a backend. */
-  readonly isDemo: boolean;
-  listCameras(): Promise<Camera[]>;
-  listMedia(camId: string): Promise<MediaItem[]>;
-  requestVideo(camId: string, item: Pick<MediaItem, 'mediaId'>): Promise<CommandResult>;
-  /** Asks the hub to read the camera at its next check-in. */
-  readCamera(camId: string): Promise<CommandResult>;
-  /** Replaces the schedule set in the app for a hub; returns what is stored. */
-  setSchedule(hubId: string, config: ScheduleConfig): Promise<ScheduleConfig>;
-}

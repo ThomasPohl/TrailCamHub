@@ -194,7 +194,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
                     .map((u) =>
                       u.name
                         ? `${u.name}${u.role === 'admin' ? ' (Admin)' : ''}`
-                        : `Telegram ${u.userId}`,
+                        : `User ${u.userId}`,
                     )
                     .join(', ')}
             </dd>

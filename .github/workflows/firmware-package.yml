@@ -416,8 +416,8 @@ jobs:
         with:
           node-version: 22
 
-      # The Telegram Mini App shares the Pages site with the installer (/app/).
-      - name: Build Telegram Mini App
+      # The gallery web app shares the Pages site with the installer (/app/).
+      - name: Build gallery app
         shell: bash
         working-directory: app
         env:

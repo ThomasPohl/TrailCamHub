@@ -1,26 +1,13 @@
-# TrailCamHub app (Telegram Mini App)
+# TrailCamHub gallery app
 
-The phone UI for TrailCamHub: camera status (battery, SD card, last check-in),
-the latest thumbnails, and "download video" requests that the hub picks up at
-its next wake-up. Users see every camera of the hubs linked to them; with more
-than one camera, a row of chips at the top switches between them (the last
-choice is remembered on the device).
+The web app for TrailCamHub (React + Vite + TypeScript, plain static files).
+Users see every camera of the hubs linked to them and sort their recordings;
+an admin sees all hubs. It replaces the former Telegram Mini App (#266).
+`src/api/types.ts` mirrors the v1 API of the backend in `backend/`.
 
-It is a plain static web app (React + Vite + TypeScript). Inside Telegram it
-runs as a **Mini App**: it uses Telegram's theme colors, the native back
-button and haptics, and authenticates with Telegram's signed init data — so
-users need no extra account. Opened in a normal browser it runs as a regular
-web page, which is the starting point for a later PWA.
+## Gallery (`gallery.html`)
 
-## Status
-
-Without `VITE_API_BASE_URL` the app runs in **demo mode** with in-memory sample
-data (one hub with two cameras). `src/api/types.ts` mirrors the v1 API of the
-backend in `backend/`.
-
-## Gallery for the laptop (`gallery.html`)
-
-A second page for the end user who sorts recordings on his laptop (#258):
+The page for the end user who sorts recordings on his laptop (#258):
 large thumbnails, one tab per camera with its name, the camera's file names
 per recording (a video and the photo taken with it, e.g. `DSCF0023.AVI` and
 `DSCF0024.JPG`, are one recording; the mediaIds stay the keys), **Fetch video** and
@@ -68,7 +55,7 @@ temperature, last read, "Jetzt lesen"), and the schedule set in the app. Faults
 ```bash
 cd app
 npm install
-npm run dev          # http://localhost:5173, demo mode
+npm run dev          # http://localhost:5173/gallery.html, demo mode
 npm test             # unit and component tests (Vitest + Testing Library)
 npm run lint         # ESLint
 npm run format:check # Prettier
@@ -89,7 +76,7 @@ job in `firmware-package.yml` builds the app and publishes it together with the
 installer on GitHub Pages under `/app/`:
 
 ```
-https://thomaspohl.github.io/TrailCamHub/app/
+https://thomaspohl.github.io/TrailCamHub/app/gallery.html
 ```
 
 Both are deployed from one workflow because a repository has exactly one
@@ -102,20 +89,12 @@ and variables → Actions → Variables):
 | -------------------------- | ---------------------------------------------- |
 | `TRAILCAMHUB_API_BASE_URL` | Backend URL; unset → the app runs in demo mode |
 
-No secrets belong in the app: everything in it is public. The bot token stays in
-the backend, which verifies the init data the app sends.
-
-## Connecting it to a Telegram bot
-
-1. In Telegram, open [@BotFather](https://t.me/BotFather) and create a bot
-   with `/newbot` (or pick an existing one).
-2. Send `/newapp`, choose the bot and enter the Pages URL above as the Web App
-   URL. Alternatively set it as the bot's menu button with `/setmenubutton`.
-3. Open the bot and tap the menu button — the app opens inside Telegram.
+No secrets belong in the app: everything in it is public. Users sign in with
+an app token from their set-up link (see above).
 
 ## API sketch (draft v1)
 
-All requests carry `Authorization: tma <initData>`.
+All requests carry `Authorization: Bearer <userId>.<secret>`.
 
 | Method | Path                           | Purpose                                             |
 | ------ | ------------------------------ | --------------------------------------------------- |
