@@ -1,0 +1,50 @@
+name: Camera report
+description: Tell us whether a trail camera model works with TrailCamHub
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying a new camera. Please do **not** post passwords, SIM PINs, API keys or the camera's Wi-Fi password. See [camera compatibility](https://github.com/ThomasPohl/TrailCamHub/blob/main/docs/guide/compatibility.md).
+  - type: input
+    id: camera
+    attributes:
+      label: Camera brand, model and firmware version
+      description: The TrailCam Go app shows the firmware version.
+    validations:
+      required: true
+  - type: input
+    id: names
+    attributes:
+      label: BLE name and Wi-Fi name
+      description: For example `TC100_0CFB` and `TrailCam_XXXX`.
+    validations:
+      required: true
+  - type: input
+    id: hub
+    attributes:
+      label: Hub board and release
+      description: For example "Waveshare ESP32-S3-A7670E-4G, v0.1.13".
+    validations:
+      required: true
+  - type: dropdown
+    id: progress
+    attributes:
+      label: How far did a camera search get?
+      options:
+        - Camera not found over BLE
+        - Found over BLE, Wi-Fi join failed
+        - Wi-Fi joined, login failed
+        - Login worked, media list failed
+        - Media list worked, thumbnails failed
+        - Thumbnails worked
+        - Photos worked
+        - Videos worked
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Output of `status` and the log of the run
+      description: From the serial console or `/sdcard/logs/`. Remove anything private first.
+      render: text

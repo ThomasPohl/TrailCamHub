@@ -1,0 +1,37 @@
+name: Problem report
+description: Something does not work
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please look at [troubleshooting](https://github.com/ThomasPohl/TrailCamHub/blob/main/docs/guide/troubleshooting.md) first. Do **not** post passwords, SIM PINs, API keys or device keys.
+  - type: input
+    id: hub
+    attributes:
+      label: Hub board and release
+      description: For example "ESP32-WROOM-32D, v0.1.13".
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - 4G modem with the own backend and the gallery
+        - Home Wi-Fi with WebDAV
+        - Web page on the hub (pull)
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you expect, and what happened?
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of `status` and the last log lines
+      description: From the serial console, the installer or `/sdcard/logs/`. Remove anything private first.
+      render: text
