@@ -153,6 +153,16 @@ bool supported()
 #endif
 }
 
+void *i2c_bus()
+{
+#if CONFIG_HUB_BATTERY_MAX17048
+    std::lock_guard<std::mutex> guard(s_lock);
+    return open_bus() ? static_cast<void *>(s_bus) : nullptr;
+#else
+    return nullptr;
+#endif
+}
+
 const char *source_name()
 {
     return supported() ? "MAX17048" : "none";
