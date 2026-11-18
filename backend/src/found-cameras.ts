@@ -98,12 +98,19 @@ export async function recordRead(
   return known?.alias;
 }
 
-/** BLE addresses the hub may read, sorted. */
+/**
+ * BLE addresses the hub may read, sorted. A camera hidden in the gallery
+ * (#273) is left out, so the hub stops reading it; showing it again adds it
+ * back at the next check-in.
+ */
 export async function approvedAddresses(store: Store, hubId: string): Promise<string[]> {
-  return (await store.listFoundCameras(hubId))
-    .filter((c) => c.state === 'approved')
-    .map((c) => c.bleAddress)
-    .sort();
+  const addresses: string[] = [];
+  for (const found of await store.listFoundCameras(hubId)) {
+    if (found.state !== 'approved') continue;
+    if (found.camId !== undefined && (await store.getCamera(found.camId))?.hidden) continue;
+    addresses.push(found.bleAddress);
+  }
+  return addresses.sort();
 }
 
 /** For the gallery: new ones first, then by last seen. */

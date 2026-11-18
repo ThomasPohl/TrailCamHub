@@ -591,8 +591,8 @@ async function renameCameraByUser(req: ApiRequest, params: Record<string, string
 
 /**
  * Hides a camera in the gallery or shows it again (#273). Reversible: the
- * recordings stay in the backend and on the hub, and the hub keeps reading
- * the camera. Every user linked to the hub may do it, like renaming.
+ * recordings stay in the backend and on the hub, but the hub no longer
+ * reads the camera (it leaves `approvedCameras`). Every user linked to the hub may do it, like renaming.
  */
 async function hideCamera(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const camera = await authUserForCamera(req, params.camId ?? '', deps);

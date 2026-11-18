@@ -583,6 +583,26 @@ describe('found cameras (#296, #297)', () => {
     expect((await checkin({ discovered: [] })).approvedCameras).toEqual([A, B]);
   });
 
+  it('leaves a hidden camera out of the approved list (#273)', async () => {
+    const world = await galleryWorld();
+    const checkin = async () =>
+      body<{ approvedCameras?: string[] }>(
+        await handleRequest(
+          hubRequest('/v1/device/checkin', world.hubKey, {
+            cameras: [{ camId: CAM_ID, readAt: NOW - 20, bleAddress: B, media: [] }],
+          }),
+          world.deps,
+        ),
+      );
+    expect((await checkin()).approvedCameras).toEqual([B]);
+
+    await world.call('POST', `/v1/cameras/${CAM_ID}/hidden`, { hidden: true });
+    expect((await checkin()).approvedCameras).toEqual([]);
+
+    await world.call('POST', `/v1/cameras/${CAM_ID}/hidden`, { hidden: false });
+    expect((await checkin()).approvedCameras).toEqual([B]);
+  });
+
   it('checks the input and who may decide', async () => {
     const world = await galleryWorld();
     const bad = await handleRequest(
