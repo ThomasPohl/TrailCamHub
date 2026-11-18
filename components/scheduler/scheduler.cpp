@@ -14,6 +14,10 @@
 
 #include "esp_log.h"
 #include "esp_sleep.h"
+#if CONFIG_HUB_BOOT_BUTTON
+#include "driver/gpio.h"
+#include "driver/rtc_io.h"
+#endif
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -204,6 +208,18 @@ void wait_for_modem_down(const char *what)
     // Radio off; the next boot starts it again.
     esp_wifi_stop();
     esp_sleep_enable_timer_wakeup((std::uint64_t)sleep_s * 1000000u);
+#if CONFIG_HUB_BOOT_BUTTON
+    // The button also wakes the hub (#224); it pulls the pin to ground.
+    const gpio_num_t button = static_cast<gpio_num_t>(CONFIG_HUB_BUTTON_GPIO);
+    if (esp_sleep_is_valid_wakeup_gpio(button)) {
+        rtc_gpio_pullup_en(button);
+        rtc_gpio_pulldown_dis(button);
+        esp_sleep_enable_ext0_wakeup(button, 0);
+    } else {
+        ESP_LOGW(TAG, "GPIO %d cannot wake the hub from deep sleep",
+                 CONFIG_HUB_BUTTON_GPIO);
+    }
+#endif
     esp_deep_sleep_start();
 }
 #endif
@@ -221,6 +237,14 @@ void scheduler_task(void *arg)
         woke ? boot : boot + CONFIG_POWER_AWAKE_AFTER_BOOT_MIN * 60;
 #endif
 
+#if CONFIG_HUB_BOOT_BUTTON
+    // A press of the button woke the hub: read the cameras at once (#224).
+    bool button_wake =
+        woke && esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
+    if (button_wake) {
+        ESP_LOGI(TAG, "Woken by the button");
+    }
+#endif
     update_hub_battery();
     {
         const schedule::Effective effective = schedule::effective();
@@ -261,6 +285,23 @@ void scheduler_task(void *arg)
                                             ? schedule::due(times, now)
                                             : schedule::Task::none;
             esp_err_t error = ESP_OK;
+#if CONFIG_HUB_BOOT_BUTTON
+            if (button_wake) {
+                button_wake = false;
+                // Whatever is due, the person at the hub wants the cameras.
+                cycle_trace::note_trigger("button");
+                error = session_controller_request_scan();
+                if (error != ESP_OK) {
+                    cycle_trace::note_trigger(nullptr);
+                    ESP_LOGW(TAG, "Could not start the cycle: %s",
+                             esp_err_to_name(error));
+                } else {
+                    wait_ms = SCHEDULER_REQUEST_WAIT_MS;
+                }
+                ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(wait_ms));
+                continue;
+            }
+#endif
             if (task != schedule::Task::none) {
                 // The cycle journal names who asked for a cycle.
                 cycle_trace::note_trigger("schedule");
