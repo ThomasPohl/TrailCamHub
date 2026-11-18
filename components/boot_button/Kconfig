@@ -1,0 +1,36 @@
+menu "TrailCamHub: BOOT button"
+
+config HUB_BOOT_BUTTON
+    bool "Use the BOOT button as the \"fetch now\" button"
+    default y if IDF_TARGET_ESP32 || (IDF_TARGET_ESP32S3 && !BOARD_TDONGLE)
+    default n
+    help
+        A short press searches for the cameras now (as the console's
+        "scan"), a long press stops the search. With deep sleep the button
+        also wakes the hub, which then reads the cameras at once. Needs no
+        extra hardware: the BOOT button of the board is on GPIO0.
+
+        GPIO0 is a strapping pin. Holding the button while the chip is reset
+        or powered on starts the serial bootloader (flashing mode), so do not
+        keep it pressed when pressing reset or connecting power.
+
+        Off on the T-Dongles, whose button belongs to the dongle display
+        (dongle_ui), and on the ESP32-P4-NANO.
+
+config HUB_BUTTON_GPIO
+    int "Button GPIO"
+    depends on HUB_BOOT_BUTTON
+    range 0 39
+    default 0
+    help
+        The button pulls this pin to ground. To wake the hub from deep sleep
+        it has to be an RTC-capable pin (GPIO0 to 21 on the ESP32-S3,
+        0/2/4/12-15/25-27/32-39 on the ESP32).
+
+config HUB_BUTTON_LONG_PRESS_MS
+    int "Long press (milliseconds)"
+    depends on HUB_BOOT_BUTTON
+    range 500 5000
+    default 1500
+
+endmenu
