@@ -1,5 +1,6 @@
 import type {
   AppUser,
+  AuditEntry,
   CameraRecord,
   CommandRecord,
   HubRecord,
@@ -66,6 +67,11 @@ export interface Store {
 
   putAppUser(user: AppUser): Promise<void>;
   getAppUser(userId: number): Promise<AppUser | undefined>;
+
+  /** Appends to the admin audit log (#259). */
+  addAudit(entry: AuditEntry): Promise<void>;
+  /** The newest `limit` entries, newest first. */
+  listAudit(limit: number): Promise<AuditEntry[]>;
 
   listMedia(camId: string): Promise<MediaRecord[]>;
   getMedia(camId: string, mediaId: number): Promise<MediaRecord | undefined>;

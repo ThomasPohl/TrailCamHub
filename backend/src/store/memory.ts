@@ -1,5 +1,6 @@
 import type {
   AppUser,
+  AuditEntry,
   CameraRecord,
   CommandRecord,
   HubRecord,
@@ -27,6 +28,7 @@ export class MemoryStore implements Store {
   private readonly media = new Map<string, Map<number, MediaRecord>>();
   private readonly commands = new Map<string, Map<string, CommandRecord>>();
   private readonly appUsers = new Map<number, AppUser>();
+  private readonly audit: AuditEntry[] = [];
   private readonly samples = new Map<string, Sample[]>();
   private readonly firmwareChanges = new Map<string, FirmwareChange[]>();
   private readonly found = new Map<string, Map<string, FoundCamera>>();
@@ -122,6 +124,18 @@ export class MemoryStore implements Store {
   async getAppUser(userId: number): Promise<AppUser | undefined> {
     const user = this.appUsers.get(userId);
     return user && { ...user };
+  }
+
+  async addAudit(entry: AuditEntry): Promise<void> {
+    this.audit.push({ ...entry });
+  }
+
+  async listAudit(limit: number): Promise<AuditEntry[]> {
+    return this.audit
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => b.entry.at - a.entry.at || b.index - a.index)
+      .slice(0, limit)
+      .map((x) => ({ ...x.entry }));
   }
 
   async listMedia(camId: string): Promise<MediaRecord[]> {
