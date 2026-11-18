@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { ApiError } from '../api/http';
 import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
 import { isNewer } from './release';
 import { clockTime, faultText, memoryText, uplinkText } from './text';
-import type { AdminHub, GalleryApi, HubHistory, Sample } from './types';
+import type { AdminHub, AuditEntry, GalleryApi, HubHistory, Sample } from './types';
 
 /**
  * The admin view (#264): every hub with its state, cameras and users, the
@@ -31,6 +32,31 @@ const STRETCH: Record<ScheduleStretch, string> = {
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+const AUDIT_TEXT: Record<AuditEntry['action'], string> = {
+  elevate: 'Admin angemeldet',
+  elevateFailed: 'Falscher Code',
+  elevateLocked: 'Falscher Code, Konto vorübergehend gesperrt',
+  rotateUser: 'Neuer Link erstellt',
+  revokeUser: 'Gesperrt',
+};
+
+/** What went wrong with a code, in words for the admin (#259). */
+function codeError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return 'Der Code stimmt nicht. Bitte den aktuellen Code eingeben.';
+    if (error.status === 429) {
+      return 'Zu viele falsche Codes. Bitte in 15 Minuten noch einmal versuchen.';
+    }
+    if (error.status === 403) {
+      return 'Für dieses Konto ist kein zweiter Faktor eingerichtet (am Rechner: add-user --rotate-totp).';
+    }
+  }
+  return errorText(error);
+}
+
+const needsCode = (error: unknown) =>
+  error instanceof ApiError && (error.status === 401 || error.status === 403);
+
 function minutes(seconds: number): string {
   if (seconds <= 0) return 'nur nach dem Lesen der Kamera';
   return seconds % 3600 === 0 ? `alle ${seconds / 3600} h` : `alle ${Math.round(seconds / 60)} min`;
@@ -43,7 +69,60 @@ function sdText(c: Camera): string {
   return c.sdTotalMB ? `${free} von ${(c.sdTotalMB / 1024).toFixed(1)} GB` : free;
 }
 
+/** The admin's second factor: the 6-digit code of the authenticator app (#259). */
+function CodeForm({ api, onDone }: { api: GalleryApi; onDone: () => void }) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await api.elevate(code);
+      onDone();
+    } catch (e) {
+      setError(codeError(e));
+      setCode('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="g-code" onSubmit={(event) => void submit(event)}>
+      <p className="g-hint">
+        Die Verwaltung ist mit einem Code aus der Authenticator-App geschützt.
+      </p>
+      <label htmlFor="admin-code">Code aus der Authenticator-App</label>
+      <input
+        id="admin-code"
+        type="text"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={6}
+        value={code}
+        onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
+      />
+      <button type="submit" className="g-btn" disabled={busy || code.length !== 6}>
+        Anmelden
+      </button>
+      {error && (
+        <p className="g-error" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+type Confirm = { userId: number; name: string; action: 'rotate' | 'revoke' };
+
 export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) {
+  const [elevated, setElevated] = useState(() => api.elevated());
+  const [confirm, setConfirm] = useState<Confirm>();
+  const [newLink, setNewLink] = useState<{ name: string; link: string }>();
+  const [audit, setAudit] = useState<AuditEntry[]>();
   const [hubs, setHubs] = useState<AdminHub[]>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -55,17 +134,23 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
   }, [api]);
 
   const load = useCallback(async () => {
+    if (!api.elevated()) {
+      // The session ended: ask for a code again (#259).
+      setElevated(false);
+      return;
+    }
     try {
       setHubs(await api.adminHubs());
       setError(undefined);
     } catch (e) {
-      setError(errorText(e));
+      if (needsCode(e)) setElevated(false);
+      else setError(errorText(e));
     }
   }, [api]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (elevated) void load();
+  }, [elevated, load]);
 
   const act = async (run: () => Promise<void>, success: string) => {
     setBusy(true);
@@ -74,13 +159,48 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
       setNotice(success);
       await load();
     } catch (e) {
-      setNotice(`Das hat nicht geklappt: ${errorText(e)}`);
+      if (needsCode(e)) setElevated(false);
+      else setNotice(`Das hat nicht geklappt: ${errorText(e)}`);
     } finally {
       setBusy(false);
     }
   };
 
+  const runConfirmed = async () => {
+    const c = confirm;
+    if (!c) return;
+    setConfirm(undefined);
+    if (c.action === 'rotate') {
+      await act(async () => {
+        const result = await api.rotateUser(c.userId);
+        const page = `${window.location.origin}${window.location.pathname}`;
+        setNewLink({ name: result.name, link: `${page}#token=${result.token}` });
+      }, `Neuer Link für „${c.name}“ erstellt.`);
+    } else {
+      await act(() => api.revokeUser(c.userId), `„${c.name}“ ist gesperrt.`);
+    }
+  };
+
+  const showAudit = async () => {
+    try {
+      setAudit(await api.adminAudit());
+    } catch (e) {
+      if (needsCode(e)) setElevated(false);
+      else setNotice(`Das Protokoll konnte nicht geladen werden: ${errorText(e)}`);
+    }
+  };
+
+  if (!elevated) {
+    return (
+      <section className="g-admin" aria-label="Verwaltung">
+        <CodeForm api={api} onDone={() => setElevated(true)} />
+      </section>
+    );
+  }
+
   const t = now();
+  const userName = (id?: number) =>
+    hubs?.flatMap((h) => h.users).find((u) => u.userId === id)?.name ?? `User ${id}`;
 
   return (
     <section className="g-admin" aria-label="Verwaltung">
@@ -91,6 +211,64 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             Ausblenden
           </button>
         </p>
+      )}
+      {confirm && (
+        <div className="g-confirm" role="alertdialog" aria-label="Bestätigen">
+          <p>
+            {confirm.action === 'rotate'
+              ? `Neuen Link für „${confirm.name}“ erstellen? Der alte Link funktioniert dann nicht mehr.`
+              : `„${confirm.name}“ sperren? Der Link funktioniert dann nicht mehr, bis ein neuer erstellt wird.`}
+          </p>
+          <button
+            type="button"
+            className="g-btn g-btn--danger"
+            disabled={busy}
+            onClick={() => void runConfirmed()}
+          >
+            {confirm.action === 'rotate' ? 'Neuen Link erstellen' : 'Sperren'}
+          </button>
+          <button
+            type="button"
+            className="g-btn g-btn--quiet"
+            onClick={() => setConfirm(undefined)}
+          >
+            Abbrechen
+          </button>
+        </div>
+      )}
+      {newLink && (
+        <div className="g-newlink" role="group" aria-label="Neuer Link">
+          <p>
+            Neuer Einrichtungslink für „{newLink.name}“. Er wird nur jetzt angezeigt; bitte
+            privat weitergeben, zum Beispiel per Signal. Der alte Link funktioniert nicht mehr.
+          </p>
+          <input
+            type="text"
+            readOnly
+            aria-label="Neuer Einrichtungslink"
+            value={newLink.link}
+            onFocus={(event) => event.target.select()}
+          />
+          <button
+            type="button"
+            className="g-btn g-btn--small"
+            onClick={() =>
+              void navigator.clipboard?.writeText(newLink.link).then(
+                () => setNotice('Link kopiert.'),
+                () => setNotice('Kopieren ging nicht; bitte den Link von Hand markieren.'),
+              )
+            }
+          >
+            Link kopieren
+          </button>
+          <button
+            type="button"
+            className="g-btn g-btn--small g-btn--quiet"
+            onClick={() => setNewLink(undefined)}
+          >
+            Link ausblenden
+          </button>
+        </div>
       )}
       {error && (
         <div className="g-error" role="alert">
@@ -188,15 +366,43 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             )}
             <dt>Nutzer</dt>
             <dd>
-              {hub.users.length === 0
-                ? 'keine'
-                : hub.users
-                    .map((u) =>
-                      u.name
+              {hub.users.length === 0 ? (
+                'keine'
+              ) : (
+                <ul className="g-users" aria-label={`Nutzer ${hub.name}`}>
+                  {hub.users.map((u) => (
+                    <li key={u.userId}>
+                      {u.name
                         ? `${u.name}${u.role === 'admin' ? ' (Admin)' : ''}`
-                        : `User ${u.userId}`,
-                    )
-                    .join(', ')}
+                        : `User ${u.userId}`}
+                      {u.role === 'user' && u.name && (
+                        <span className="g-user-actions">
+                          <button
+                            type="button"
+                            className="g-btn g-btn--small g-btn--quiet"
+                            disabled={busy}
+                            onClick={() =>
+                              setConfirm({ userId: u.userId, name: u.name ?? '', action: 'rotate' })
+                            }
+                          >
+                            Neuer Link
+                          </button>
+                          <button
+                            type="button"
+                            className="g-btn g-btn--small g-btn--quiet g-btn--danger-text"
+                            disabled={busy}
+                            onClick={() =>
+                              setConfirm({ userId: u.userId, name: u.name ?? '', action: 'revoke' })
+                            }
+                          >
+                            Sperren
+                          </button>
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </dd>
           </dl>
 
@@ -276,6 +482,29 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
           />
         </article>
       ))}
+      <section className="g-audit" aria-label="Protokoll">
+        <h2>Protokoll</h2>
+        {audit === undefined ? (
+          <button
+            type="button"
+            className="g-btn g-btn--small g-btn--quiet"
+            onClick={() => void showAudit()}
+          >
+            Protokoll anzeigen
+          </button>
+        ) : audit.length === 0 ? (
+          <p className="g-hint">Noch nichts protokolliert.</p>
+        ) : (
+          <ul className="g-audit-list">
+            {audit.map((entry, i) => (
+              <li key={i}>
+                {clockTime(entry.at, t)} · {AUDIT_TEXT[entry.action]}
+                {entry.target !== undefined && ` (${userName(entry.target)})`}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </section>
   );
 }

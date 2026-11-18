@@ -246,3 +246,56 @@ describe('pairing with a missing photo', () => {
     expect(groups.map((g) => g.map((m) => m.num))).toEqual([[35], [34, 33]]);
   });
 });
+
+describe('admin session (#259)', () => {
+  /** A backend that accepts the session, or answers it with 401 (ended early). */
+  function sessionFetch(options: { rejectSession?: boolean } = {}) {
+    const seen: Array<{ path: string; authorization?: string }> = [];
+    const fn = (async (url: string, init?: RequestInit) => {
+      const path = url.replace('https://api', '');
+      const authorization = (init?.headers as Record<string, string>).Authorization;
+      seen.push({ path, authorization });
+      if (path === '/v1/admin/elevate') {
+        return new Response(JSON.stringify({ session: 'SESSION', expiresAt: 1_900 }), {
+          status: 200,
+        });
+      }
+      if (authorization?.startsWith('Admin ') && options.rejectSession) {
+        return new Response('{"error":"expired"}', { status: 401 });
+      }
+      return new Response('[]', { status: 200 });
+    }) as unknown as typeof fetch;
+    return { fn, seen };
+  }
+
+  it('sends the code with the plain token, then uses the session until it expires', async () => {
+    const { fn, seen } = sessionFetch();
+    let now = 1_000;
+    const api = new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => now);
+    expect(api.elevated()).toBe(false);
+    await api.elevate('123456');
+    expect(api.elevated()).toBe(true);
+    await api.adminHubs();
+    now = 1_900;
+    expect(api.elevated()).toBe(false);
+    await api.adminAudit();
+    expect(seen.map((s) => s.authorization)).toEqual([
+      'Bearer TOKEN',
+      'Admin SESSION',
+      'Bearer TOKEN',
+    ]);
+  });
+
+  it('falls back to the token when the backend ends the session', async () => {
+    const { fn, seen } = sessionFetch({ rejectSession: true });
+    const api = new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => 1_000);
+    await api.elevate('123456');
+    await api.status();
+    expect(api.elevated()).toBe(false);
+    expect(seen.map((s) => s.authorization)).toEqual([
+      'Bearer TOKEN',
+      'Admin SESSION',
+      'Bearer TOKEN',
+    ]);
+  });
+});

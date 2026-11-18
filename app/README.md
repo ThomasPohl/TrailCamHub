@@ -50,6 +50,15 @@ temperature, last read, "Jetzt lesen"), and the schedule set in the app. Faults
 (#265) stand at the top of each hub, the button shows their number
 ("Verwaltung (2)"). The demo shows it with `?demo=admin`.
 
+The admin view is protected by a second factor (#259): the admin enters the
+6-digit code of an authenticator app (TOTP) and gets a 15-minute admin session;
+the plain link of an admin only shows his own hubs. In the user list of each
+hub the admin can create a **new link** for an ordinary user (the old one
+stops working; the new link is shown once) or **lock** the user out. Admin
+accounts are changed only with `npm run add-user` in `backend/`. A log at the
+bottom lists the last logins and changes. `?demo=admin-code` shows the code
+prompt in the demo (code `123456`).
+
 ## Development
 
 ```bash
