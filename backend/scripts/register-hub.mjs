@@ -1,17 +1,13 @@
 #!/usr/bin/env node
-// Registers a hub, links Telegram users to it, and prints its key.
+// Registers a hub, links gallery users to it, and prints its key.
 //
 //   npm run register-hub -- --hub garden-hub [--name "Garden"] \
-//     [--user <telegramUserId>]... [--rotate-key] [--pair [--pair-hours <h>]] \
+//     [--user <userId>]... [--rotate-key] \
 //     [--stack trailcamhub | --function <name>] [--region <region>]
 //
 // - A new hub gets a key, printed once.
 // - For an existing hub, --user links more people (family members) without
 //   touching the key; --rotate-key issues a new key (the old one stops working).
-// - --pair prints a one-time link (https://t.me/<bot>?start=<code>, valid for
-//   a week or --pair-hours): whoever opens it in Telegram is linked to the
-//   hub, without looking up their user id. Send it to yourself or a family
-//   member; each link works once.
 // - Cameras are not registered by hand: they appear automatically when the
 //   hub reports them, and every user linked to the hub sees them.
 //
@@ -35,8 +31,6 @@ const { values } = parseArgs({
     name: { type: 'string' },
     user: { type: 'string', multiple: true, default: [] },
     'rotate-key': { type: 'boolean', default: false },
-    pair: { type: 'boolean', default: false },
-    'pair-hours': { type: 'string' },
     stack: { type: 'string', default: 'trailcamhub' },
     function: { type: 'string' },
     table: { type: 'string' }, // no longer needed; accepted for old command lines
@@ -53,10 +47,7 @@ if (!values.hub || !/^[A-Za-z0-9_-]{1,64}$/.test(values.hub)) {
   fail('--hub must be 1-64 characters [A-Za-z0-9_-]');
 }
 for (const user of values.user) {
-  if (!/^\d+$/.test(user)) fail(`--user must be a numeric Telegram user id (got ${user})`);
-}
-if (values['pair-hours'] !== undefined && !/^\d+$/.test(values['pair-hours'])) {
-  fail('--pair-hours must be a number of hours (1-720)');
+  if (!/^\d+$/.test(user)) fail(`--user must be a numeric user id (got ${user})`);
 }
 if (values.table) console.warn('note: --table is no longer needed and is ignored.');
 
@@ -132,7 +123,7 @@ const result = invoke({
 if (!result.ok) fail(result.error);
 
 for (const user of result.linkedUsers) {
-  console.log(`Linked Telegram user ${user} to hub ${values.hub}.`);
+  console.log(`Linked user ${user} to hub ${values.hub}.`);
 }
 if (result.created) {
   console.log(`Hub ${values.hub} registered.`);
@@ -142,18 +133,6 @@ if (result.created) {
 if (result.key) {
   console.log('\nHub key (enter it as "Device key" in the web installer; shown only once):\n');
   console.log(`  ${result.key}\n`);
-} else if (result.linkedUsers.length === 0 && !values.name && !values.pair) {
-  console.log('Nothing to do: the hub exists. Use --user, --name, --rotate-key or --pair.');
-}
-
-if (values.pair) {
-  const pairing = invoke({
-    admin: 'createPairingCode',
-    hubId: values.hub,
-    ttlHours: values['pair-hours'] === undefined ? undefined : Number(values['pair-hours']),
-  });
-  if (!pairing.ok) fail(pairing.error);
-  const until = new Date(pairing.expiresAt * 1000).toISOString().replace('T', ' ').slice(0, 16);
-  console.log(`\nPairing link for hub ${values.hub} (works once, until ${until} UTC):\n`);
-  console.log(`  ${pairing.link ?? `code ${pairing.code} (bot not configured)`}\n`);
+} else if (result.linkedUsers.length === 0 && !values.name) {
+  console.log('Nothing to do: the hub exists. Use --user, --name or --rotate-key.');
 }

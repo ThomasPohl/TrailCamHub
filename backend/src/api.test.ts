@@ -8,7 +8,7 @@ import {
   CAM_ID,
   HUB_ID,
   hubRequest,
-  makeInitData,
+  userToken,
   NOW,
   setup,
   USER_ID,
@@ -377,12 +377,12 @@ describe("the camera's state", () => {
 });
 
 describe('app API', () => {
-  it('requires valid Telegram init data', async () => {
+  it('requires a valid app token', async () => {
     const { deps } = await setup();
     const noAuth = await handleRequest({ method: 'GET', path: '/v1/cameras', headers: {} }, deps);
     expect(noAuth.statusCode).toBe(401);
     const forged = await handleRequest(
-      appRequest('GET', '/v1/cameras', undefined, makeInitData(1, NOW, 'wrong:token')),
+      appRequest('GET', '/v1/cameras', undefined, `${USER_ID}.${'x'.repeat(43)}`),
       deps,
     );
     expect(forged.statusCode).toBe(401);
@@ -404,7 +404,7 @@ describe('app API', () => {
     });
 
     const other = await handleRequest(
-      appRequest('GET', '/v1/cameras', undefined, makeInitData(999)),
+      appRequest('GET', '/v1/cameras', undefined, userToken(USER_ID + 1)),
       deps,
     );
     expect(body(other)).toEqual([]);
@@ -441,7 +441,7 @@ describe('app API', () => {
     const { deps, hubKey } = await setup();
     await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
     const res = await handleRequest(
-      appRequest('GET', `/v1/cameras/${CAM_ID}/media`, undefined, makeInitData(999)),
+      appRequest('GET', `/v1/cameras/${CAM_ID}/media`, undefined, userToken(USER_ID + 1)),
       deps,
     );
     expect(res.statusCode).toBe(404);
@@ -452,7 +452,7 @@ describe('app API', () => {
     await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
     await store.linkUser(USER_ID + 1, 'garden-hub');
     const res = await handleRequest(
-      appRequest('GET', `/v1/cameras/${CAM_2}/media`, undefined, makeInitData(USER_ID + 1)),
+      appRequest('GET', `/v1/cameras/${CAM_2}/media`, undefined, userToken(USER_ID + 1)),
       deps,
     );
     expect(res.statusCode).toBe(200);
@@ -676,8 +676,8 @@ describe('wake-up schedule (app → hub, hub → app)', () => {
 
   it('validates the schedule and the hub', async () => {
     const { deps } = await setup();
-    const put = (path: string, b: unknown, initData?: string) =>
-      handleRequest(appRequest('PUT', path, b, initData), deps);
+    const put = (path: string, b: unknown, token?: string) =>
+      handleRequest(appRequest('PUT', path, b, token), deps);
     expect((await put(schedulePath, { cameraPlan: 'hourly' })).statusCode).toBe(400);
     expect((await put(schedulePath, { cameraPlan: '*=2000' })).statusCode).toBe(400);
     expect((await put(schedulePath, { cameraPlan: 42 })).statusCode).toBe(400);
@@ -685,7 +685,7 @@ describe('wake-up schedule (app → hub, hub → app)', () => {
     expect((await put(schedulePath, { checkinIntervalS: 900.5 })).statusCode).toBe(400);
     expect((await put('/v1/hubs/other-hub/schedule', {})).statusCode).toBe(404);
     expect((await put('/v1/hubs/nope/schedule', {})).statusCode).toBe(404);
-    expect((await put(schedulePath, {}, makeInitData(USER_ID + 1))).statusCode).toBe(404);
+    expect((await put(schedulePath, {}, userToken(USER_ID + 1))).statusCode).toBe(404);
     expect((await put(schedulePath, { cameraPlan: 'off' })).statusCode).toBe(200);
   });
 });

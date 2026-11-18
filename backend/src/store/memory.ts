@@ -4,13 +4,11 @@ import type {
   CommandRecord,
   HubRecord,
   MediaRecord,
-  PairingCode,
   FirmwareChange,
   FoundCamera,
   Sample,
   SampleOwner,
   ScheduleConfig,
-  UserSettings,
   VideoState,
 } from '../model';
 import type { CameraTelemetry, HubTelemetry, Store } from './types';
@@ -28,9 +26,7 @@ export class MemoryStore implements Store {
   private readonly links = new Map<number, Set<string>>();
   private readonly media = new Map<string, Map<number, MediaRecord>>();
   private readonly commands = new Map<string, Map<string, CommandRecord>>();
-  private readonly settings = new Map<number, UserSettings>();
   private readonly appUsers = new Map<number, AppUser>();
-  private readonly pairings = new Map<string, PairingCode>();
   private readonly samples = new Map<string, Sample[]>();
   private readonly firmwareChanges = new Map<string, FirmwareChange[]>();
   private readonly found = new Map<string, Map<string, FoundCamera>>();
@@ -126,25 +122,6 @@ export class MemoryStore implements Store {
   async getAppUser(userId: number): Promise<AppUser | undefined> {
     const user = this.appUsers.get(userId);
     return user && { ...user };
-  }
-
-  async getUserSettings(userId: number): Promise<UserSettings | undefined> {
-    const settings = this.settings.get(userId);
-    return settings && { ...settings };
-  }
-
-  async putUserSettings(userId: number, settings: UserSettings): Promise<void> {
-    this.settings.set(userId, { ...settings });
-  }
-
-  async putPairingCode(pairing: PairingCode): Promise<void> {
-    this.pairings.set(pairing.code, { ...pairing });
-  }
-
-  async takePairingCode(code: string): Promise<PairingCode | undefined> {
-    const pairing = this.pairings.get(code);
-    this.pairings.delete(code);
-    return pairing;
   }
 
   async listMedia(camId: string): Promise<MediaRecord[]> {

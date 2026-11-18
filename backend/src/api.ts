@@ -1,7 +1,6 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { parseAppToken } from './auth/app';
 import { parseDeviceKey, verifySecret } from './auth/device';
-import { validateInitData } from './auth/telegram';
 import { requestDelete, requestVideo, withdraw } from './commands';
 import {
   HttpError,
@@ -53,7 +52,6 @@ import {
   normalizeBleAddress,
   validCameraName,
 } from './model';
-import { createPairingCode, HUB_CODE_TTL_S, pairingLink } from './pairing';
 import {
   formatPlan,
   MAX_CHECKIN_INTERVAL_S,
@@ -63,28 +61,15 @@ import {
 } from './schedule';
 import type { MediaStorage } from './storage';
 import type { CameraTelemetry, Store } from './store/types';
-import { webhookSecret, type TelegramApi } from './telegram/api';
-import { handleUpdate, type TelegramUpdate } from './telegram/bot';
-import { notifyNewThumbnails, type NewThumbnail } from './telegram/notify';
 
 export interface Deps {
   store: Store;
   storage: MediaStorage;
-  /** Resolved lazily so requests that don't need it never touch SSM. */
-  botToken: () => Promise<string>;
   now: () => number;
   newId?: () => string;
   config?: {
     /** Thumbnail upload URLs handed out per check-in, over all cameras. */
     maxThumbUploadsPerCheckin?: number;
-  };
-  /** The bot: webhook, notifications, pairing links. Without it these are off. */
-  telegram?: {
-    api: TelegramApi;
-    /** URL of the Mini App for "Open app" buttons; no button without it. */
-    appUrl?: string;
-    /** Time zone of a user's quiet hours until they set their own. */
-    defaultTimeZone: string;
   };
 }
 
@@ -132,8 +117,6 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'GET', pattern: '/v1/admin/hubs/:hubId/history', handler: adminHistory },
   { method: 'POST', pattern: '/v1/device/checkin', handler: checkin },
   { method: 'POST', pattern: '/v1/device/ack', handler: ack },
-  { method: 'POST', pattern: '/v1/device/pairing-code', handler: devicePairingCode },
-  { method: 'POST', pattern: '/v1/telegram/webhook', handler: telegramWebhook },
 ];
 
 export async function handleRequest(req: ApiRequest, deps: Deps): Promise<ApiResponse> {
@@ -171,21 +154,15 @@ interface SignedIn {
 
 /**
  * The signed-in user: a gallery user with an app token (`Bearer
- * <userId>.<secret>`, #259) or a Telegram user (`tma <initData>`). A revoked
- * token (empty hash) never matches.
+ * <userId>.<secret>`, #259). A revoked token (empty hash) never matches.
  */
 async function authUser(req: ApiRequest, deps: Deps): Promise<SignedIn> {
-  if ((req.headers.authorization ?? '').startsWith('Bearer ')) {
-    const parsed = parseAppToken(bearer(req, 'Bearer'));
-    const user = parsed && (await deps.store.getAppUser(parsed.userId));
-    if (!parsed || !user || !user.tokenHash || !verifySecret(parsed.secret, user.tokenHash)) {
-      throw new HttpError(401, 'Invalid app token');
-    }
-    return { userId: user.userId, name: user.name, admin: user.role === 'admin' };
+  const parsed = parseAppToken(bearer(req, 'Bearer'));
+  const user = parsed && (await deps.store.getAppUser(parsed.userId));
+  if (!parsed || !user || !user.tokenHash || !verifySecret(parsed.secret, user.tokenHash)) {
+    throw new HttpError(401, 'Invalid app token');
   }
-  const result = validateInitData(bearer(req, 'tma'), await deps.botToken(), deps.now());
-  if (!result.ok) throw new HttpError(401, `Invalid Telegram init data (${result.reason})`);
-  return { userId: result.identity.userId, admin: false };
+  return { userId: user.userId, name: user.name, admin: user.role === 'admin' };
 }
 
 /** The admin sees every hub; everyone else the hubs linked to him. */
@@ -1054,7 +1031,6 @@ async function ack(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
 
   let thumbsConfirmed = 0;
   let commandsUpdated = 0;
-  const newThumbnails: NewThumbnail[] = [];
   for (const entry of Array.isArray(body.cameras) ? body.cameras : []) {
     if (typeof entry?.camId !== 'string') continue;
     const camera = await deps.store.getCamera(entry.camId);
@@ -1065,11 +1041,8 @@ async function ack(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
       if (!isMediaId(t?.mediaId)) continue;
       // Trust S3, not the device: only mark thumbnails that really arrived.
       if (await deps.storage.thumbExists(camera.camId, t.mediaId)) {
-        const media = await deps.store.getMedia(camera.camId, t.mediaId);
         await deps.store.markThumbPresent(camera.camId, t.mediaId);
         thumbsConfirmed++;
-        // A repeated acknowledgement does not announce the recording again.
-        if (media && !media.thumbPresent) newThumbnails.push({ camera, media });
       }
     }
 
@@ -1100,51 +1073,5 @@ async function ack(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
     }
   }
 
-  try {
-    await notifyNewThumbnails(hub, newThumbnails, deps);
-  } catch (error) {
-    console.error('Notifications failed', error);
-  }
   return json(200, { thumbsConfirmed, commandsUpdated });
-}
-
-/**
- * A one-time pairing code for the hub to show (display or web UI, as a QR
- * code of `link`). Whoever opens the link gets access to the hub's cameras,
- * so the code is short-lived.
- */
-async function devicePairingCode(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
-  const hub = await authHub(req, deps);
-  if (!deps.telegram) throw new HttpError(503, 'The bot is not configured');
-  const pairing = await createPairingCode(deps.store, hub.hubId, HUB_CODE_TTL_S, deps.now());
-  return json(201, {
-    code: pairing.code,
-    link: pairingLink(await deps.telegram.api.botUsername(), pairing.code),
-    expiresAt: pairing.expiresAt,
-  });
-}
-
-function sameSecret(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-}
-
-/**
- * Updates from Telegram (set up with setWebhook on deploy). Telegram proves
- * itself with the secret token header. Errors are logged and still answered
- * with 200: Telegram would otherwise retry the same update again and again.
- */
-async function telegramWebhook(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
-  const secret = req.headers['x-telegram-bot-api-secret-token'] ?? '';
-  if (!sameSecret(secret, webhookSecret(await deps.botToken()))) {
-    throw new HttpError(401, 'Invalid webhook secret');
-  }
-  const update = parseJsonBody<TelegramUpdate>(req);
-  try {
-    await handleUpdate(update, deps);
-  } catch (error) {
-    console.error(`Telegram update ${String(update?.update_id)} failed`, error);
-  }
-  return json(200, { ok: true });
 }

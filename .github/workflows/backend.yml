@@ -119,12 +119,10 @@ jobs:
         shell: bash
         env:
           HAS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
-          HAS_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN != '' }}
           EXECUTION_ROLE: ${{ vars.AWS_CFN_EXECUTION_ROLE_ARN }}
         run: |
           missing=""
           [[ "$HAS_KEY" == true ]] || missing+=" secret AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
-          [[ "$HAS_TOKEN" == true ]] || missing+=" secret TELEGRAM_BOT_TOKEN"
           [[ "$EXECUTION_ROLE" == arn:*:iam::*:role/* ]] || missing+=" variable AWS_CFN_EXECUTION_ROLE_ARN"
           if [[ -n "$missing" ]]; then
             echo "::error title=Deployment settings missing::Set the repository$missing (see backend/README.md)"
@@ -154,9 +152,6 @@ jobs:
           ARTIFACT_BUCKET: ${{ vars.AWS_SAM_ARTIFACT_BUCKET }}
           EXECUTION_ROLE: ${{ vars.AWS_CFN_EXECUTION_ROLE_ARN }}
           ALLOWED_ORIGIN: https://${{ github.repository_owner }}.github.io
-          # The Mini App is part of the Pages site (firmware-package workflow).
-          MINI_APP_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/app/
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           set -euo pipefail
           ../.github/scripts/run-annotated.sh 'SAM deploy' sam deploy \
@@ -166,44 +161,12 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              "AllowedOrigin=${ALLOWED_ORIGIN,,}" \
-              "MiniAppUrl=${MINI_APP_URL}" \
-              "TelegramBotToken=${TELEGRAM_BOT_TOKEN}"
+              "AllowedOrigin=${ALLOWED_ORIGIN,,}"
           api_url="$(aws cloudformation describe-stacks --stack-name trailcamhub \
             --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)"
           echo "api_url=$api_url" >> "$GITHUB_OUTPUT"
           echo "### Backend deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "API URL: \`$api_url\`" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Register the Telegram webhook and commands
-        # Idempotent; runs on every deploy so the webhook always points at the
-        # current Function URL. The secret token is derived from the bot token
-        # the same way as webhookSecret() in src/telegram/api.ts.
-        shell: bash
-        env:
-          API_URL: ${{ steps.deploy.outputs.api_url }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        run: |
-          set -euo pipefail
-          secret="$(printf '%s' "$TELEGRAM_BOT_TOKEN" | openssl dgst -sha256 -hmac trailcamhub-webhook -r | cut -d' ' -f1)"
-          telegram() {
-            local method="$1"; shift
-            local response
-            response="$(curl -sS --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}" "$@")"
-            if ! jq -e '.ok == true' <<<"$response" >/dev/null; then
-              echo "::error title=Telegram ${method} failed::$(jq -r '.description // "no response"' <<<"$response" 2>/dev/null || echo "$response")"
-              exit 1
-            fi
-          }
-          telegram setWebhook \
-            --data-urlencode "url=${API_URL%/}/v1/telegram/webhook" \
-            --data-urlencode "secret_token=${secret}" \
-            --data-urlencode 'allowed_updates=["message","callback_query"]'
-          telegram setMyCommands -H 'content-type: application/json' --data '{"commands":[
-            {"command":"settings","description":"Notifications and quiet hours"},
-            {"command":"invite","description":"Link another person to your hub"},
-            {"command":"help","description":"What the bot can do"}]}'
-          echo "Telegram webhook: \`${API_URL%/}/v1/telegram/webhook\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report failed stack events
         # SAM only prints the last status; the first FAILED event names the

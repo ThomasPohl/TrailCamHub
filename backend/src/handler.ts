@@ -1,45 +1,14 @@
-import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { handleAdmin, isAdminEvent, type AdminEvent, type AdminResult } from './admin';
 import { handleRequest, type Deps } from './api';
 import type { ApiRequest } from './http';
 import { S3MediaStorage } from './storage';
 import { DynamoStore } from './store/dynamo';
-import { HttpTelegramApi } from './telegram/api';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing environment variable ${name}`);
   return value;
-}
-
-let botTokenPromise: Promise<string> | undefined;
-
-/**
- * The bot token comes from the environment (set at deploy time) or, if that
- * is empty, from SSM Parameter Store - read once per Lambda container.
- */
-export function botToken(env: NodeJS.ProcessEnv = process.env): Promise<string> {
-  const direct = env.TELEGRAM_BOT_TOKEN?.trim();
-  if (direct) return Promise.resolve(direct);
-  const parameter = env.TELEGRAM_BOT_TOKEN_PARAM?.trim();
-  if (!parameter) {
-    return Promise.reject(
-      new Error('No Telegram bot token: set TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN_PARAM'),
-    );
-  }
-  botTokenPromise ??= new SSMClient({})
-    .send(new GetParameterCommand({ Name: parameter, WithDecryption: true }))
-    .then((result) => {
-      const value = result.Parameter?.Value;
-      if (!value) throw new Error('Telegram bot token parameter is empty');
-      return value;
-    })
-    .catch((error: unknown) => {
-      botTokenPromise = undefined; // retry on the next request
-      throw error;
-    });
-  return botTokenPromise;
 }
 
 let deps: Deps | undefined;
@@ -50,13 +19,7 @@ function getDeps(): Deps {
   deps ??= {
     store: new DynamoStore(requireEnv('TABLE_NAME')),
     storage: new S3MediaStorage(requireEnv('MEDIA_BUCKET')),
-    botToken: () => botToken(),
     now,
-    telegram: {
-      api: new HttpTelegramApi(() => botToken()),
-      appUrl: process.env.APP_URL?.trim() || undefined,
-      defaultTimeZone: process.env.DEFAULT_TIME_ZONE?.trim() || 'Europe/Berlin',
-    },
   };
   return deps;
 }

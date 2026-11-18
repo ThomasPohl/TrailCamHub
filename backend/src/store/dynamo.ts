@@ -17,13 +17,11 @@ import type {
   CommandRecord,
   HubRecord,
   MediaRecord,
-  PairingCode,
   FirmwareChange,
   FoundCamera,
   Sample,
   SampleOwner,
   ScheduleConfig,
-  UserSettings,
   VideoState,
 } from '../model';
 import { HISTORY_KEEP_S } from '../model';
@@ -35,9 +33,7 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
  *   HUB#<hubId>  / CAM#<camId>            hub → camera (listing)
  *   USER#<id>    / HUB#<hubId>            user → hub link
  *   HUB#<hubId>  / USER#<id>              hub → user link (who gets notified)
- *   USER#<id>    / SETTINGS               bot settings of the user
  *   USER#<id>    / APP                    gallery app user (token hash, role)
- *   PAIR#<code>  / META                   one-time pairing code (expires: ttl)
  *   CAM#<camId>  / META                   camera record (with hubId)
  *   CAM#<camId>  / MEDIA#<dir>#<num>      media (zero-padded, sorts by file)
  *   CAM#<camId>  / CMD#<id>               command
@@ -49,7 +45,6 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
 const hubPk = (hubId: string) => `HUB#${hubId}`;
 const camPk = (camId: string) => `CAM#${camId}`;
 const userPk = (userId: number) => `USER#${userId}`;
-const pairPk = (code: string) => `PAIR#${code}`;
 const mediaSk = (mediaId: number) => `MEDIA#${mediaId}`;
 const cmdSk = (id: string) => `CMD#${id}`;
 // Zero-padded so the sort key orders by time.
@@ -223,45 +218,6 @@ export class DynamoStore implements Store {
 
   async getAppUser(userId: number): Promise<AppUser | undefined> {
     return this.getItem<AppUser>(userPk(userId), 'APP');
-  }
-
-  async getUserSettings(userId: number): Promise<UserSettings | undefined> {
-    return this.getItem<UserSettings>(userPk(userId), 'SETTINGS');
-  }
-
-  async putUserSettings(userId: number, settings: UserSettings): Promise<void> {
-    await this.db.send(
-      new PutCommand({
-        TableName: this.table,
-        Item: { PK: userPk(userId), SK: 'SETTINGS', ...settings },
-      }),
-    );
-  }
-
-  // ---- Pairing codes -------------------------------------------------------
-
-  async putPairingCode(pairing: PairingCode): Promise<void> {
-    await this.db.send(
-      new PutCommand({
-        TableName: this.table,
-        // `ttl` lets DynamoDB delete expired codes; the API checks expiresAt itself.
-        Item: { PK: pairPk(pairing.code), SK: 'META', ...pairing, ttl: pairing.expiresAt },
-      }),
-    );
-  }
-
-  async takePairingCode(code: string): Promise<PairingCode | undefined> {
-    const { Attributes } = await this.db.send(
-      new DeleteCommand({
-        TableName: this.table,
-        Key: { PK: pairPk(code), SK: 'META' },
-        ReturnValues: 'ALL_OLD',
-      }),
-    );
-    if (!Attributes) return undefined;
-    const { ttl: _ttl, ...pairing } = strip<PairingCode & { ttl?: number }>(Attributes);
-    void _ttl;
-    return pairing;
   }
 
   // ---- Media ---------------------------------------------------------------

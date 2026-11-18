@@ -9,36 +9,7 @@ Parameters:
   AllowedOrigin:
     Type: String
     Default: https://thomaspohl.github.io
-    Description: Browser origin of the Telegram Mini App (CORS).
-  TelegramBotToken:
-    Type: String
-    NoEcho: true
-    Default: ''
-    Description: >-
-      Telegram bot token, passed in at deploy time (GitHub secret
-      TELEGRAM_BOT_TOKEN). It ends up in a Lambda environment variable. Leave
-      empty to read it from SSM instead (TelegramBotTokenParameter).
-  TelegramBotTokenParameter:
-    Type: String
-    Default: ''
-    AllowedPattern: '^$|^/[A-Za-z0-9_./-]+$'
-    Description: >-
-      Optional: name of an SSM SecureString parameter holding the bot token, for
-      accounts where Parameter Store is available. Used only if
-      TelegramBotToken is empty.
-  MiniAppUrl:
-    Type: String
-    Default: ''
-    AllowedPattern: '^$|^https://\S+$'
-    Description: >-
-      URL of the Telegram Mini App, for the "Open app" buttons in bot messages.
-      Empty: messages come without that button.
-  DefaultTimeZone:
-    Type: String
-    Default: Europe/Berlin
-    Description: >-
-      Time zone of a user's quiet hours until they set their own with
-      /timezone.
+    Description: Browser origin of the gallery web app (CORS).
   ThumbnailRetentionDays:
     Type: Number
     Default: 365
@@ -51,9 +22,6 @@ Parameters:
     Description: >-
       Requested videos are deleted from S3 this many days after the upload
       (they stay on the hub's SD card).
-
-Conditions:
-  UseSsmToken: !Not [!Equals [!Ref TelegramBotTokenParameter, '']]
 
 Globals:
   Function:
@@ -86,7 +54,7 @@ Resources:
         PointInTimeRecoveryEnabled: false
       SSESpecification:
         SSEEnabled: true
-      # Expired pairing codes (PAIR#…) are deleted by DynamoDB.
+      # Expired samples (BAT#…, FW#…) are deleted by DynamoDB.
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -162,15 +130,11 @@ Resources:
     Properties:
       CodeUri: .
       Handler: handler.handler
-      Description: TrailCamHub API (app, device and Telegram webhook endpoints)
+      Description: TrailCamHub API (gallery app and device endpoints)
       Environment:
         Variables:
           TABLE_NAME: !Ref Table
           MEDIA_BUCKET: !Ref MediaBucket
-          TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
-          TELEGRAM_BOT_TOKEN_PARAM: !Ref TelegramBotTokenParameter
-          APP_URL: !Ref MiniAppUrl
-          DEFAULT_TIME_ZONE: !Ref DefaultTimeZone
           NODE_OPTIONS: --enable-source-maps
       LoggingConfig:
         LogGroup: !Ref ApiLogGroup
@@ -186,12 +150,6 @@ Resources:
             - Effect: Allow
               Action: s3:ListBucket
               Resource: !GetAtt MediaBucket.Arn
-            - !If
-              - UseSsmToken
-              - Effect: Allow
-                Action: ssm:GetParameter
-                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${TelegramBotTokenParameter}'
-              - !Ref AWS::NoValue
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
