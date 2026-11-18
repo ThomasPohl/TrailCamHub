@@ -36,7 +36,7 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | Method | Path                                           | Auth                   | Purpose                                                              |
 | ------ | ---------------------------------------------- | ---------------------- | -------------------------------------------------------------------- |
 | GET    | `/v1/health`                                   | –                      | Liveness check                                                       |
-| GET    | `/v1/cameras`                                  | app user               | Cameras linked to the user                                  |
+| GET    | `/v1/cameras`                                  | app user               | Cameras linked to the user                                           |
 | GET    | `/v1/me`                                       | app user               | `{userId, name, role, hubs}` of the signed-in user                   |
 | GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults                             |
 | GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)                                  |

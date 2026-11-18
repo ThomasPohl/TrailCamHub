@@ -67,11 +67,7 @@ export type AppUserResult =
   | Failure;
 export type RenameResult = { ok: true; camId: string; name: string } | Failure;
 export type RevokeResult = { ok: true; userId: number; name: string } | Failure;
-export type AdminResult =
-  | RegisterHubResult
-  | AppUserResult
-  | RevokeResult
-  | RenameResult;
+export type AdminResult = RegisterHubResult | AppUserResult | RevokeResult | RenameResult;
 
 export type AdminDeps = Pick<Deps, 'store' | 'now'>;
 
