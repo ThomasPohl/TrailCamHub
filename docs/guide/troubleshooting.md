@@ -10,7 +10,7 @@ The log is in the installer's console and in `/sdcard/logs/` on the SD card.
 | Symptom | Likely cause and what to do |
 | --- | --- |
 | The installer does not list my board's port | Use Chrome or Edge on a computer (Web Serial is not in other browsers or on phones), and a USB **data** cable; try another cable and port. |
-| The board is flashed but the console stays silent | Press reset. On the main board the console is the USB-C port with the **USB DIP switch ON** (the modem is then off); put it to OFF again for modem use. |
+| The board is flashed but the console stays silent | Press reset and open the console again at 115200 baud in the installer. Check that the cable is a data cable and that the board is the one you picked in the installer. |
 | `config set …` says `this board has no modem` (or similar) | The setting needs a capability this board lacks; see [`modes.md`](../modes.md). |
 | A hub with older firmware refuses a new release | The project was renamed once (#238): flash it once over USB with the installer. |
 
@@ -19,7 +19,7 @@ The log is in the installer's console and in `/sdcard/logs/` on the SD card.
 | Symptom | Likely cause and what to do |
 | --- | --- |
 | Nothing happens after power-up | A battery hub is **idle** until the schedule or `scan`; for the first 10 minutes after power-on it stays awake. Send `scan`. |
-| `no camera found` | Camera too far (BLE range about 10 m), camera batteries low, or the camera not awake: wake it with its own button once. Move the hub closer to test. |
+| The scan ends without a camera | Camera too far (BLE range about 10 m) or its batteries are low. Move the hub close to the camera to test, and look at the log for the BLE step. |
 | Found, but the Wi-Fi join fails | The camera's access point is weak behind walls. Try again closer; check the camera's batteries (below ~20 % it also reads less often). |
 | Login or media list fails after the join | Camera password changed in the TrailCam Go app; set it on the hub (`modes.md`, camera login). |
 | Reads work, thumbnails are missing | A thumbnail transfer that stalls is retried; check the log for stalls and the SD card's health. |
