@@ -1,6 +1,6 @@
 name: App
 
-# Checks the Telegram Mini App in app/. Publishing happens in the
+# Checks the gallery web app in app/. Publishing happens in the
 # deploy-installer job of firmware-package.yml, because the repository has a
 # single GitHub Pages site that holds both the installer and the app.
 
