@@ -2,7 +2,6 @@ import type { Deps } from './api';
 import { generateAppToken, newAppUserId } from './auth/app';
 import { generateDeviceKey } from './auth/device';
 import { MAX_CAMERA_NAME, validCameraName } from './model';
-import { ADMIN_CODE_TTL_S, createPairingCode, pairingLink } from './pairing';
 import type { Store } from './store/types';
 
 /**
@@ -22,14 +21,6 @@ export interface RegisterHubEvent {
   name?: string;
   users?: number[];
   rotateKey?: boolean;
-}
-
-/** A one-time link that pairs whoever opens it with the hub (see pairing.ts). */
-export interface CreatePairingCodeEvent {
-  admin: 'createPairingCode';
-  hubId: string;
-  /** Validity in hours, 1-720; default one week. */
-  ttlHours?: number;
 }
 
 /**
@@ -63,7 +54,6 @@ export interface RenameCameraEvent {
 
 export type AdminEvent =
   | RegisterHubEvent
-  | CreatePairingCodeEvent
   | CreateAppUserEvent
   | RevokeAppUserEvent
   | RenameCameraEvent;
@@ -72,20 +62,14 @@ type Failure = { ok: false; error: string };
 export type RegisterHubResult =
   | { ok: true; created: boolean; key?: string; linkedUsers: number[] }
   | Failure;
-export type PairingResult = { ok: true; code: string; link?: string; expiresAt: number } | Failure;
 export type AppUserResult =
   | { ok: true; userId: number; token: string; linkedHubs: string[] }
   | Failure;
 export type RenameResult = { ok: true; camId: string; name: string } | Failure;
 export type RevokeResult = { ok: true; userId: number; name: string } | Failure;
-export type AdminResult =
-  | RegisterHubResult
-  | PairingResult
-  | AppUserResult
-  | RevokeResult
-  | RenameResult;
+export type AdminResult = RegisterHubResult | AppUserResult | RevokeResult | RenameResult;
 
-export type AdminDeps = Pick<Deps, 'store' | 'now' | 'telegram'>;
+export type AdminDeps = Pick<Deps, 'store' | 'now'>;
 
 const HUB_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -109,38 +93,12 @@ export async function handleAdmin(
   if (event.admin === 'createAppUser') {
     return createAppUser(event as CreateAppUserEvent, deps);
   }
-  if (event.admin === 'createPairingCode') {
-    return createPairing(event as CreatePairingCodeEvent, deps);
-  }
   return { ok: false, error: `unknown admin task ${JSON.stringify(event.admin)}` };
 }
 
 /**
- * Creates a pairing code for an existing hub. The link needs the bot's
- * username; without a configured bot only the code is returned.
- */
-export async function createPairing(
-  event: CreatePairingCodeEvent,
-  deps: AdminDeps,
-): Promise<PairingResult> {
-  const { hubId, ttlHours } = event;
-  if (typeof hubId !== 'string' || !HUB_ID.test(hubId) || !(await deps.store.getHub(hubId))) {
-    return { ok: false, error: `unknown hub ${JSON.stringify(hubId)}` };
-  }
-  if (ttlHours !== undefined && !(Number.isInteger(ttlHours) && ttlHours >= 1 && ttlHours <= 720)) {
-    return { ok: false, error: 'ttlHours must be 1-720' };
-  }
-  const ttlS = ttlHours === undefined ? ADMIN_CODE_TTL_S : ttlHours * 60 * 60;
-  const pairing = await createPairingCode(deps.store, hubId, ttlS, deps.now());
-  const link = deps.telegram
-    ? pairingLink(await deps.telegram.api.botUsername(), pairing.code)
-    : undefined;
-  return { ok: true, code: pairing.code, link, expiresAt: pairing.expiresAt };
-}
-
-/**
  * Creates a hub (with a new key) or updates an existing one: `name` renames
- * it, `rotateKey` issues a new key, `users` links Telegram users. The key is
+ * it, `rotateKey` issues a new key, `users` links gallery user ids. The key is
  * returned only when it was created now; only its hash is stored.
  */
 export async function registerHub(
@@ -156,7 +114,7 @@ export async function registerHub(
     return { ok: false, error: 'name must be a non-empty string' };
   }
   if (!Array.isArray(users) || !users.every((u) => Number.isSafeInteger(u) && u > 0)) {
-    return { ok: false, error: 'users must be positive numeric Telegram user ids' };
+    return { ok: false, error: 'users must be positive numeric user ids' };
   }
 
   const existing = await store.getHub(hubId);

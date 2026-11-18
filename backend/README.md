@@ -1,13 +1,12 @@
 # TrailCamHub backend (AWS SAM)
 
-A small serverless backend for the hub, the Telegram Mini App and the bot:
+A small serverless backend for the hub and the gallery web app:
 
 ```
-Hub (ESP32) ──Bearer <hub key>─────┐
-Mini App ──tma <Telegram initData>─┼─▶ Lambda (Function URL) ──▶ DynamoDB (hubs, cameras, media, commands, users)
-Telegram ──webhook secret token────┘          │        │
-                                              │        └─▶ Telegram Bot API (notifications, replies)
-                                              └─▶ S3 (thumbnails and videos, via presigned URLs)
+Hub (ESP32) ──Bearer <hub key>────────┐
+Gallery app ──Bearer <userId.secret>──┼─▶ Lambda (Function URL) ──▶ DynamoDB (hubs, cameras, media, commands, users)
+                                      │          │
+                                      │          └─▶ S3 (thumbnails and videos, via presigned URLs)
 ```
 
 ## Hubs, cameras and users
@@ -17,10 +16,9 @@ Telegram ──webhook secret token────┘          │        │
 - A **camera** is created automatically the first time a hub reports it and then
   belongs to that hub. If another hub reports the same camera id, that report is
   refused (`accepted: false`), so a hub cannot take over someone else's camera.
-- **Users** (Telegram accounts) are linked to hubs and see every camera of their
-  hubs. Several users can share a hub. A user is linked by opening a one-time
-  **pairing link** (see [Telegram bot](#telegram-bot)) or by an admin
-  (`register-hub --user`).
+- **Users** (gallery app users with an app token) are linked to hubs and see
+  every camera of their hubs. Several users can share a hub. A user is linked
+  by an admin (`register-hub --user <id>`).
 
 - **One Lambda function** (Node.js 22, TypeScript, arm64) behind a **Function URL**
   — no API Gateway needed.
@@ -30,8 +28,6 @@ Telegram ──webhook secret token────┘          │        │
   downloads directly via short-lived presigned URLs; the bucket stays private.
   Thumbnails expire after `ThumbnailRetentionDays` (365), videos after
   `VideoRetentionDays` (30).
-- The **Telegram bot token** is a GitHub secret, passed to the Lambda function at
-  deploy time; it never appears in the repository.
 
 Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 
@@ -40,15 +36,15 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | Method | Path                                           | Auth                   | Purpose                                                              |
 | ------ | ---------------------------------------------- | ---------------------- | -------------------------------------------------------------------- |
 | GET    | `/v1/health`                                   | –                      | Liveness check                                                       |
-| GET    | `/v1/cameras`                                  | `tma <initData>`       | Cameras linked to the Telegram user                                  |
+| GET    | `/v1/cameras`                                  | app user               | Cameras linked to the user                                           |
 | GET    | `/v1/me`                                       | app user               | `{userId, name, role, hubs}` of the signed-in user                   |
 | GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults                             |
 | GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)                                  |
 | POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT; the apps use it (CORS, #286)                        |
-| GET    | `/v1/cameras/{camId}/media`                    | `tma <initData>`       | Recordings with uploaded thumbnails                                  |
-| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"requestVideo","mediaId":3987654321}`                       |
-| POST   | `/v1/cameras/{camId}/commands`                 | `tma <initData>`       | `{"type":"readCamera"}`                                              |
-| PUT    | `/v1/hubs/{hubId}/schedule`                    | `tma <initData>`       | Wake-up schedule of a hub (see below)                                |
+| GET    | `/v1/cameras/{camId}/media`                    | app user               | Recordings with uploaded thumbnails                                  |
+| POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"requestVideo","mediaId":3987654321}`                       |
+| POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"readCamera"}`                                              |
+| PUT    | `/v1/hubs/{hubId}/schedule`                    | app user               | Wake-up schedule of a hub (see below)                                |
 | POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`                              |
 | POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests                                |
 | POST   | `/v1/cameras/{camId}/name`                     | app user               | `{"name":"Garten"}`, 1–40 characters                                 |
@@ -58,8 +54,6 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | POST   | `/v1/hubs/{hubId}/found-cameras/{bleAddress}`  | app user               | `{"state":"approved","name":"…"}` or `excluded`                      |
 | POST   | `/v1/device/checkin`                           | `Bearer <hubId>.<key>` | Telemetry + media of all cameras (batch)                             |
 | POST   | `/v1/device/ack`                               | `Bearer <hubId>.<key>` | Confirm uploaded thumbnails and commands                             |
-| POST   | `/v1/device/pairing-code`                      | `Bearer <hubId>.<key>` | One-time pairing link for the hub to show                            |
-| POST   | `/v1/telegram/webhook`                         | webhook secret token   | Updates from Telegram (bot messages, buttons)                        |
 
 A recording is identified by its **`mediaId`** (per camera), not by `dir`/`num`:
 the camera reuses `dir`/`num` after its card was cleared. `dir`/`num` are only
@@ -68,8 +62,7 @@ data. See [docs/media-identity.md](../docs/media-identity.md).
 ### Gallery users (#259)
 
 The gallery web app (`app/gallery.html`) signs in with an **app token**,
-`Authorization: Bearer <userId>.<secret>`, instead of Telegram init data; all
-app endpoints accept both. The admin creates a user and links hubs:
+`Authorization: Bearer <userId>.<secret>`. The admin creates a user and links hubs:
 
 ```bash
 npm run add-user -- --name "Opa" --hub garden-hub
@@ -277,58 +270,6 @@ are 300–86400 seconds. The hub takes the change at its next check-in.
 
 `serverTime` lets the hub set its clock (and the camera's `utcTime`).
 
-## Telegram bot
-
-Besides serving the Mini App, the bot talks to its users. Telegram delivers
-updates to `POST /v1/telegram/webhook`; the deploy workflow registers that URL
-(`setWebhook`) and the command menu (`setMyCommands`) after every deploy. Every
-webhook request carries the header `X-Telegram-Bot-Api-Secret-Token`, derived
-from the bot token (`webhookSecret()` in `src/telegram/api.ts`), so nobody else
-can post updates. Only private chats are served.
-
-### Notifications
-
-When `/v1/device/ack` confirms a thumbnail for the first time, every user linked
-to the hub gets it as a photo with buttons: **🎬 Download video** (videos only;
-queues a `requestVideo` like the app) and **📱 Open app** (the Mini App, from the
-`MiniAppUrl` parameter). Limits, so a sync never floods a chat:
-
-- only recordings of the last three days (a new camera's backlog stays quiet),
-- three photos per camera and check-in, the rest summed up in one message,
-- ten messages per user and check-in.
-
-Telegram failures are logged and never fail the hub's request; a user who
-blocked the bot is skipped.
-
-### Commands and settings
-
-| Command                   | Effect                                                          |
-| ------------------------- | --------------------------------------------------------------- |
-| `/start <code>`           | Redeems a pairing code (what opening a pairing link sends)      |
-| `/settings`               | Shows the settings, with a button to turn notifications on/off  |
-| `/notify on\|off`         | Messages about new recordings                                   |
-| `/quiet 22-7` / `off`     | Quiet hours: messages in this window arrive without sound       |
-| `/timezone Europe/Berlin` | Time zone of the quiet hours (default: `DefaultTimeZone`)       |
-| `/invite`                 | One-time pairing link for one of your hubs, as QR code and text |
-
-Settings are stored per Telegram user (`USER#<id> / SETTINGS`).
-
-### Pairing
-
-A pairing code links whoever redeems it to a hub. It is shared as the link
-`https://t.me/<bot>?start=<code>`: opening it (or scanning its QR code) starts
-the bot with `/start <code>`, and the bot links the user. Codes work once and
-expire (DynamoDB deletes them through the table's TTL); there are three ways to
-get one:
-
-| Who                    | How                                               | Valid    |
-| ---------------------- | ------------------------------------------------- | -------- |
-| Admin                  | `npm run register-hub -- --hub garden-hub --pair` | 7 days   |
-| A user linked to a hub | `/invite` in the bot (QR code + link)             | 24 hours |
-| The hub                | `POST /v1/device/pairing-code` (to show as QR)    | 30 min   |
-
-The QR code is drawn by the backend itself (`src/qr.ts`), not by a web service.
-
 ## Development
 
 ```bash
@@ -344,8 +285,7 @@ sam validate --lint && sam build
 This works in an **AWS project** (the new AWS sign-up, where AWS manages the
 organization policies) as well as in a classic account. Projects do not allow
 GitHub's OIDC identity provider, so GitHub Actions deploys with the access key of
-an IAM user that may only deploy this stack, and the Telegram bot token is a
-GitHub secret instead of an SSM parameter.
+an IAM user that may only deploy this stack.
 
 Prerequisites: AWS CLI with credentials for your project or account, in the
 project's home Region (AWS assigns it, e.g. `eu-central-1` or `eu-north-1`;
@@ -378,35 +318,26 @@ the GitHub variable `AWS_REGION` if it is not `eu-central-1`.
    | -------- | ---------------------------- | --------------------------------------- |
    | Secret   | `AWS_ACCESS_KEY_ID`          | `AccessKeyId` from step 2               |
    | Secret   | `AWS_SECRET_ACCESS_KEY`      | `SecretAccessKey` from step 2           |
-   | Secret   | `TELEGRAM_BOT_TOKEN`         | Token from @BotFather                   |
    | Variable | `AWS_SAM_ARTIFACT_BUCKET`    | `ArtifactBucketName` output             |
    | Variable | `AWS_CFN_EXECUTION_ROLE_ARN` | `CloudFormationExecutionRoleArn` output |
    | Variable | `AWS_REGION` (optional)      | Home Region if not `eu-central-1`       |
 
    Then run the **Backend** workflow on `main` (Actions → Backend → Run workflow)
    or push a change under `backend/`. The job summary shows the API URL; set it as
-   the variable `TRAILCAMHUB_API_BASE_URL` so the Mini App uses the backend
+   the variable `TRAILCAMHUB_API_BASE_URL` so the gallery app uses the backend
    instead of demo data.
 
 The access key can only create and run change sets for the `trailcamhub` stack;
 everything else happens through the execution role. Rotate it from time to time
 (`aws iam create-access-key`, update the secrets, `aws iam delete-access-key`).
-The bot token ends up in a Lambda environment variable, readable by anyone who
-can view the function's configuration in your account. In an account where
-Parameter Store is available, you can instead deploy with
-`TelegramBotTokenParameter=/trailcamhub/telegram-bot-token` and leave the token
-parameter empty.
 
-4. **Register a hub** and get a pairing link for yourself:
+4. **Register a hub** and link users to it:
 
    ```bash
-   npm run register-hub -- --hub garden-hub --name Garden --pair
+   npm run register-hub -- --hub garden-hub --name Garden --user <userId>
    ```
 
-   Open the printed link on your phone: Telegram starts the bot, which links
-   your account to the hub. Instead of `--pair` you can also link a Telegram
-   user id directly (`--user <id>`, e.g. from
-   [@userinfobot](https://t.me/userinfobot)).
+   `<userId>` is the id of a gallery app user (see [Gallery users](#gallery-users-259)).
 
    The script runs the registration inside the backend's Lambda function
    (`aws lambda invoke`), because AWS projects deny people direct access to
@@ -416,12 +347,8 @@ parameter empty.
 
    The printed hub key goes onto the hub (web installer → Device setup → Device
    key). Cameras need no registration: they appear when the hub first reports
-   them. Add family members with `/invite` in the bot, `--pair` or `--user <id>`
+   them. Add family members with `--user <id>`
    (repeatable); `--rotate-key` issues a new key.
-
-   Links made before the bot sent notifications (before #58) are only stored in
-   one direction, and the hub does not know whom to notify. Link those users
-   again once: `--user <id>` for each, or a pairing link.
 
    Admin tasks are only reachable by invoking the function directly; requests
    through the Function URL never trigger them.
@@ -436,8 +363,7 @@ billing more. In a classic account, set an AWS Budgets alert.
 
 ## Not yet included
 
-Video upload (the bot's download button only queues the request), showing the
-hub's pairing code as a QR code on the hub, OTA manifest.
+Video upload from the hub and an OTA manifest.
 
 ## Found cameras (#296, #297)
 
