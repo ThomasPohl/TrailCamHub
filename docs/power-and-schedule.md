@@ -137,6 +137,12 @@ a display do not respond.
   `POWER_AWAKE_AFTER_ACTIVITY_MIN` (5 min) more.
 - A **wake-up from deep sleep** starts the scheduled cycle at once and goes back
   to sleep when it is done.
+- The **BOOT button** (GPIO0, `CONFIG_HUB_BOOT_BUTTON`, on by default on the
+  ESP32-S3 and ESP32 boards without a button of their own, #224) wakes a
+  sleeping hub and starts a camera read at once ("fetch now" on site); while
+  the hub is awake a short press searches for the cameras and a long press
+  stops the search. GPIO0 is a strapping pin: holding the button while
+  pressing reset or connecting power starts the bootloader.
 
 ### What survives deep sleep
 

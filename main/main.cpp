@@ -23,6 +23,7 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
+#include "boot_button.h"
 #include "camera_actions.hpp"
 #include "camera_ble.h"
 #include "camera_protocol.h"
@@ -167,7 +168,7 @@ static void on_media_progress(uint32_t done, uint32_t stored, uint32_t total)
     hub_console_set_media_progress(done, stored, total);
 }
 
-#if CONFIG_BOARD_TDONGLE || CONFIG_WEB_UI_ENABLE
+#if CONFIG_BOARD_TDONGLE || CONFIG_WEB_UI_ENABLE || CONFIG_HUB_BOOT_BUTTON
 static void on_search_request(void)
 {
     session_controller_request_scan();
@@ -327,6 +328,15 @@ extern "C" void app_main(void)
                                  web_ui_url());
     }
 #endif
+#endif
+#if CONFIG_HUB_BOOT_BUTTON
+    static const boot_button_callbacks_t button_callbacks = {
+        .on_search = on_search_request,
+        .on_stop = on_stop_request,
+    };
+    if (boot_button_start(&button_callbacks) != ESP_OK) {
+        ESP_LOGW(TAG, "Continuing without the BOOT button");
+    }
 #endif
 #if CONFIG_BOARD_TDONGLE || CONFIG_WEB_UI_ENABLE
     if (session_controller_add_status_listener(on_session_status, NULL) !=

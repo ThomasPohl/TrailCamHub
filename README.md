@@ -116,6 +116,7 @@ runs their own. The optional AWS backend with a Telegram Mini App is in
 
 | Topic | |
 |---|---|
+| [Guide: build your own hub](docs/guide/README.md) | decision tree, shopping list, one guide per mode, compatibility, troubleshooting |
 | [Hardware](docs/hardware.md) | boards, main board details, open hardware questions |
 | [Modes](docs/modes.md) | power, push/pull, transport, destinations; per-board notes |
 | [Power and schedule](docs/power-and-schedule.md) | camera read plan, check-ins, deep sleep |

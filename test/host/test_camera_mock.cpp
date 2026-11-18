@@ -28,6 +28,8 @@
 #include "media_transfer.hpp"
 #include "mock_camera.hpp"
 #include "mock_wire.hpp"
+#include "playback_record.hpp"
+#include "playback_stream.hpp"
 #include "pppp_session.hpp"
 
 using namespace camera_mock;
@@ -87,6 +89,12 @@ struct Hub {
     std::vector<Record> records;
     unsigned bulk_frames = 0;
     bool ack_bulk = true;
+    // Playback stream (subtype 0x02): frames as they arrived.
+    struct PlaybackFrame {
+        std::uint16_t seq = 0;
+        std::vector<std::uint8_t> payload;
+    };
+    std::vector<PlaybackFrame> playback_frames;
 
     void receive_bulk(const Datagram &packet)
     {
@@ -98,6 +106,12 @@ struct Hub {
             camera::ArtemisBulkAckRequest ack;
             REQUIRE(ack.build(subtype, &seq, 1));
             to_camera.send(ack.data(), ack.size(), "BULK ACK");
+        }
+        if (subtype == 0x02) {
+            playback_frames.push_back(
+                {seq,
+                 std::vector<std::uint8_t>(packet.begin() + 8, packet.end())});
+            return;
         }
         camera::artemis::BulkReassembler &bulk =
             subtype == 0x04 ? thumbnail_bulk : photo_bulk;
@@ -823,6 +837,7 @@ TEST_CASE("camera mock: size of the media list (#122)")
     }
 }
 
+<<<<<<< HEAD
 TEST_CASE("camera mock: the pictures come from the fixture files (#122)")
 {
     const auto read_file = [](const std::string &name) {
@@ -867,4 +882,150 @@ TEST_CASE("camera mock: the pictures come from the fixture files (#122)")
     CHECK(bench.hub.records[0].header.media_id == item.id);
     CHECK(bench.hub.records[1].subtype == 0x03);
     CHECK(bench.hub.records[1].file == photo);
+=======
+TEST_CASE("camera mock: video playback (769/770, #122 stage 3)")
+{
+    Bench bench;
+    bench.discover_and_login();
+    REQUIRE(bench.hub.responses.size() == 1);
+    camera::artemis::MediaList list;
+    REQUIRE(camera::artemis::parse_media_list(
+        decrypt(fixtures::kMediaListPage0Response), list));
+    const camera::artemis::MediaItem *video = nullptr;
+    const camera::artemis::MediaItem *photo = nullptr;
+    for (const auto &item : list.files) {
+        if (item.file_type != 0 && item.duration_ms > 0 && video == nullptr) {
+            video = &item;
+        }
+        if (item.file_type == 0 && photo == nullptr) {
+            photo = &item;
+        }
+    }
+    REQUIRE(video != nullptr);
+    REQUIRE(photo != nullptr);
+    const std::string t =
+        ",\"token\":" + std::to_string(fixtures::kCapturedToken) + "}";
+    const auto play = [&](const camera::artemis::MediaItem &item,
+                          std::uint32_t seq, int session_no) {
+        bench.hub.command(
+            seq,
+            "{\"cmdId\":769,\"fileType\":" + std::to_string(item.file_type) +
+                ",\"dirNum\":" + std::to_string(item.dir_num) +
+                ",\"mediaNum\":" + std::to_string(item.num) +
+                ",\"sessionNo\":" + std::to_string(session_no) + t,
+            bench.now_ms);
+    };
+
+    SUBCASE("the stream decodes with the hub's own playback code")
+    {
+        play(*video, 2, 4711);
+        bench.run(40);
+        REQUIRE(bench.hub.responses.size() == 2);
+        std::int64_t total = 0;
+        std::int64_t start = -1;
+        REQUIRE(find_int(bench.hub.responses.back(), "totalFrame", total));
+        REQUIRE(find_int(bench.hub.responses.back(), "startPbRet", start));
+        CHECK(start == 0);
+        CHECK(total == static_cast<std::int64_t>(video->duration_ms / 40));
+
+        // Everything the camera sends comes through the window; run on.
+        for (int i = 0; i < 400 && bench.camera.stats().playbacks == 1; i++) {
+            bench.run(20);
+        }
+        camera::artemis::PlaybackStream stream(256, 1 << 20);
+        std::size_t video_frames = 0;
+        std::size_t audio_frames = 0;
+        bool first_is_key = false;
+        const camera::artemis::Aes128 cipher =
+            camera::artemis::command_cipher();
+        const camera::artemis::PlaybackStream::RecordSink sink =
+            [&](std::uint32_t version, std::uint32_t, std::uint8_t *payload,
+                std::size_t size) {
+                CHECK(version == 4);
+                camera::artemis::PlaybackFrame frame;
+                REQUIRE(camera::artemis::parse_playback_record(payload, size,
+                                                               frame));
+                CHECK(frame.session_no == 4711);
+                camera::artemis::decrypt_playback_data(cipher, frame.data,
+                                                       frame.size);
+                if (frame.kind == camera::artemis::PlaybackKind::video) {
+                    CHECK(frame.width == 1920);
+                    CHECK(frame.height == 1080);
+                    CHECK(frame.data[0] == 0);
+                    CHECK(frame.data[3] == 1);
+                    if (video_frames == 0) {
+                        first_is_key = frame.data[4] == 0x67;
+                    }
+                    video_frames++;
+                } else {
+                    CHECK(frame.kind == camera::artemis::PlaybackKind::audio);
+                    CHECK(frame.data[0] == 0xff);
+                    CHECK((frame.data[1] & 0xf0) == 0xf0);
+                    audio_frames++;
+                }
+                return true;
+            };
+        for (const auto &frame : bench.hub.playback_frames) {
+            bool ack = false;
+            CHECK(stream.feed(frame.seq, frame.payload.data(),
+                              frame.payload.size(), sink, ack) ==
+                  camera::artemis::PlaybackStream::Status::ok);
+        }
+        CHECK(first_is_key);
+        CHECK(video_frames == static_cast<std::size_t>(total));
+        CHECK(audio_frames == (video_frames + 1) / 2);
+        CHECK(bench.camera.stats().playback_records ==
+              video_frames + audio_frames);
+    }
+
+    SUBCASE("a photo, a missing file and a deleted video are refused")
+    {
+        play(*photo, 2, 1);
+        bench.run(20);
+        play(*video, 3, 1);
+        bench.run(5);
+        bench.hub.command(
+            4,
+            "{\"cmdId\":773,\"fileType\":" + std::to_string(video->file_type) +
+                ",\"dirNum\":" + std::to_string(video->dir_num) +
+                ",\"mediaNum\":" + std::to_string(video->num) + t,
+            bench.now_ms);
+        bench.run(20);
+        bench.hub.playback_frames.clear();
+        play(*video, 5, 2);
+        bench.run(20);
+        REQUIRE(bench.hub.responses.size() >= 5);
+        CHECK(bench.hub.responses[1].find("\"startPbRet\":-3") !=
+              std::string::npos);
+        CHECK(bench.hub.responses.back().find("\"startPbRet\":-3") !=
+              std::string::npos);
+        CHECK(bench.camera.stats().playbacks == 1);
+    }
+
+    SUBCASE("770 stops the stream")
+    {
+        bench.hub.ack_bulk = true;
+        play(*video, 2, 7);
+        bench.run(5);
+        const std::size_t before = bench.hub.playback_frames.size();
+        REQUIRE(before > 0);
+        bench.hub.command(3, "{\"cmdId\":770" + t, bench.now_ms);
+        bench.run(5);
+        const std::size_t after = bench.hub.playback_frames.size();
+        bench.run(40);
+        CHECK(bench.hub.playback_frames.size() == after);
+        CHECK(bench.camera.stats().playback_records < 100);
+    }
+
+    SUBCASE("the abort fault ends the stream early")
+    {
+        Faults faults;
+        faults.abort_after_frames = 10;
+        bench.camera.set_faults(faults);
+        play(*video, 2, 9);
+        bench.run(60);
+        CHECK(bench.hub.playback_frames.size() == 10);
+        CHECK(bench.camera.stats().aborted_records == 1);
+    }
+>>>>>>> origin/main
 }
