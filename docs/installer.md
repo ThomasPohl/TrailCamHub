@@ -132,10 +132,10 @@ exactly these commands.
 | `update` | Sync, then read the firmware manifest now |
 | `heap [blocks]`, `ls [path]`, `cat <path> [offset [len]]`, `rm [-r] <path>`, `sdbench` | Diagnostics (only with `CONFIG_HUB_CONSOLE_DIAGNOSTICS`); the SD card tab uses them |
 
-## Phone app (Telegram Mini App)
+## Gallery web app
 
-With the optional own backend, a Telegram Mini App shows the cameras, their
-status and thumbnails and requests videos. It is published on the same site
-under **https://thomaspohl.github.io/TrailCamHub/app/**; without a backend it
-runs in demo mode with sample data. Code and setup: [`app/`](../app/README.md),
-[`backend/`](../backend/README.md).
+With the optional own backend, the gallery web app shows the cameras, their
+status and thumbnails, requests videos and deletes recordings. It is published
+on the same site under **https://thomaspohl.github.io/TrailCamHub/app/gallery.html**;
+without a backend it runs in demo mode with sample data. Code and setup:
+[`app/`](../app/README.md), [`backend/`](../backend/README.md).

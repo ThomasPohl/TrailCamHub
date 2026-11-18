@@ -49,7 +49,7 @@ schedules) sits in separate files and is covered by the host tests in
 | `sd_storage`, `sd_log` | microSD mount (SDMMC or SPI); log files on the card |
 | `session_controller` | Session state machine and the tasks that drive a cycle: camera session, then uplink; request and status interface for front ends |
 | `schedule`, `schedule_state`, `scheduler` | Wake-up schedule: camera read plan and check-in times, state across deep sleep, the task that requests cycles and sleeps in between |
-| `uplink` | Destinations: own backend (HTTPS check-in, thumbnail upload, acknowledgement), WebDAV, Telegram directly |
+| `uplink` | Destinations: own backend (HTTPS check-in, thumbnail upload, acknowledgement), WebDAV |
 | `modem_uplink`, `ethernet_uplink` | A7670E 4G modem over USB/PPP; Ethernet (P4 EMAC, W5500) |
 | `hub_config` | Settings in NVS (modes, Wi-Fi, destinations, schedule) with validation and board presets |
 | `hub_console` | Line-based serial commands used by the web installer ([installer.md](installer.md#serial-commands)) |
@@ -103,7 +103,7 @@ and the result of the last cycle. SSID and result stay set until the next
 cycle starts, so a front end can keep showing them.
 
 Front ends are the serial console, the display and button, the web UI, the
-Telegram commands and the **scheduler**, which runs cycles on the camera read
+backend commands and the **scheduler**, which runs cycles on the camera read
 plan ([power-and-schedule.md](power-and-schedule.md)).
 
 ### Data on the SD card
