@@ -38,16 +38,12 @@ enum class Key {
     // "push" (the hub sends to its destination) or "pull" (people fetch
     // from the hub's web UI).
     direction,
-    // Where push sends to: "backend", "webdav" or "telegram" (docs/modes.md).
+    // Where push sends to: "backend" or "webdav" (docs/modes.md).
     destination,
     // WebDAV destination: folder URL (http:// or https://), user, password.
     webdav_url,
     webdav_user,
     webdav_password,
-    // Telegram destination: the bot token from @BotFather, and the one chat
-    // it talks to (set by /start; empty: the next chat that sends /start).
-    telegram_token,
-    telegram_chat,
     // Called after every sync (a health check service such as
     // healthchecks.io: "<url>" after success, "<url>/fail" after a
     // failure), so that it warns when the hub stops reporting.
@@ -69,14 +65,13 @@ enum class Key {
 };
 
 constexpr Key kAllKeys[] = {
-    Key::wifi_ssid,      Key::wifi_password, Key::api_url,
-    Key::device_key,     Key::camera_plan,   Key::checkin_min,
-    Key::transport,      Key::apn,           Key::sim_pin,
-    Key::power,          Key::direction,     Key::destination,
-    Key::webdav_url,     Key::webdav_user,   Key::webdav_password,
-    Key::telegram_token, Key::telegram_chat, Key::health_url,
-    Key::web_password,   Key::camera_user,   Key::camera_password,
-    Key::webdav_videos};
+    Key::wifi_ssid,       Key::wifi_password, Key::api_url,
+    Key::device_key,      Key::camera_plan,   Key::checkin_min,
+    Key::transport,       Key::apn,           Key::sim_pin,
+    Key::power,           Key::direction,     Key::destination,
+    Key::webdav_url,      Key::webdav_user,   Key::webdav_password,
+    Key::health_url,      Key::web_password,  Key::camera_user,
+    Key::camera_password, Key::webdav_videos};
 // Every key must be in kAllKeys (loading, "config set" and "config show" go
 // through it); the last enumerator is the last key.
 static_assert(sizeof(kAllKeys) / sizeof(kAllKeys[0]) ==
@@ -99,8 +94,6 @@ struct Settings {
     std::string webdav_url;
     std::string webdav_user;
     std::string webdav_password;
-    std::string telegram_token;
-    std::string telegram_chat;
     std::string health_url;
     std::string web_password;
     std::string camera_user;
@@ -151,7 +144,7 @@ std::string api_base(const std::string &api_url);
 
 enum class Power { mains, battery };
 enum class Direction { push, pull };
-enum class Destination { backend, webdav, telegram };
+enum class Destination { backend, webdav };
 
 // What the build of this board can do.
 struct Capabilities {
@@ -214,7 +207,7 @@ Transport transport(const Settings &settings, const Capabilities &caps);
 bool uplink_configured(const Settings &settings, const Capabilities &caps);
 
 // The destination's own settings are complete (backend URL and key, WebDAV
-// URL, Telegram token).
+// URL).
 bool destination_configured(const Settings &settings);
 Destination destination(const Settings &settings);
 
@@ -222,10 +215,6 @@ Destination destination(const Settings &settings);
 // WebDAV destination over `transport` (setting webdav_videos), not only the
 // requested ones. False for other destinations.
 bool webdav_fetches_videos(const Settings &settings, Transport transport);
-
-// Longest check-in interval with Telegram directly: Telegram keeps updates
-// (button presses, commands) for about a day.
-constexpr std::uint32_t kTelegramMaxCheckinMin = 12 * 60;
 
 // Empty if `value` for `key` fits the board, else a short reason (e.g.
 // "this board has no modem"). For keys without such limits always empty.

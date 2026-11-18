@@ -530,7 +530,7 @@ TEST_CASE("settings come from the backend, the hub or the build")
     CHECK(std::string(origin_name(Origin::remote)) == "remote");
 }
 
-TEST_CASE("checkin_max_min bounds the back-off of check-ins (Telegram)")
+TEST_CASE("checkin_max_min bounds the back-off of check-ins")
 {
     Settings settings = settings_with("*=60", 240);
     State state = initial_state();

@@ -1,10 +1,10 @@
 #pragma once
 
 // The actions the hub can ask a camera to do (#135, #194), described once for
-// every front end: the serial console, the web UI and Telegram all turn their
-// input into an Action and get the same Outcome back. The camera session sends
-// the request and judges the answer with this module. Pure logic (no ESP-IDF),
-// host-tested.
+// every front end: the serial console, the web UI and the backend all turn
+// their input into an Action and get the same Outcome back. The camera session
+// sends the request and judges the answer with this module. Pure logic (no
+// ESP-IDF), host-tested.
 //
 // What the camera does is in docs/camera-media-delete.md and
 // docs/udp-protocol.md. Two rules come from there:
@@ -45,10 +45,9 @@ std::optional<Type> type_of_cmd(std::int64_t cmd_id);
 // Who asks. The same action may be allowed from one front end and not from
 // another.
 enum class Source : std::uint8_t {
-    console,   // the serial console: someone is at the hub
-    web_ui,    // the hub's web page (password protected)
-    telegram,  // a chat, over the internet
-    backend,   // a command from the backend
+    console,  // the serial console: someone is at the hub
+    web_ui,   // the hub's web page (password protected)
+    backend,  // a command from the backend
 };
 
 const char *source_name(Source source);

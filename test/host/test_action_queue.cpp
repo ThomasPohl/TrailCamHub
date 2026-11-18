@@ -54,7 +54,7 @@ TEST_CASE("actions run in the order they were asked for")
     ActionQueue queue;
     const auto a = queue.add(kPhoto, Source::console, "", 100);
     const auto b =
-        queue.add(Action{Type::video_start, 0}, Source::telegram, "tg:1", 101);
+        queue.add(Action{Type::video_start, 0}, Source::backend, "bk:1", 101);
     CHECK(a.kind == Kind::added);
     CHECK(b.kind == Kind::added);
     CHECK(a.id == 1);
@@ -89,8 +89,8 @@ TEST_CASE("a failed action keeps its reason without commas")
 TEST_CASE("a command that arrives twice is queued once")
 {
     ActionQueue queue;
-    const auto first = queue.add(kPhoto, Source::telegram, "tg:4711", 100);
-    const auto second = queue.add(kPhoto, Source::telegram, "tg:4711", 101);
+    const auto first = queue.add(kPhoto, Source::backend, "bk:4711", 100);
+    const auto second = queue.add(kPhoto, Source::backend, "bk:4711", 101);
     CHECK(first.kind == Kind::added);
     CHECK(second.kind == Kind::duplicate);
     CHECK(second.id == first.id);
@@ -99,10 +99,10 @@ TEST_CASE("a command that arrives twice is queued once")
     // Also after it was done: the key is still known.
     queue.start(first.id);
     queue.finish(first.id, ok(), 110);
-    CHECK(queue.add(kPhoto, Source::telegram, "tg:4711", 120).kind ==
+    CHECK(queue.add(kPhoto, Source::backend, "bk:4711", 120).kind ==
           Kind::duplicate);
     // Another update is another command.
-    CHECK(queue.add(kPhoto, Source::telegram, "tg:4712", 120).kind ==
+    CHECK(queue.add(kPhoto, Source::backend, "bk:4712", 120).kind ==
           Kind::added);
 }
 
@@ -127,10 +127,8 @@ TEST_CASE("invalid and forbidden actions are refused")
     const auto bad = queue.add(del(0), Source::console, "", 1);
     CHECK(bad.kind == Kind::invalid);
     CHECK_FALSE(bad.reason.empty());
-    const auto remote = queue.add(kFormat, Source::telegram, "", 1);
+    const auto remote = queue.add(kFormat, Source::backend, "", 1);
     CHECK(remote.kind == Kind::not_allowed);
-    CHECK(queue.add(del(5), Source::telegram, "", 1).kind == Kind::not_allowed);
-    CHECK(queue.add(kFormat, Source::backend, "", 1).kind == Kind::not_allowed);
     CHECK(queue.pending_count() == 0);
 }
 
@@ -138,14 +136,14 @@ TEST_CASE("only a few actions may wait")
 {
     ActionQueue queue;
     for (std::size_t i = 0; i < ActionQueue::kMaxPending; ++i) {
-        CHECK(queue.add(kPhoto, Source::telegram, "k" + std::to_string(i), 1)
+        CHECK(queue.add(kPhoto, Source::backend, "k" + std::to_string(i), 1)
                   .kind == Kind::added);
     }
-    CHECK(queue.add(kPhoto, Source::telegram, "more", 1).kind == Kind::full);
+    CHECK(queue.add(kPhoto, Source::backend, "more", 1).kind == Kind::full);
     // Room again once one is done.
     queue.start(1);
     queue.finish(1, ok(), 2);
-    CHECK(queue.add(kPhoto, Source::telegram, "more", 3).kind == Kind::added);
+    CHECK(queue.add(kPhoto, Source::backend, "more", 3).kind == Kind::added);
 }
 
 TEST_CASE("the oldest finished entry makes room")
@@ -177,8 +175,8 @@ TEST_CASE("a restart does not repeat an action that was running")
 TEST_CASE("an action that waited more than a day is dropped")
 {
     ActionQueue queue;
-    queue.add(kPhoto, Source::telegram, "a", 1000);
-    queue.add(kPhoto, Source::telegram, "b", 1000 + 20 * 3600);
+    queue.add(kPhoto, Source::backend, "a", 1000);
+    queue.add(kPhoto, Source::backend, "b", 1000 + 20 * 3600);
     // No clock: nothing is judged.
     CHECK(queue.expire_stale(0) == 0);
     CHECK(queue.expire_stale(1000 + ActionQueue::kMaxAgeS + 1) == 1);
@@ -204,16 +202,16 @@ TEST_CASE("all waiting actions can fail together")
 TEST_CASE("results are reported once to the front end that asked")
 {
     ActionQueue queue;
-    queue.add(kPhoto, Source::telegram, "t1", 1);
+    queue.add(kPhoto, Source::backend, "t1", 1);
     queue.add(kPhoto, Source::console, "", 1);
-    queue.add(kPhoto, Source::telegram, "t2", 1);
+    queue.add(kPhoto, Source::backend, "t2", 1);
     queue.finish(1, ok(), 5);
     queue.finish(2, failure("x"), 5);
-    auto results = queue.unreported_results(Source::telegram);
+    auto results = queue.unreported_results(Source::backend);
     REQUIRE(results.size() == 1);
     CHECK(results[0]->id == 1);
     CHECK(queue.mark_notified(1));
-    CHECK(queue.unreported_results(Source::telegram).empty());
+    CHECK(queue.unreported_results(Source::backend).empty());
     CHECK(queue.unreported_results(Source::console).size() == 1);
     CHECK_FALSE(queue.mark_notified(99));
 }
@@ -233,7 +231,7 @@ TEST_CASE("an entry is described the same way everywhere")
 
 TEST_CASE("keys are cleaned")
 {
-    CHECK(sanitize_key("tg:42_x-1") == "tg:42_x-1");
+    CHECK(sanitize_key("bk:42_x-1") == "bk:42_x-1");
     CHECK(sanitize_key("a,b\nc d") == "abcd");
     CHECK(sanitize_key(std::string(100, 'a')).size() ==
           ActionQueue::kMaxKeyLength);
@@ -242,7 +240,7 @@ TEST_CASE("keys are cleaned")
 TEST_CASE("the queue survives a round trip through text")
 {
     ActionQueue queue;
-    queue.add(kPhoto, Source::telegram, "tg:1", 100);
+    queue.add(kPhoto, Source::backend, "bk:1", 100);
     queue.add(del(4294967295LL), Source::console, "", 101);
     queue.add(kFormat, Source::web_ui, "", 102);
     queue.start(1);
@@ -255,9 +253,9 @@ TEST_CASE("the queue survives a round trip through text")
     const Entry &first = loaded.entries()[0];
     CHECK(first.state == State::failed);
     CHECK(first.reason == "snapRet -2; card full");
-    CHECK(first.key == "tg:1");
+    CHECK(first.key == "bk:1");
     CHECK(first.notified);
-    CHECK(first.source == Source::telegram);
+    CHECK(first.source == Source::backend);
     CHECK(loaded.entries()[1].action.media_id == 4294967295LL);
     CHECK(loaded.entries()[2].source == Source::web_ui);
     // Ids go on where they were.
@@ -279,7 +277,7 @@ TEST_CASE("unreadable text and lines are handled")
                         "garbage\n"
                         "2,photo,0,nobody,done,10,11,0,,\n"
                         "7,delete,0,console,pending,10,0,0,,\n"
-                        "5,photo,0,telegram,pending,10,0,0,k,\r\n"));
+                        "5,photo,0,backend,pending,10,0,0,k,\r\n"));
     REQUIRE(queue.entries().size() == 2);
     CHECK(queue.entries()[0].id == 1);
     CHECK(queue.entries()[1].id == 5);
@@ -294,7 +292,7 @@ TEST_CASE(
     CHECK(load_queue(dir.file(), queue, 100));
     CHECK(queue.entries().empty());
 
-    queue.add(kPhoto, Source::telegram, "tg:9", 100);
+    queue.add(kPhoto, Source::backend, "bk:9", 100);
     queue.add(kFormat, Source::console, "", 100);
     queue.start(1);
     REQUIRE(save_queue(dir.file(), queue));
@@ -305,7 +303,7 @@ TEST_CASE(
     CHECK(loaded.find(1)->state == State::failed);
     CHECK(loaded.find(1)->finished_s == 500);
     CHECK(loaded.find(2)->state == State::pending);
-    CHECK(loaded.add(kPhoto, Source::telegram, "tg:9", 600).kind ==
+    CHECK(loaded.add(kPhoto, Source::backend, "bk:9", 600).kind ==
           Kind::duplicate);
 }
 
@@ -366,7 +364,7 @@ TEST_CASE("a v1 file (without camera) is still read")
     ActionQueue queue;
     REQUIRE(queue.parse("v1,3\n"
                         "1,delete,42,console,pending,10,0,0,,\n"
-                        "2,photo,0,telegram,failed,10,11,1,tg:5,snapRet -2\n"));
+                        "2,photo,0,backend,failed,10,11,1,bk:5,snapRet -2\n"));
     REQUIRE(queue.entries().size() == 2);
     CHECK(queue.entries()[0].action.cam_id.empty());
     CHECK(queue.entries()[1].reason == "snapRet -2");

@@ -40,15 +40,13 @@ TEST_CASE("actions have stable names and camera commands")
 
 TEST_CASE("formatting is never remote and deleting needs the hub or its page")
 {
-    CHECK(allowed(Type::photo, Source::telegram));
+    CHECK(allowed(Type::photo, Source::backend));
     CHECK(allowed(Type::video_start, Source::backend));
     CHECK(allowed(Type::delete_media, Source::console));
     CHECK(allowed(Type::delete_media, Source::web_ui));
-    CHECK_FALSE(allowed(Type::delete_media, Source::telegram));
     CHECK(allowed(Type::delete_media, Source::backend));
     CHECK(allowed(Type::format_sd, Source::console));
     CHECK(allowed(Type::format_sd, Source::web_ui));
-    CHECK_FALSE(allowed(Type::format_sd, Source::telegram));
     CHECK_FALSE(allowed(Type::format_sd, Source::backend));
     CHECK(needs_confirmation(Type::format_sd));
     CHECK(needs_confirmation(Type::delete_media));

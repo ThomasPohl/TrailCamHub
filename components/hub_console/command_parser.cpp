@@ -382,7 +382,7 @@ const char *help_text()
            "keys: wifi_ssid wifi_password api_url device_key camera_plan\n"
            "      checkin_min transport apn sim_pin power direction\n"
            "      destination webdav_url webdav_user webdav_password\n"
-           "      webdav_videos telegram_token telegram_chat health_url\n"
+           "      webdav_videos health_url\n"
            "      web_password camera_user camera_password\n";
 }
 

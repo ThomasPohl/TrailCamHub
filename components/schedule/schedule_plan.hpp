@@ -134,9 +134,8 @@ struct Settings {
     // Interval of the backend check-ins in minutes; 0: none on schedule.
     std::uint32_t checkin_min = 0;
     // Upper bound for the check-in interval after back-off and a low hub
-    // battery have stretched it; 0: only kMaxStretchedMin. Telegram keeps
-    // button presses and commands for about a day, so it sets 12 h. A
-    // critical hub battery is not bounded by it.
+    // battery have stretched it; 0: only kMaxStretchedMin. A critical hub
+    // battery is not bounded by it.
     std::uint32_t checkin_max_min = 0;
     // The hub has complete uplink settings.
     bool uplink = false;

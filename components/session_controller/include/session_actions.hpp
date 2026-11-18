@@ -6,8 +6,7 @@
 // the action queue and starts the session that runs it. The rules themselves
 // are in camera_action.hpp, action_confirm.hpp and action_queue.hpp; the
 // answer is the same for both, so each only words it for its medium
-// (console line, JSON). Telegram queues directly: its read is scheduled by
-// the check-in, and it never needs a confirmation.
+// (console line, JSON).
 
 #include <cstddef>
 #include <string>

@@ -1,6 +1,6 @@
 #pragma once
 
-// HTTP(S) helpers shared by the destinations (backend, WebDAV, Telegram).
+// HTTP(S) helpers shared by the destinations (backend, WebDAV).
 // Server certificates are checked against the ESP-IDF certificate bundle;
 // http:// URLs (a NAS in the home network) are sent unencrypted.
 
@@ -45,7 +45,7 @@ struct Request {
     // HTTP Basic authentication if `user` is not empty.
     std::string user;
     std::string password;
-    // The URL carries a secret (the Telegram bot token is part of the path):
+    // The URL carries a secret (a WebDAV URL may embed a token):
     // ESP-IDF's HTTP client logs the URL on some errors ("Error parse url
     // ...", redirects), so its log is switched off for this request. Our own
     // messages never contain the URL.

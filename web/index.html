@@ -97,7 +97,6 @@
             </fieldset>
             <fieldset id="wz-q-goal">
               <legend>How do you want to get the pictures?</legend>
-              <label data-needs="modem"><input type="radio" name="goal" value="telegram"> In Telegram on my phone <small>the hub sends them over its own SIM card; no server needed</small></label>
               <label><input type="radio" name="goal" value="webdav"> Copied to a folder on my NAS or cloud <small>WebDAV: Nextcloud, Synology, QNAP, …</small></label>
               <label data-needs="web_ui"><input type="radio" name="goal" value="pull"> I open the hub's web page <small>in the home network or on the hub's own Wi-Fi; needs mains power</small></label>
               <label><input type="radio" name="goal" value="backend"> My own TrailCamHub backend <small>for people who run the AWS backend</small></label>
@@ -124,10 +123,6 @@
               <label>User <input name="webdav_user" spellcheck="false" maxlength="64"></label>
               <label>Password <input name="webdav_password" type="password" maxlength="128"></label>
               <p class="note">Nextcloud: Settings → Files → WebDAV shows the URL; use an app password. A NAS with a self-signed certificate needs <code>http://</code> (only in a network you trust).</p>
-            </div>
-            <div class="wz-fields" data-for="telegram">
-              <label>Bot token <input name="telegram_token" type="password" placeholder="123456789:AA…" spellcheck="false"></label>
-              <p class="note">In Telegram, ask <strong>@BotFather</strong> for <code>/newbot</code> and paste the token here. After saving, send <code>/start</code> to your bot: the hub pairs with your chat at its next check-in.</p>
             </div>
             <div class="wz-fields" data-for="backend">
               <label>Backend API URL <input name="api_url" type="url" placeholder="https://….lambda-url.eu-central-1.on.aws/" spellcheck="false"></label>
@@ -315,7 +310,6 @@
                   <option value="">Keep stored</option>
                   <option value="backend">Own backend (AWS)</option>
                   <option value="webdav">WebDAV folder (NAS, Nextcloud)</option>
-                  <option value="telegram">Telegram bot directly (modem only)</option>
                 </select>
                 <small>Stored: <span id="ds-current-destination">–</span> · default: backend</small>
               </label>
@@ -393,18 +387,6 @@
               </label>
             </fieldset>
             <fieldset class="ds-group">
-              <legend>Telegram</legend>
-              <p class="note">Destination "Telegram bot".</p>
-              <label>Telegram bot token
-                <input name="telegram_token" type="password" placeholder="123456789:AA…" spellcheck="false">
-                <small>Stored: <span id="ds-current-telegram_token">–</span> · from @BotFather; then send /start to the bot</small>
-              </label>
-              <label>Telegram chat
-                <input name="telegram_chat" placeholder="set by /start" spellcheck="false" maxlength="20">
-                <small>Stored: <span id="ds-current-telegram_chat">–</span> · empty: the next chat that sends /start</small>
-              </label>
-            </fieldset>
-            <fieldset class="ds-group">
               <legend>Own backend</legend>
               <p class="note">Destination "Own backend".</p>
               <label>Backend API URL
@@ -472,7 +454,7 @@
               <h2 id="cam-actions-heading">Actions</h2>
               <button id="cam-actions-refresh" class="secondary-button" type="button">Refresh</button>
             </div>
-            <p class="note">What was asked of the camera, from here, the hub's web page or Telegram, newest first. An action that was sent and not answered is not repeated: ask again.</p>
+            <p class="note">What was asked of the camera, from here, or the hub's web page, newest first. An action that was sent and not answered is not repeated: ask again.</p>
             <ul id="cam-actions" class="cam-actions" aria-live="polite"><li>Connect to the hub to see them.</li></ul>
           </section>
 

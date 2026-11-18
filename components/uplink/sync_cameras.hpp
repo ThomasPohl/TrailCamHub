@@ -2,7 +2,7 @@
 
 // The cameras on the SD card during one sync: each camera's catalog, loaded
 // once, changed by the destination (what it knows, which videos were asked
-// for) and saved when it changed. Shared by the backend, WebDAV and Telegram
+// for) and saved when it changed. Shared by the backend and WebDAV
 // destinations (#218); owned by the uplink task for the length of a sync.
 
 #include <string>
