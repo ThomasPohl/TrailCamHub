@@ -239,8 +239,8 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
       {newLink && (
         <div className="g-newlink" role="group" aria-label="Neuer Link">
           <p>
-            Neuer Einrichtungslink für „{newLink.name}“. Er wird nur jetzt angezeigt; bitte
-            privat weitergeben, zum Beispiel per Signal. Der alte Link funktioniert nicht mehr.
+            Neuer Einrichtungslink für „{newLink.name}“. Er wird nur jetzt angezeigt; bitte privat
+            weitergeben, zum Beispiel per Signal. Der alte Link funktioniert nicht mehr.
           </p>
           <input
             type="text"
