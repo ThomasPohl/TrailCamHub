@@ -170,6 +170,9 @@ target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} 
                                               ${copro_dir} ${diag_dir}
                                               ${mock_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
+# The camera mock's pictures (tools/camera_mock/fixtures).
+target_compile_definitions(host_tests PRIVATE
+    MOCK_FIXTURE_DIR="${repo_root}/tools/camera_mock/fixtures")
 target_compile_options(host_tests PRIVATE -Wall -Wextra -Werror)
 
 # -DHOST_TESTS_SANITIZE=ON runs the tests with AddressSanitizer and

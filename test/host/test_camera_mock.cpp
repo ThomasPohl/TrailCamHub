@@ -6,6 +6,8 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <fstream>
+#include <iterator>
 #include <cstdint>
 #include <set>
 #include <string>
@@ -833,6 +835,52 @@ TEST_CASE("camera mock: size of the media list (#122)")
                                     item.num, 95) == (i < 5 ? item.id : 0));
         }
     }
+}
+
+TEST_CASE("camera mock: the pictures come from the fixture files (#122)")
+{
+    const auto read_file = [](const std::string &name) {
+        std::ifstream in(std::string(MOCK_FIXTURE_DIR) + "/" + name,
+                         std::ios::binary);
+        return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(in),
+                                         std::istreambuf_iterator<char>());
+    };
+    const std::vector<std::uint8_t> thumbnail = read_file("thumbnail.jpg");
+    const std::vector<std::uint8_t> photo = read_file("photo.jpg");
+    REQUIRE(thumbnail.size() > 1000);
+    REQUIRE(photo.size() > thumbnail.size());
+    CHECK(thumbnail[0] == 0xff);
+    CHECK(thumbnail[1] == 0xd8);
+    CHECK(thumbnail[thumbnail.size() - 2] == 0xff);
+    CHECK(thumbnail[thumbnail.size() - 1] == 0xd9);
+
+    Options options;
+    options.thumbnail_jpeg = thumbnail.data();
+    options.thumbnail_jpeg_size = thumbnail.size();
+    options.photo_jpeg = photo.data();
+    options.photo_jpeg_size = photo.size();
+    Bench bench(options);
+    bench.discover_and_login();
+    camera::artemis::MediaList list;
+    REQUIRE(camera::artemis::parse_media_list(
+        decrypt(fixtures::kMediaListPage0Response), list));
+    const camera::artemis::MediaItem &item = list.files[0];
+    bench.hub.command(2,
+                      camera::artemis::build_thumbnail_request(
+                          item, fixtures::kCapturedToken),
+                      bench.now_ms);
+    bench.run(40);
+    bench.hub.command(
+        3,
+        camera::artemis::build_download_request(item, fixtures::kCapturedToken),
+        bench.now_ms);
+    bench.run(60);
+    REQUIRE(bench.hub.records.size() == 2);
+    CHECK(bench.hub.records[0].subtype == 0x04);
+    CHECK(bench.hub.records[0].file == thumbnail);
+    CHECK(bench.hub.records[0].header.media_id == item.id);
+    CHECK(bench.hub.records[1].subtype == 0x03);
+    CHECK(bench.hub.records[1].file == photo);
 }
 
 TEST_CASE("camera mock: video playback (769/770, #122 stage 3)")

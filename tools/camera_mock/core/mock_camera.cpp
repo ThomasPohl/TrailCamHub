@@ -137,6 +137,34 @@ std::vector<std::uint8_t> artemis_response(std::uint32_t app_sequence,
     return out;
 }
 
+std::vector<std::uint8_t>
+media_record_for_file(const Identity &identity, std::int64_t dir_num,
+                      std::int64_t media_num, std::int64_t media_id,
+                      const std::uint8_t *file, std::size_t file_size)
+{
+    std::vector<std::uint8_t> header(72, 0);
+    const std::string mac = mac_text(identity);
+    std::memcpy(header.data(), mac.data(), 17);
+    const auto put = [&header](std::size_t at, std::uint32_t value, int bytes) {
+        for (int i = 0; i < bytes; i++) {
+            header[at + i] = static_cast<std::uint8_t>(value >> (8 * i));
+        }
+    };
+    put(0x20, static_cast<std::uint32_t>(dir_num), 2);
+    put(0x22, static_cast<std::uint32_t>(media_num), 2);
+    put(0x24, static_cast<std::uint32_t>(file_size), 4);
+    put(0x28, static_cast<std::uint32_t>(media_id), 4);
+
+    std::vector<std::uint8_t> out(
+        kArtemisSignature, kArtemisSignature + sizeof(kArtemisSignature));
+    append_u32_le(out, kMsgResponse);
+    append_u32_le(out, 0);
+    append_u32_le(out, static_cast<std::uint32_t>(header.size() + file_size));
+    out.insert(out.end(), header.begin(), header.end());
+    out.insert(out.end(), file, file + file_size);
+    return out;
+}
+
 std::vector<std::uint8_t> media_record(const Identity &identity,
                                        std::int64_t dir_num,
                                        std::int64_t media_num,
@@ -151,28 +179,8 @@ std::vector<std::uint8_t> media_record(const Identity &identity,
     for (std::size_t i = 2; i + 2 < file.size(); i++) {
         file[i] = static_cast<std::uint8_t>((i * 31 + media_num) & 0x7f);
     }
-
-    std::vector<std::uint8_t> header(72, 0);
-    const std::string mac = mac_text(identity);
-    std::memcpy(header.data(), mac.data(), 17);
-    const auto put = [&header](std::size_t at, std::uint32_t value, int bytes) {
-        for (int i = 0; i < bytes; i++) {
-            header[at + i] = static_cast<std::uint8_t>(value >> (8 * i));
-        }
-    };
-    put(0x20, static_cast<std::uint32_t>(dir_num), 2);
-    put(0x22, static_cast<std::uint32_t>(media_num), 2);
-    put(0x24, static_cast<std::uint32_t>(file.size()), 4);
-    put(0x28, static_cast<std::uint32_t>(media_id), 4);
-
-    std::vector<std::uint8_t> out(
-        kArtemisSignature, kArtemisSignature + sizeof(kArtemisSignature));
-    append_u32_le(out, kMsgResponse);
-    append_u32_le(out, 0);
-    append_u32_le(out, static_cast<std::uint32_t>(header.size() + file.size()));
-    out.insert(out.end(), header.begin(), header.end());
-    out.insert(out.end(), file.begin(), file.end());
-    return out;
+    return media_record_for_file(identity, dir_num, media_num, media_id,
+                                 file.data(), file.size());
 }
 
 namespace
@@ -1257,9 +1265,17 @@ void Camera::handle_media(std::int64_t cmd_id, const std::string &request,
     } else {
         stats_.downloads++;
     }
+    const std::uint8_t *jpeg =
+        thumbnail ? options_.thumbnail_jpeg : options_.photo_jpeg;
+    const std::size_t jpeg_size =
+        thumbnail ? options_.thumbnail_jpeg_size : options_.photo_jpeg_size;
     queue_bulk_record(
         thumbnail ? 0x04 : 0x03,
-        media_record(identity_, dir_num, media_num, media_id, size), now_ms);
+        jpeg != nullptr && jpeg_size > 0
+            ? media_record_for_file(identity_, dir_num, media_num, media_id,
+                                    jpeg, jpeg_size)
+            : media_record(identity_, dir_num, media_num, media_id, size),
+        now_ms);
 }
 
 void Camera::queue_bulk_record(std::uint8_t subtype,
