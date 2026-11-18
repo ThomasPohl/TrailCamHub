@@ -34,6 +34,7 @@
 #include "hub_config.hpp"
 #include "hub_console.h"
 #include "ota_update.hpp"
+#include "oled_ui.h"
 #include "schedule_state.hpp"
 #include "scheduler.h"
 #include "sd_card.h"
@@ -70,9 +71,12 @@ static void on_cycle_status(const session_status_t *status, void *context)
     }
 }
 
-#if CONFIG_BOARD_TDONGLE || CONFIG_WEB_UI_ENABLE
+#if CONFIG_BOARD_TDONGLE || CONFIG_WEB_UI_ENABLE || CONFIG_HUB_OLED
 #if CONFIG_BOARD_TDONGLE
 static bool s_display_ready;
+#endif
+#if CONFIG_HUB_OLED
+static bool s_oled_ready;
 #endif
 #if CONFIG_WEB_UI_ENABLE
 static bool s_web_ready;
@@ -137,6 +141,14 @@ static void on_session_status(const session_status_t *status, void *context)
 #else
     (void)phase;
 #endif
+#if CONFIG_HUB_OLED
+    if (s_oled_ready) {
+        if (listed) {
+            oled_ui_set_media_progress(0, 0, status->listed_files);
+        }
+        oled_ui_set_status(phase, status->camera_ssid, status->retry_delay_ms);
+    }
+#endif
 #if CONFIG_WEB_UI_ENABLE
     if (s_web_ready) {
         if (listed) {
@@ -158,6 +170,11 @@ static void on_media_progress(uint32_t done, uint32_t stored, uint32_t total)
 #if CONFIG_BOARD_TDONGLE
     if (s_display_ready) {
         dongle_ui_set_media_progress(done, stored, total);
+    }
+#endif
+#if CONFIG_HUB_OLED
+    if (s_oled_ready) {
+        oled_ui_set_media_progress(done, stored, total);
     }
 #endif
 #if CONFIG_WEB_UI_ENABLE
@@ -329,6 +346,12 @@ extern "C" void app_main(void)
     }
 #endif
 #endif
+#if CONFIG_HUB_OLED
+    s_oled_ready = oled_ui_start() == ESP_OK;
+    if (!s_oled_ready) {
+        ESP_LOGW(TAG, "Continuing without the OLED");
+    }
+#endif
 #if CONFIG_HUB_BOOT_BUTTON
     static const boot_button_callbacks_t button_callbacks = {
         .on_search = on_search_request,
@@ -338,7 +361,7 @@ extern "C" void app_main(void)
         ESP_LOGW(TAG, "Continuing without the BOOT button");
     }
 #endif
-#if CONFIG_BOARD_TDONGLE || CONFIG_WEB_UI_ENABLE
+#if CONFIG_BOARD_TDONGLE || CONFIG_WEB_UI_ENABLE || CONFIG_HUB_OLED
     if (session_controller_add_status_listener(on_session_status, NULL) !=
         ESP_OK) {
         ESP_LOGW(TAG, "The display and web UI do not follow the session");

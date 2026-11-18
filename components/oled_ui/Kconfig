@@ -1,0 +1,37 @@
+menu "TrailCamHub: OLED display"
+
+config HUB_OLED
+    bool "Show the status on an SSD1306 OLED (128x64, I2C)"
+    depends on !BOARD_TDONGLE
+    default n
+    help
+        An optional display for boards without one (#224). It shows the
+        screens of the T-Dongle's display (search, connecting, result, retry)
+        in monochrome.
+
+config HUB_OLED_I2C_ADDRESS
+    hex "I2C address"
+    depends on HUB_OLED
+    range 0x3c 0x3d
+    default 0x3c
+
+config HUB_OLED_SHARE_BATTERY_BUS
+    bool "Use the battery gauge's I2C bus"
+    depends on HUB_OLED && HUB_BATTERY_MAX17048
+    default y
+    help
+        On the Waveshare ESP32-S3-A7670E-4G the OLED shares the bus of the
+        MAX17048 (address 0x36; the OLED is 0x3C). Turn this off to give the
+        OLED a bus of its own on the pins below.
+
+config HUB_OLED_I2C_SDA_GPIO
+    int "I2C SDA GPIO (own bus)"
+    depends on HUB_OLED && !HUB_OLED_SHARE_BATTERY_BUS
+    default 21
+
+config HUB_OLED_I2C_SCL_GPIO
+    int "I2C SCL GPIO (own bus)"
+    depends on HUB_OLED && !HUB_OLED_SHARE_BATTERY_BUS
+    default 22
+
+endmenu

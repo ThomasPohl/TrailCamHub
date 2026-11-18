@@ -40,4 +40,9 @@ bool modem_allowed(int &millivolts);
 // Writes the reading to the log, with `stage` naming the occasion.
 void log_reading(const char *stage);
 
+// The I2C master bus of the gauge (an i2c_master_bus_handle_t), opened if
+// needed, so that another device (the OLED, #224) can share it; nullptr when
+// the board has no gauge or the bus cannot be opened.
+void *i2c_bus();
+
 }  // namespace hub_battery

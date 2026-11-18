@@ -26,6 +26,7 @@ set(ble_dir ${repo_root}/components/camera_ble)
 set(link_dir ${repo_root}/components/camera_link)
 set(session_dir ${repo_root}/components/session_controller)
 set(ui_dir ${repo_root}/components/dongle_ui)
+set(oled_dir ${repo_root}/components/oled_ui)
 set(web_dir ${repo_root}/components/web_ui)
 set(config_dir ${repo_root}/components/hub_config)
 set(console_dir ${repo_root}/components/hub_console)
@@ -87,6 +88,7 @@ add_executable(host_tests
     test_sd_log_files.cpp
     test_session_fsm.cpp
     test_status_screen.cpp
+    test_oled_renderer.cpp
     test_screen_renderer.cpp
     test_udp_packets.cpp
     test_web_paths.cpp
@@ -135,6 +137,7 @@ add_executable(host_tests
     ${ui_dir}/button_detector.cpp
     ${ui_dir}/status_screen.cpp
     ${ui_dir}/screen_renderer.cpp
+    ${oled_dir}/oled_renderer.cpp
     ${ui_dir}/font5x7.cpp
     ${web_dir}/web_paths.cpp
     ${config_dir}/hub_config_rules.cpp
@@ -158,7 +161,7 @@ add_executable(host_tests
     ${mock_dir}/mock_camera.cpp
     ${mock_dir}/mock_wire.cpp)
 target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} ${time_dir}
-                                              ${session_dir} ${ui_dir}
+                                              ${session_dir} ${ui_dir} ${oled_dir}
                                               ${web_dir}
                                               ${config_dir}/include
                                               ${console_dir} ${uplink_dir}

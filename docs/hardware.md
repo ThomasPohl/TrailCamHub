@@ -21,6 +21,8 @@ Pins, wiring and notes for the smaller boards are in [modes.md](modes.md#boards)
 Wiring diagrams (38-pin and 30-pin boards) for the ESP32-WROOM-32D and its microSD reader: [wiring-wroom32d.md](wiring-wroom32d.md).
 The 4G modem is described in [modem.md](modem.md).
 
+**Optional OLED (#224):** `CONFIG_HUB_OLED` (menuconfig, "TrailCamHub: OLED display") shows the T-Dongle's status screens on an SSD1306 128x64 OLED over I2C (address 0x3C). On the main board it shares the MAX17048's bus (SDA 15, SCL 16); elsewhere give it pins of its own. Off by default, not tested on hardware yet.
+
 **What you need besides the board:** a microSD card (FAT32, up to 32 GB
 SDHC), a USB data cable, for the main board an 18650 cell, optionally a 6 V
 solar panel and a SIM card with a data plan.
