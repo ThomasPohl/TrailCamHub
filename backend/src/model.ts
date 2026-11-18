@@ -100,7 +100,7 @@ export interface CameraRecord {
   camId: string;
   hubId: string;
   name: string;
-  /** Hidden in the gallery by a user (#273); the hub still reads it. */
+  /** Hidden in the gallery by a user (#273); the hub does not read it. */
   hidden?: boolean;
   /** BLE address the hub reported with its last read (#296). */
   bleAddress?: string;
