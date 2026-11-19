@@ -7,6 +7,13 @@
 //     [--stack trailcamhub | --function <name>] [--region <region>]
 //   npm run add-user -- --user <userId> [--hub ...]   # new token, more hubs
 //   npm run add-user -- --user <userId> --revoke      # lock out (lost laptop)
+//   npm run add-user -- --user <adminId> --rotate-totp # new TOTP secret (lost phone)
+//
+// An admin has a second factor (TOTP): a new admin gets a secret, shown once
+// as an otpauth:// URI (add it to an authenticator app, e.g. by QR code). The
+// gallery asks for the 6-digit code before it opens the admin view; the plain
+// link of an admin only shows his own hubs. Admin accounts are changed only
+// here; the admin view rotates and revokes ordinary users.
 //
 // Open the link once on the user's laptop: the gallery keeps the token, and
 // the user never signs in. The token is in the link's #fragment, which the
@@ -29,6 +36,7 @@ const { values } = parseArgs({
     hub: { type: 'string', multiple: true, default: [] },
     admin: { type: 'boolean', default: false },
     revoke: { type: 'boolean', default: false },
+    'rotate-totp': { type: 'boolean', default: false },
     'app-url': {
       type: 'string',
       default: 'https://thomaspohl.github.io/TrailCamHub/app/gallery.html',
@@ -47,6 +55,7 @@ function fail(message) {
 if (!values.user && !values.name) fail('--name is required for a new user');
 if (values.user && !/^\d{16}$/.test(values.user)) fail('--user must be a gallery user id');
 if (values.revoke && !values.user) fail('--revoke needs --user <userId>');
+if (values['rotate-totp'] && !values.user) fail('--rotate-totp needs --user <adminId>');
 for (const hub of values.hub) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(hub)) fail(`--hub must be a hub id (got ${hub})`);
 }
@@ -125,6 +134,7 @@ const result = invoke({
   userId: values.user === undefined ? undefined : Number(values.user),
   hubIds: values.hub,
   role: values.admin ? 'admin' : undefined,
+  rotateTotp: values['rotate-totp'] || undefined,
 });
 if (!result.ok) fail(result.error);
 
@@ -133,3 +143,11 @@ console.log(
   `\nSet-up link for user ${result.userId} (open it once on the laptop; shown only once):\n`,
 );
 console.log(`  ${values['app-url']}#token=${result.token}\n`);
+
+if (result.totpSecret) {
+  console.log(
+    'Second factor (TOTP) for this admin, shown only once. Add it to an authenticator app:',
+  );
+  console.log(`\n  ${result.totpUri}\n`);
+  console.log(`  or enter the secret by hand: ${result.totpSecret}\n`);
+}

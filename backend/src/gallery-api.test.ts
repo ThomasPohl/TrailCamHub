@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hubFaults } from './faults';
 import { createAppUser, revokeAppUser } from './admin';
+import { createAdminSession } from './auth/admin-session';
 import { handleRequest } from './api';
 import type { ApiRequest, ApiResponse } from './http';
 import type { CheckinRequest, CheckinResponse, MediaItem } from './model';
@@ -28,6 +29,22 @@ function galleryRequest(token: string, method: string, path: string, data?: unkn
     headers: { authorization: `Bearer ${token}` },
     body: data === undefined ? undefined : JSON.stringify(data),
   };
+}
+
+function adminRequest(session: string, method: string, path: string, data?: unknown): ApiRequest {
+  return {
+    method,
+    path,
+    headers: { authorization: `Admin ${session}` },
+    body: data === undefined ? undefined : JSON.stringify(data),
+  };
+}
+
+/** An admin session (#259) for a user created with `createAppUser`. */
+async function adminSession(world: Awaited<ReturnType<typeof setup>>, userId: number) {
+  const record = await world.store.getAppUser(userId);
+  if (!record) throw new Error('unknown user');
+  return createAdminSession(record, world.deps.now());
 }
 
 /** One camera with two videos whose thumbnails arrived, and a gallery user. */
@@ -90,8 +107,9 @@ describe('admin role and locking out (#259)', () => {
       world.deps,
     );
     if (!admin.ok) throw new Error(admin.error);
+    const session = await adminSession(world, admin.userId);
     const asAdmin = (method: string, path: string, data?: unknown) =>
-      handleRequest(galleryRequest(admin.token, method, path, data), world.deps);
+      handleRequest(adminRequest(session, method, path, data), world.deps);
 
     const me = body<{ role: string; name: string; hubs: Array<{ hubId: string }> }>(
       await asAdmin('GET', '/v1/me'),
@@ -147,8 +165,9 @@ describe('admin view (#264)', () => {
       world.deps,
     );
     if (!admin.ok) throw new Error(admin.error);
+    const session = await adminSession(world, admin.userId);
     const asAdmin = (method: string, path: string, data?: unknown) =>
-      handleRequest(galleryRequest(admin.token, method, path, data), world.deps);
+      handleRequest(adminRequest(session, method, path, data), world.deps);
 
     const res = await asAdmin('GET', '/v1/admin/hubs');
     expect(res.statusCode).toBe(200);
@@ -327,7 +346,11 @@ describe('battery history (#76)', () => {
     );
     if (!admin.ok) throw new Error(admin.error);
     const res = await handleRequest(
-      galleryRequest(admin.token, 'GET', `/v1/admin/hubs/${HUB_ID}/history`),
+      adminRequest(
+        await adminSession(world, admin.userId),
+        'GET',
+        `/v1/admin/hubs/${HUB_ID}/history`,
+      ),
       world.deps,
     );
     expect(res.statusCode).toBe(200);
@@ -372,7 +395,12 @@ describe('firmware changes (#149)', () => {
         firmwareChanges: Array<{ from: string; to: string }>;
         faults: Array<{ kind: string }>;
       }>
-    >(await handleRequest(galleryRequest(admin.token, 'GET', '/v1/admin/hubs'), world.deps));
+    >(
+      await handleRequest(
+        adminRequest(await adminSession(world, admin.userId), 'GET', '/v1/admin/hubs'),
+        world.deps,
+      ),
+    );
     const hub = hubs.find((h) => h.hubId === HUB_ID);
     expect(hub?.firmwareChanges.map((c) => `${c.from}>${c.to}`)).toEqual([
       'v0.1.13>v0.1.12',

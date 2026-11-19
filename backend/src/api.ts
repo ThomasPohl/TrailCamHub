@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import {
+  ADMIN_SESSION_S,
+  createAdminSession,
+  parseAdminSession,
+  verifyAdminSession,
+} from './auth/admin-session';
 import { parseAppToken } from './auth/app';
 import { parseDeviceKey, verifySecret } from './auth/device';
+import { verifyTotp } from './auth/totp';
+import { createAppUser, revokeAppUser } from './admin';
 import { requestDelete, requestVideo, withdraw } from './commands';
 import {
   HttpError,
@@ -13,6 +21,7 @@ import {
 import type {
   AckRequest,
   AdminHub,
+  AppUser,
   Camera,
   CameraCheckin,
   CameraRecord,
@@ -115,6 +124,10 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   },
   { method: 'GET', pattern: '/v1/admin/hubs', handler: adminHubs },
   { method: 'GET', pattern: '/v1/admin/hubs/:hubId/history', handler: adminHistory },
+  { method: 'POST', pattern: '/v1/admin/elevate', handler: elevate },
+  { method: 'POST', pattern: '/v1/admin/users/:userId/rotate', handler: rotateUser },
+  { method: 'POST', pattern: '/v1/admin/users/:userId/revoke', handler: revokeUser },
+  { method: 'GET', pattern: '/v1/admin/audit', handler: listAudit },
   { method: 'POST', pattern: '/v1/device/checkin', handler: checkin },
   { method: 'POST', pattern: '/v1/device/ack', handler: ack },
 ];
@@ -145,24 +158,59 @@ function bearer(req: ApiRequest, scheme: string): string {
   return header.slice(prefix.length).trim();
 }
 
-/** Who is signed in. Only gallery users can be admins (#259). */
+/**
+ * Who is signed in. Only gallery users can be admins (#259). `admin` means the
+ * admin's powers are active: the request carries a valid admin session. An
+ * admin with a plain app token (`role` admin, `admin` false) acts like a user.
+ */
 interface SignedIn {
   userId: number;
   name?: string;
+  role: 'user' | 'admin';
   admin: boolean;
 }
 
+/** Wrong TOTP codes in a row before the account is locked, and for how long. */
+const MAX_TOTP_FAILURES = 5;
+const TOTP_LOCK_S = 15 * 60;
+
 /**
- * The signed-in user: a gallery user with an app token (`Bearer
- * <userId>.<secret>`, #259). A revoked token (empty hash) never matches.
+ * The user behind a plain app token (`Bearer <userId>.<secret>`). A revoked
+ * token (empty hash) never matches.
  */
-async function authUser(req: ApiRequest, deps: Deps): Promise<SignedIn> {
+async function bearerUser(req: ApiRequest, deps: Deps): Promise<AppUser> {
   const parsed = parseAppToken(bearer(req, 'Bearer'));
   const user = parsed && (await deps.store.getAppUser(parsed.userId));
   if (!parsed || !user || !user.tokenHash || !verifySecret(parsed.secret, user.tokenHash)) {
     throw new HttpError(401, 'Invalid app token');
   }
-  return { userId: user.userId, name: user.name, admin: user.role === 'admin' };
+  return user;
+}
+
+/**
+ * The signed-in user: a gallery user with an app token (`Bearer
+ * <userId>.<secret>`, #259), or an admin with a session from `POST
+ * /v1/admin/elevate` (`Admin <session>`). The session replaces the token for
+ * the time it lasts and ends as soon as the token or the TOTP secret changes.
+ */
+async function authUser(req: ApiRequest, deps: Deps): Promise<SignedIn> {
+  const header = req.headers.authorization ?? '';
+  if (header.startsWith('Admin ')) {
+    const parsed = parseAdminSession(header.slice('Admin '.length).trim());
+    const user = parsed && (await deps.store.getAppUser(parsed.userId));
+    if (!parsed || !user || !verifyAdminSession(user, parsed, deps.now())) {
+      throw new HttpError(401, 'Invalid or expired admin session');
+    }
+    return { userId: user.userId, name: user.name, role: 'admin', admin: true };
+  }
+  const user = await bearerUser(req, deps);
+  return { userId: user.userId, name: user.name, role: user.role, admin: false };
+}
+
+/** Only with an active admin session; an admin without one is told to elevate. */
+function requireAdmin(user: SignedIn): void {
+  if (user.admin) return;
+  throw new HttpError(403, user.role === 'admin' ? 'Admin session required' : 'Only for the admin');
 }
 
 /** The admin sees every hub; everyone else the hubs linked to him. */
@@ -248,7 +296,8 @@ async function me(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
   return json(200, {
     userId: user.userId,
     name: user.name ?? '',
-    role: user.admin ? 'admin' : 'user',
+    role: user.role,
+    elevated: user.admin,
     hubs,
   });
 }
@@ -256,7 +305,7 @@ async function me(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
 /** Every hub with its cameras and users, for the admin view (#264). */
 async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
   const user = await authUser(req, deps);
-  if (!user.admin) throw new HttpError(403, 'Only for the admin');
+  requireAdmin(user);
   const hubs: AdminHub[] = [];
   for (const hubId of await deps.store.listHubIds()) {
     const hub = await deps.store.getHub(hubId);
@@ -306,13 +355,102 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
   return json(200, hubs);
 }
 
+/**
+ * Exchanges a TOTP code for an admin session (#259). Takes the plain app token
+ * (not a session), counts wrong codes and locks the account for a while after
+ * too many. A code works once.
+ */
+async function elevate(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
+  const user = await bearerUser(req, deps);
+  if (user.role !== 'admin' || !user.totpSecret) {
+    throw new HttpError(403, 'No second factor set up for this user');
+  }
+  const now = deps.now();
+  if ((user.totpLockedUntil ?? 0) > now) {
+    throw new HttpError(429, 'Too many wrong codes, try again later');
+  }
+  const { code } = parseJsonBody<{ code?: unknown }>(req);
+  const step =
+    typeof code === 'string'
+      ? verifyTotp(user.totpSecret, code, now, user.totpLastStep)
+      : undefined;
+  if (step === undefined) {
+    const failures = (user.totpFailures ?? 0) + 1;
+    const locked = failures >= MAX_TOTP_FAILURES;
+    await deps.store.putAppUser({
+      ...user,
+      totpFailures: locked ? 0 : failures,
+      ...(locked ? { totpLockedUntil: now + TOTP_LOCK_S } : {}),
+    });
+    await deps.store.addAudit({
+      at: now,
+      actor: user.userId,
+      action: locked ? 'elevateLocked' : 'elevateFailed',
+    });
+    throw new HttpError(401, 'Wrong code');
+  }
+  const { totpLockedUntil: _lock, ...rest } = user;
+  void _lock;
+  await deps.store.putAppUser({ ...rest, totpLastStep: step, totpFailures: 0 });
+  await deps.store.addAudit({ at: now, actor: user.userId, action: 'elevate' });
+  return json(200, { session: createAdminSession(user, now), expiresAt: now + ADMIN_SESSION_S });
+}
+
+/** The user an admin acts on; admin accounts are never changed through the API. */
+async function targetUser(params: Record<string, string>, deps: Deps): Promise<AppUser> {
+  const id = Number(params.userId);
+  const target = Number.isSafeInteger(id) ? await deps.store.getAppUser(id) : undefined;
+  if (!target) throw new HttpError(404, 'User not found');
+  if (target.role === 'admin') throw new HttpError(403, 'Admin accounts are managed with add-user');
+  return target;
+}
+
+/** New token for a user; the old link stops working. The token is returned once. */
+async function rotateUser(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const admin = await authUser(req, deps);
+  requireAdmin(admin);
+  const target = await targetUser(params, deps);
+  const result = await createAppUser({ admin: 'createAppUser', userId: target.userId }, deps);
+  if (!result.ok) throw new HttpError(500, result.error);
+  await deps.store.addAudit({
+    at: deps.now(),
+    actor: admin.userId,
+    action: 'rotateUser',
+    target: target.userId,
+  });
+  return json(200, { userId: target.userId, name: target.name, token: result.token });
+}
+
+/** Locks a user out; the hub links stay, so rotating gives a working link again. */
+async function revokeUser(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const admin = await authUser(req, deps);
+  requireAdmin(admin);
+  const target = await targetUser(params, deps);
+  const result = await revokeAppUser({ admin: 'revokeAppUser', userId: target.userId }, deps);
+  if (!result.ok) throw new HttpError(500, result.error);
+  await deps.store.addAudit({
+    at: deps.now(),
+    actor: admin.userId,
+    action: 'revokeUser',
+    target: target.userId,
+  });
+  return json(200, { userId: target.userId, name: target.name });
+}
+
+const AUDIT_LIMIT = 50;
+
+async function listAudit(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
+  requireAdmin(await authUser(req, deps));
+  return json(200, await deps.store.listAudit(AUDIT_LIMIT));
+}
+
 /** How far back the admin view shows the battery history (#76). */
 const HISTORY_VIEW_S = 30 * 24 * 60 * 60;
 
 /** Battery and SD samples of a hub and its cameras, for the admin (#76). */
 async function adminHistory(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const user = await authUser(req, deps);
-  if (!user.admin) throw new HttpError(403, 'Only for the admin');
+  requireAdmin(user);
   const hubId = params.hubId ?? '';
   const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
   if (!hub) throw new HttpError(404, 'Hub not found');

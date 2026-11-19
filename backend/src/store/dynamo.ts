@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DeleteCommand,
@@ -13,6 +14,7 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import type {
   AppUser,
+  AuditEntry,
   CameraRecord,
   CommandRecord,
   HubRecord,
@@ -24,7 +26,7 @@ import type {
   ScheduleConfig,
   VideoState,
 } from '../model';
-import { HISTORY_KEEP_S } from '../model';
+import { AUDIT_KEEP_S, HISTORY_KEEP_S } from '../model';
 import type { CameraTelemetry, HubTelemetry, Store } from './types';
 
 /*
@@ -33,7 +35,8 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
  *   HUB#<hubId>  / CAM#<camId>            hub → camera (listing)
  *   USER#<id>    / HUB#<hubId>            user → hub link
  *   HUB#<hubId>  / USER#<id>              hub → user link (who gets notified)
- *   USER#<id>    / APP                    gallery app user (token hash, role)
+ *   USER#<id>    / APP                    gallery app user (token hash, role, TOTP)
+ *   AUDIT        / <at>#<random>          admin audit log entry (ttl)
  *   CAM#<camId>  / META                   camera record (with hubId)
  *   CAM#<camId>  / MEDIA#<dir>#<num>      media (zero-padded, sorts by file)
  *   CAM#<camId>  / CMD#<id>               command
@@ -218,6 +221,37 @@ export class DynamoStore implements Store {
 
   async getAppUser(userId: number): Promise<AppUser | undefined> {
     return this.getItem<AppUser>(userPk(userId), 'APP');
+  }
+
+  async addAudit(entry: AuditEntry): Promise<void> {
+    await this.db.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: {
+          PK: 'AUDIT',
+          SK: `${String(entry.at).padStart(10, '0')}#${randomUUID().slice(0, 8)}`,
+          ...entry,
+          ttl: entry.at + AUDIT_KEEP_S,
+        },
+      }),
+    );
+  }
+
+  async listAudit(limit: number): Promise<AuditEntry[]> {
+    const page = await this.db.send(
+      new QueryCommand({
+        TableName: this.table,
+        KeyConditionExpression: 'PK = :pk',
+        ExpressionAttributeValues: { ':pk': 'AUDIT' },
+        ScanIndexForward: false,
+        Limit: limit,
+      }),
+    );
+    return (page.Items ?? []).map((item) => {
+      const { ttl: _ttl, ...entry } = strip<AuditEntry & { ttl?: number }>(item);
+      void _ttl;
+      return entry;
+    });
   }
 
   // ---- Media ---------------------------------------------------------------

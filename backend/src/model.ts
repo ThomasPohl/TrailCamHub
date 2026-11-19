@@ -164,7 +164,27 @@ export interface AppUser {
   role: 'user' | 'admin';
   tokenHash: string;
   created: number;
+  /** Admin only (#259): base32 TOTP secret, the second factor for the admin session. */
+  totpSecret?: string;
+  /** Last accepted TOTP time step; a code works only once. */
+  totpLastStep?: number;
+  /** Wrong codes in a row; reset by a right one. */
+  totpFailures?: number;
+  /** Unix seconds until which codes are refused after too many wrong ones. */
+  totpLockedUntil?: number;
 }
+
+/** One line of the admin audit log (#259), kept for AUDIT_KEEP_S. */
+export interface AuditEntry {
+  at: number;
+  /** User id of the admin (or the user who tried to become one). */
+  actor: number;
+  action: 'elevate' | 'elevateFailed' | 'elevateLocked' | 'rotateUser' | 'revokeUser';
+  /** User the action was about, if any. */
+  target?: number;
+}
+
+export const AUDIT_KEEP_S = 90 * 24 * 60 * 60;
 
 // ---- App API ---------------------------------------------------------------
 

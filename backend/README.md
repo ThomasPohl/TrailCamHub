@@ -37,9 +37,13 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | ------ | ---------------------------------------------- | ---------------------- | -------------------------------------------------------------------- |
 | GET    | `/v1/health`                                   | –                      | Liveness check                                                       |
 | GET    | `/v1/cameras`                                  | app user               | Cameras linked to the user                                           |
-| GET    | `/v1/me`                                       | app user               | `{userId, name, role, hubs}` of the signed-in user                   |
+| GET    | `/v1/me`                                       | app user               | `{userId, name, role, elevated, hubs}` of the user                   |
 | GET    | `/v1/admin/hubs`                               | app user, admin        | Every hub: state, cameras, users, faults                             |
 | GET    | `/v1/admin/hubs/{hubId}/history`               | app user, admin        | Battery/SD samples of 30 days (#76)                                  |
+| POST   | `/v1/admin/elevate`                            | app user, admin        | TOTP code → admin session, 15 min (#259)                             |
+| POST   | `/v1/admin/users/{id}/rotate`                  | admin session          | New token of a user, returned once (#259)                            |
+| POST   | `/v1/admin/users/{id}/revoke`                  | admin session          | Locks a user out until a new token (#259)                            |
+| GET    | `/v1/admin/audit`                              | admin session          | Last 50 audit entries (#259)                                         |
 | POST   | `/v1/hubs/{hubId}/schedule`                    | app user               | Same as the PUT; the apps use it (CORS, #286)                        |
 | GET    | `/v1/cameras/{camId}/media`                    | app user               | Recordings with uploaded thumbnails                                  |
 | POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"requestVideo","mediaId":3987654321}`                       |
@@ -72,9 +76,24 @@ The script prints a set-up link (`…/gallery.html#token=<token>`) to open once
 on the user's laptop; the gallery keeps the token. `--user <userId>` issues a
 new token (the old link stops working) and can link more hubs;
 `--user <userId> --revoke` locks the user out at once (lost laptop) until a
-new token is issued. `--admin` sets the admin role: an admin sees and may use
-the cameras of **every** hub, linked or not. `GET /v1/me` tells the gallery who
-is signed in (`{userId, name, role}`). There is no self-registration.
+new token is issued. `--admin` sets the admin role: with an **admin session**
+(below) an admin sees and may use the cameras of **every** hub, linked or not.
+`GET /v1/me` tells the gallery who is signed in (`{userId, name, role,
+elevated, hubs}`). There is no self-registration.
+
+**Admin second factor** (#259): a new admin gets a TOTP secret (RFC 6238,
+shown once as an `otpauth://` URI; add it to an authenticator app).
+`--user <adminId> --rotate-totp` issues a new one (lost phone). The plain
+token of an admin acts like a user token: own hubs only, no admin endpoints
+(403 `Admin session required`). `POST /v1/admin/elevate {"code": "123456"}`
+with the plain token returns a 15-minute `session`; the gallery then sends
+`Authorization: Admin <session>` instead. A code works once; five wrong codes
+lock the account for 15 minutes. The session is signed with the token hash and
+the TOTP secret, so a new token or secret ends it at once. With a session the
+admin can rotate (`POST /v1/admin/users/{id}/rotate`, new token returned once)
+or revoke (`…/revoke`) ordinary users, and read the audit log (`GET
+/v1/admin/audit`, last 50 entries of 90 days). Admin accounts are never changed
+through the API, only with `add-user`.
 
 **Admin view and faults** (#264, #265): `GET /v1/admin/hubs` (admin only)
 lists every hub with its reported state and schedule, the schedule set in the

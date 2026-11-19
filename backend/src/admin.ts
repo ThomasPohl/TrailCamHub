@@ -1,7 +1,9 @@
 import type { Deps } from './api';
 import { generateAppToken, newAppUserId } from './auth/app';
 import { generateDeviceKey } from './auth/device';
+import { generateTotpSecret, totpUri } from './auth/totp';
 import { MAX_CAMERA_NAME, validCameraName } from './model';
+import type { AppUser } from './model';
 import type { Store } from './store/types';
 
 /**
@@ -34,6 +36,8 @@ export interface CreateAppUserEvent {
   hubIds?: string[];
   role?: 'user' | 'admin';
   userId?: number;
+  /** Admin only: issue a new TOTP secret (lost phone); a new admin gets one anyway. */
+  rotateTotp?: boolean;
 }
 
 /**
@@ -63,7 +67,15 @@ export type RegisterHubResult =
   | { ok: true; created: boolean; key?: string; linkedUsers: number[] }
   | Failure;
 export type AppUserResult =
-  | { ok: true; userId: number; token: string; linkedHubs: string[] }
+  | {
+      ok: true;
+      userId: number;
+      token: string;
+      linkedHubs: string[];
+      /** Only when a TOTP secret was issued now (#259); shown once. */
+      totpSecret?: string;
+      totpUri?: string;
+    }
   | Failure;
 export type RenameResult = { ok: true; camId: string; name: string } | Failure;
 export type RevokeResult = { ok: true; userId: number; name: string } | Failure;
@@ -165,15 +177,40 @@ export async function createAppUser(
 
   const userId = existing?.userId ?? newAppUserId();
   const { token, tokenHash } = generateAppToken(userId);
-  await deps.store.putAppUser({
+  const finalRole = event.role ?? existing?.role ?? role;
+  if (event.rotateTotp && finalRole !== 'admin') {
+    return { ok: false, error: 'only an admin has a TOTP secret' };
+  }
+  // An admin gets a TOTP secret when created, or when asked for a new one.
+  const newSecret =
+    finalRole === 'admin' && (event.rotateTotp || !existing?.totpSecret)
+      ? generateTotpSecret()
+      : undefined;
+  const user: AppUser = {
+    ...existing,
     userId,
     name,
-    role: event.role ?? existing?.role ?? role,
+    role: finalRole,
     tokenHash,
     created: existing?.created ?? deps.now(),
-  });
+  };
+  if (newSecret !== undefined) {
+    user.totpSecret = newSecret;
+    delete user.totpLastStep;
+    delete user.totpFailures;
+    delete user.totpLockedUntil;
+  }
+  await deps.store.putAppUser(user);
   for (const hubId of hubIds) await deps.store.linkUser(userId, hubId);
-  return { ok: true, userId, token, linkedHubs: hubIds };
+  return {
+    ok: true,
+    userId,
+    token,
+    linkedHubs: hubIds,
+    ...(newSecret === undefined
+      ? {}
+      : { totpSecret: newSecret, totpUri: totpUri(newSecret, name) }),
+  };
 }
 
 export async function revokeAppUser(
