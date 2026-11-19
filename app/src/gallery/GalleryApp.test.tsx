@@ -126,6 +126,45 @@ describe('GalleryApp', () => {
     expect(screen.queryByLabelText('Neuer Name der Kamera')).not.toBeInTheDocument();
   });
 
+  it('asks the admin for a code, then rotates and revokes a user (#259)', async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20, true, true);
+    render(
+      <GalleryApp
+        api={api}
+        folder={fakeFolder({ kind: 'none' })}
+        now={() => 1_000_000}
+        pollMs={0}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Verwaltung' }));
+    const field = await screen.findByLabelText('Code aus der Authenticator-App');
+    fireEvent.change(field, { target: { value: '000000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Anmelden' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Der Code stimmt nicht');
+
+    fireEvent.change(screen.getByLabelText('Code aus der Authenticator-App'), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Anmelden' }));
+    const hub = await screen.findByRole('article', { name: 'Hub Garten' });
+    const users = within(hub).getByRole('list', { name: 'Nutzer Garten' });
+    // Only ordinary users get buttons, never the admin account.
+    expect(within(users).getAllByRole('button', { name: 'Neuer Link' })).toHaveLength(1);
+
+    fireEvent.click(within(users).getByRole('button', { name: 'Neuer Link' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Neuen Link erstellen' }));
+    const link = await screen.findByLabelText('Neuer Einrichtungslink');
+    expect((link as HTMLInputElement).value).toMatch(/#token=1000000000000001\./);
+
+    fireEvent.click(within(users).getByRole('button', { name: 'Sperren' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Bestätigen' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sperren' }));
+    expect(await screen.findByText(/ist gesperrt/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Protokoll anzeigen' }));
+    expect(await screen.findByText(/Admin angemeldet/)).toBeInTheDocument();
+  });
+
   it('offers the admin view only to the admin', async () => {
     const user = new DemoGalleryApi(() => 1_000_000, 20);
     const { unmount } = render(
@@ -151,7 +190,9 @@ describe('GalleryApp', () => {
     const faults = within(hub).getByRole('list', { name: 'Störungen Garten' });
     expect(faults).toHaveTextContent('Kamera „Wiese“: Akku schwach (18 %).');
     expect(within(hub).getByText('84 %')).toBeInTheDocument();
-    expect(within(hub).getByText(/Anwender, Admin \(Admin\)/)).toBeInTheDocument();
+    const users = within(hub).getByRole('list', { name: 'Nutzer Garten' });
+    expect(users).toHaveTextContent('Anwender');
+    expect(users).toHaveTextContent('Admin (Admin)');
 
     const row = within(hub).getByRole('row', { name: /Wiese/ });
     fireEvent.click(within(row).getByRole('button', { name: 'Jetzt lesen' }));

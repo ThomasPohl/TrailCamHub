@@ -82,6 +82,14 @@ export interface Me {
   admin: boolean;
 }
 
+/** One line of the admin audit log (#259); `at` in Unix seconds. */
+export interface AuditEntry {
+  at: number;
+  actor: number;
+  action: 'elevate' | 'elevateFailed' | 'elevateLocked' | 'rotateUser' | 'revokeUser';
+  target?: number;
+}
+
 /** A camera a hub heard in its scans (#297, #298). */
 export interface FoundCamera {
   hubId: string;
@@ -211,6 +219,20 @@ export interface GalleryApi {
   adminHubs(): Promise<AdminHub[]>;
   /** Admin only: battery history of a hub and its cameras (#76). */
   adminHistory(hubId: string): Promise<HubHistory>;
+  /** Whether an admin session is active; without one the admin view asks for a code (#259). */
+  elevated(): boolean;
+  /**
+   * Admin only: exchanges the 6-digit code from the authenticator app for a
+   * 15-minute admin session (#259). Throws an `ApiError` (401 wrong code, 429
+   * locked, 403 no second factor).
+   */
+  elevate(code: string): Promise<void>;
+  /** Admin only: new token for a user; the old link stops working (#259). */
+  rotateUser(userId: number): Promise<{ name: string; token: string }>;
+  /** Admin only: locks a user out until he gets a new token (#259). */
+  revokeUser(userId: number): Promise<void>;
+  /** Admin only: the newest audit entries (#259). */
+  adminAudit(): Promise<AuditEntry[]>;
   /** Replaces the schedule set in the app; an empty object leaves it to the hub. */
   setSchedule(hubId: string, config: ScheduleConfig): Promise<void>;
   /** Asks the hub to read the camera at its next check-in. */

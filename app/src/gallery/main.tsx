@@ -26,7 +26,10 @@ function chooseApi(): GalleryApi | undefined {
   const params = new URLSearchParams(window.location.search);
   if (!baseUrl || params.has('demo')) {
     // `?demo=admin` shows the admin view as well.
-    return new DemoGalleryApi(undefined, undefined, params.get('demo') === 'admin');
+    // `?demo=admin-code` asks for a code first (123456), like the real one.
+    const demo = params.get('demo');
+    const admin = demo === 'admin' || demo === 'admin-code';
+    return new DemoGalleryApi(undefined, undefined, admin, demo === 'admin-code');
   }
   const token = takeToken();
   const debug = params.has('debug');

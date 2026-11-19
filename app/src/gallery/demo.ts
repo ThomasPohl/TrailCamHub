@@ -1,8 +1,10 @@
 import { placeholderThumb } from '../api/demo';
+import { ApiError } from '../api/http';
 import { toCameraWallClock } from '../format';
 import type { Camera, ScheduleConfig } from '../api/types';
 import type {
   AdminHub,
+  AuditEntry,
   GalleryApi,
   FoundCamera,
   GalleryCamera,
@@ -72,6 +74,8 @@ export class DemoGalleryApi implements GalleryApi {
     private readonly checkinS = DEMO_CHECKIN_S,
     /** Signed in as the admin (`?demo=admin`), with the admin view. */
     private readonly admin = false,
+    /** `?demo=admin-code`: the admin view asks for a code first (the code is `123456`). */
+    private needsCode = false,
   ) {
     const start = this.now();
     this.lastCheckin = start;
@@ -209,9 +213,40 @@ export class DemoGalleryApi implements GalleryApi {
     return 'v0.1.14';
   }
 
+  elevated(): boolean {
+    return this.admin && !this.needsCode;
+  }
+
+  async elevate(code: string): Promise<void> {
+    if (code !== '123456') throw new ApiError(401, 'Wrong code');
+    this.needsCode = false;
+  }
+
+  async rotateUser(userId: number): Promise<{ name: string; token: string }> {
+    this.requireSession();
+    return { name: `User ${userId}`, token: `${userId}.${'demo'.repeat(11)}` };
+  }
+
+  async revokeUser(): Promise<void> {
+    this.requireSession();
+  }
+
+  async adminAudit(): Promise<AuditEntry[]> {
+    this.requireSession();
+    const at = this.lastCheckin;
+    return [
+      { at, actor: 1_000_000_000_000_002, action: 'elevate' },
+      { at: at - 3_600, actor: 1_000_000_000_000_002, action: 'elevateFailed' },
+    ];
+  }
+
+  private requireSession(): void {
+    if (!this.elevated()) throw new ApiError(403, 'Admin session required');
+  }
+
   async adminHubs(): Promise<AdminHub[]> {
     this.catchUp();
-    if (!this.admin) throw new Error('Nur für den Admin');
+    this.requireSession();
     const cameras: Camera[] = this.cameras.map((c, i) => ({
       camId: c.camId,
       name: c.name,
@@ -271,7 +306,7 @@ export class DemoGalleryApi implements GalleryApi {
   }
 
   async adminHistory(): Promise<HubHistory> {
-    if (!this.admin) throw new Error('Nur für den Admin');
+    this.requireSession();
     // A falling camera battery and a hub battery that the sun recharges.
     const days = Array.from({ length: 30 }, (_, i) => this.lastCheckin - (29 - i) * 86_400);
     return {

@@ -938,3 +938,59 @@ body {
   color: var(--g-accent);
   font-weight: 600;
 }
+
+/* ---- Admin: second factor, users, audit (#259) ------------------------ */
+
+.g-code,
+.g-confirm,
+.g-newlink {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--g-border);
+  border-radius: 8px;
+  background: var(--g-surface);
+}
+
+.g-code .g-hint,
+.g-confirm p,
+.g-newlink p {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.g-newlink input {
+  flex: 1 1 24rem;
+  min-width: 0;
+}
+
+.g-users {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-users li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 2px 0;
+}
+
+.g-user-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.g-audit {
+  margin-top: 24px;
+}
+
+.g-audit-list {
+  margin: 0;
+  padding-left: 20px;
+}

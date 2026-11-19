@@ -5,6 +5,7 @@ import { cameraFile, videoFileName } from './text';
 import type { ScheduleConfig } from '../api/types';
 import type {
   AdminHub,
+  AuditEntry,
   GalleryApi,
   FoundCamera,
   GalleryStatus,
@@ -124,6 +125,8 @@ export class HttpGalleryApi implements GalleryApi {
   readonly isDemo = false;
   private readonly baseUrl: string;
   private cameras = new Map<string, Camera>();
+  /** The admin session (#259): used instead of the token while it lasts. */
+  private session?: { value: string; expiresAt: number };
 
   constructor(
     baseUrl: string,
@@ -131,6 +134,7 @@ export class HttpGalleryApi implements GalleryApi {
     private readonly fetchFn: typeof fetch = (...args) => fetch(...args),
     /** With `?debug` in the address: log how videos and photos are paired. */
     private readonly debug = false,
+    private readonly now: () => number = () => Math.floor(Date.now() / 1000),
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
   }
@@ -309,6 +313,33 @@ export class HttpGalleryApi implements GalleryApi {
     return this.request<HubHistory>('GET', `/v1/admin/hubs/${encodeURIComponent(hubId)}/history`);
   }
 
+  elevated(): boolean {
+    return this.session !== undefined && this.session.expiresAt > this.now();
+  }
+
+  async elevate(code: string): Promise<void> {
+    this.session = undefined;
+    // With the plain token: the session replaces it only afterwards.
+    const result = await this.request<{ session: string; expiresAt: number }>(
+      'POST',
+      '/v1/admin/elevate',
+      { code },
+    );
+    this.session = { value: result.session, expiresAt: result.expiresAt };
+  }
+
+  rotateUser(userId: number): Promise<{ name: string; token: string }> {
+    return this.request('POST', `/v1/admin/users/${userId}/rotate`, {});
+  }
+
+  async revokeUser(userId: number): Promise<void> {
+    await this.request('POST', `/v1/admin/users/${userId}/revoke`, {});
+  }
+
+  adminAudit(): Promise<AuditEntry[]> {
+    return this.request<AuditEntry[]>('GET', '/v1/admin/audit');
+  }
+
   async setSchedule(hubId: string, config: ScheduleConfig): Promise<void> {
     // POST, not PUT: the backend's CORS allows no PUT (#286).
     await this.request('POST', `/v1/hubs/${encodeURIComponent(hubId)}/schedule`, {
@@ -326,9 +357,11 @@ export class HttpGalleryApi implements GalleryApi {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    // An active admin session replaces the token, except to get one.
+    const useSession = this.elevated() && path !== '/v1/admin/elevate';
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      Authorization: `Bearer ${this.token}`,
+      Authorization: useSession ? `Admin ${this.session?.value}` : `Bearer ${this.token}`,
     };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const response = await this.fetchFn(this.baseUrl + path, {
@@ -337,6 +370,12 @@ export class HttpGalleryApi implements GalleryApi {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!response.ok) {
+      if (useSession && response.status === 401) {
+        // The session ended (or its token or secret was rotated): carry on
+        // with the plain token, so the admin view asks for a code again.
+        this.session = undefined;
+        return this.request<T>(method, path, body);
+      }
       throw new ApiError(response.status, `${method} ${path}: HTTP ${response.status}`);
     }
     return (await response.json()) as T;
