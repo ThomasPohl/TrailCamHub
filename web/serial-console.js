@@ -504,8 +504,10 @@ function sendLine(line) {
 // is connected it sends "ping" after two quiet minutes. Firmware without
 // "ping" answers with an error, which keeps it awake just the same.
 const KEEP_AWAKE_MS = 2 * 60 * 1000;
+// Off while the camera mock is shown: it has no "ping" and no battery.
+let keepAwake = true;
 setInterval(() => {
-  if (port && reading && Date.now() - lastSentAt >= KEEP_AWAKE_MS) {
+  if (keepAwake && port && reading && Date.now() - lastSentAt >= KEEP_AWAKE_MS) {
     command("ping", 5000).catch(() => {});
   }
 }, 30 * 1000);
@@ -516,6 +518,10 @@ window.trailcamSerial = {
   reset,
   command,
   sendLine,
+  disconnect: handleDisconnect,
+  setKeepAwake: (on) => {
+    keepAwake = Boolean(on);
+  },
   outputText,
   isConnected: () => Boolean(port && reading),
 };

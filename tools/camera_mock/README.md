@@ -28,6 +28,11 @@ The CI job "Build camera mock (ESP32)" also uploads a merged image
 esptool.py --chip esp32 write_flash 0 camera-mock.bin
 ```
 
+Without a toolchain, the web installer's **Camera mock** view
+(<https://thomaspohl.github.io/TrailCamHub/#mock>) flashes the same image and
+drives the console from the browser: identity, size of the media list, fault
+injection, session control ([`docs/installer.md`](../../docs/installer.md)).
+
 Settings (`idf.py -C tools/camera_mock menuconfig`, menu "Camera mock"): the
 AP password (default `12345678`), the channel, and whether the AP is up from
 boot.

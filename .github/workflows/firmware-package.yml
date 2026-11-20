@@ -387,7 +387,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))))
-    needs: [build, release]
+    needs: [build, release, camera-mock]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -434,6 +434,15 @@ jobs:
           pattern: trailcamhub-*
           merge-multiple: true
           path: artifact
+
+      # The bench stand-in for the camera (docs/installer.md, "Camera mock").
+      # Optional: without it the installer simply has no mock to offer.
+      - name: Download camera mock image
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: camera-mock-esp32
+          path: artifact-mock
 
       - name: Accumulate build and assemble site
         id: store
@@ -506,6 +515,25 @@ jobs:
             exit 1
           fi
 
+          # The camera mock (tools/camera_mock, ESP32 target): one merged
+          # image at offset 0 and its ESP Web Tools manifest, next to the
+          # boards. The installer's "Camera mock" view offers it.
+          mock='null'
+          if [[ -f artifact-mock/camera-mock.bin ]]; then
+            mkdir -p "$dir/camera-mock"
+            cp artifact-mock/camera-mock.bin "$dir/camera-mock/"
+            jq -n --arg version "$id" \
+              '{name: "TrailCamHub camera mock (ESP32-WROOM-32D)", version: $version,
+                builds: [{chipFamily: "ESP32",
+                          parts: [{path: "./camera-mock.bin", offset: 0}]}]}' \
+              > "$dir/camera-mock/manifest.json"
+            (cd "$dir/camera-mock" && sha256sum camera-mock.bin > SHA256SUMS)
+            mock='{"manifest": "builds/'"$id"'/camera-mock/manifest.json",
+                   "bin": "builds/'"$id"'/camera-mock/camera-mock.bin"}'
+          else
+            echo "::warning::No camera mock image; the installer leaves it out"
+          fi
+
           # Prepend to the version index. A build of a tag carries the tag as
           # its "version" (the installer lists it by that name). Keep the
           # newest 5 releases (vX.Y.Z without a suffix) and the newest 10
@@ -521,11 +549,12 @@ jobs:
           fi
           jq --arg id "$id" --arg date "$date_iso" --arg commit "${GITHUB_SHA:0:7}" \
              --arg branch "${GITHUB_REF_NAME:-}" --arg message "$message" \
-             --arg version "$version" --argjson boards "$boards" \
+             --arg version "$version" --argjson boards "$boards" --argjson mock "$mock" \
              'def release: (.version // .branch // "") | test("^v[0-9]+[.][0-9]+[.][0-9]+$");
               ([{id:$id,date:$date,commit:$commit,branch:$branch,message:$message,
                  boards:$boards}
-                | if $version != "" then .version = $version else . end]
+                | if $version != "" then .version = $version else . end
+                | if $mock != null then .mock = $mock else . end]
                + .builds) as $all
               | (([$all[] | select(release)] | .[0:5])
                  + ([$all[] | select(release | not)] | .[0:10]) | map(.id)) as $keep

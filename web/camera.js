@@ -43,7 +43,10 @@
       say("Connect to the hub to use the camera.");
     } else {
       say("");
-      void refreshActions();
+      // Not while the camera mock is shown: it has no camera actions.
+      if (document.body.dataset.view !== "mock") {
+        void refreshActions();
+      }
     }
   }
 

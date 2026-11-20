@@ -149,6 +149,49 @@
       .catch(function () {});
   }
 
+  // The camera mock (tools/camera_mock) has its own build list: only builds
+  // that carry a mock image (`build.mock`), newest first.
+  function setupMock(all) {
+    var mockSelect = document.getElementById("mock-version");
+    var mockButton = document.getElementById("install-mock");
+    var mockInfo = document.getElementById("mock-build-info");
+    var mockDownload = document.getElementById("mock-dl");
+    var mockSha = document.getElementById("mock-dl-sha");
+    if (!mockSelect || !mockButton) {
+      return;
+    }
+    var withMock = all.filter(function (build) {
+      return build.mock;
+    });
+    mockSelect.innerHTML = "";
+    if (withMock.length === 0) {
+      var empty = document.createElement("option");
+      empty.textContent = "No build with a camera mock yet";
+      mockSelect.appendChild(empty);
+      mockSelect.disabled = true;
+      mockButton.hidden = true;
+      return;
+    }
+    withMock.forEach(function (build, index) {
+      var option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = labelOf(build, all.indexOf(build), null);
+      mockSelect.appendChild(option);
+    });
+    function show() {
+      var build = withMock[Number(mockSelect.value)];
+      mockButton.setAttribute("manifest", "./" + build.mock.manifest);
+      mockButton.hidden = false;
+      mockDownload.setAttribute("href", "./" + build.mock.bin);
+      mockSha.setAttribute("href", "./" + dirOf(build.mock.manifest) + "SHA256SUMS");
+      mockInfo.textContent = [build.date, build.branch, build.commit, build.message]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    mockSelect.addEventListener("change", show);
+    show();
+  }
+
   fetch("./versions.json", { cache: "no-store" })
     .then(function (response) {
       if (!response.ok) {
@@ -158,6 +201,7 @@
     })
     .then(function (data) {
       builds = (data && data.builds) || [];
+      setupMock(builds);
       select.innerHTML = "";
       if (builds.length === 0) {
         var empty = document.createElement("option");
