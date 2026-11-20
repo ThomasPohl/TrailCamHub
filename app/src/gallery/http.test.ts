@@ -232,6 +232,22 @@ describe('pairing trace', () => {
   });
 });
 
+describe('pairing switched off (#347)', () => {
+  it('shows every file alone but still works out and logs the pairs', async () => {
+    const { groupRecordings } = await import('./http');
+    const t = 1_794_731_000;
+    const items = [
+      item({ mediaId: 42, num: 42, fileType: 2, mediaTime: t + 12 }),
+      item({ mediaId: 43, num: 43, fileType: 0, mediaTime: t }),
+    ];
+    const rows: Record<string, unknown>[] = [];
+    const alone = groupRecordings(items, (r) => rows.push(...r), false);
+    expect(alone.map((g) => g.map((m) => m.num))).toEqual([[42], [43]]);
+    expect(rows.map((r) => r.result)).toEqual(['paired']);
+    expect(groupRecordings(items).map((g) => g.map((m) => m.num))).toEqual([[43, 42]]);
+  });
+});
+
 describe('pairing with a missing photo', () => {
   it('does not let a video take the photo of the next pair', async () => {
     const { groupRecordings } = await import('./http');
