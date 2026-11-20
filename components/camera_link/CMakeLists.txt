@@ -1,5 +1,7 @@
 idf_component_register(SRCS "camera_protocol.cpp"
- "camera_session.cpp" "camera_handshake.cpp"
+ "camera_session.cpp" "camera_session_commands.cpp"
+ "camera_session_bulk.cpp" "camera_session_downloads.cpp"
+ "camera_session_lists.cpp" "camera_session_actions.cpp" "camera_handshake.cpp"
                             "camera_link_io.cpp" "camera_prelogin.cpp"
                             "camera_udp_packets.cpp" "camera_udp_transport.cpp"
                             "pppp_session.cpp"
