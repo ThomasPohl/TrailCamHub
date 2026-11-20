@@ -121,6 +121,22 @@ export function groupRecordings(
  * The gallery's backend: the TrailCamHub API v1 with an app token (#259),
  * `Authorization: Bearer <userId>.<secret>`.
  */
+/** The part of `sessionStorage` the API needs. */
+export interface SessionStorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+const SESSION_KEY = 'trailcamhub.adminSession';
+
+interface StoredSession {
+  value: string;
+  expiresAt: number;
+  /** The token the session was issued for. */
+  token: string;
+}
+
 export class HttpGalleryApi implements GalleryApi {
   readonly isDemo = false;
   private readonly baseUrl: string;
@@ -135,8 +151,11 @@ export class HttpGalleryApi implements GalleryApi {
     /** With `?debug` in the address: log how videos and photos are paired. */
     private readonly debug = false,
     private readonly now: () => number = () => Math.floor(Date.now() / 1000),
+    /** Where the admin session survives a reload (one browser tab). */
+    private readonly storage?: SessionStorageLike,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
+    this.session = this.restoreSession();
   }
 
   async status(): Promise<GalleryStatus> {
@@ -326,6 +345,7 @@ export class HttpGalleryApi implements GalleryApi {
       { code },
     );
     this.session = { value: result.session, expiresAt: result.expiresAt };
+    this.saveSession();
   }
 
   rotateUser(userId: number): Promise<{ name: string; token: string }> {
@@ -352,6 +372,48 @@ export class HttpGalleryApi implements GalleryApi {
     await this.request('POST', `${this.camera(camId)}/commands`, { type: 'readCamera' });
   }
 
+  /**
+   * A reload (Cmd+R) must not end the admin session (#345): without it the
+   * admin sees only the hubs linked to his own account, usually none. The
+   * session is short-lived and kept per tab, and only for the token it was
+   * issued for.
+   */
+  private restoreSession(): { value: string; expiresAt: number } | undefined {
+    try {
+      const raw = this.storage?.getItem(SESSION_KEY);
+      if (!raw) return undefined;
+      const saved = JSON.parse(raw) as Partial<StoredSession> | null;
+      if (
+        !saved ||
+        saved.token !== this.token ||
+        typeof saved.value !== 'string' ||
+        typeof saved.expiresAt !== 'number' ||
+        saved.expiresAt <= this.now()
+      ) {
+        this.storage?.removeItem(SESSION_KEY);
+        return undefined;
+      }
+      return { value: saved.value, expiresAt: saved.expiresAt };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private saveSession(): void {
+    try {
+      if (!this.storage) return;
+      if (this.session) {
+        const stored: StoredSession = { ...this.session, token: this.token };
+        this.storage.setItem(SESSION_KEY, JSON.stringify(stored));
+      } else {
+        this.storage.removeItem(SESSION_KEY);
+      }
+    } catch {
+      // Storage can be unavailable (private mode): then the session lasts
+      // until the next reload, as before.
+    }
+  }
+
   private camera(camId: string): string {
     return `/v1/cameras/${encodeURIComponent(camId)}`;
   }
@@ -374,6 +436,7 @@ export class HttpGalleryApi implements GalleryApi {
         // The session ended (or its token or secret was rotated): carry on
         // with the plain token, so the admin view asks for a code again.
         this.session = undefined;
+        this.saveSession();
         return this.request<T>(method, path, body);
       }
       throw new ApiError(response.status, `${method} ${path}: HTTP ${response.status}`);

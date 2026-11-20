@@ -286,6 +286,91 @@ describe('admin session (#259)', () => {
     ]);
   });
 
+  /** A tiny stand-in for `sessionStorage`. */
+  function memoryStorage(initial: Record<string, string> = {}) {
+    const data = new Map(Object.entries(initial));
+    return {
+      data,
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => void data.set(key, value),
+      removeItem: (key: string) => void data.delete(key),
+    };
+  }
+
+  it('keeps the session over a reload for the same token (#345)', async () => {
+    const storage = memoryStorage();
+    const first = sessionFetch();
+    const before = new HttpGalleryApi(
+      'https://api',
+      'TOKEN',
+      first.fn,
+      false,
+      () => 1_000,
+      storage,
+    );
+    await before.elevate('123456');
+
+    // A reload: a new object with the same storage.
+    const second = sessionFetch();
+    const after = new HttpGalleryApi(
+      'https://api',
+      'TOKEN',
+      second.fn,
+      false,
+      () => 1_100,
+      storage,
+    );
+    expect(after.elevated()).toBe(true);
+    await after.adminHubs();
+    expect(second.seen.map((s) => s.authorization)).toEqual(['Admin SESSION']);
+  });
+
+  it('does not restore an expired session or one of another token (#345)', async () => {
+    const storage = memoryStorage();
+    const { fn } = sessionFetch();
+    await new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => 1_000, storage).elevate('1');
+
+    const expired = new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => 1_900, storage);
+    expect(expired.elevated()).toBe(false);
+    expect(storage.data.size).toBe(0);
+
+    await new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => 1_000, storage).elevate('1');
+    const other = new HttpGalleryApi('https://api', 'OTHER', fn, false, () => 1_100, storage);
+    expect(other.elevated()).toBe(false);
+  });
+
+  it('forgets the stored session when the backend ends it (#345)', async () => {
+    const storage = memoryStorage();
+    const { fn } = sessionFetch({ rejectSession: true });
+    const api = new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => 1_000, storage);
+    await api.elevate('123456');
+    expect(storage.data.size).toBe(1);
+    await api.status();
+    expect(storage.data.size).toBe(0);
+  });
+
+  it('works when the storage throws or holds garbage (#345)', async () => {
+    const broken = {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {
+        throw new Error('blocked');
+      },
+      removeItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    const { fn } = sessionFetch();
+    const api = new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => 1_000, broken);
+    await api.elevate('123456');
+    expect(api.elevated()).toBe(true);
+
+    const garbage = memoryStorage({ 'trailcamhub.adminSession': '{nope' });
+    const other = new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => 1_000, garbage);
+    expect(other.elevated()).toBe(false);
+  });
+
   it('falls back to the token when the backend ends the session', async () => {
     const { fn, seen } = sessionFetch({ rejectSession: true });
     const api = new HttpGalleryApi('https://api', 'TOKEN', fn, false, () => 1_000);

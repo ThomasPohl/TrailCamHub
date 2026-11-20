@@ -33,7 +33,17 @@ function chooseApi(): GalleryApi | undefined {
   }
   const token = takeToken();
   const debug = params.has('debug');
-  return token ? new HttpGalleryApi(baseUrl, token, undefined, debug) : undefined;
+  if (!token) return undefined;
+  return new HttpGalleryApi(baseUrl, token, undefined, debug, undefined, safeSessionStorage());
+}
+
+/** `sessionStorage` can throw (blocked storage): then there is none. */
+function safeSessionStorage(): Storage | undefined {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 const api = chooseApi();

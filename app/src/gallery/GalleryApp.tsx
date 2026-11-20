@@ -468,7 +468,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                 </button>
               </div>
               {status.cameras.length === 0 ? (
-                <p className="g-hint">Der Hub hat noch keine Kamera gelesen.</p>
+                <p className="g-hint">
+                  {isAdmin && !api.elevated()
+                    ? 'Dieses Konto hat keinen verknüpften Hub. Unter „Verwaltung“ den Code eingeben, dann sind alle Hubs sichtbar.'
+                    : 'Der Hub hat noch keine Kamera gelesen.'}
+                </p>
               ) : (
                 <table className="g-table g-cams">
                   <thead>
