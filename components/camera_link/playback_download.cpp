@@ -95,7 +95,7 @@ void PlaybackDownload::send_playback_request(
         ",\"dirNum\":" + std::to_string(e.dir_num) +
         ",\"mediaNum\":" + std::to_string(e.media_num) +
         ",\"sessionNo\":" + std::to_string(session_.number());
-    host_.send_command(769, extra.c_str(), "ARTEMIS StartPlayRecord");
+    host_.send_command(host_.context, 769, extra.c_str(), "ARTEMIS StartPlayRecord");
 }
 
 bool PlaybackDownload::start(const camera::artemis::CatalogEntry &e,
@@ -167,7 +167,7 @@ PlaybackDownload::Response PlaybackDownload::handle_playback_response(
                  (long long)other);
         retried_ = true;
         file_type_ = other;
-        host_.progress(esp_timer_get_time());
+        host_.progress(host_.context, esp_timer_get_time());
         send_playback_request(e);
         return Response::retried;
     }
@@ -183,7 +183,7 @@ bool PlaybackDownload::timed_write(camera::store::MediaFileWriter &file,
     if (kDiscardVideoData) {
         return true;
     }
-    host_.before_sd_wait(size);
+    host_.before_sd_wait(host_.context, size);
     const std::int64_t started_us = esp_timer_get_time();
     const bool ok = camera::store::sd_writer_write(file, data, size);
     stats_.note_write(esp_timer_get_time() - started_us);
@@ -336,13 +336,13 @@ bool PlaybackDownload::handle_frame(std::uint16_t seq,
         stats_.gap_logged++;
     }
     if (ack) {
-        host_.queue_ack(seq);
+        host_.queue_ack(host_.context, seq);
         last_data_us_ = esp_timer_get_time();
-        host_.progress(last_data_us_);
+        host_.progress(host_.context, last_data_us_);
     }
     if (status == PlaybackStream::Status::invalid) {
         if (write_failed_) {
-            host_.finish_download(false, true);
+            host_.finish_download(host_.context, false, true);
             return false;
         }
         ESP_LOGW(TAG, "Video stream out of sync after %llu frames",
@@ -350,7 +350,7 @@ bool PlaybackDownload::handle_frame(std::uint16_t seq,
         const std::size_t dump = payload_len < 24 ? payload_len : 24;
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, payload, dump, ESP_LOG_WARN);
         // Keep what was written; the rest of the video is missing.
-        host_.finish_download(stats_.frames > 0, false);
+        host_.finish_download(host_.context, stats_.frames > 0, false);
         return false;
     }
     // Audio frames may still follow the last video frame, so the stream ends
@@ -413,7 +413,7 @@ bool PlaybackDownload::finish(const camera::artemis::CatalogEntry &e,
 {
     const std::uint64_t bytes = stats_.bytes;
     // Stop the stream, also after it ended, as the app does.
-    host_.send_command(770, "", "ARTEMIS StopPlayRecord");
+    host_.send_command(host_.context, 770, "", "ARTEMIS StopPlayRecord");
     ESP_LOGI(
         TAG,
         "Video dir %lld num %lld: %u video frames (camera: %lld), %u "
@@ -499,7 +499,7 @@ void PlaybackDownload::complete_pending(bool wait)
                  (unsigned long long)(elapsed_ms > 0
                                           ? pending_.bytes / elapsed_ms
                                           : 0));
-        host_.pending_done(e, true, false);
+        host_.pending_done(host_.context, e, true, false);
         return;
     }
     files.video.abort();
@@ -508,7 +508,7 @@ void PlaybackDownload::complete_pending(bool wait)
     if (!ok) {
         ESP_LOGW(TAG, "SD card write failed; stopping downloads");
     }
-    host_.pending_done(e, false, !ok);
+    host_.pending_done(host_.context, e, false, !ok);
 }
 
 void PlaybackDownload::note_heartbeat()

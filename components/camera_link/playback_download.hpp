@@ -27,27 +27,29 @@ namespace camera::link
 class PlaybackDownload
 {
   public:
-    // What the download asks of the session. Plain function pointers: the
-    // session's callbacks capture nothing, and std::function would cost
-    // internal RAM on boards that are short of it.
+    // What the download asks of the session. Plain function pointers, which
+    // get `context` as their first argument (the session): std::function
+    // would cost internal RAM on boards that are short of it.
     struct Host {
+        void *context;
         // Sends a token-authenticated ARTEMIS command; `extra` is inserted
         // after cmdId.
-        bool (*send_command)(std::uint32_t cmd_id, const char *extra,
-                             const char *context);
+        bool (*send_command)(void *context, std::uint32_t cmd_id,
+                             const char *extra, const char *what);
         // Adds playback frame `seq` (subtype 0x02) to the next bulk ACK.
-        void (*queue_ack)(std::uint16_t seq);
+        void (*queue_ack)(void *context, std::uint16_t seq);
         // Writing `size` bytes is about to wait for the SD card: send the
         // pending ACK now.
-        void (*before_sd_wait)(std::size_t size);
+        void (*before_sd_wait)(void *context, std::size_t size);
         // The stream advanced at `now_us` (a frame was taken).
-        void (*progress)(std::int64_t now_us);
+        void (*progress)(void *context, std::int64_t now_us);
         // The current download ends: `stored` if the video is kept,
         // `stop_all` if the SD card failed.
-        void (*finish_download)(bool stored, bool stop_all);
+        void (*finish_download)(void *context, bool stored, bool stop_all);
         // The SD writer has written a video that ended earlier: `stored` if
         // it is on the card; `sd_failed` if writing it failed.
-        void (*pending_done)(const camera::artemis::CatalogEntry &entry,
+        void (*pending_done)(void *context,
+                             const camera::artemis::CatalogEntry &entry,
                              bool stored, bool sd_failed);
     };
 

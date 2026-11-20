@@ -316,18 +316,20 @@ static const struct sockaddr_in *s_ack_camera_address;
 // Video download by playback (cmdId 769), on top of s_download_active.
 static camera::link::PlaybackDownload s_video(
     s_command_cipher, CAMERA_DOWNLOAD_REORDER_FRAMES,
-    {[](uint32_t cmd_id, const char *extra, const char *context) {
+    {nullptr,
+     [](void *, uint32_t cmd_id, const char *extra, const char *context) {
          return send_artemis_command(cmd_id, extra, context);
      },
-     [](uint16_t seq) {
+     [](void *, uint16_t seq) {
          queue_bulk_ack(s_ack_socket, s_ack_camera_address, 0x02, seq);
      },
-     [](size_t size) { send_bulk_ack_before_waiting(size); },
-     [](int64_t now_us) { s_download_progress_us = now_us; },
-     [](bool stored, bool stop_all) {
+     [](void *, size_t size) { send_bulk_ack_before_waiting(size); },
+     [](void *, int64_t now_us) { s_download_progress_us = now_us; },
+     [](void *, bool stored, bool stop_all) {
          finish_current_download(stored, stop_all);
      },
-     [](const camera::artemis::CatalogEntry &e, bool stored, bool sd_failed) {
+     [](void *, const camera::artemis::CatalogEntry &e, bool stored,
+        bool sd_failed) {
          if (stored) {
              s_catalog.set_flag(e.media_id,
                                 camera::artemis::MediaCatalog::kFileDownloaded);

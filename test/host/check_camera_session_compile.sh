@@ -7,8 +7,14 @@ set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 link=$root/components/camera_link
 inc="-I$root/test/host/esp_stubs -I$link -I$link/include \
--I$root/components/time_sync/include -I$root/components/time_sync"
-files=${*:-$link/camera_protocol.cpp}
+-I$root/components/time_sync/include -I$root/components/time_sync \
+-DHOST_SD_ROOT=\"/tmp/host-sd\""
+# The files of the session itself; others as arguments.
+default_files="$link/camera_protocol.cpp $link/playback_download.cpp"
+for f in "$link"/camera_session*.cpp; do
+    [ -e "$f" ] && default_files="$default_files $f"
+done
+files=${*:-$default_files}
 status=0
 check() {
     name=$1
