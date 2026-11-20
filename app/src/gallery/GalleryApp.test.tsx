@@ -138,14 +138,17 @@ describe('GalleryApp', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Verwaltung' }));
     const field = await screen.findByLabelText('Code aus der Authenticator-App');
+    // The field has the focus on arrival, and the sixth digit sends the code.
+    expect(field).toHaveFocus();
     fireEvent.change(field, { target: { value: '000000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Anmelden' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Der Code stimmt nicht');
+    await waitFor(() =>
+      expect(screen.getByLabelText('Code aus der Authenticator-App')).toHaveFocus(),
+    );
 
     fireEvent.change(screen.getByLabelText('Code aus der Authenticator-App'), {
       target: { value: '123456' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Anmelden' }));
     const hub = await screen.findByRole('article', { name: 'Hub Garten' });
     const users = within(hub).getByRole('list', { name: 'Nutzer Garten' });
     // Only ordinary users get buttons, never the admin account.
