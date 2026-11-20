@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/http';
 import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
 import { isNewer } from './release';
@@ -69,46 +69,82 @@ function sdText(c: Camera): string {
   return c.sdTotalMB ? `${free} von ${(c.sdTotalMB / 1024).toFixed(1)} GB` : free;
 }
 
-/** The admin's second factor: the 6-digit code of the authenticator app (#259). */
+/**
+ * The admin's second factor: the 6-digit code of the authenticator app (#259).
+ * The field has the focus on arrival and the code is sent as soon as the sixth
+ * digit is in, so there is no button to hunt for.
+ */
 function CodeForm({ api, onDone }: { api: GalleryApi; onDone: () => void }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  useEffect(() => {
+    input.current?.focus();
+  }, []);
+
+  const send = async (value: string) => {
+    if (busy || value.length !== 6) return;
     setBusy(true);
+    setError(undefined);
     try {
-      await api.elevate(code);
+      await api.elevate(value);
       onDone();
     } catch (e) {
       setError(codeError(e));
       setCode('');
+      // Ready for the next try without a click.
+      input.current?.focus();
     } finally {
       setBusy(false);
     }
   };
 
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void send(code);
+  };
+
+  const change = (raw: string) => {
+    const digits = raw.replace(/\D/g, '').slice(0, 6);
+    setCode(digits);
+    if (digits.length === 6) void send(digits);
+  };
+
   return (
-    <form className="g-code" onSubmit={(event) => void submit(event)}>
-      <p className="g-hint">
-        Die Verwaltung ist mit einem Code aus der Authenticator-App geschützt.
-      </p>
+    <form className="g-code" onSubmit={submit} aria-busy={busy}>
+      <div className="g-code-head">
+        <h3>Verwaltung entsperren</h3>
+        <p className="g-hint">
+          Die Verwaltung ist mit einem Code aus der Authenticator-App geschützt.
+        </p>
+      </div>
       <label htmlFor="admin-code">Code aus der Authenticator-App</label>
       <input
+        ref={input}
         id="admin-code"
+        className="g-code-input"
         type="text"
         inputMode="numeric"
+        pattern="[0-9]*"
         autoComplete="one-time-code"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
         maxLength={6}
+        placeholder="••••••"
+        readOnly={busy}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? 'admin-code-error' : undefined}
         value={code}
-        onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
+        onChange={(event) => change(event.target.value)}
       />
       <button type="submit" className="g-btn" disabled={busy || code.length !== 6}>
-        Anmelden
+        {busy ? 'Prüfe …' : 'Anmelden'}
       </button>
       {error && (
-        <p className="g-error" role="alert">
+        <p className="g-error" id="admin-code-error" role="alert">
           {error}
         </p>
       )}
