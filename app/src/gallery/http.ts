@@ -1,6 +1,6 @@
 import { ApiError } from '../api/http';
 import type { Camera, MediaItem } from '../api/types';
-import { measureThumbnails } from './stamp';
+import { compareThumbnails, judge, MAX_MISMATCH, splitMismatchedPairs } from './stamp';
 import { fetchLatestRelease } from './release';
 import { cameraFile, videoFileName } from './text';
 import type { ScheduleConfig } from '../api/types';
@@ -122,9 +122,9 @@ export function groupRecordings(
 }
 
 /**
- * With `?debug`: for every video and the photos next to it, how much the time
- * stamp line at the bottom of the thumbnails differs (#347). 0 means the same
- * line, a large value another time. It changes no tile.
+ * With `?debug`: for every video and the photos next to it, how much the date
+ * and time line of the two thumbnails differs (#347). `textPx` is the text
+ * that was compared, `differentPx` the part that is in only one of them.
  */
 async function logStampDifferences(items: MediaItem[], fetchFn: typeof fetch): Promise<void> {
   const photos = new Map<string, MediaItem>();
@@ -137,17 +137,19 @@ async function logStampDifferences(items: MediaItem[], fetchFn: typeof fetch): P
       if (!photo) continue;
       const apartS = Math.abs(photo.mediaTime - video.mediaTime);
       if (apartS > PAIR_WINDOW_S) continue;
-      const result = await measureThumbnails(video.thumbUrl, photo.thumbUrl, fetchFn);
+      const result = await compareThumbnails(video.thumbUrl, photo.thumbUrl, fetchFn);
       rows.push({
         video: `${video.dir}/${video.num}`,
         photo: `${photo.dir}/${photo.num}`,
         apartS,
-        stampDiff: result ? Number(result.strip.toFixed(2)) : 'n/a',
-        imageDiff: result ? Number(result.image.toFixed(2)) : 'n/a',
+        differentPx: result?.different ?? 'n/a',
+        textPx: result?.text ?? 'n/a',
+        ratio: result ? Number(result.ratio.toFixed(3)) : 'n/a',
+        verdict: judge(result) === undefined ? 'n/a' : judge(result) ? 'same moment' : 'different',
       });
     }
   }
-  console.info('[gallery] time stamp difference (0 = same line, higher = different):');
+  console.info(`[gallery] date and time line (same moment up to ratio ${MAX_MISMATCH}):`);
   console.table(rows);
 }
 
@@ -235,7 +237,13 @@ export class HttpGalleryApi implements GalleryApi {
           void logStampDifferences(items, this.fetchFn);
         }
       : undefined;
-    return groupRecordings(items, log, this.pairing).map((files) => {
+    const grouped = groupRecordings(items, log, this.pairing);
+    // The numbers say which photo belongs to a video; the date and time in
+    // the thumbnails have the last word (#347).
+    const groups = this.pairing
+      ? await splitMismatchedPairs(grouped, (video, photo) => this.sameMoment(video, photo))
+      : grouped;
+    return groups.map((files) => {
       const video = files.find((m) => m.fileType === 2);
       const photo = files.find((m) => m.fileType !== 2);
       // The video decides the state; a delete of any file shows as well.
@@ -254,6 +262,18 @@ export class HttpGalleryApi implements GalleryApi {
         ...toState(deleting ?? main),
       };
     });
+  }
+
+  /** Verdicts of the date and time check, per video and photo; only answers are kept. */
+  private readonly sameMoments = new Map<string, boolean>();
+
+  private async sameMoment(video: MediaItem, photo: MediaItem): Promise<boolean | undefined> {
+    const key = `${video.mediaId}:${photo.mediaId}`;
+    const known = this.sameMoments.get(key);
+    if (known !== undefined) return known;
+    const same = judge(await compareThumbnails(video.thumbUrl, photo.thumbUrl, this.fetchFn));
+    if (same !== undefined) this.sameMoments.set(key, same);
+    return same;
   }
 
   async requestVideos(camId: string, mediaIds: number[]): Promise<void> {
