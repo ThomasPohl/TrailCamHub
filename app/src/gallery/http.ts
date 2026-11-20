@@ -1,5 +1,6 @@
 import { ApiError } from '../api/http';
 import type { Camera, MediaItem } from '../api/types';
+import { measureThumbnails } from './stamp';
 import { fetchLatestRelease } from './release';
 import { cameraFile, videoFileName } from './text';
 import type { ScheduleConfig } from '../api/types';
@@ -118,6 +119,36 @@ export function groupRecordings(
 }
 
 /**
+ * With `?debug`: for every video and the photos next to it, how much the time
+ * stamp line at the bottom of the thumbnails differs (#347). 0 means the same
+ * line, a large value another time. It changes no tile.
+ */
+async function logStampDifferences(items: MediaItem[], fetchFn: typeof fetch): Promise<void> {
+  const photos = new Map<string, MediaItem>();
+  for (const m of items) if (m.fileType !== 2) photos.set(`${m.dir}/${m.num}`, m);
+  const rows: Record<string, unknown>[] = [];
+  for (const video of items) {
+    if (video.fileType !== 2) continue;
+    for (const offset of [1, -1]) {
+      const photo = photos.get(`${video.dir}/${video.num + offset}`);
+      if (!photo) continue;
+      const apartS = Math.abs(photo.mediaTime - video.mediaTime);
+      if (apartS > PAIR_WINDOW_S) continue;
+      const result = await measureThumbnails(video.thumbUrl, photo.thumbUrl, fetchFn);
+      rows.push({
+        video: `${video.dir}/${video.num}`,
+        photo: `${photo.dir}/${photo.num}`,
+        apartS,
+        stampDiff: result ? Number(result.strip.toFixed(2)) : 'n/a',
+        imageDiff: result ? Number(result.image.toFixed(2)) : 'n/a',
+      });
+    }
+  }
+  console.info('[gallery] time stamp difference (0 = same line, higher = different):');
+  console.table(rows);
+}
+
+/**
  * The gallery's backend: the TrailCamHub API v1 with an app token (#259),
  * `Authorization: Bearer <userId>.<secret>`.
  */
@@ -196,6 +227,7 @@ export class HttpGalleryApi implements GalleryApi {
           );
           console.info('[gallery] pairing:');
           console.table(rows);
+          void logStampDifferences(items, this.fetchFn);
         }
       : undefined;
     return groupRecordings(items, log).map((files) => {
