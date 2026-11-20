@@ -95,7 +95,8 @@ void PlaybackDownload::send_playback_request(
         ",\"dirNum\":" + std::to_string(e.dir_num) +
         ",\"mediaNum\":" + std::to_string(e.media_num) +
         ",\"sessionNo\":" + std::to_string(session_.number());
-    host_.send_command(host_.context, 769, extra.c_str(), "ARTEMIS StartPlayRecord");
+    host_.send_command(host_.context, 769, extra.c_str(),
+                       "ARTEMIS StartPlayRecord");
 }
 
 bool PlaybackDownload::start(const camera::artemis::CatalogEntry &e,

@@ -200,7 +200,7 @@ add_test(NAME host_tests COMMAND host_tests)
 # against the camera mock over real UDP sockets on the loopback interface:
 # esp_stubs stands in for the ESP-IDF headers, session/host_esp.cpp for what
 # they provide, and the SD card is a directory. Runs in real time.
-file(GLOB session_link_sources ${link_dir}/*.cpp)
+file(GLOB session_link_sources CONFIGURE_DEPENDS ${link_dir}/*.cpp)
 list(REMOVE_ITEM session_link_sources ${link_dir}/sd_writer.cpp)
 add_executable(session_tests
     test_main.cpp
