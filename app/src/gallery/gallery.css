@@ -1038,7 +1038,10 @@ body {
   font-weight: 600;
   letter-spacing: 0.4em;
   text-align: center;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    background 0.15s;
 }
 
 .g-code-input::placeholder {
