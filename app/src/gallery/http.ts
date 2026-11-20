@@ -68,6 +68,8 @@ const PAIR_WINDOW_S = 120;
 export function groupRecordings(
   items: MediaItem[],
   log?: (rows: Record<string, unknown>[]) => void,
+  /** `false` (`?pairing=off`, #347): work out the pairs and log them, but show every file alone. */
+  pair = true,
 ): MediaItem[][] {
   const trace: Record<string, unknown>[] = [];
   const photos = new Map<string, MediaItem>();
@@ -106,6 +108,7 @@ export function groupRecordings(
     }
   }
   log?.(trace);
+  if (!pair) return items.map((m) => [m]);
   const groups: MediaItem[][] = [];
   for (const m of items) {
     if (m.fileType === 2) {
@@ -184,6 +187,8 @@ export class HttpGalleryApi implements GalleryApi {
     private readonly now: () => number = () => Math.floor(Date.now() / 1000),
     /** Where the admin session survives a reload (one browser tab). */
     private readonly storage?: SessionStorageLike,
+    /** With `?pairing=off`: no tile joins a video and a photo (#347). */
+    private readonly pairing = true,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.session = this.restoreSession();
@@ -230,7 +235,7 @@ export class HttpGalleryApi implements GalleryApi {
           void logStampDifferences(items, this.fetchFn);
         }
       : undefined;
-    return groupRecordings(items, log).map((files) => {
+    return groupRecordings(items, log, this.pairing).map((files) => {
       const video = files.find((m) => m.fileType === 2);
       const photo = files.find((m) => m.fileType !== 2);
       // The video decides the state; a delete of any file shows as well.

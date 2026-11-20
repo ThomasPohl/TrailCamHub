@@ -34,7 +34,17 @@ function chooseApi(): GalleryApi | undefined {
   const token = takeToken();
   const debug = params.has('debug');
   if (!token) return undefined;
-  return new HttpGalleryApi(baseUrl, token, undefined, debug, undefined, safeSessionStorage());
+  // `?pairing=off`: every file in its own tile, to see which ones belong together (#347).
+  const pairing = params.get('pairing') !== 'off';
+  return new HttpGalleryApi(
+    baseUrl,
+    token,
+    undefined,
+    debug,
+    undefined,
+    safeSessionStorage(),
+    pairing,
+  );
 }
 
 /** `sessionStorage` can throw (blocked storage): then there is none. */
