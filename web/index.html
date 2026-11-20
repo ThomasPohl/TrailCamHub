@@ -16,6 +16,7 @@
     <script src="./advanced.js" defer></script>
     <script src="./camera.js" defer></script>
     <script src="./sd-card.js" defer></script>
+    <script src="./mock.js" defer></script>
     <script src="./shell.js" defer></script>
   </head>
   <body data-view="wizard">
@@ -24,6 +25,7 @@
       <div class="view-switch" role="tablist" aria-label="View">
         <button id="view-tab-wizard" type="button" role="tab" data-view="wizard" aria-controls="view-wizard" aria-selected="true">Setup assistant</button>
         <button id="view-tab-advanced" type="button" role="tab" data-view="advanced" aria-controls="view-advanced" aria-selected="false" tabindex="-1">Advanced</button>
+        <button id="view-tab-mock" type="button" role="tab" data-view="mock" aria-controls="view-mock" aria-selected="false" tabindex="-1">Camera mock</button>
       </div>
       <span id="conn-pill" class="conn-pill" role="status">Not connected</span>
     </header>
@@ -557,6 +559,160 @@
             <button id="copy-serial" class="secondary-button" type="button" disabled>Copy</button>
           </div>
           <pre id="serial-output" aria-label="ESP32 serial output"></pre>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-mock" class="view-advanced view-mock" role="tabpanel" aria-labelledby="view-tab-mock" hidden>
+      <aside class="adv-dock" aria-label="Camera mock status and controls">
+        <div class="dock-block">
+          <div class="dock-head">
+            <h2>Camera mock</h2>
+          </div>
+          <div class="console-controls">
+            <button id="mock-connect" class="primary-button" type="button">Connect</button>
+            <button id="mock-other-port" class="secondary-button" type="button" title="Choose the serial port instead of the one used last" hidden>Other port…</button>
+            <button id="mock-disconnect" class="secondary-button" type="button" hidden>Disconnect</button>
+          </div>
+          <p id="mock-conn-status" class="dock-status" role="status" aria-live="polite">Not connected</p>
+          <dl class="hub-facts" id="mock-facts">
+            <div><dt>Camera ID</dt><dd data-fact="id">–</dd></div>
+            <div><dt>BLE</dt><dd data-fact="ble">–</dd></div>
+            <div><dt>Access point</dt><dd data-fact="ap">–</dd></div>
+            <div><dt>Session</dt><dd data-fact="session">–</dd></div>
+            <div><dt>Recordings</dt><dd data-fact="media">–</dd></div>
+            <div><dt>Faults</dt><dd data-fact="faults">–</dd></div>
+          </dl>
+          <p id="mock-facts-age" class="dock-age">Connect to read the status.</p>
+        </div>
+
+        <div class="dock-block">
+          <h2>Control</h2>
+          <div class="dock-buttons">
+            <button class="primary-button" type="button" data-mock-command="status">Refresh status</button>
+            <button class="secondary-button" type="button" data-mock-command="close" title="End the session from the camera side (CLOSE)">Close session</button>
+            <button class="secondary-button" type="button" data-mock-command="ap on">AP on</button>
+            <button class="secondary-button" type="button" data-mock-command="ap off" title="Also ends a running session">AP off</button>
+            <button id="mock-reset" class="secondary-button" type="button" title="Reset over the serial lines (RTS/DTR); runtime settings are lost">Reset board</button>
+            <button id="mock-help" class="secondary-button" type="button" data-mock-command="help">Help</button>
+          </div>
+          <p id="mock-status" class="dock-status" role="status" aria-live="polite"></p>
+          <form id="mock-command" class="adv-command" autocomplete="off">
+            <input name="line" aria-label="Mock console command" placeholder="Command, e.g. fault (↑ repeats)" spellcheck="false">
+            <button class="secondary-button" type="submit">Send</button>
+          </form>
+          <pre id="mock-answer" class="adv-answer" aria-live="polite"></pre>
+        </div>
+      </aside>
+
+      <div class="adv-main">
+        <div class="adv-panel mock-panel">
+          <section aria-labelledby="mock-install-heading">
+            <h2 id="mock-install-heading">Install the camera mock</h2>
+            <p>The mock stands in for the camera on the bench: it advertises over BLE like a TC100, opens its access point and answers the hub's requests (media list, thumbnails, photos, videos) with recorded data. It runs on a classic <strong>ESP32-WROOM-32D</strong> board without an SD card. See <a href="https://github.com/ThomasPohl/TrailCamHub/blob/main/tools/camera_mock/README.md">tools/camera_mock</a>.</p>
+            <ol>
+              <li>Connect the board with a USB data cable. Do not use the board that runs the hub firmware, or the hub is overwritten.</li>
+              <li>Press <strong>Install camera mock</strong> and choose the serial port. If the flashing does not start, hold BOOT while the dialog connects.</li>
+              <li>Press <strong>Connect</strong> at the left, after the installation.</li>
+            </ol>
+            <div class="version-picker">
+              <label for="mock-version">Build version</label>
+              <select id="mock-version"><option>Loading…</option></select>
+              <p id="mock-build-info" class="note">&nbsp;</p>
+            </div>
+            <esp-web-install-button id="install-mock">
+              <button slot="activate" class="primary-button">Install camera mock</button>
+              <span slot="unsupported">Use a desktop Chromium-based browser that supports Web Serial, such as Chrome or Edge.</span>
+              <span slot="not-allowed">Open this page over HTTPS and allow serial-port access in your browser.</span>
+            </esp-web-install-button>
+            <p class="note">Manual download: <a id="mock-dl" href="#">camera-mock.bin</a> (<a id="mock-dl-sha" href="#">SHA-256</a>), write it at offset 0: <code>esptool --chip esp32 write-flash 0x0 camera-mock.bin</code>. Only builds of <code>main</code> and later carry a mock.</p>
+          </section>
+
+          <section aria-labelledby="mock-id-heading">
+            <h2 id="mock-id-heading">Settings</h2>
+            <form id="mock-id-form" class="ds-group-form" autocomplete="off">
+              <fieldset class="ds-group">
+                <legend>Camera identity</legend>
+                <label>Camera MAC (devId)
+                  <input name="mac" placeholder="C6:1E:0D:E0:0C:FB" pattern="([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}" spellcheck="false" maxlength="17">
+                  <small>BLE name: <span id="mock-ble-name">–</span> · stored in the mock and used after a reset: BLE advertising, device info and media headers. Two mocks with different MACs stand for two cameras.</small>
+                </label>
+                <div class="ds-save">
+                  <button class="primary-button" type="submit">Store and reset</button>
+                  <button id="mock-id-default" class="secondary-button" type="button">Back to the build default</button>
+                </div>
+              </fieldset>
+            </form>
+
+            <form id="mock-media-form" class="ds-group-form" autocomplete="off">
+              <fieldset class="ds-group">
+                <legend>Media list</legend>
+                <label>Recordings (0–1000)
+                  <input name="count" type="number" min="0" max="1000" step="1" inputmode="numeric" value="90">
+                  <small>90 is the captured list of a real TC100, byte for byte. More continues the numbering with invented entries (photo and video alternate), 0 is an empty card. Applies at once; after a reset the build default (90) is back.</small>
+                </label>
+                <div class="ds-save">
+                  <button class="primary-button" type="submit">Apply</button>
+                  <span class="mock-presets">Presets:
+                    <button class="secondary-button" type="button" data-media-preset="0">0</button>
+                    <button class="secondary-button" type="button" data-media-preset="90">90</button>
+                    <button class="secondary-button" type="button" data-media-preset="500">500</button>
+                    <button class="secondary-button" type="button" data-media-preset="1000">1000</button>
+                  </span>
+                </div>
+              </fieldset>
+            </form>
+
+            <fieldset class="ds-group" id="mock-faults">
+              <legend>Fault injection</legend>
+              <p class="note">Each value is set on its own and applies at once; a reset clears them all. The hub must stop cleanly or carry on, never hang.</p>
+              <div class="mock-fault" data-fault="drop">
+                <label>Drop DATA frames (%) <input type="number" min="0" max="100" step="1" value="0" inputmode="numeric"></label>
+                <button class="secondary-button" type="button">Set</button>
+              </div>
+              <div class="mock-fault" data-fault="dup">
+                <label>Duplicate DATA frames (%) <input type="number" min="0" max="100" step="1" value="0" inputmode="numeric"></label>
+                <button class="secondary-button" type="button">Set</button>
+              </div>
+              <div class="mock-fault" data-fault="lateack">
+                <label>Late ACKs (ms) <input type="number" min="0" max="60000" step="10" value="0" inputmode="numeric"></label>
+                <button class="secondary-button" type="button">Set</button>
+              </div>
+              <div class="mock-fault" data-fault="abort" data-off="true">
+                <label>Abort a bulk record after (frames) <input type="number" min="1" max="10000" step="1" value="20" inputmode="numeric"></label>
+                <button class="secondary-button" type="button">Set</button>
+                <button class="secondary-button" type="button" data-fault-off>Off</button>
+              </div>
+              <div class="mock-fault" data-fault="battery" data-off="true">
+                <label>Battery in the device info (%) <input type="number" min="0" max="100" step="1" value="50" inputmode="numeric"></label>
+                <button class="secondary-button" type="button">Set</button>
+                <button class="secondary-button" type="button" data-fault-off>Off</button>
+              </div>
+              <div class="mock-fault" data-fault="sdfree" data-off="true">
+                <label>Free SD space in the device info (MB) <input type="number" min="0" max="10000000" step="1" value="100" inputmode="numeric"></label>
+                <button class="secondary-button" type="button">Set</button>
+                <button class="secondary-button" type="button" data-fault-off>Off</button>
+              </div>
+              <div class="mock-fault" data-fault="mute" data-toggle="true">
+                <label class="mock-check"><input type="checkbox"> Silent after the login (the hub's 15 s action window)</label>
+              </div>
+              <div class="ds-save">
+                <button id="mock-faults-off" class="secondary-button" type="button">All faults off</button>
+              </div>
+            </fieldset>
+
+            <p class="note">Not settable here, because they are build options of the mock (<code>idf.py menuconfig</code> → Camera mock): the access point's password (default <code>12345678</code>, the hub's default), its Wi-Fi channel and whether it starts at boot.</p>
+          </section>
+
+          <section aria-labelledby="mock-log-heading" class="mock-log-section">
+            <div class="console-controls">
+              <h2 id="mock-log-heading">Mock console</h2>
+              <span class="note">115200 baud</span>
+              <button id="mock-log-clear" class="secondary-button" type="button">Clear</button>
+              <button id="mock-log-copy" class="secondary-button" type="button">Copy</button>
+            </div>
+            <pre id="mock-log" class="mock-log" aria-label="Mock serial output"></pre>
+          </section>
         </div>
       </div>
     </div>

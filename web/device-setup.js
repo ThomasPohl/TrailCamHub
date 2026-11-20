@@ -385,8 +385,11 @@
   window.addEventListener("serial-line", (event) => handleLine(event.detail));
   window.addEventListener("serial-connected", () => {
     setConnected(true);
-    // Ask for the current state; the hub may have booted long ago.
-    void send("status").catch(() => {});
+    // Ask for the current state; the hub may have booted long ago. Not while
+    // the camera mock is shown: its console does not know the hub's commands.
+    if (document.body.dataset.view !== "mock") {
+      void send("status").catch(() => {});
+    }
   });
   window.addEventListener("serial-disconnected", () => setConnected(false));
 

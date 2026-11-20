@@ -11,11 +11,12 @@ over USB and shows its serial console. No toolchain is needed.
   available in other browsers or on phones.
 - A USB **data** cable. The browser asks for permission for each serial port.
 
-## Two views
+## Three views
 
-The bar at the top switches between the **Setup assistant** and **Advanced**;
+The bar at the top switches between the **Setup assistant**, **Advanced** and
+**Camera mock** (see [below](#camera-mock));
 each view replaces the other. The view is part of the address (`#wizard`,
-`#advanced/console`) and the last one is remembered in the browser. The bar
+`#advanced/console`, `#mock`) and the last one is remembered in the browser. The bar
 also shows whether the hub is connected.
 
 ### Setup assistant
@@ -80,6 +81,35 @@ hub's port on its own:
 The installer does not configure the camera name or the Wi-Fi-enable payload;
 the CI build sends `BT_KEY_ON`. Install firmware only from a source you trust
 and only on a board you may modify.
+
+## Camera mock
+
+The **Camera mock** view installs and drives the bench stand-in for the camera
+([`tools/camera_mock`](../tools/camera_mock/README.md), #122) on an
+**ESP32-WROOM-32D** board without SD card. The mock is not a hub: flash it onto
+a second board, never onto the hub.
+
+- **Install**: pick a build and press *Install camera mock* (ESP Web Tools,
+  one merged image at offset 0, chip family ESP32). Only builds that carry a
+  mock are listed; the *Firmware Package* workflow builds it in the job
+  *Build camera mock (ESP32)* and `deploy-installer` publishes it next to the
+  boards (`builds/<id>/camera-mock/`, `mock` in `versions.json`). The image is
+  also a download with a SHA-256 file.
+- **Connect** at the left. The dock shows the camera ID and BLE name, the
+  access point, the session counters and the active faults, read with the
+  mock's `status`, `id` and `media`. *Close session*, *AP on/off* and *Reset
+  board* control it; a command line (arrow up repeats) takes any console
+  command.
+- **Settings**: the camera MAC (stored in the mock, applies after the reset
+  that the page triggers; two mocks with different MACs are two cameras),
+  the number of recordings (0–1000, applies at once, back to the build default
+  after a reset) and the fault injection (`fault drop|dup|lateack|mute|
+  battery|sdfree|abort`, all off with one button; a reset clears them).
+- The access point's password, its Wi-Fi channel and starting at boot are
+  build options of the mock (`menuconfig` → Camera mock) and cannot be set
+  here.
+- The **mock console** at the bottom shows the serial log at 115200 baud. The
+  hub's keep-alive `ping` is not sent while this view is shown.
 
 ## Builds and images
 

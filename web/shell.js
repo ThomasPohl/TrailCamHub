@@ -1,5 +1,5 @@
-// Page shell: switches between the two views ("Setup assistant" and
-// "Advanced") and between the tabs of the advanced view, shows the connection
+// Page shell: switches between the views ("Setup assistant", "Advanced" and
+// "Camera mock") and between the tabs of the advanced view, shows the connection
 // in the top bar and adds a "show" button to every password field.
 //
 // The view is part of the address (#wizard, #advanced, #advanced/console), so
@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  const VIEWS = ["wizard", "advanced"];
+  const VIEWS = ["wizard", "advanced", "mock"];
   const STORAGE_KEY = "trailcamhub.installer.view";
   const viewTabs = [...document.querySelectorAll(".view-switch [role=tab]")];
   const advTabs = [...document.querySelectorAll(".adv-tabs [role=tab]")];
@@ -74,7 +74,7 @@
     }
     remember();
     if (updateAddress) {
-      const hash = view === "advanced" ? `#advanced/${tab}` : "#wizard";
+      const hash = view === "advanced" ? `#advanced/${tab}` : `#${view}`;
       if (window.location.hash !== hash) {
         window.history.replaceState(null, "", hash);
       }
@@ -119,7 +119,7 @@
 
   const pill = document.getElementById("conn-pill");
   function showConnection(on) {
-    pill.textContent = on ? "Hub connected" : "Not connected";
+    pill.textContent = on ? "Connected" : "Not connected";
     pill.dataset.connected = String(on);
   }
   window.addEventListener("serial-connected", () => showConnection(true));
