@@ -195,3 +195,41 @@ target_compile_options(mp4_tool PRIVATE -Wall -Wextra -Werror)
 
 enable_testing()
 add_test(NAME host_tests COMMAND host_tests)
+
+# The camera session (components/camera_link/camera_*.cpp, ESP-IDF code) run
+# against the camera mock over real UDP sockets on the loopback interface:
+# esp_stubs stands in for the ESP-IDF headers, session/host_esp.cpp for what
+# they provide, and the SD card is a directory. Runs in real time.
+file(GLOB session_link_sources ${link_dir}/*.cpp)
+list(REMOVE_ITEM session_link_sources ${link_dir}/sd_writer.cpp)
+add_executable(session_tests
+    test_main.cpp
+    session/host_esp.cpp
+    session/mock_server.cpp
+    session/test_session.cpp
+    ${session_link_sources}
+    ${mp4_dir}/mp4_mux.cpp
+    ${time_dir}/time_policy.cpp
+    ${mock_dir}/ble_frames.cpp
+    ${mock_dir}/capture_fixtures.cpp
+    ${mock_dir}/mock_camera.cpp
+    ${mock_dir}/mock_wire.cpp)
+# esp_stubs first: its headers stand in for the ESP-IDF ones of the same name.
+target_include_directories(session_tests BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/esp_stubs)
+target_include_directories(session_tests PRIVATE
+    ${link_dir} ${link_dir}/include ${mp4_dir} ${time_dir}
+    ${time_dir}/include ${mock_dir} ${CMAKE_CURRENT_SOURCE_DIR}/session)
+target_include_directories(session_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
+target_compile_definitions(session_tests PRIVATE
+    HOST_SD_ROOT="${CMAKE_BINARY_DIR}/sd-card"
+    MOCK_FIXTURE_DIR="${repo_root}/tools/camera_mock/fixtures")
+target_compile_options(session_tests PRIVATE -Wall -Wextra -Werror)
+find_package(Threads REQUIRED)
+target_link_libraries(session_tests PRIVATE Threads::Threads)
+if(HOST_TESTS_SANITIZE)
+    target_compile_options(session_tests PRIVATE ${sanitize_flags})
+    target_link_options(session_tests PRIVATE ${sanitize_flags})
+endif()
+add_test(NAME session_tests COMMAND session_tests)
+set_tests_properties(session_tests PROPERTIES TIMEOUT 300)
