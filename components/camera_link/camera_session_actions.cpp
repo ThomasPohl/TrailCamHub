@@ -87,7 +87,7 @@ void CameraSession::after_list_actions()
 bool CameraSession::send_next_action()
 {
     namespace act = camera::action;
-    while (!action_active_) {
+    while (!action_.active) {
         act::service::Job job;
         if (!act::service::take_next(list_ready_, camera_id_, job)) {
             return false;
@@ -114,10 +114,10 @@ bool CameraSession::send_next_action()
                 act::failure("the command could not be sent to the camera"));
             continue;
         }
-        action_active_ = true;
-        action_id_ = job.id;
-        action_ = job.action;
-        action_sent_us_ = esp_timer_get_time();
+        action_.active = true;
+        action_.id = job.id;
+        action_.action = job.action;
+        action_.sent_us = esp_timer_get_time();
     }
     return true;
 }
@@ -126,7 +126,7 @@ bool CameraSession::send_next_action()
 // thumbnails.
 void CameraSession::advance_after_actions()
 {
-    if (action_active_ || send_next_action()) {
+    if (action_.active || send_next_action()) {
         return;
     }
     if (list_ready_) {
@@ -139,13 +139,13 @@ void CameraSession::advance_after_actions()
 void CameraSession::handle_action_response(const std::string &json)
 {
     namespace act = camera::action;
-    const act::Outcome outcome = act::interpret(action_.type, json);
-    action_active_ = false;
-    act::service::finish(action_id_, outcome);
-    if (outcome.done && action_.type == act::Type::delete_media) {
+    const act::Outcome outcome = act::interpret(action_.action.type, json);
+    action_.active = false;
+    act::service::finish(action_.id, outcome);
+    if (outcome.done && action_.action.type == act::Type::delete_media) {
         // Gone from the card: no thumbnail or download is wanted for it, and
         // its dir/num may belong to a new recording soon.
-        catalog_.mark_gone(action_.media_id);
+        catalog_.mark_gone(action_.action.media_id);
         save_session_catalog();
     }
     advance_after_actions();
@@ -155,13 +155,13 @@ void CameraSession::handle_action_response(const std::string &json)
 // may not have been done, so the person is told that.
 void CameraSession::check_action_timeout(int64_t now_us)
 {
-    if (!action_active_ || now_us - action_sent_us_ <= kActionAnswerTimeoutUs) {
+    if (!action_.active || now_us - action_.sent_us <= kActionAnswerTimeoutUs) {
         return;
     }
-    ESP_LOGW(TAG, "No answer to action %u within 15 s", (unsigned)action_id_);
-    action_active_ = false;
+    ESP_LOGW(TAG, "No answer to action %u within 15 s", (unsigned)action_.id);
+    action_.active = false;
     camera::action::service::finish(
-        action_id_,
+        action_.id,
         camera::action::failure(
             "the camera did not answer within 15 s; it may have been done"));
     advance_after_actions();

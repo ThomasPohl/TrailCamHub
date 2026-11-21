@@ -73,9 +73,9 @@ void CameraSession::report_download_progress()
 {
     if (settings_.progress_callback != nullptr) {
         settings_.progress_callback(
-            static_cast<uint32_t>(download_index_),
-            static_cast<uint32_t>(download_stored_),
-            static_cast<uint32_t>(download_queue_.size()));
+            static_cast<uint32_t>(download_.index),
+            static_cast<uint32_t>(download_.stored),
+            static_cast<uint32_t>(download_.queue.size()));
     }
 }
 
@@ -83,13 +83,13 @@ void CameraSession::report_download_progress()
 // downloads, the session is closed right away.
 void CameraSession::start_downloads()
 {
-    download_queue_ = catalog_.download_queue(kDownloadPhotos, video_download(),
+    download_.queue = catalog_.download_queue(kDownloadPhotos, video_download(),
                                               CAMERA_VIDEO_MAX_PER_SESSION);
-    download_index_ = 0;
-    download_stored_ = 0;
-    stop_downloads_ = false;
+    download_.index = 0;
+    download_.stored = 0;
+    download_.stopped = false;
     if (kDownloadPhotos || kDownloadVideos) {
-        ESP_LOGI(TAG, "%u files to download", (unsigned)download_queue_.size());
+        ESP_LOGI(TAG, "%u files to download", (unsigned)download_.queue.size());
     }
     report_download_progress();
     request_current_download();
@@ -106,25 +106,25 @@ void CameraSession::request_current_download()
         return;
     }
     video_.clear_drain();
-    while (download_index_ < download_queue_.size()) {
+    while (download_.index < download_.queue.size()) {
         const camera::artemis::CatalogEntry &e =
-            download_queue_[download_index_];
+            download_.queue[download_.index];
         if (e.file_type != 0) {
-            if (video_.start(e, camera_id_, download_index_,
-                             download_queue_.size())) {
-                download_active_ = true;
-                download_started_us_ = video_.started_us();
-                download_progress_us_ = download_started_us_;
+            if (video_.start(e, camera_id_, download_.index,
+                             download_.queue.size())) {
+                download_.active = true;
+                download_.started_us = video_.started_us();
+                download_.progress_us = download_.started_us;
                 return;
             }
             ESP_LOGW(TAG, "Cannot write to the SD card; stopping downloads");
-            download_index_ = download_queue_.size();
+            download_.index = download_.queue.size();
             break;
         }
         if (!media_file_.open(camera_id_, e.media_id, nullptr,
                               !camera::store::sd_writer_active())) {
             ESP_LOGW(TAG, "Cannot write to the SD card; stopping downloads");
-            download_index_ = download_queue_.size();
+            download_.index = download_.queue.size();
             break;
         }
         const std::string extra =
@@ -134,17 +134,17 @@ void CameraSession::request_current_download()
         if (send_artemis_command(1285, extra.c_str(), "ARTEMIS Download")) {
             ESP_LOGI(TAG, "Downloading %s dir %lld num %lld (%u of %u)",
                      e.file_type == 0 ? "photo" : "video", (long long)e.dir_num,
-                     (long long)e.media_num, (unsigned)(download_index_ + 1),
-                     (unsigned)download_queue_.size());
-            download_stream_.reset();
-            download_active_ = true;
-            download_started_us_ = esp_timer_get_time();
-            download_progress_us_ = download_started_us_;
-            download_logged_bytes_ = 0;
+                     (long long)e.media_num, (unsigned)(download_.index + 1),
+                     (unsigned)download_.queue.size());
+            download_.stream.reset();
+            download_.active = true;
+            download_.started_us = esp_timer_get_time();
+            download_.progress_us = download_.started_us;
+            download_.logged_bytes = 0;
             return;
         }
         media_file_.abort();
-        ++download_index_;
+        ++download_.index;
         report_download_progress();
     }
     video_.complete_pending(true);
@@ -162,9 +162,9 @@ void CameraSession::request_current_download()
 void CameraSession::finish_current_download(bool stored, bool stop_all)
 {
     using camera::artemis::MediaCatalog;
-    const camera::artemis::CatalogEntry &e = download_queue_[download_index_];
+    const camera::artemis::CatalogEntry &e = download_.queue[download_.index];
     const bool was_video = video_.active();
-    stop_all = stop_all || stop_downloads_;
+    stop_all = stop_all || download_.stopped;
     // A video that ended normally is closed once the SD writer has written
     // it, while the next one is downloaded
     // (PlaybackDownload::complete_pending()).
@@ -185,17 +185,17 @@ void CameraSession::finish_current_download(bool stored, bool stop_all)
         // Closed by PlaybackDownload::complete_pending().
     } else if (stored && file.finish(e.media_time)) {
         const int64_t elapsed_ms =
-            (esp_timer_get_time() - download_started_us_) / 1000;
+            (esp_timer_get_time() - download_.started_us) / 1000;
         const uint64_t bytes = was_video ? video_bytes
-                                         : download_stream_.delivered_bytes() -
-                                               download_stream_.prefix().size();
+                                         : download_.stream.delivered_bytes() -
+                                               download_.stream.prefix().size();
         ESP_LOGI(TAG, "Stored %s (%llu bytes in %lld ms, %llu KB/s)",
                  file.path().c_str(), (unsigned long long)bytes,
                  (long long)elapsed_ms,
                  (unsigned long long)(elapsed_ms > 0 ? bytes / elapsed_ms : 0));
         catalog_.set_flag(e.media_id, MediaCatalog::kFileDownloaded);
         save_session_catalog();
-        ++download_stored_;
+        ++download_.stored;
         ++stored_items_;
     } else {
         file.abort();
@@ -216,13 +216,13 @@ void CameraSession::finish_current_download(bool stored, bool stop_all)
             save_session_catalog();
         }
     }
-    download_stream_.reset();
-    download_active_ = false;
-    bulk_active_ = false;
-    ++download_index_;
+    download_.stream.reset();
+    download_.active = false;
+    bulk_.active = false;
+    ++download_.index;
     if (stop_all) {
         ESP_LOGW(TAG, "SD card write failed; stopping downloads");
-        download_index_ = download_queue_.size();
+        download_.index = download_.queue.size();
     }
     report_download_progress();
     request_current_download();
@@ -237,7 +237,7 @@ bool CameraSession::handle_download_frame(
     bool is_record_start)
 {
     using camera::artemis::BulkStream;
-    if (!download_stream_.header_ready() && !is_record_start) {
+    if (!download_.stream.header_ready() && !is_record_start) {
         // Leftover of an earlier record: acknowledge it so the camera stops
         // resending it.
         camera::ArtemisBulkAckRequest stray_ack;
@@ -247,9 +247,9 @@ bool CameraSession::handle_download_frame(
         }
         return false;
     }
-    if (!download_stream_.header_ready()) {
-        bulk_subtype_ = subtype;
-        bulk_active_ = true;
+    if (!download_.stream.header_ready()) {
+        bulk_.subtype = subtype;
+        bulk_.active = true;
     }
 
     bool sink_failed = false;
@@ -258,29 +258,29 @@ bool CameraSession::handle_download_frame(
         sink_failed = !camera::store::sd_writer_write(media_file_, data, size);
         return !sink_failed;
     };
-    const uint64_t before = download_stream_.delivered_bytes();
+    const uint64_t before = download_.stream.delivered_bytes();
     bool ack = false;
     const BulkStream::Status status =
-        download_stream_.feed(seq, payload, payload_len, sink, ack);
-    const bool progressed = download_stream_.progressed();
+        download_.stream.feed(seq, payload, payload_len, sink, ack);
+    const bool progressed = download_.stream.progressed();
     if (ack) {
         queue_bulk_ack(socket_fd, camera_address, subtype, seq);
     }
 
-    const uint64_t delivered = download_stream_.delivered_bytes();
+    const uint64_t delivered = download_.stream.delivered_bytes();
     if (delivered > before) {
-        download_progress_us_ = esp_timer_get_time();
+        download_.progress_us = esp_timer_get_time();
     }
-    if (before == 0 && download_stream_.header_ready()) {
+    if (before == 0 && download_.stream.header_ready()) {
         ESP_LOGI(TAG, "Download record start: subtype 0x%02x, %u bytes",
-                 (unsigned)subtype, (unsigned)download_stream_.record_len());
+                 (unsigned)subtype, (unsigned)download_.stream.record_len());
     }
-    if (delivered - download_logged_bytes_ >=
+    if (delivered - download_.logged_bytes >=
         CAMERA_DOWNLOAD_LOG_INTERVAL_BYTES) {
-        download_logged_bytes_ = delivered;
+        download_.logged_bytes = delivered;
         ESP_LOGI(TAG, "Download: %llu of %u bytes",
                  (unsigned long long)delivered,
-                 (unsigned)download_stream_.record_len());
+                 (unsigned)download_.stream.record_len());
     }
 
     if (status == BulkStream::Status::invalid) {
@@ -293,12 +293,12 @@ bool CameraSession::handle_download_frame(
         return progressed;
     }
     if (status == BulkStream::Status::complete) {
-        const auto &prefix = download_stream_.prefix();
+        const auto &prefix = download_.stream.prefix();
         camera::artemis::MediaRecordHeader header;
         size_t data_offset = 0;
         size_t data_size = 0;
         const camera::artemis::CatalogEntry &e =
-            download_queue_[download_index_];
+            download_.queue[download_.index];
         if (camera::artemis::parse_media_record(
                 prefix.data(), prefix.size(), header, data_offset, data_size) &&
             (header.dir_num != e.dir_num || header.media_num != e.media_num)) {
@@ -318,7 +318,7 @@ bool CameraSession::handle_download_frame(
 void CameraSession::check_download_stall(int64_t now_us)
 {
     video_.complete_pending(false);
-    if (video_.drain_done(now_us) && !download_active_) {
+    if (video_.drain_done(now_us) && !download_.active) {
         request_current_download();
         return;
     }
@@ -330,8 +330,8 @@ void CameraSession::check_download_stall(int64_t now_us)
         }
         return;
     }
-    if (download_active_ &&
-        now_us - download_progress_us_ >
+    if (download_.active &&
+        now_us - download_.progress_us >
             CONFIG_CAMERA_DOWNLOAD_STALL_TIMEOUT_S * 1000000LL) {
         ESP_LOGW(TAG, "No download data for %d s; skipping the file",
                  CONFIG_CAMERA_DOWNLOAD_STALL_TIMEOUT_S);

@@ -66,8 +66,8 @@ CameraSession::CameraSession(UdpTransport &transport,
       command_cipher_(camera::artemis::command_cipher()),
       catalog_saves_(16, 10 * 1000 * 1000),
       scan_list_(CONFIG_CAMERA_MEDIA_LIST_MAX_PAGES),
-      download_stream_(camera::artemis::kMediaRecordHeaderSize,
-                       CAMERA_DOWNLOAD_REORDER_FRAMES),
+      download_(camera::artemis::kMediaRecordHeaderSize,
+                CAMERA_DOWNLOAD_REORDER_FRAMES),
       // The video download calls back into the session through plain function
       // pointers (std::function would cost internal RAM).
       video_(
@@ -88,7 +88,7 @@ CameraSession::CameraSession(UdpTransport &transport,
                    size);
            },
            [](void *self, int64_t now_us) {
-               static_cast<CameraSession *>(self)->download_progress_us_ =
+               static_cast<CameraSession *>(self)->download_.progress_us =
                    now_us;
            },
            [](void *self, bool stored, bool stop_all) {
@@ -103,11 +103,11 @@ CameraSession::CameraSession(UdpTransport &transport,
                        e.media_id,
                        camera::artemis::MediaCatalog::kFileDownloaded);
                    session->save_session_catalog();
-                   ++session->download_stored_;
+                   ++session->download_.stored;
                    ++session->stored_items_;
                }
                if (sd_failed) {
-                   session->stop_downloads_ = true;
+                   session->download_.stopped = true;
                }
                session->report_download_progress();
            }})
@@ -130,7 +130,7 @@ SessionResult CameraSession::run(const esp_ip4_addr_t &gateway,
     const esp_err_t error = connect_and_run_session(gateway);
     camera::store::sd_writer_end_session();
     // An action sent and not answered is not repeated: the person asks again.
-    action_active_ = false;
+    action_.active = false;
     camera::action::service::abandon_running(
         "the camera session ended before the camera answered");
     // A session that ended early (stop, timeout, camera closed) may have
@@ -204,7 +204,7 @@ esp_err_t CameraSession::wait_for_artemis_packets(
         media_file_.abort();
     }
     video_.end_session();
-    download_active_ = false;
+    download_.active = false;
     return error;
 }
 
@@ -240,19 +240,19 @@ CameraSession::run_artemis_session(int socket_fd,
     work_done_ = false;
     end_session_ = false;
     last_progress_us_ = esp_timer_get_time();
-    bulk_.reset();
-    bulk_subtype_ = 0;
-    bulk_ack_pending_ = 0;
-    bulk_active_ = false;
-    bulk_next_seq_valid_ = false;
-    side_channel_.reset();
-    download_queue_.clear();
-    download_index_ = 0;
-    download_active_ = false;
-    download_stream_.reset();
+    bulk_.reassembler.reset();
+    bulk_.subtype = 0;
+    bulk_.ack_pending = 0;
+    bulk_.active = false;
+    bulk_.next_seq_valid = false;
+    bulk_.side_channel.reset();
+    download_.queue.clear();
+    download_.index = 0;
+    download_.active = false;
+    download_.stream.reset();
     video_.begin_session();
     device_info_ = camera::artemis::DeviceInfo{};
-    action_active_ = false;
+    action_.active = false;
     list_ready_ = false;
     ESP_LOGI(TAG, "Starting ARTEMIS heartbeat loop");
 
@@ -299,7 +299,7 @@ CameraSession::run_artemis_session(int socket_fd,
         // Pause the session heartbeat during a bulk transfer: it would not be
         // acknowledged while the camera is streaming, and its retransmissions
         // only compete with our frame ACKs on the uplink.
-        if (!bulk_active_ && !heartbeat_pending &&
+        if (!bulk_.active && !heartbeat_pending &&
             (last_heartbeat_us == 0 ||
              now_us - last_heartbeat_us >= heartbeat_interval_us)) {
             // The session copies the packet (for retransmissions).
@@ -325,7 +325,7 @@ CameraSession::run_artemis_session(int socket_fd,
                 }
             }
         }
-        size_t retransmitted = bulk_active_ ? 0 : session_.poll(now_us);
+        size_t retransmitted = bulk_.active ? 0 : session_.poll(now_us);
         if (retransmitted > 0) {
             ESP_LOGW(TAG, "Retransmitted %u unacknowledged DATA packet(s)",
                      (unsigned)retransmitted);
@@ -338,7 +338,7 @@ CameraSession::run_artemis_session(int socket_fd,
         // bulk transfer both are paused, so just block for the full interval
         // and stay responsive to incoming frames.
         int64_t timeout_us = CAMERA_RUDP_RECEIVE_TIMEOUT_MS * 1000LL;
-        if (!bulk_active_) {
+        if (!bulk_.active) {
             timeout_us = session_.time_until_retransmit_us(now_us, timeout_us);
             timeout_us =
                 deferred_command_.time_until_retry_us(now_us, timeout_us);
@@ -351,7 +351,7 @@ CameraSession::run_artemis_session(int socket_fd,
             }
         }
         // Send the pending bulk ACK once no frame follows shortly.
-        if (bulk_ack_pending_ > 0 && timeout_us > CAMERA_BULK_ACK_DELAY_US) {
+        if (bulk_.ack_pending > 0 && timeout_us > CAMERA_BULK_ACK_DELAY_US) {
             timeout_us = CAMERA_BULK_ACK_DELAY_US;
         }
         esp_err_t timeout_error =
@@ -437,11 +437,11 @@ CameraSession::run_artemis_session(int socket_fd,
 void CameraSession::release_session_memory(void)
 {
     response_ = camera::artemis::Reassembler();
-    bulk_ = camera::artemis::BulkReassembler();
+    bulk_.reassembler = camera::artemis::BulkReassembler();
     catalog_ = camera::artemis::MediaCatalog();
     thumbnails_.release();
     deferred_command_.clear();
-    std::vector<camera::artemis::CatalogEntry>().swap(download_queue_);
+    std::vector<camera::artemis::CatalogEntry>().swap(download_.queue);
     std::string().swap(camera_id_);
 }
 

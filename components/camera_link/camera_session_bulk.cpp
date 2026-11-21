@@ -128,14 +128,14 @@ void CameraSession::begin_thumbnails()
 void CameraSession::send_bulk_ack(int socket_fd,
                                   const struct sockaddr_in *camera_address)
 {
-    if (bulk_ack_pending_ == 0) {
+    if (bulk_.ack_pending == 0) {
         return;
     }
     camera::ArtemisBulkAckRequest ack;
     const bool built =
-        ack.build(bulk_ack_subtype_, bulk_ack_seqs_, bulk_ack_pending_);
-    video_.note_ack_sent(bulk_ack_subtype_, bulk_ack_seqs_, bulk_ack_pending_);
-    bulk_ack_pending_ = 0;
+        ack.build(bulk_.ack_subtype, bulk_.ack_seqs, bulk_.ack_pending);
+    video_.note_ack_sent(bulk_.ack_subtype, bulk_.ack_seqs, bulk_.ack_pending);
+    bulk_.ack_pending = 0;
     if (built && send_udp_request(socket_fd, camera_address, "BULK ACK", ack) !=
                      ESP_OK) {
         video_.note_ack_failure();
@@ -147,7 +147,7 @@ void CameraSession::send_bulk_ack(int socket_fd,
 // meanwhile for lost and send them again.
 void CameraSession::send_bulk_ack_before_waiting(size_t size)
 {
-    if (bulk_ack_pending_ > 0 && ack_socket_ >= 0 &&
+    if (bulk_.ack_pending > 0 && ack_socket_ >= 0 &&
         !camera::store::sd_writer_has_room(size)) {
         send_bulk_ack(ack_socket_, ack_camera_address_);
     }
@@ -158,12 +158,12 @@ void CameraSession::queue_bulk_ack(int socket_fd,
                                    const struct sockaddr_in *camera_address,
                                    uint8_t subtype, uint16_t seq)
 {
-    if (bulk_ack_pending_ > 0 && subtype != bulk_ack_subtype_) {
+    if (bulk_.ack_pending > 0 && subtype != bulk_.ack_subtype) {
         send_bulk_ack(socket_fd, camera_address);
     }
-    bulk_ack_subtype_ = subtype;
-    bulk_ack_seqs_[bulk_ack_pending_++] = seq;
-    if (bulk_ack_pending_ >= kBulkAckMax) {
+    bulk_.ack_subtype = subtype;
+    bulk_.ack_seqs[bulk_.ack_pending++] = seq;
+    if (bulk_.ack_pending >= kBulkAckMax) {
         send_bulk_ack(socket_fd, camera_address);
     }
 }
@@ -178,27 +178,27 @@ void CameraSession::check_thumbnail_stall(int64_t now_us)
 {
     const char *const next =
         thumbnails_.retrying() ? "skipping it" : "requesting it again";
-    if (bulk_active_) {
-        if (bulk_subtype_ != 0x04 ||
-            now_us - bulk_last_frame_us_ < CAMERA_THUMBNAIL_STALL_US) {
+    if (bulk_.active) {
+        if (bulk_.subtype != 0x04 ||
+            now_us - bulk_.last_frame_us < CAMERA_THUMBNAIL_STALL_US) {
             return;
         }
         ESP_LOGW(TAG, "Thumbnail stalled at %u of %u frames; %s",
-                 (unsigned)bulk_.received_frames(),
-                 (unsigned)bulk_.total_frames(), next);
+                 (unsigned)bulk_.reassembler.received_frames(),
+                 (unsigned)bulk_.reassembler.total_frames(), next);
     } else {
         // Counted from the request, or from the last frame of a record that
         // was rejected after it.
         if (thumbnail_requested_us_ == 0 ||
-            now_us - std::max(thumbnail_requested_us_, bulk_last_frame_us_) <
+            now_us - std::max(thumbnail_requested_us_, bulk_.last_frame_us) <
                 CAMERA_THUMBNAIL_STALL_US) {
             return;
         }
         ESP_LOGW(TAG, "No thumbnail data %d s after the request; %s",
                  (int)(CAMERA_THUMBNAIL_STALL_US / 1000000LL), next);
     }
-    bulk_.reset();
-    bulk_active_ = false;
+    bulk_.reassembler.reset();
+    bulk_.active = false;
     thumbnails_.on_stall();
     request_current_thumbnail();
 }
@@ -254,13 +254,13 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
     // Records the camera sends on its own: acknowledge them, so that it
     // does not send them again and again, and leave the record being
     // received alone. They are no progress of the session.
-    if (is_bulk_side_channel(subtype, download_active_)) {
+    if (is_bulk_side_channel(subtype, download_.active)) {
         camera::ArtemisBulkAckRequest side_ack;
         if (side_ack.build(subtype, &seq, 1)) {
             send_udp_request(socket_fd, camera_address,
                              "BULK ACK (side channel)", side_ack);
         }
-        if (side_channel_.note(subtype, seq)) {
+        if (bulk_.side_channel.note(subtype, seq)) {
             // Diagnostics until the records are understood: every frame
             // once, with its content.
             const size_t dump = payload_len < kSideChannelDumpMax
@@ -270,7 +270,7 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
                      "BULK side channel 0x%02x seq %u: %u payload bytes "
                      "(frame %u of this session)%s",
                      (unsigned)subtype, (unsigned)seq, (unsigned)payload_len,
-                     (unsigned)side_channel_.frames(),
+                     (unsigned)bulk_.side_channel.frames(),
                      is_record_start ? ", record start" : "");
             ESP_LOG_BUFFER_HEX_LEVEL(TAG, payload, dump, ESP_LOG_INFO);
         }
@@ -278,12 +278,12 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
     }
     // Thumbnails keep subtype 0x04; any other subtype during a download is
     // the requested file (0x03 for photos).
-    if (download_active_ && subtype != 0x04) {
+    if (download_.active && subtype != 0x04) {
         return handle_download_frame(socket_fd, camera_address, subtype, seq,
                                      payload, payload_len, is_record_start);
     }
 
-    if (!bulk_active_ || subtype != bulk_subtype_) {
+    if (!bulk_.active || subtype != bulk_.subtype) {
         // A record only begins on its header-bearing (ARTEMIS) frame. Any
         // other frame received between records is a retransmit of a
         // finished record or a reordered straggler: acknowledge it so the
@@ -303,8 +303,8 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
         // The camera may resend the header frame of a record that is
         // already complete; a record starting before the end of the last
         // one is such a repeat, not the next record.
-        if (bulk_next_seq_valid_ && subtype == bulk_subtype_ &&
-            static_cast<int16_t>(seq - bulk_next_seq_) < 0) {
+        if (bulk_.next_seq_valid && subtype == bulk_.subtype &&
+            static_cast<int16_t>(seq - bulk_.next_seq) < 0) {
             camera::ArtemisBulkAckRequest stray_ack;
             if (stray_ack.build(subtype, &seq, 1)) {
                 send_udp_request(socket_fd, camera_address, "BULK ACK (stray)",
@@ -314,41 +314,43 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
                      "BULK subtype 0x%02x seq %u: repeated header of a "
                      "finished record ignored (next record from seq %u)",
                      (unsigned)subtype, (unsigned)seq,
-                     (unsigned)bulk_next_seq_);
+                     (unsigned)bulk_.next_seq);
             return false;
         }
-        bulk_.reset();
-        bulk_subtype_ = subtype;
-        bulk_active_ = true;
+        bulk_.reassembler.reset();
+        bulk_.subtype = subtype;
+        bulk_.active = true;
     }
 
-    bulk_last_frame_us_ = esp_timer_get_time();
-    const bool was_header = bulk_.header_ready();
-    const size_t before = bulk_.received_frames();
+    bulk_.last_frame_us = esp_timer_get_time();
+    const bool was_header = bulk_.reassembler.header_ready();
+    const size_t before = bulk_.reassembler.received_frames();
     const BulkReassembler::Status status =
-        bulk_.feed(seq, payload, payload_len);
+        bulk_.reassembler.feed(seq, payload, payload_len);
     // The reassembler ignores repeated frames; only a new one counts.
-    const bool progressed = bulk_.received_frames() > before;
+    const bool progressed = bulk_.reassembler.received_frames() > before;
 
     // Acknowledge the frame so the camera keeps streaming.
     queue_bulk_ack(socket_fd, camera_address, subtype, seq);
 
     // Log the record boundary so successive records can be told apart.
-    if (!was_header && bulk_.header_ready()) {
+    if (!was_header && bulk_.reassembler.header_ready()) {
         ESP_LOGI(TAG,
                  "BULK record start: subtype 0x%02x base seq %u, ver %u typ %u "
                  "len %u (%u frames)",
-                 (unsigned)subtype, (unsigned)seq, (unsigned)bulk_.version(),
-                 (unsigned)bulk_.type(), (unsigned)bulk_.record_len(),
-                 (unsigned)bulk_.total_frames());
+                 (unsigned)subtype, (unsigned)seq,
+                 (unsigned)bulk_.reassembler.version(),
+                 (unsigned)bulk_.reassembler.type(),
+                 (unsigned)bulk_.reassembler.record_len(),
+                 (unsigned)bulk_.reassembler.total_frames());
     }
 
-    const size_t frames = bulk_.received_frames();
+    const size_t frames = bulk_.reassembler.received_frames();
     if (frames > before && (frames == 1 || frames % 8 == 0)) {
         ESP_LOGI(TAG, "BULK subtype 0x%02x seq %u (%u/%u frames, %u bytes)",
                  (unsigned)subtype, (unsigned)seq, (unsigned)frames,
-                 (unsigned)bulk_.total_frames(),
-                 (unsigned)bulk_.received_bytes());
+                 (unsigned)bulk_.reassembler.total_frames(),
+                 (unsigned)bulk_.reassembler.received_bytes());
     }
 
     if (status == BulkReassembler::Status::invalid) {
@@ -357,14 +359,15 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
         // (reordering, a straggler, or an unexpected framing) is visible in
         // the log.
         const size_t dump = payload_len < 24 ? payload_len : 24;
-        ESP_LOGW(TAG,
-                 "BULK subtype 0x%02x seq %u: invalid record (%s), "
-                 "%u payload bytes; first bytes:",
-                 (unsigned)subtype, (unsigned)seq,
-                 BulkReassembler::reason_name(bulk_.invalid_reason()),
-                 (unsigned)payload_len);
+        ESP_LOGW(
+            TAG,
+            "BULK subtype 0x%02x seq %u: invalid record (%s), "
+            "%u payload bytes; first bytes:",
+            (unsigned)subtype, (unsigned)seq,
+            BulkReassembler::reason_name(bulk_.reassembler.invalid_reason()),
+            (unsigned)payload_len);
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, payload, dump, ESP_LOG_WARN);
-        if (bulk_.invalid_reason() ==
+        if (bulk_.reassembler.invalid_reason() ==
             BulkReassembler::InvalidReason::no_memory) {
             // The thumbnail is skipped; the stall handling asks for it
             // again or moves on.
@@ -372,29 +375,30 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
                 TAG,
                 "No %u B block for the thumbnail record (largest free "
                 "block %u B, free heap %u B)",
-                (unsigned)bulk_.total_bytes(),
+                (unsigned)bulk_.reassembler.total_bytes(),
                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
         }
-        bulk_.reset();
-        bulk_active_ = false;
+        bulk_.reassembler.reset();
+        bulk_.active = false;
         return false;
     }
     if (status == BulkReassembler::Status::complete) {
-        bulk_next_seq_ =
-            static_cast<uint16_t>(bulk_.base_seq() + bulk_.total_frames());
-        bulk_next_seq_valid_ = true;
+        bulk_.next_seq = static_cast<uint16_t>(
+            bulk_.reassembler.base_seq() + bulk_.reassembler.total_frames());
+        bulk_.next_seq_valid = true;
         MediaRecordHeader header;
         size_t jpeg_offset = 0;
         size_t jpeg_size = 0;
-        const bool parsed =
-            parse_media_record(bulk_.payload(), bulk_.payload_size(), header,
-                               jpeg_offset, jpeg_size);
+        const bool parsed = parse_media_record(bulk_.reassembler.payload(),
+                                               bulk_.reassembler.payload_size(),
+                                               header, jpeg_offset, jpeg_size);
         if (parsed) {
             ESP_LOGI(TAG,
                      "BULK subtype 0x%02x complete: %u record bytes, "
                      "%u JPEG bytes (dir %lld num %lld)",
-                     (unsigned)subtype, (unsigned)bulk_.received_bytes(),
+                     (unsigned)subtype,
+                     (unsigned)bulk_.reassembler.received_bytes(),
                      (unsigned)jpeg_size, (long long)header.dir_num,
                      (long long)header.media_num);
         }
@@ -403,7 +407,7 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
             // Thumbnail: store it on the SD card and record it in the
             // catalog. Date the file by the capture time from the media
             // list.
-            const uint8_t *jpeg = bulk_.payload() + jpeg_offset;
+            const uint8_t *jpeg = bulk_.reassembler.payload() + jpeg_offset;
             // The answer names dir/num, which is unique among the items of
             // the current media list (only those are requested).
             const CatalogEntry *entry =
@@ -451,8 +455,8 @@ bool CameraSession::handle_bulk_frame(int socket_fd,
             }
         }
 
-        bulk_.reset();
-        bulk_active_ = false;
+        bulk_.reassembler.reset();
+        bulk_.active = false;
 
         if (subtype == 0x04) {
             thumbnails_.advance();

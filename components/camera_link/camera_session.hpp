@@ -235,10 +235,13 @@ class CameraSession
     // The camera's device info of this session, for checking an action.
     camera::artemis::DeviceInfo device_info_;
     // The action whose answer the session waits for (see send_next_action()).
-    bool action_active_ = false;
-    uint32_t action_id_ = 0;
-    camera::action::Action action_;
-    int64_t action_sent_us_ = 0;
+    struct ActionState {
+        bool active = false;
+        uint32_t id = 0;
+        camera::action::Action action;
+        int64_t sent_us = 0;
+    };
+    ActionState action_;
     // The media list of this session is complete (or as far as it was read),
     // so a deletion may look its file up.
     bool list_ready_ = false;
@@ -254,43 +257,56 @@ class CameraSession
     int64_t last_progress_us_ = 0;
     // Battery of the camera of the session.
     int battery_percent_ = -1;
-    camera::artemis::BulkReassembler bulk_;
-    uint8_t bulk_subtype_ = 0;
-    // Bulk frames received but not yet acknowledged, all of one subtype.
-    uint16_t bulk_ack_seqs_[kBulkAckMax] = {};
-    size_t bulk_ack_pending_ = 0;
-    uint8_t bulk_ack_subtype_ = 0;
-    bool bulk_active_ = false;
-    // Sequence that follows the last completed bulk record, so that a resent
-    // header frame of that record is not taken for the start of the next one.
-    uint16_t bulk_next_seq_ = 0;
-    bool bulk_next_seq_valid_ = false;
-    // Last frame of the record being received.
-    int64_t bulk_last_frame_us_ = 0;
-    // Bulk frames outside the requested media (see bulk_side_channel.hpp).
-    camera::artemis::BulkSideChannel side_channel_;
+    // State of the bulk channel (thumbnails, photos, videos).
+    struct BulkState {
+        camera::artemis::BulkReassembler reassembler;
+        uint8_t subtype = 0;
+        // Bulk frames received but not yet acknowledged, all of one subtype.
+        uint16_t ack_seqs[kBulkAckMax] = {};
+        size_t ack_pending = 0;
+        uint8_t ack_subtype = 0;
+        bool active = false;
+        // Sequence that follows the last completed bulk record, so that a
+        // resent header frame of that record is not taken for the start of the
+        // next one.
+        uint16_t next_seq = 0;
+        bool next_seq_valid = false;
+        // Last frame of the record being received.
+        int64_t last_frame_us = 0;
+        // Bulk frames outside the requested media (see
+        // bulk_side_channel.hpp).
+        camera::artemis::BulkSideChannel side_channel;
+    };
+    BulkState bulk_;
 
     // Media download state, reset at the start of each session. A download is
     // active from its request (cmdId 1285) until its record is complete or it
     // is aborted.
-    std::vector<camera::artemis::CatalogEntry> download_queue_;
-    size_t download_index_ = 0;
-    size_t download_stored_ = 0;
-    bool download_active_ = false;
-    int64_t download_progress_us_ = 0;
-    int64_t download_started_us_ = 0;
-    uint64_t download_logged_bytes_ = 0;
-    camera::artemis::BulkStream download_stream_;
+    struct DownloadState {
+        DownloadState(size_t header_size, size_t reorder_frames)
+            : stream(header_size, reorder_frames)
+        {
+        }
+        std::vector<camera::artemis::CatalogEntry> queue;
+        size_t index = 0;
+        size_t stored = 0;
+        bool active = false;
+        int64_t progress_us = 0;
+        int64_t started_us = 0;
+        uint64_t logged_bytes = 0;
+        camera::artemis::BulkStream stream;
+        // Set when writing a video failed: no further downloads.
+        bool stopped = false;
+    };
+    DownloadState download_;
     camera::store::MediaFileWriter media_file_;
-    // Set when writing a video failed: no further downloads.
-    bool stop_downloads_ = false;
 
     // Socket and camera of the running session, for sending pending ACKs from
     // code that has no access to them.
     int ack_socket_ = -1;
     const struct sockaddr_in *ack_camera_address_ = nullptr;
 
-    // Video download by playback (cmdId 769), on top of download_active_.
+    // Video download by playback (cmdId 769), on top of download_.active.
     camera::link::PlaybackDownload video_;
 };
 

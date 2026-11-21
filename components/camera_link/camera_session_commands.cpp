@@ -202,10 +202,10 @@ void CameraSession::process_artemis_response(const SessionEvent &event)
     }
 
     // The answer to the action the session waits for.
-    if (action_active_) {
+    if (action_.active) {
         const std::optional<camera::action::Type> type =
             camera::action::type_of_cmd(cmd_id);
-        if (type && *type == action_.type) {
+        if (type && *type == action_.action.type) {
             handle_action_response(message.json);
             return;
         }
@@ -215,7 +215,7 @@ void CameraSession::process_artemis_response(const SessionEvent &event)
     // streams it. When it refuses the app's fileType, try the media list's.
     if (cmd_id == 769 && video_.active()) {
         if (video_.handle_playback_response(message.json,
-                                            download_queue_[download_index_]) ==
+                                            download_.queue[download_.index]) ==
             camera::link::PlaybackDownload::Response::refused) {
             finish_current_download(false, false);
         }
@@ -224,7 +224,7 @@ void CameraSession::process_artemis_response(const SessionEvent &event)
 
     // The camera acknowledges a download request before streaming the file;
     // a non-zero result means it will not send it.
-    if (cmd_id == 1285 && download_active_) {
+    if (cmd_id == 1285 && download_.active) {
         int64_t result = 0;
         if (json_find_int(message.json, "result", result) && result != 0) {
             ESP_LOGW(TAG, "Camera refused the download (result %lld)",
