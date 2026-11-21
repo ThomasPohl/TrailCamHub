@@ -74,6 +74,7 @@ add_executable(host_tests
     test_media_store.cpp
     test_found_cameras.cpp
     test_mp4_mux.cpp
+    test_mp4_body.cpp
     test_ota_policy.cpp
     test_time_policy.cpp
     test_pppp_session.cpp
@@ -145,6 +146,7 @@ add_executable(host_tests
     ${uplink_dir}/uplink_protocol.cpp
     ${uplink_dir}/video_request.cpp
     ${uplink_dir}/delete_request.cpp
+    ${uplink_dir}/mp4_body.cpp
     ${uplink_dir}/push_protocol.cpp
     ${mp4_dir}/mp4_mux.cpp
     ${mp4_dir}/mp4_file_source.cpp

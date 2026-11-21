@@ -30,7 +30,7 @@
 #include "hub_config.hpp"
 #include "media_catalog.hpp"
 #include "media_store.hpp"
-#include "mp4_file_source.hpp"
+#include "mp4_body.hpp"
 #include "mp4_mux.hpp"
 #include "push_protocol.hpp"
 #include "schedule_state.hpp"
@@ -58,32 +58,16 @@ bool is_video(const CatalogEntry &entry)
     return entry.file_type == 2;
 }
 
-// A recording's MP4, built while it is read from the stored H.264 and AAC.
-struct Mp4Body {
-    mp4::FileSource video;
-    mp4::FileSource audio;
-    mp4::Mp4File file;
-    Mp4Body(const std::string &camera_id, std::int64_t media_id)
-        : video(camera::store::media_path(camera_id, media_id, "h264")),
-          audio(camera::store::media_path(camera_id, media_id, "aac"))
-    {
-    }
-};
-
 // Opens the MP4 of a recording; nullptr (and `reason`) if it cannot be built.
 std::shared_ptr<Mp4Body> open_mp4(const std::string &camera_id,
                                   std::int64_t media_id, std::string &reason)
 {
-    auto body = std::make_shared<Mp4Body>(camera_id, media_id);
-    if (!body->video.exists()) {
-        reason = "the video is not on the SD card";
-        return nullptr;
-    }
-    if (!body->file.open(body->video,
-                         body->audio.exists() && body->audio.size() > 0
-                             ? &body->audio
-                             : nullptr)) {
-        reason = "the MP4 cannot be built: " + body->file.error();
+    auto body = std::make_shared<Mp4Body>(
+        camera::store::media_path(camera_id, media_id, "h264"),
+        camera::store::media_path(camera_id, media_id, "aac"));
+    const Mp4Status status = body->open();
+    if (status != Mp4Status::ok) {
+        reason = body->failure(status);
         return nullptr;
     }
     return body;
