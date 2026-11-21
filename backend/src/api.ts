@@ -47,6 +47,7 @@ import type {
   SdCardState,
 } from './model';
 import { hubFaults } from './faults';
+import { loadHubInputs } from './hub-inputs';
 import {
   approvedAddresses,
   parseDiscovered,
@@ -310,22 +311,10 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
   for (const hubId of await deps.store.listHubIds()) {
     const hub = await deps.store.getHub(hubId);
     if (!hub) continue;
-    const records: Array<{ camera: CameraRecord; commands: CommandRecord[] }> = [];
-    for (const camId of await deps.store.listHubCameraIds(hubId)) {
-      const camera = await deps.store.getCamera(camId);
-      if (camera && camera.hubId === hubId) {
-        records.push({ camera, commands: await deps.store.listCommands(camId) });
-      }
-    }
+    const { records, firmwareChanges, excluded } = await loadHubInputs(deps.store, hub);
     const cameras = records
       .map((r) => toCamera(r.camera, hub, r.commands))
       .sort((a, b) => a.name.localeCompare(b.name));
-    const firmwareChanges = await deps.store.listFirmwareChanges(hubId, 5);
-    const excluded = new Set(
-      (await deps.store.listFoundCameras(hubId))
-        .filter((c) => c.state === 'excluded' && c.camId)
-        .map((c) => c.camId as string),
-    );
     const faults = hubFaults(hub, records, deps.now(), firmwareChanges, excluded).sort(
       (a, b) => Number(a.level === 'warning') - Number(b.level === 'warning'),
     );

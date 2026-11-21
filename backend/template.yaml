@@ -23,6 +23,27 @@ Parameters:
       Requested videos are deleted from S3 this many days after the upload
       (they stay on the hub's SD card).
 
+  FaultMailFrom:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: >-
+      Sender address of the mails about new faults (#265), verified in Amazon
+      SES. Empty switches the mails off. CI passes the GitHub secret
+      FAULT_MAIL_FROM.
+  FaultMailTo:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: >-
+      Recipient of those mails; empty = the sender address. CI passes the
+      optional GitHub secret FAULT_MAIL_TO. In the SES sandbox the address
+      has to be verified too.
+
+Conditions:
+  FaultMailEnabled: !Not [!Equals [!Ref FaultMailFrom, '']]
+  FaultMailToSet: !Not [!Equals [!Ref FaultMailTo, '']]
+
 Globals:
   Function:
     Runtime: nodejs22.x
@@ -157,6 +178,45 @@ Resources:
           AllowMethods: [GET, POST]
           AllowHeaders: [authorization, content-type]
           MaxAge: 3600
+
+  # Mails the operator about new faults (#265), every 30 minutes. A silent hub
+  # cannot report itself, so this runs on a schedule and not at a check-in.
+  FaultMailFunction:
+    Type: AWS::Serverless::Function
+    Condition: FaultMailEnabled
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2022
+        Minify: true
+        Sourcemap: true
+        EntryPoints: [src/handler.ts]
+        External: ['@aws-sdk/*']
+        OutExtension: ['.js=.mjs']
+    Properties:
+      CodeUri: .
+      Handler: handler.faultMailHandler
+      Description: Mails the operator about new faults (#265)
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Table
+          MEDIA_BUCKET: !Ref MediaBucket
+          FAULT_MAIL_FROM: !Ref FaultMailFrom
+          FAULT_MAIL_TO: !If [FaultMailToSet, !Ref FaultMailTo, !Ref FaultMailFrom]
+          NODE_OPTIONS: --enable-source-maps
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref Table
+        - Statement:
+            - Effect: Allow
+              Action: ses:SendEmail
+              Resource: '*'
+      Events:
+        Every30Minutes:
+          Type: Schedule
+          Properties:
+            Schedule: rate(30 minutes)
 
   ApiLogGroup:
     Type: AWS::Logs::LogGroup

@@ -106,6 +106,10 @@ export interface Store {
   /** The newest `limit` changes, newest first. */
   listFirmwareChanges(hubId: string, limit: number): Promise<FirmwareChange[]>;
 
+  /** The faults the admin has been mailed about and that still hold (#265). */
+  getNotifiedFaults(): Promise<string[]>;
+  putNotifiedFaults(keys: string[], at: number): Promise<void>;
+
   putCommand(camId: string, command: CommandRecord): Promise<void>;
   getCommand(camId: string, id: string): Promise<CommandRecord | undefined>;
   listCommands(camId: string): Promise<CommandRecord[]>;

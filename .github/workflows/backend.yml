@@ -152,6 +152,9 @@ jobs:
           ARTIFACT_BUCKET: ${{ vars.AWS_SAM_ARTIFACT_BUCKET }}
           EXECUTION_ROLE: ${{ vars.AWS_CFN_EXECUTION_ROLE_ARN }}
           ALLOWED_ORIGIN: https://${{ github.repository_owner }}.github.io
+          # Mails about new faults (#265); without FAULT_MAIL_FROM they are off.
+          FAULT_MAIL_FROM: ${{ secrets.FAULT_MAIL_FROM }}
+          FAULT_MAIL_TO: ${{ secrets.FAULT_MAIL_TO }}
         run: |
           set -euo pipefail
           ../.github/scripts/run-annotated.sh 'SAM deploy' sam deploy \
@@ -161,7 +164,9 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              "AllowedOrigin=${ALLOWED_ORIGIN,,}"
+              "AllowedOrigin=${ALLOWED_ORIGIN,,}" \
+              "FaultMailFrom=${FAULT_MAIL_FROM}" \
+              "FaultMailTo=${FAULT_MAIL_TO}"
           api_url="$(aws cloudformation describe-stacks --stack-name trailcamhub \
             --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)"
           echo "api_url=$api_url" >> "$GITHUB_OUTPUT"
