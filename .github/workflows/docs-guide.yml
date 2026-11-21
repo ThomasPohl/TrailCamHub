@@ -2,8 +2,10 @@ name: Guide site
 
 # Builds the guide site from docs/guide/ and checks its links and images (#223).
 # It does not publish: the repository has a single GitHub Pages site that the
-# deploy-installer job of firmware-package.yml writes (#207). The built site is
-# kept as an artifact so a reviewer can look at it.
+# deploy-installer job of firmware-package.yml writes (#207). That job builds
+# the same site and publishes it under /docs/. This workflow is the check that
+# fails a pull request before a broken link gets there; the built site is kept
+# as an artifact so a reviewer can look at it.
 
 on:
   pull_request:
