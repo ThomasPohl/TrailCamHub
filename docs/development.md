@@ -87,6 +87,18 @@ CI runs them a second time with AddressSanitizer and
 UndefinedBehaviorSanitizer (`-DHOST_TESTS_SANITIZE=ON` in a build directory
 of its own); a finding fails the run.
 
+The `session_tests` target (part of the same `ctest` run) runs a whole
+camera session of `camera_link` against the camera mock core over loopback UDP
+(`127.0.0.1:40611`). `camera_link` itself is ESP-IDF code; `test/host/esp_stubs`
+provides stand-ins for the ESP-IDF headers and the SD card is a directory. The
+tests compare the result, the files on the card and the normalised log of each
+scenario, so a change to the session code that alters behaviour shows up. A
+run takes about a minute (about five with sanitizers).
+
+`test/host/check_camera_session_compile.sh` additionally compiles the session
+sources in four Kconfig variants (photos, all videos, videos on request,
+discard and preview) with `-Wall -Wextra -Werror`.
+
 Files covered by host tests must not include ESP-IDF headers. New parsing or
 protocol logic belongs in such files, with a test in `test/host`.
 

@@ -120,7 +120,7 @@ changes is in [media-identity.md](media-identity.md); the file formats are in
 | Task | Stack | Runs | Owns |
 |---|---|---|---|
 | `session_ctrl` | 6 KB | the state machine, from one event queue | FSM, cycle settings, the published status (under a lock) |
-| `camera_session` | 8 KB | one camera session per request (`camera_protocol_run()`) | all state of `camera_link` during a session; the camera's directory on the SD card |
+| `camera_session` | 8 KB | one camera session per request (`camera_protocol_run()`) | all state of `camera_link` during a session (members of one long-lived `CameraSession` object, `camera_session*.cpp`; `camera_protocol.cpp` is the C API around it); the camera's directory on the SD card |
 | `uplink` | 12 KB (TLS) | one sync per request (`uplink::run()`) | the catalogs of all cameras during the sync |
 | `scheduler` | 6 KB | requests cycles on the plan, enters deep sleep | the schedule state (RTC memory) |
 | `hub_console` | 12 KB | serial commands | nothing shared; calls the request interface |

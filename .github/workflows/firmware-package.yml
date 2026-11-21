@@ -276,6 +276,12 @@ jobs:
           .github/scripts/run-annotated.sh "Host test build (sanitizers)" cmake --build build-host-sanitize --parallel
           .github/scripts/run-annotated.sh "Host tests (sanitizers)" ctest --test-dir build-host-sanitize --output-on-failure
 
+      # camera_link is ESP-IDF code; the stubs in test/host/esp_stubs let it
+      # compile on the host in every Kconfig variant the session supports.
+      - name: Compile camera session variants
+        shell: bash
+        run: .github/scripts/run-annotated.sh "Camera session compile matrix" test/host/check_camera_session_compile.sh
+
       # The files of the host tests build without ESP-IDF, so clang-tidy can
       # check them with the flags of that build (.clang-tidy).
       - name: Static analysis (clang-tidy)
