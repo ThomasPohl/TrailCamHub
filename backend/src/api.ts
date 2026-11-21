@@ -906,6 +906,9 @@ export function parseMemory(raw: unknown): HubMemory | undefined {
 
 const UPLINKS: readonly HubUplink[] = ['wifi', 'modem', 'ethernet'];
 
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+
 /**
  * Transport, modem signal and mobile network of a check-in (#149); unknown
  * values are left out. A hub without the operator field (older firmware) sends
@@ -925,11 +928,7 @@ export function uplinkOf(body: CheckinRequest): {
   }
   const operator =
     typeof body.modemOperator === 'string'
-      ? // eslint-disable-next-line no-control-regex
-        body.modemOperator
-          .replace(/[\u0000-\u001f\u007f]/g, '')
-          .trim()
-          .slice(0, 40)
+      ? body.modemOperator.replace(CONTROL_CHARS, '').trim().slice(0, 40)
       : '';
   if (uplink === 'modem' && operator) out.modemOperator = operator;
   return out;
