@@ -46,7 +46,7 @@ The session state machine is unchanged: `UPLINK_JOIN` brings the uplink up, `UPL
 2. Wait until the modem answers AT commands over USB.
 3. Radio on (`AT+CFUN=1`), SIM PIN entered if the card asks for it (see below).
 4. Wait for the network registration (home network or roaming).
-5. Signal strength and operator are logged, the data call is made (PPP); with an APN the PDP context is set first.
+5. Signal strength and operator are logged (and sent in the check-in as `modemSignalDbm` and `modemOperator`, shown in the admin view), the data call is made (PPP); with an APN the PDP context is set first.
 6. The PPP interface gets an IP address and becomes the default route; the sync runs.
 7. Afterwards: data call ended, radio off (`AT+CFUN=4`) or power off (GPIO), drivers removed. Deep sleep waits for this (at most 30 s).
 
