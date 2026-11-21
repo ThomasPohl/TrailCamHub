@@ -32,6 +32,7 @@ export class MemoryStore implements Store {
   private readonly samples = new Map<string, Sample[]>();
   private readonly firmwareChanges = new Map<string, FirmwareChange[]>();
   private readonly found = new Map<string, Map<string, FoundCamera>>();
+  private notifiedFaults: string[] = [];
 
   async putHub(hub: HubRecord): Promise<void> {
     this.hubs.set(hub.hubId, { ...hub });
@@ -187,6 +188,14 @@ export class MemoryStore implements Store {
   async getFoundCamera(hubId: string, bleAddress: string): Promise<FoundCamera | undefined> {
     const camera = this.found.get(hubId)?.get(bleAddress);
     return camera && { ...camera };
+  }
+
+  async getNotifiedFaults(): Promise<string[]> {
+    return [...this.notifiedFaults];
+  }
+
+  async putNotifiedFaults(keys: string[]): Promise<void> {
+    this.notifiedFaults = [...keys];
   }
 
   async putFoundCamera(hubId: string, camera: FoundCamera): Promise<void> {

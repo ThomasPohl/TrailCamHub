@@ -344,6 +344,20 @@ export class DynamoStore implements Store {
     return this.getItem<FoundCamera>(hubPk(hubId), `BLE#${bleAddress}`);
   }
 
+  async getNotifiedFaults(): Promise<string[]> {
+    const item = await this.getItem<{ keys?: string[] }>('SYS#faults', 'NOTIFIED');
+    return item?.keys ?? [];
+  }
+
+  async putNotifiedFaults(keys: string[], at: number): Promise<void> {
+    await this.db.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: { PK: 'SYS#faults', SK: 'NOTIFIED', keys, at },
+      }),
+    );
+  }
+
   async putFoundCamera(hubId: string, camera: FoundCamera): Promise<void> {
     await this.db.send(
       new PutCommand({

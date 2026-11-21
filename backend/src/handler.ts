@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { handleAdmin, isAdminEvent, type AdminEvent, type AdminResult } from './admin';
 import { handleRequest, type Deps } from './api';
+import { runFaultMail, SesMailer, type FaultMailResult } from './fault-mail';
 import type { ApiRequest } from './http';
 import { S3MediaStorage } from './storage';
 import { DynamoStore } from './store/dynamo';
@@ -51,4 +52,17 @@ export async function handler(
 ): Promise<APIGatewayProxyStructuredResultV2 | AdminResult> {
   if (isAdminEvent(event)) return handleAdmin(event, getDeps());
   return handleRequest(toApiRequest(event as APIGatewayProxyEventV2), getDeps());
+}
+
+/**
+ * Scheduled run (every 30 minutes, template.yaml): mails the operator about
+ * new faults (#265). The sender and the recipient come from FAULT_MAIL_FROM
+ * and FAULT_MAIL_TO; the function exists only when a sender is configured.
+ */
+export async function faultMailHandler(): Promise<FaultMailResult> {
+  const from = requireEnv('FAULT_MAIL_FROM');
+  const to = process.env.FAULT_MAIL_TO || from;
+  const result = await runFaultMail(getDeps().store, new SesMailer(), { from, to }, now());
+  console.log(JSON.stringify({ faultMail: result }));
+  return result;
 }
