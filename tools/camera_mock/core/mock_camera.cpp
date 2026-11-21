@@ -674,8 +674,29 @@ bool Camera::handle_packet(const std::uint8_t *bytes, std::size_t size,
         return false;
     }
 
+    if (packet.kind == Kind::lan_search) {
+        // The app keeps searching for a moment after the session has
+        // started; the camera stops answering then.
+        stats_.lan_searches++;
+        lan_search_ms_ = now_ms;
+        if (state_ != State::session) {
+            send(std::vector<std::uint8_t>(
+                fixtures::kLanSearchReply,
+                fixtures::kLanSearchReply + sizeof(fixtures::kLanSearchReply)));
+        }
+        return true;
+    }
     if (packet.kind == Kind::discovery_request) {
         stats_.discoveries++;
+        if (lan_search_ms_ >= 0 &&
+            now_ms - lan_search_ms_ <= options_.lan_search_window_ms) {
+            for (unsigned i = 0; i < options_.camera_address_repeats; i++) {
+                send(std::vector<std::uint8_t>(
+                    fixtures::kCameraAddress,
+                    fixtures::kCameraAddress +
+                        sizeof(fixtures::kCameraAddress)));
+            }
+        }
         send(std::vector<std::uint8_t>(fixtures::kDiscoveryReply,
                                        fixtures::kDiscoveryReply +
                                            sizeof(fixtures::kDiscoveryReply)));

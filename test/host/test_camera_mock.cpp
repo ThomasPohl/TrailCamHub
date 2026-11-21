@@ -456,6 +456,67 @@ TEST_CASE("camera mock: first DATA without PRE_LOGIN, ALIVE, retransmission")
     CHECK(bench.camera.state() == Camera::State::idle);
 }
 
+TEST_CASE("camera mock: the vendor app's LAN search and punch")
+{
+    // trailcam_2-1-connect.pcap: the app broadcasts F1 30 00 00 to port
+    // 32108, the camera answers 0x41, the app sends 0x41 back, the camera
+    // answers 0x43 (its address) and 0x42, then its first DATA.
+    Bench bench;
+    const std::uint8_t lan_search[] = {0xf1, 0x30, 0x00, 0x00};
+    CHECK(wire::parse(lan_search, sizeof(lan_search)).kind ==
+          wire::Packet::Kind::lan_search);
+    REQUIRE(bench.camera.handle_packet(lan_search, sizeof(lan_search),
+                                       bench.now_ms));
+    auto sent = bench.to_hub.take();
+    REQUIRE(sent.size() == 1);
+    const camera::CameraDiscoveryRequest probe;
+    CHECK(sent[0] == Datagram(probe.data(), probe.data() + probe.size()));
+    CHECK(bench.camera.state() == Camera::State::idle);
+    CHECK(bench.camera.stats().lan_searches == 1);
+
+    bench.now_ms += 120;
+    REQUIRE(
+        bench.camera.handle_packet(probe.data(), probe.size(), bench.now_ms));
+    sent = bench.to_hub.take();
+    REQUIRE(sent.size() == 4);
+    const Datagram address(fixtures::kCameraAddress,
+                           fixtures::kCameraAddress +
+                               sizeof(fixtures::kCameraAddress));
+    for (int i = 0; i < 3; i++) {
+        CHECK(sent[i] == address);
+    }
+    // 00 02, port 40611 and 192.168.43.1, byte-swapped.
+    CHECK(address[24] == 0x00);
+    CHECK(address[25] == 0x02);
+    CHECK(((address[27] << 8) | address[26]) == 40611);
+    CHECK(Datagram(address.begin() + 28, address.begin() + 32) ==
+          Datagram{0x01, 0x2b, 0xa8, 0xc0});
+    CHECK(sent[3] == Datagram(fixtures::kDiscoveryReply,
+                              fixtures::kDiscoveryReply +
+                                  sizeof(fixtures::kDiscoveryReply)));
+    CHECK(bench.camera.state() == Camera::State::discovered);
+
+    // The first DATA follows on its own; later searches are not answered.
+    bench.now_ms += 400;
+    bench.camera.poll(bench.now_ms);
+    CHECK(bench.camera.state() == Camera::State::session);
+    sent = bench.to_hub.take();
+    REQUIRE(sent.size() == 1);
+    CHECK(sent[0] == wire::data(0, fixtures::kFirstDataPayload,
+                                sizeof(fixtures::kFirstDataPayload)));
+    bench.camera.handle_packet(lan_search, sizeof(lan_search), bench.now_ms);
+    CHECK(bench.to_hub.take().empty());
+    CHECK(bench.camera.stats().lan_searches == 2);
+
+    // The hub sends no LAN search and gets only the 0x42.
+    Bench hub_bench;
+    hub_bench.camera.handle_packet(probe.data(), probe.size(),
+                                   hub_bench.now_ms);
+    sent = hub_bench.to_hub.take();
+    REQUIRE(sent.size() == 1);
+    CHECK(sent[0][1] == wire::kDiscoveryReply);
+}
+
 TEST_CASE("camera mock: camera actions (#122 stage 3)")
 {
     using camera::action::interpret;

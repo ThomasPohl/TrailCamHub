@@ -36,8 +36,10 @@ big-endian length. **[verified]**
 
 | Type byte | Name | Meaning |
 |---|---|---|
+| `0x30` | `LAN_SEARCH` | the app's broadcast search (port 32108, §2.3) |
 | `0x41` | `DISCOVERY_REQUEST` | LBCS discovery probe |
 | `0x42` | `DISCOVERY_REPLY` | discovery answer from the camera |
+| `0x43` | — | the camera's address, to the app (§2.3) |
 | `0xD0` | `DATA` | reliable data (carries the ARTEMIS payload) |
 | `0xD1` | `DATA_ACK` | acknowledgement of DATA |
 | `0xE0` | `ALIVE` | transport keep-alive (from camera) |
@@ -87,6 +89,14 @@ F1 41 00 14 4C 42 43 53 00 00 00 00 00 00 00 00 43 43 43 4A 4A 00 00 00
   D1 00 00 00 "ACK"`) about 0.3–0.5 s after discovery on its own, without any
   PRE_LOGIN. The hub still sends PRE_LOGIN by default, because that is the flow verified
   on hardware; `CONFIG_CAMERA_SEND_PRELOGIN` switches it off for a test.
+
+**The app's LAN search (#122).** Before the probe, the app broadcasts `F1 30 00 00`
+to UDP port 32108 (to `192.168.43.255` and `255.255.255.255`). The camera answers from
+port 40611 with a `0x41` carrying the device ID (the same 24 bytes as the probe); the
+app then sends the probe to that address, and the camera answers with `0x43` packets
+(device ID, then `00 02`, port and IPv4 address byte-swapped, 16 zero bytes) and the
+`0x42`, then its first DATA. The hub skips the search and sends the probe to the
+gateway directly. The camera mock answers both flows.
 
 ---
 
