@@ -18,8 +18,7 @@ namespace host_session
 class MockServer
 {
   public:
-    explicit MockServer(const camera_mock::Options &options =
-                            camera_mock::Options());
+    explicit MockServer(const camera_mock::Options &options);
     ~MockServer();
     MockServer(const MockServer &) = delete;
     MockServer &operator=(const MockServer &) = delete;

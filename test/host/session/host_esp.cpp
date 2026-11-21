@@ -107,10 +107,10 @@ int mbedtls_base64_encode(unsigned char *dst, size_t dlen, size_t *olen,
         const uint32_t v = (b0 << 16) | (b1 << 8) | b2;
         dst[out++] = static_cast<unsigned char>(kAlphabet[(v >> 18) & 63]);
         dst[out++] = static_cast<unsigned char>(kAlphabet[(v >> 12) & 63]);
-        dst[out++] = static_cast<unsigned char>(
-            i + 1 < slen ? kAlphabet[(v >> 6) & 63] : '=');
-        dst[out++] = static_cast<unsigned char>(
-            i + 2 < slen ? kAlphabet[v & 63] : '=');
+        const char c2 = i + 1 < slen ? kAlphabet[(v >> 6) & 63] : '=';
+        const char c3 = i + 2 < slen ? kAlphabet[v & 63] : '=';
+        dst[out++] = static_cast<unsigned char>(c2);
+        dst[out++] = static_cast<unsigned char>(c3);
     }
     dst[out] = 0;
     *olen = out;
@@ -148,7 +148,9 @@ bool sd_writer_begin_session()
 {
     return false;
 }
-void sd_writer_end_session() {}
+void sd_writer_end_session()
+{
+}
 bool sd_writer_active()
 {
     return false;
@@ -211,8 +213,12 @@ std::string log_signature()
         for (char c : line.text) {
             text += c;
         }
-        out += std::to_string(line.level) + " " + line.tag + ": " + text +
-               "\n";
+        out += std::to_string(line.level);
+        out += " ";
+        out += line.tag;
+        out += ": ";
+        out += text;
+        out += "\n";
     }
     return out;
 }

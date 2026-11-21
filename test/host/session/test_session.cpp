@@ -351,9 +351,9 @@ TEST_CASE("session: a queued photo is taken before the list is read")
 {
     reset_world();
     act::service::init();
+    const act::Action photo(act::Type::photo);
     const auto added =
-        act::service::submit(act::Action(act::Type::photo), act::Source::console,
-                             "host-test-photo");
+        act::service::submit(photo, act::Source::console, "host-test-photo");
     REQUIRE(added.kind == act::ActionQueue::AddResult::Kind::added);
     host_session::MockServer mock(options_with(3));
     REQUIRE(mock.ok());

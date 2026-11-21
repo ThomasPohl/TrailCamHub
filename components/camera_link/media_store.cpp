@@ -112,7 +112,9 @@ void migrate_dir(const std::string &dir,
         std::string rest;
         if (!camera::store::parse_legacy_name(name, dir_num, media_num, rest))
             continue;
-        const std::string old_path = dir + "/" + name;
+        std::string old_path = dir;
+        old_path += "/";
+        old_path += name;
         const std::pair<std::int64_t, std::int64_t> key{dir_num, media_num};
         const bool partial =
             rest.size() >= 5 && rest.compare(rest.size() - 5, 5, ".part") == 0;
@@ -129,9 +131,11 @@ void migrate_dir(const std::string &dir,
         }
         if (owner == plan.owner.end())
             continue;
-        const std::string new_path =
-            dir + "/" + camera::store::media_base_name(owner->second) + "." +
-            rest;
+        std::string new_path = dir;
+        new_path += "/";
+        new_path += camera::store::media_base_name(owner->second);
+        new_path += ".";
+        new_path += rest;
         if (file_exists(new_path)) {
             // Already stored under the new name: that one is newer.
             if (remove(old_path.c_str()) == 0)

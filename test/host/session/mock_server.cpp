@@ -106,8 +106,8 @@ void MockServer::run()
             }
             if (discovery ||
                 (output_->has_peer && same_endpoint(output_->peer, source))) {
-                camera_->handle_packet(buffer, static_cast<std::size_t>(received),
-                                       now_ms());
+                const auto size = static_cast<std::size_t>(received);
+                camera_->handle_packet(buffer, size, now_ms());
             }
         }
         camera_->poll(now_ms());
