@@ -1,4 +1,6 @@
 idf_component_register(SRCS "uplink.cpp" "uplink_protocol.cpp"
+                            "backend.cpp" "backend_http.cpp"
+                            "backend_checkin.cpp" "backend_commands.cpp"
                             "video_request.cpp" "http_util.cpp"
                             "push_protocol.cpp" "destinations.cpp"
                             "sync_cameras.cpp" "delete_request.cpp"

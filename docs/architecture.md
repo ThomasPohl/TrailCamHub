@@ -49,7 +49,7 @@ schedules) sits in separate files and is covered by the host tests in
 | `sd_storage`, `sd_log` | microSD mount (SDMMC or SPI); log files on the card |
 | `session_controller` | Session state machine and the tasks that drive a cycle: camera session, then uplink; request and status interface for front ends |
 | `schedule`, `schedule_state`, `scheduler` | Wake-up schedule: camera read plan and check-in times, state across deep sleep, the task that requests cycles and sleeps in between |
-| `uplink` | Destinations: own backend (HTTPS check-in, thumbnail upload, acknowledgement), WebDAV |
+| `uplink` | Destinations: own backend (`backend*.cpp`: HTTPS check-in, thumbnail and video upload, commands, acknowledgement), WebDAV (`destinations.cpp`); `uplink.cpp` picks one |
 | `modem_uplink`, `ethernet_uplink` | A7670E 4G modem over USB/PPP; Ethernet (P4 EMAC, W5500) |
 | `hub_config` | Settings in NVS (modes, Wi-Fi, destinations, schedule) with validation and board presets |
 | `hub_console` | Line-based serial commands used by the web installer ([installer.md](installer.md#serial-commands)) |

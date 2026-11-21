@@ -4,6 +4,19 @@ Design decisions that shape the code, newest first, each with its reason so
 that it can be revisited. Details are in the linked issues and pages. Add an
 entry when a decision changes how new code should be written.
 
+## 2026-11-21 — The backend and WebDAV have no common `Destination` interface
+
+#218 proposed one (begin, report, deliver a video, end). With Telegram gone
+(#266) two destinations are left, and they differ in what an interface would
+have to carry: the backend is a protocol (one check-in for all cameras,
+upload URLs, commands, acknowledgement), WebDAV copies files one by one and
+has no video requests. An interface would have one real user per method.
+Both share what was duplicated instead: the camera store (`sync_cameras`),
+the MP4 body (`mp4_body`) and the video decision (`video_request`). The
+backend's code is split by responsibility (`backend_http`, `backend_checkin`,
+`backend_commands`, `backend`); `uplink.cpp` only picks the destination.
+Revisit when a third destination comes. (#218)
+
 ## 2026-11-14 — The project is named `trailcamhub`; older hubs need one flash over USB
 
 The ESP-IDF project was `trailcamhub_ble_poc`. Its name is the `project_name`
