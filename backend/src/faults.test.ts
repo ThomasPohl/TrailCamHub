@@ -138,6 +138,40 @@ describe('hub faults (#265)', () => {
     expect(hubFaults(hub(), [], NOW, [{ ...back, at: NOW - FAILED_WINDOW_S - 1 }])).toEqual([]);
   });
 
+  it('reports a failed or rolled-back update of the hub itself (#149, #265)', () => {
+    const failedUpdate = {
+      at: NOW - 60,
+      from: 'v0.1.12',
+      to: 'v0.1.13',
+      result: 'failed' as const,
+      reason: 'image check',
+    };
+    expect(hubFaults(hub(), [], NOW, [failedUpdate])).toEqual([
+      {
+        kind: 'firmwareUpdateFailed',
+        level: 'warning',
+        value: 0,
+        detail: 'v0.1.12 → v0.1.13: image check',
+        since: NOW - 60,
+      },
+    ]);
+    const rolledBack = { ...failedUpdate, result: 'rolledBack' as const, reason: undefined };
+    expect(hubFaults(hub(), [], NOW, [rolledBack])).toMatchObject([
+      { kind: 'firmwareUpdateFailed', value: 1, detail: 'v0.1.12 → v0.1.13' },
+    ]);
+    // A later successful update ends the fault; an old one is no news.
+    const installed = {
+      at: NOW - 30,
+      from: 'v0.1.12',
+      to: 'v0.1.13',
+      result: 'installed' as const,
+    };
+    expect(hubFaults(hub(), [], NOW, [failedUpdate, installed])).toEqual([]);
+    expect(
+      hubFaults(hub(), [], NOW, [{ ...failedUpdate, at: NOW - FAILED_WINDOW_S - 1 }]),
+    ).toEqual([]);
+  });
+
   it('notices a camera that is no longer read (#297)', () => {
     const stale = camera({ lastSeen: NOW - 600 - 2 * 86_400 });
     expect(hubFaults(hub(), [{ camera: stale, commands: [] }], NOW)).toEqual([
