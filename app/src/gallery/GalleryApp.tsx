@@ -64,6 +64,16 @@ const selectable = (r: Recording) =>
 const videoWanted = (r: Recording) =>
   r.fileType === 2 && (r.state === 'new' || r.state === 'failed');
 
+/** Key of a found camera: a camera is known by its hub and BLE address. */
+const foundKey = (f: FoundCamera) => `${f.hubId}/${f.bleAddress}`;
+
+/**
+ * Taken in, but the hub has not read it yet: it has no camId and no
+ * recordings. The gallery shows it with the read cameras anyway, so it does
+ * not vanish until the next scan.
+ */
+const notReachedYet = (f: FoundCamera) => f.state === 'approved' && !f.camId;
+
 interface DeleteQuestion {
   question: string;
   mediaIds: number[];
@@ -94,21 +104,28 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   // Cameras the hub heard (#298) and asking before one is no longer read.
   const [found, setFound] = useState<FoundCamera[]>([]);
   const [stopAsk, setStopAsk] = useState<FoundCamera>();
+  // A camera taken in but not read yet, opened in its tab (foundKey).
+  const [pendingKey, setPendingKey] = useState<string>();
   // A recording shown large, with its video if asked for (#306).
   const [viewing, setViewing] = useState<{ recording: Recording; video: boolean }>();
   const saving = useRef(false);
 
   const reload = useCallback(async () => {
     try {
-      const s = await api.status();
+      // Both together, so a camera just read does not show twice: once read
+      // and once still waiting. Older backends do not know found cameras:
+      // then the list stays empty.
+      const [s, f] = await Promise.all([
+        api.status(),
+        api.foundCameras().catch((): FoundCamera[] => []),
+      ]);
       setStatus(s);
+      setFound(f);
       const shown = s.cameras.filter((c) => !c.hidden);
       const id = camId && shown.some((c) => c.camId === camId) ? camId : shown[0]?.camId;
       setCamId(id);
       setItems(id ? await api.recordings(id) : []);
       setLoadError(undefined);
-      // Older backends do not know found cameras: then the list stays empty.
-      api.foundCameras().then(setFound, () => setFound([]));
     } catch (error) {
       setLoadError(error instanceof ApiError && error.status === 401 ? 'signin' : errorText(error));
     }
@@ -150,6 +167,28 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const cameraName = status?.cameras.find((c) => c.camId === camId)?.name ?? 'Kamera';
   const shownCameras = status?.cameras.filter((c) => !c.hidden) ?? [];
   const currentCamera = status?.cameras.find((c) => c.camId === camId);
+  const notReached = found.filter(notReachedYet);
+  // The open camera that waits for its first read; without a read camera
+  // the first waiting one is open.
+  const openPending = manage
+    ? undefined
+    : (notReached.find((f) => foundKey(f) === pendingKey) ??
+      (shownCameras.length === 0 ? notReached[0] : undefined));
+  // A read camera's recordings are shown.
+  const showCamera = !manage && !openPending;
+
+  // Once the hub has read the open waiting camera, its tab turns into a
+  // normal one: open that, with its recordings.
+  useEffect(() => {
+    if (pendingKey === undefined) return;
+    const entry = found.find((f) => foundKey(f) === pendingKey);
+    if (entry && notReachedYet(entry)) return;
+    setPendingKey(undefined);
+    if (entry?.camId && status?.cameras.some((c) => c.camId === entry.camId && !c.hidden)) {
+      setCamId(entry.camId);
+      setItems(undefined);
+    }
+  }, [found, pendingKey, status]);
 
   const decide = async (camera: FoundCamera, state: 'approved' | 'excluded', name?: string) => {
     setBusy(true);
@@ -158,7 +197,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       const shown = name ?? camera.name;
       setNotice(
         state === 'approved'
-          ? `Die Kamera „${shown}“ wird ab dem nächsten Kontakt mit dem Hub gelesen.`
+          ? `Die Kamera „${shown}“ wird ab dem nächsten Kontakt mit dem Hub gelesen.${
+              camera.camId ? '' : ' Bis dahin steht sie ohne Aufnahmen bei Ihren Kameras.'
+            }`
           : `Die Kamera „${shown}“ wird nicht mehr gelesen. Sie steht unten unter „Nicht abgefragte Kameras“.`,
       );
       await reload();
@@ -280,10 +321,10 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   };
 
   // Returns whether the name was stored, so the form can close.
-  const renameCamera = async (id: string, name: string): Promise<boolean> => {
+  const rename = async (run: () => Promise<string>): Promise<boolean> => {
     setBusy(true);
     try {
-      const stored = await api.renameCamera(id, name);
+      const stored = await run();
       setNotice(
         `Die Kamera heißt jetzt „${stored}“. Neue Videos landen im Unterordner „${folderName(stored)}“.`,
       );
@@ -297,6 +338,14 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       setBusy(false);
     }
   };
+
+  const renameCamera = (id: string, name: string) => rename(() => api.renameCamera(id, name));
+  // A camera not read yet keeps the name and takes it at its first read.
+  const renamePending = (camera: FoundCamera, name: string) =>
+    rename(async () => {
+      await api.decideCamera(camera.hubId, camera.bleAddress, 'approved', name);
+      return name;
+    });
 
   const pickFolder = async (allow: boolean) => {
     try {
@@ -322,11 +371,18 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const switchCamera = (id: string) => {
     setManage(false);
     setRenaming(undefined);
+    setPendingKey(undefined);
     if (id !== camId) {
       setCamId(id);
       setItems(undefined);
       setSelected(new Set());
     }
+  };
+  const openWaiting = (camera: FoundCamera) => {
+    setManage(false);
+    setRenaming(undefined);
+    setPendingKey(foundKey(camera));
+    setSelected(new Set());
   };
 
   return (
@@ -401,7 +457,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
           {status && (
             <div className="g-tabs" role="tablist" aria-label="Kameras">
               {shownCameras.map((c) => {
-                const active = !manage && c.camId === camId;
+                const active = showCamera && c.camId === camId;
                 if (active && renaming === c.camId) {
                   return (
                     <RenameForm
@@ -434,6 +490,41 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                   </span>
                 );
               })}
+              {notReached.map((f) => {
+                const key = foundKey(f);
+                const active = openPending === f;
+                if (active && renaming === key) {
+                  return (
+                    <RenameForm
+                      key={key}
+                      name={f.name}
+                      disabled={busy}
+                      onRename={(name) => renamePending(f, name)}
+                      onCancel={() => setRenaming(undefined)}
+                    />
+                  );
+                }
+                return (
+                  <span key={key} className="g-tab-wrap">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className="g-tab g-tab--waiting"
+                      onClick={() => openWaiting(f)}
+                    >
+                      {f.name} <span className="g-tab__note">noch nicht erreicht</span>
+                    </button>
+                    {active && (
+                      <RenameButton
+                        label="Umbenennen"
+                        disabled={busy}
+                        onClick={() => setRenaming(key)}
+                      />
+                    )}
+                  </span>
+                );
+              })}
               <button
                 type="button"
                 role="tab"
@@ -442,6 +533,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                 onClick={() => {
                   setManage(true);
                   setRenaming(undefined);
+                  setPendingKey(undefined);
                 }}
               >
                 Kameras verwalten
@@ -467,7 +559,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                   <SearchIcon /> Nach Kameras suchen
                 </button>
               </div>
-              {status.cameras.length === 0 ? (
+              {status.cameras.length === 0 && notReached.length === 0 ? (
                 <p className="g-hint">
                   {isAdmin && !api.elevated()
                     ? 'Dieses Konto hat keinen verknüpften Hub. Unter „Verwaltung“ den Code eingeben, dann sind alle Hubs sichtbar.'
@@ -565,6 +657,45 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                         </tr>
                       );
                     })}
+                    {notReached.map((f) => {
+                      const key = foundKey(f);
+                      return (
+                        <tr key={key}>
+                          <th scope="row">
+                            {renaming === key ? (
+                              <RenameForm
+                                name={f.name}
+                                disabled={busy}
+                                onRename={(name) => renamePending(f, name)}
+                                onCancel={() => setRenaming(undefined)}
+                              />
+                            ) : (
+                              <span className="g-cams__name">
+                                {f.name}
+                                <RenameButton
+                                  label={`${f.name} umbenennen`}
+                                  disabled={busy}
+                                  onClick={() => setRenaming(key)}
+                                />
+                              </span>
+                            )}
+                          </th>
+                          <td>in der Galerie · noch nicht erreicht</td>
+                          <td>
+                            <div className="g-cams__actions">
+                              <button
+                                type="button"
+                                className="g-btn g-btn--quiet"
+                                disabled={busy}
+                                onClick={() => setStopAsk(f)}
+                              >
+                                Nicht mehr abfragen
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -577,7 +708,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </section>
           )}
 
-          {!manage && status && camId && (
+          {status && openPending && (
+            <WaitingCamera camera={openPending} nextContact={status.nextContact} now={t} />
+          )}
+
+          {showCamera && status && camId && (
             <div className="g-camera-bar">
               {/* The tab shows the name; the heading is for screen readers. */}
               <h2 className="g-visually-hidden">Kamera „{cameraName}“</h2>
@@ -602,11 +737,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               )}
             </div>
           )}
-          {!manage && status && currentCamera && (
+          {showCamera && status && currentCamera && (
             <CameraHints camera={currentCamera} hubLastContact={status.lastContact} />
           )}
 
-          {!manage && camId && chosen.length > 0 && (
+          {showCamera && camId && chosen.length > 0 && (
             <div className="g-selbar" role="region" aria-label="Auswahl">
               <p>
                 {chosen.length === 1
@@ -659,16 +794,16 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </div>
           )}
 
-          {!manage && items === undefined && !loadError && (
+          {showCamera && items === undefined && !loadError && (
             <p className="g-hint">Bilder werden geladen …</p>
           )}
-          {!manage && items && items.length === 0 && (
+          {showCamera && items && items.length === 0 && (
             <p className="g-empty">
               Keine Aufnahmen. Neue Bilder erscheinen nach dem nächsten Kontakt.
             </p>
           )}
 
-          {!manage && items && items.length > 0 && camId && (
+          {showCamera && items && items.length > 0 && camId && (
             <ul className="g-grid" aria-label="Aufnahmen">
               {items.map((r) => (
                 <li
@@ -820,8 +955,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               <div className="g-dialog__box">
                 <p id="g-stop">Kamera „{stopAsk.name}“ nicht mehr abfragen?</p>
                 <p className="g-hint">
-                  Der Hub liest sie ab dem nächsten Kontakt nicht mehr. Die bisherigen Aufnahmen
-                  bleiben hier. Unter „Kameras verwalten“ können Sie sie wieder aufnehmen.
+                  {stopAsk.camId
+                    ? 'Der Hub liest sie ab dem nächsten Kontakt nicht mehr. Die bisherigen Aufnahmen bleiben hier. Unter „Kameras verwalten“ können Sie sie wieder aufnehmen.'
+                    : 'Der Hub liest sie dann nicht. Unter „Kameras verwalten“ können Sie sie wieder aufnehmen.'}
                 </p>
                 <div className="g-dialog__actions">
                   <button
@@ -924,6 +1060,41 @@ function CameraFacts({ camera, now }: { camera: GalleryCamera; now: number }) {
   ].filter(Boolean);
   if (facts.length === 0) return null;
   return <p className="g-camera-state">{facts.join(' · ')}</p>;
+}
+
+/**
+ * A camera taken in that the hub has not read yet: shown like a read one,
+ * without recordings, and with a word on when they come.
+ */
+function WaitingCamera({
+  camera,
+  nextContact,
+  now,
+}: {
+  camera: FoundCamera;
+  nextContact: number | undefined;
+  now: number;
+}) {
+  return (
+    <>
+      <div className="g-camera-bar">
+        <h2 className="g-visually-hidden">Kamera „{camera.name}“</h2>
+        <p className="g-camera-state">
+          {camera.lastSeen > 0
+            ? `noch nicht gelesen · zuletzt gehört ${clockTime(camera.lastSeen, now)}`
+            : 'noch nicht gelesen'}
+        </p>
+      </div>
+      <div className="g-banner g-camera-hints" role="status" aria-label="Hinweise zur Kamera">
+        <p>
+          Der Hub hat diese Kamera noch nicht erreicht. Er liest sie beim nächsten Kontakt
+          {nextContact !== undefined && ` (gegen ${clockTime(nextContact, now)})`}, danach
+          erscheinen hier ihre Aufnahmen.
+        </p>
+      </div>
+      <p className="g-empty">Noch keine Aufnahmen.</p>
+    </>
+  );
 }
 
 /** What needs a look at the open camera (#304). */

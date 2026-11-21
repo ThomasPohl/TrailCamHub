@@ -310,6 +310,19 @@ body {
   margin-left: auto;
 }
 
+/* Taken in, not read yet: the tab says so under the name. */
+.g-tab--waiting {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.g-tab__note {
+  color: var(--g-hint);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
 .g-count {
   min-width: 18px;
   padding: 0 5px;
