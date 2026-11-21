@@ -448,6 +448,41 @@ describe('transport and modem signal (#149)', () => {
     hub = await world.deps.store.getHub(HUB_ID);
     expect(hub?.uplink).toBe('wifi');
   });
+
+  it('stores the mobile network, which older firmware does not send', async () => {
+    const world = await galleryWorld();
+    const checkin = (body: Record<string, unknown>) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, { cameras: [], ...body }),
+        world.deps,
+      );
+    const operator = async () => (await world.deps.store.getHub(HUB_ID))?.modemOperator;
+    // No field: nothing stored, the check-in is accepted.
+    expect((await checkin({ hubUplink: 'modem', modemSignalDbm: -87 })).statusCode).toBe(200);
+    expect(await operator()).toBeUndefined();
+    await checkin({ hubUplink: 'modem', modemOperator: '  Telekom.de\n' });
+    expect(await operator()).toBe('Telekom.de');
+    // Only over the modem, and only text.
+    await checkin({ hubUplink: 'wifi', modemOperator: 'Vodafone.de' });
+    expect(await operator()).toBe('Telekom.de');
+    await checkin({ hubUplink: 'modem', modemOperator: 42 });
+    expect(await operator()).toBe('Telekom.de');
+    const admin = await createAppUser(
+      { admin: 'createAppUser', name: 'Thomas', role: 'admin' },
+      world.deps,
+    );
+    if (!admin.ok) throw new Error(admin.error);
+    const hubs = body<Array<{ hubId: string; uplink?: string; modemOperator?: string }>>(
+      await handleRequest(
+        adminRequest(await adminSession(world, admin.userId), 'GET', '/v1/admin/hubs'),
+        world.deps,
+      ),
+    );
+    expect(hubs.find((h) => h.hubId === HUB_ID)).toMatchObject({
+      uplink: 'modem',
+      modemOperator: 'Telekom.de',
+    });
+  });
 });
 
 describe("the hub's own update record (#149)", () => {
@@ -477,12 +512,28 @@ describe("the hub's own update record (#149)", () => {
       reason: 'no check-in',
     });
     now += 60;
+    // A held-back release: an entry with the reason, and no fault of its own.
+    await checkin('v0.1.13', {
+      from: 'v0.1.13',
+      to: 'v0.1.15',
+      result: 'skipped',
+      reason: 'the hub battery is too low',
+      at: now - 2,
+    });
+    now += 60;
     // Malformed reports are ignored.
     await checkin('v0.1.13', { from: 'v0.1.13', result: 'installed' });
     await checkin('v0.1.13', { from: 'a', to: 'b', result: 'exploded' });
 
     const changes = await world.deps.store.listFirmwareChanges(HUB_ID, 10);
     expect(changes).toEqual([
+      {
+        at: NOW + 178,
+        from: 'v0.1.13',
+        to: 'v0.1.15',
+        result: 'skipped',
+        reason: 'the hub battery is too low',
+      },
       {
         at: NOW + 120,
         from: 'v0.1.13',

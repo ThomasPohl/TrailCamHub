@@ -79,6 +79,19 @@ The backend no longer offers firmware (#150). It still receives `hubFirmware`, `
 
 The rollback needs a bootloader built with this option. An update over the air does not replace the bootloader, so a hub flashed before this option existed has to be flashed once with the installer.
 
+## Reporting to the backend
+
+The hub keeps one record of its last update in NVS (`ota::UpdateRecord`) and sends it once as `firmwareUpdate` (`from`, `to`, `result`, optional `reason` and `at`) in a check-in. The result is one of:
+
+| Result       | Meaning                                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------------- |
+| `installed`  | the new firmware confirmed itself with a successful check-in                                               |
+| `rolledBack` | the bootloader went back to the old firmware                                                               |
+| `failed`     | the download or the image check failed (`reason`)                                                          |
+| `skipped`    | a newer release was offered, but the hub held it back (`reason`: battery, signal, rollback, many failures) |
+
+`skipped` is written only when the manifest was read and `ota::decide()` refused a newer release for one of those reasons. A hub that is not ready at all (`ota::ready()`: battery or signal before anything is read) does not read the manifest, so it names no release and reports nothing. A skipped record is sent once per version and reason, not at every daily manifest read, and it never replaces a pending update or a result the backend has not received. The backend shows it as an event but not as a fault. Hubs from before `skipped` and the backend before it work as before: an unknown result is ignored.
+
 ## Board and variant
 
 `CONFIG_HUB_BOARD_ID` names the board of the images (set from the board options), `CONFIG_HUB_BUILD_VARIANT` the variant (`dev`; `sdkconfig.defaults.release` sets `release`). An update keeps both, so a release hub stays on release images.

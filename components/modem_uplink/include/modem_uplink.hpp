@@ -54,4 +54,8 @@ bool active();
 // Signal strength measured during the last connect() in dBm; 0 if unknown.
 int signal_dbm();
 
+// Name of the network of the last connect() (modem_operator.hpp); empty if
+// unknown or if this build has no modem.
+std::string operator_name();
+
 }  // namespace modem_uplink

@@ -14,7 +14,16 @@ import type {
 } from '../model';
 
 export type HubTelemetry = Partial<
-  Pick<HubRecord, 'firmware' | 'batPercent' | 'schedule' | 'uplink' | 'modemSignalDbm' | 'memory'>
+  Pick<
+    HubRecord,
+    | 'firmware'
+    | 'batPercent'
+    | 'schedule'
+    | 'uplink'
+    | 'modemSignalDbm'
+    | 'modemOperator'
+    | 'memory'
+  >
 >;
 export type CameraTelemetry = Partial<
   Pick<

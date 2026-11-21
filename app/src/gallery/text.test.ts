@@ -7,6 +7,7 @@ import {
   faultText,
   folderName,
   memoryText,
+  skipReasonText,
   uplinkText,
   videoFileName,
 } from './text';
@@ -101,6 +102,23 @@ describe('hub connection (#149)', () => {
     expect(uplinkText('modem', -80)).toBe('Mobilfunk, Signal -80 dBm (gut)');
     expect(uplinkText('modem', -91)).toBe('Mobilfunk, Signal -91 dBm (mittel)');
     expect(uplinkText('modem', -110)).toBe('Mobilfunk, Signal -110 dBm (sehr schwach)');
+  });
+
+  it('adds the mobile network when the hub reports it', () => {
+    expect(uplinkText('modem', undefined, 'Telekom.de')).toBe('Mobilfunk (Telekom.de)');
+    expect(uplinkText('modem', -91, 'Telekom.de')).toBe(
+      'Mobilfunk (Telekom.de), Signal -91 dBm (mittel)',
+    );
+    // Only over the modem.
+    expect(uplinkText('wifi', undefined, 'Telekom.de')).toBe('WLAN');
+  });
+});
+
+describe('held-back firmware updates (#142, #149)', () => {
+  it('words the hub reasons and passes unknown ones on', () => {
+    expect(skipReasonText('the hub battery is too low')).toBe('Akku zu schwach');
+    expect(skipReasonText('the cellular signal is too weak')).toBe('Mobilfunksignal zu schwach');
+    expect(skipReasonText('something new')).toBe('something new');
   });
 });
 

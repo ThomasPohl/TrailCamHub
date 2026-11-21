@@ -75,6 +75,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     case hub_config::Transport::modem:
         request.hub_uplink = "modem";
         request.modem_signal_dbm = modem_uplink::signal_dbm();
+        request.modem_operator = modem_uplink::operator_name();
         break;
     case hub_config::Transport::ethernet:
         request.hub_uplink = "ethernet";

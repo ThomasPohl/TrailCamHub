@@ -33,6 +33,7 @@
 #include "iot_usbh_cdc.h"
 #include "iot_usbh_modem.h"
 #include "modem_ids.h"
+#include "modem_operator.hpp"
 #endif
 
 namespace modem_uplink
@@ -63,6 +64,8 @@ std::atomic<bool> s_active{false};
 std::atomic<bool> s_switching_off{false};
 // Signal of the last attach in dBm; 0: unknown.
 std::atomic<int> s_signal_dbm{0};
+// Name of the network of the last attach; guarded by s_settings_lock.
+std::string s_operator_name;
 // Owned by the task.
 bool s_cdc_installed = false;
 bool s_modem_installed = false;
@@ -360,6 +363,9 @@ void log_network(at_handle_t at)
     at_cmd_get_operator_name(at, op, sizeof(op));
     // rssi 0..31 is -113..-51 dBm; 99 unknown.
     s_signal_dbm = csq.rssi >= 0 && csq.rssi <= 31 ? -113 + 2 * csq.rssi : 0;
+    xSemaphoreTake(s_settings_lock, portMAX_DELAY);
+    s_operator_name = clean_operator_name(op);
+    xSemaphoreGive(s_settings_lock);
     if (csq.rssi >= 0 && csq.rssi <= 31) {
         ESP_LOGI(TAG, "Network %s, signal %d dBm (CSQ %d)", op,
                  -113 + 2 * csq.rssi, csq.rssi);
@@ -621,6 +627,7 @@ esp_err_t connect(const Settings &settings)
     }
     xSemaphoreTake(s_settings_lock, portMAX_DELAY);
     s_next_settings = settings;
+    s_operator_name.clear();
     xSemaphoreGive(s_settings_lock);
     s_cancel = false;
     s_signal_dbm = 0;
@@ -648,6 +655,17 @@ bool active()
 int signal_dbm()
 {
     return s_signal_dbm.load();
+}
+
+std::string operator_name()
+{
+    if (s_settings_lock == nullptr) {
+        return "";
+    }
+    xSemaphoreTake(s_settings_lock, portMAX_DELAY);
+    std::string name = s_operator_name;
+    xSemaphoreGive(s_settings_lock);
+    return name;
 }
 
 #else  // !CONFIG_MODEM_UPLINK
@@ -681,6 +699,11 @@ bool active()
 int signal_dbm()
 {
     return 0;
+}
+
+std::string operator_name()
+{
+    return "";
 }
 
 #endif  // CONFIG_MODEM_UPLINK

@@ -319,4 +319,75 @@ TEST_CASE("ota: update record (#149)")
         CHECK_FALSE(ota::update_record_reportable(record));
         CHECK(ota::decode_update_record(ota::encode(record)) == record);
     }
+
+    SUBCASE("a release is held back (#142)")
+    {
+        using ota::Decision;
+        UpdateRecord record;
+        // No news: not newer, not a release, or nothing refused.
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "v1.2.0",
+                                               Decision::not_newer, 7));
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "dev",
+                                               Decision::invalid_offer, 7));
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "v1.3.0",
+                                               Decision::install, 7));
+        CHECK(record.result == UpdateResult::none);
+
+        CHECK(ota::update_record_skipped(record, "v1.2.0", "v1.3.0",
+                                         Decision::battery_low, 1763300000));
+        CHECK(record.result == UpdateResult::skipped);
+        CHECK(record.from == "v1.2.0");
+        CHECK(record.to == "v1.3.0");
+        CHECK(record.reason == ota::decision_text(Decision::battery_low));
+        CHECK(record.at == 1763300000);
+        CHECK(ota::update_record_reportable(record));
+        CHECK(std::string(ota::update_result_name(record.result)) == "skipped");
+        CHECK(ota::decode_update_record(ota::encode(record)) == record);
+
+        // The same reason the next day, reported or not, adds nothing.
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "v1.3.0",
+                                               Decision::battery_low, 2));
+        record.reported = true;
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "v1.3.0",
+                                               Decision::battery_low, 2));
+        CHECK(record.at == 1763300000);
+        // Another reason or another release does.
+        CHECK(ota::update_record_skipped(record, "v1.2.0", "v1.3.0",
+                                         Decision::weak_signal, 3));
+        CHECK_FALSE(record.reported);
+        record.reported = true;
+        CHECK(ota::update_record_skipped(record, "v1.2.0", "v1.4.0",
+                                         Decision::weak_signal, 4));
+        CHECK(record.to == "v1.4.0");
+    }
+
+    SUBCASE("a held-back release never hides another result")
+    {
+        using ota::Decision;
+        // An update under way, or a result the backend has not heard.
+        UpdateRecord record = pending;
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "v1.4.0",
+                                               Decision::gave_up, 9));
+        CHECK(record.result == UpdateResult::pending);
+        record.result = UpdateResult::rolled_back;
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "v1.4.0",
+                                               Decision::gave_up, 9));
+        CHECK(record.result == UpdateResult::rolled_back);
+        // A result the backend has is history and may be replaced.
+        record.reported = true;
+        CHECK(ota::update_record_skipped(record, "v1.2.0", "v1.4.0",
+                                         Decision::rolled_back, 9));
+        CHECK(record.result == UpdateResult::skipped);
+        // Only these refusals are reported.
+        for (Decision d : {Decision::rolled_back, Decision::battery_critical,
+                           Decision::battery_low, Decision::weak_signal,
+                           Decision::gave_up}) {
+            CHECK(ota::decision_is_skip(d));
+        }
+        for (Decision d :
+             {Decision::install, Decision::disabled, Decision::dev_build,
+              Decision::invalid_offer, Decision::not_newer}) {
+            CHECK_FALSE(ota::decision_is_skip(d));
+        }
+    }
 }

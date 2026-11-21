@@ -271,6 +271,7 @@ export class DemoGalleryApi implements GalleryApi {
         firmware: 'v0.1.13',
         uplink: 'modem',
         modemSignalDbm: -91,
+        modemOperator: 'Telekom.de',
         memory: { cycle: 412, heapMin: 41_200, psramMin: 3_250_000, stackSession: 1_400 },
         batPercent: 84,
         lastSeen: this.lastCheckin,
@@ -289,6 +290,13 @@ export class DemoGalleryApi implements GalleryApi {
           { userId: 1_000_000_000_000_002, name: 'Admin', role: 'admin' },
         ],
         firmwareChanges: [
+          {
+            at: this.lastCheckin - 86_400,
+            from: 'v0.1.13',
+            to: 'v0.1.14',
+            result: 'skipped',
+            reason: 'the hub battery is too low',
+          },
           {
             at: this.lastCheckin - 3 * 86_400,
             from: 'v0.1.12',

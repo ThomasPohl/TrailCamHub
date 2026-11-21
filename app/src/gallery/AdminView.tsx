@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { ApiError } from '../api/http';
 import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
 import { isNewer } from './release';
-import { clockTime, faultText, memoryText, uplinkText } from './text';
+import { clockTime, faultText, memoryText, skipReasonText, uplinkText } from './text';
 import type { AdminHub, AuditEntry, GalleryApi, HubHistory, Sample } from './types';
 
 /**
@@ -16,7 +16,10 @@ const UPDATE_RESULT = {
   installed: 'installiert',
   rolledBack: 'zurückgerollt',
   failed: 'fehlgeschlagen',
+  skipped: 'übersprungen',
 } as const;
+
+type FirmwareChangeView = NonNullable<AdminHub['firmwareChanges']>[number];
 
 const ORIGIN: Record<ScheduleOrigin, string> = {
   'built-in': 'Standard',
@@ -346,7 +349,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             {hub.uplink && (
               <>
                 <dt>Verbindung</dt>
-                <dd>{uplinkText(hub.uplink, hub.modemSignalDbm)}</dd>
+                <dd>{uplinkText(hub.uplink, hub.modemSignalDbm, hub.modemOperator)}</dd>
               </>
             )}
             {hub.memory && (
@@ -369,15 +372,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
               <>
                 <dt>Firmware-Wechsel</dt>
                 <dd>
-                  <ul className="g-plain-list" aria-label={`Firmware-Wechsel ${hub.name}`}>
-                    {hub.firmwareChanges.map((c) => (
-                      <li key={c.at}>
-                        {c.from} → {c.to} ({clockTime(c.at, t)})
-                        {c.result && `, ${UPDATE_RESULT[c.result]}`}
-                        {c.reason && `: ${c.reason}`}
-                      </li>
-                    ))}
-                  </ul>
+                  <FirmwareHistory hubName={hub.name} changes={hub.firmwareChanges} now={t} />
                 </dd>
               </>
             )}
@@ -542,6 +537,55 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
         )}
       </section>
     </section>
+  );
+}
+
+/** One firmware event as a line: "v1.2.0 → v1.3.0 (15.11. 05:12), installiert" (#149). */
+function changeText(change: FirmwareChangeView, now: number): string {
+  const result = change.result ? `, ${UPDATE_RESULT[change.result]}` : '';
+  const reason = change.reason
+    ? `: ${change.result === 'skipped' ? skipReasonText(change.reason) : change.reason}`
+    : '';
+  return `${change.from} → ${change.to} (${clockTime(change.at, now)})${result}${reason}`;
+}
+
+/** The latest firmware event; the last five (#149) on tap. */
+function FirmwareHistory({
+  hubName,
+  changes,
+  now,
+}: {
+  hubName: string;
+  changes: FirmwareChangeView[];
+  now: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [latest] = changes;
+  if (!latest) return null;
+  return (
+    <>
+      <span>{changeText(latest, now)}</span>
+      {changes.length > 1 && (
+        <>
+          {' '}
+          <button
+            type="button"
+            className="g-btn g-btn--small g-btn--quiet"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? 'Verlauf ausblenden' : `Verlauf (${changes.length})`}
+          </button>
+          {open && (
+            <ul className="g-plain-list" aria-label={`Firmware-Verlauf ${hubName}`}>
+              {changes.map((c) => (
+                <li key={`${c.at}-${c.to}-${c.result ?? ''}`}>{changeText(c, now)}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </>
   );
 }
 
