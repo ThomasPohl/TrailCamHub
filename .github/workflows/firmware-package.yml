@@ -433,6 +433,25 @@ jobs:
           if [[ -f package-lock.json ]]; then npm ci; else npm install --no-audit --no-fund; fi
           VITE_APP_VERSION="${GITHUB_SHA:0:7}" npm run build
 
+      # The guide (docs/guide/) shares the Pages site too (/docs/guide/, #223).
+      # A problem with it must never stop the installer deploy, so it only
+      # warns here; docs-guide.yml fails the pull request that breaks a link.
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build guide site
+        shell: bash
+        run: |
+          set -uo pipefail
+          if pip install --quiet "markdown==3.*" &&
+            python3 .github/scripts/build-guide-site.py guide-site; then
+            echo "Guide site built"
+          else
+            echo "::warning::The guide site was not built or has broken links; it is published as far as it was built"
+          fi
+
       # Every board's package; boards.json says which the installer offers.
       - name: Download firmware packages
         uses: actions/download-artifact@v8
@@ -603,6 +622,7 @@ jobs:
           cp store/versions.json site/
           cp -r store/builds site/builds
           cp -r app/dist site/app
+          if [[ -d guide-site ]]; then cp -r guide-site site/docs; fi
 
       - name: Upload GitHub Pages artifact
         id: pages-artifact
