@@ -674,6 +674,13 @@ void check_for_update(const Conditions &conditions)
                  decision_text(decision));
         set_last_check_text("release " + offer.version +
                             " not installed: " + decision_text(decision));
+        // Held back for a reason of the hub's own: the backend hears of it
+        // once (#142, #149).
+        UpdateRecord record = load_update_record();
+        if (update_record_skipped(record, running, offer.version, decision,
+                                  record_time())) {
+            store_update_record(record);
+        }
         return;
     }
     if (install(offer, error) != ESP_OK) {

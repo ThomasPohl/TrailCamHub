@@ -404,6 +404,8 @@ const char *update_result_name(UpdateResult result)
         return "rolledBack";
     case UpdateResult::failed:
         return "failed";
+    case UpdateResult::skipped:
+        return "skipped";
     case UpdateResult::none:
         break;
     }
@@ -458,7 +460,7 @@ UpdateRecord decode_update_record(const std::string &text)
     UpdateRecord record;
     const UpdateResult results[] = {
         UpdateResult::pending, UpdateResult::installed,
-        UpdateResult::rolled_back, UpdateResult::failed};
+        UpdateResult::rolled_back, UpdateResult::failed, UpdateResult::skipped};
     for (UpdateResult result : results) {
         if (fields[1] == update_result_name(result)) {
             record.result = result;
@@ -511,7 +513,38 @@ bool update_record_reportable(const UpdateRecord &record)
 {
     return !record.reported && (record.result == UpdateResult::installed ||
                                 record.result == UpdateResult::rolled_back ||
-                                record.result == UpdateResult::failed);
+                                record.result == UpdateResult::failed ||
+                                record.result == UpdateResult::skipped);
+}
+
+bool decision_is_skip(Decision decision)
+{
+    return decision == Decision::rolled_back ||
+           decision == Decision::battery_critical ||
+           decision == Decision::battery_low ||
+           decision == Decision::weak_signal || decision == Decision::gave_up;
+}
+
+bool update_record_skipped(UpdateRecord &record, const std::string &running,
+                           const std::string &offered, Decision decision,
+                           std::int64_t now)
+{
+    if (!decision_is_skip(decision) || record.result == UpdateResult::pending ||
+        update_record_reportable(record)) {
+        return false;
+    }
+    const std::string reason = decision_text(decision);
+    if (record.result == UpdateResult::skipped && record.to == offered &&
+        record.reason == reason) {
+        return false;
+    }
+    record.result = UpdateResult::skipped;
+    record.from = running;
+    record.to = offered;
+    record.reason = reason;
+    record.at = now;
+    record.reported = false;
+    return true;
 }
 
 }  // namespace ota

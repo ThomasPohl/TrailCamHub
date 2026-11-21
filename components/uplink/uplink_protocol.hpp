@@ -88,7 +88,7 @@ struct FirmwareUpdateReport {
     bool present = false;
     std::string from;
     std::string to;
-    std::string result;   // installed, rolledBack, failed
+    std::string result;   // installed, rolledBack, failed, skipped
     std::string reason;   // left out when empty
     std::int64_t at = 0;  // Unix seconds; left out when 0 (clock not set)
 };

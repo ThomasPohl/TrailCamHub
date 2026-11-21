@@ -138,9 +138,18 @@ std::string to_hex(const std::uint8_t *digest, std::size_t length);
 // firmware and completed after it: `installed` when the new firmware
 // confirmed itself (a successful check-in), `rolled_back` when the
 // bootloader went back to the old one. `failed` when the download or the
-// image check failed. Times are Unix seconds from the hub's clock, 0 if it
+// image check failed. `skipped` when a newer release was offered but the hub
+// did not install it (battery, signal, too many failures; the reason is in
+// `reason`, #142). Times are Unix seconds from the hub's clock, 0 if it
 // was not set yet.
-enum class UpdateResult { none, pending, installed, rolled_back, failed };
+enum class UpdateResult {
+    none,
+    pending,
+    installed,
+    rolled_back,
+    failed,
+    skipped
+};
 
 struct UpdateRecord {
     UpdateResult result = UpdateResult::none;
@@ -172,5 +181,21 @@ bool update_record_confirmed(UpdateRecord &record, const std::string &running,
 // Whether the record goes into the next check-in: complete and not
 // reported yet.
 bool update_record_reportable(const UpdateRecord &record);
+
+// Whether a refused offer is worth a `skipped` record: the hub holds a newer
+// release back for a reason of its own (rolled back before, battery, signal,
+// too many failures). Not an offer that is no newer or no release, which is
+// no news.
+bool decision_is_skip(Decision decision);
+
+// A release `offered` was not installed because of `decision` (#142). Turns
+// `record` into a `skipped` record and returns true if that is news: not for
+// a decision that is no skip, not while an update is pending or its result
+// is not reported yet, and not for the same version and reason as the record
+// already holds (the manifest is read once a day, so a standing condition
+// would otherwise add an event a day). False means `record` is unchanged.
+bool update_record_skipped(UpdateRecord &record, const std::string &running,
+                           const std::string &offered, Decision decision,
+                           std::int64_t now);
 
 }  // namespace ota
