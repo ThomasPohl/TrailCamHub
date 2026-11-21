@@ -167,9 +167,9 @@ describe('hub faults (#265)', () => {
       result: 'installed' as const,
     };
     expect(hubFaults(hub(), [], NOW, [failedUpdate, installed])).toEqual([]);
-    expect(
-      hubFaults(hub(), [], NOW, [{ ...failedUpdate, at: NOW - FAILED_WINDOW_S - 1 }]),
-    ).toEqual([]);
+    expect(hubFaults(hub(), [], NOW, [{ ...failedUpdate, at: NOW - FAILED_WINDOW_S - 1 }])).toEqual(
+      [],
+    );
   });
 
   it('notices a camera that is no longer read (#297)', () => {
