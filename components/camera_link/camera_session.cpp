@@ -114,6 +114,43 @@ CameraSession::CameraSession(UdpTransport &transport,
 {
 }
 
+// Resets the state of one session once the connection is up, right before the
+// heartbeat loop. The state lives in one long-lived object, so nothing is
+// carried over from the previous session.
+void CameraSession::begin_session()
+{
+    response_.reset();
+    logged_in_ = false;
+    token_ = 0;
+    devinfo_requested_ = false;
+    media_requested_ = false;
+    next_command_seq_ = 2;
+    camera_id_.clear();
+    catalog_.clear();
+    thumbnails_.release();
+    thumbnail_requested_us_ = 0;
+    deferred_command_.clear();
+    thumb_emitted_ = false;
+    scan_list_.reset();
+    work_done_ = false;
+    end_session_ = false;
+    last_progress_us_ = esp_timer_get_time();
+    bulk_.reassembler.reset();
+    bulk_.subtype = 0;
+    bulk_.ack_pending = 0;
+    bulk_.active = false;
+    bulk_.next_seq_valid = false;
+    bulk_.side_channel.reset();
+    download_.queue.clear();
+    download_.index = 0;
+    download_.active = false;
+    download_.stream.reset();
+    video_.begin_session();
+    device_info_ = camera::artemis::DeviceInfo{};
+    action_.active = false;
+    list_ready_ = false;
+}
+
 SessionResult CameraSession::run(const esp_ip4_addr_t &gateway,
                                  const SessionSettings &settings)
 {
@@ -224,36 +261,7 @@ CameraSession::run_artemis_session(int socket_fd,
     int64_t last_heartbeat_us = 0;
     int64_t heartbeat_interval_us = CAMERA_RUDP_HEARTBEAT_INTERVAL_MS * 1000LL;
     int64_t last_receive_us = 0;
-    response_.reset();
-    logged_in_ = false;
-    token_ = 0;
-    devinfo_requested_ = false;
-    media_requested_ = false;
-    next_command_seq_ = 2;
-    camera_id_.clear();
-    catalog_.clear();
-    thumbnails_.release();
-    thumbnail_requested_us_ = 0;
-    deferred_command_.clear();
-    thumb_emitted_ = false;
-    scan_list_.reset();
-    work_done_ = false;
-    end_session_ = false;
-    last_progress_us_ = esp_timer_get_time();
-    bulk_.reassembler.reset();
-    bulk_.subtype = 0;
-    bulk_.ack_pending = 0;
-    bulk_.active = false;
-    bulk_.next_seq_valid = false;
-    bulk_.side_channel.reset();
-    download_.queue.clear();
-    download_.index = 0;
-    download_.active = false;
-    download_.stream.reset();
-    video_.begin_session();
-    device_info_ = camera::artemis::DeviceInfo{};
-    action_.active = false;
-    list_ready_ = false;
+    begin_session();
     ESP_LOGI(TAG, "Starting ARTEMIS heartbeat loop");
 
     while (!stop_requested()) {

@@ -127,6 +127,7 @@ class CameraSession
 
     // --- start, end and the loop of the session ---
     esp_err_t connect_and_run_session(const esp_ip4_addr_t &gateway);
+    void begin_session();
     esp_err_t wait_for_artemis_packets(int socket_fd,
                                        const struct sockaddr_in *camera_address,
                                        int64_t discovery_started_us);
