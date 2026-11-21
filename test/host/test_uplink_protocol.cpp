@@ -370,4 +370,9 @@ TEST_CASE("uplink: transport and modem signal in the check-in (#149)")
     json = build_checkin_json(request);
     CHECK(json.find("\"hubUplink\":\"modem\"") != std::string::npos);
     CHECK(json.find("\"modemSignalDbm\":-87") != std::string::npos);
+    // Older firmware sends no operator; the field is optional (#149).
+    CHECK(json.find("modemOperator") == std::string::npos);
+    request.modem_operator = "Telekom.de";
+    json = build_checkin_json(request);
+    CHECK(json.find("\"modemOperator\":\"Telekom.de\"") != std::string::npos);
 }

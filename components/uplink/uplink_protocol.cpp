@@ -227,6 +227,10 @@ std::string build_checkin_json(const CheckinRequest &request)
         out +=
             ",\"modemSignalDbm\":" + std::to_string(request.modem_signal_dbm);
     }
+    if (!request.modem_operator.empty()) {
+        out += ",\"modemOperator\":\"" + json_escape(request.modem_operator) +
+               "\"";
+    }
     if (request.max_thumb_uploads >= 0) {
         out +=
             ",\"maxThumbUploads\":" + std::to_string(request.max_thumb_uploads);

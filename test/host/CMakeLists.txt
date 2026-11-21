@@ -37,6 +37,7 @@ set(wifi_dir ${repo_root}/components/camera_wifi)
 set(schedule_dir ${repo_root}/components/schedule)
 set(sd_log_dir ${repo_root}/components/sd_log)
 set(ota_dir ${repo_root}/components/ota_update)
+set(modem_dir ${repo_root}/components/modem_uplink)
 set(battery_dir ${repo_root}/components/hub_battery)
 set(copro_dir ${repo_root}/components/coprocessor_update)
 set(diag_dir ${repo_root}/components/diagnostics)
@@ -76,6 +77,7 @@ add_executable(host_tests
     test_mp4_mux.cpp
     test_mp4_body.cpp
     test_ota_policy.cpp
+    test_modem_operator.cpp
     test_time_policy.cpp
     test_pppp_session.cpp
     test_playback.cpp
@@ -155,6 +157,7 @@ add_executable(host_tests
     ${schedule_dir}/schedule_plan.cpp
     ${sd_log_dir}/log_files.cpp
     ${ota_dir}/ota_policy.cpp
+    ${modem_dir}/modem_operator.cpp
     ${copro_dir}/coprocessor_version.cpp
     ${battery_dir}/battery_level.cpp
     ${diag_dir}/cycle_record.cpp
@@ -168,7 +171,7 @@ target_include_directories(host_tests PRIVATE ${ble_dir} ${link_dir} ${mp4_dir} 
                                               ${config_dir}/include
                                               ${console_dir} ${uplink_dir}
                                               ${wifi_dir} ${schedule_dir}
-                                              ${sd_log_dir} ${ota_dir}/include ${battery_dir}
+                                              ${sd_log_dir} ${ota_dir}/include ${modem_dir}/include ${battery_dir}
                                               ${copro_dir} ${diag_dir}
                                               ${mock_dir})
 target_include_directories(host_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})

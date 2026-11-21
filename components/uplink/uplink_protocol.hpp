@@ -114,6 +114,9 @@ struct CheckinRequest {
     // Modem signal measured when connecting, dBm; left out when 0 (unknown
     // or no modem).
     int modem_signal_dbm = 0;
+    // Name of the mobile network (modem_uplink::operator_name()); left out
+    // when empty.
+    std::string modem_operator;
     // The most thumbnail uploads the backend should answer with; -1 leaves
     // it to the backend (30). Each one is a presigned URL of about 1.8 KB in
     // the response (measured on the WROOM-32D, #244). The backend hands out
