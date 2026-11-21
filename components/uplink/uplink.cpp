@@ -28,7 +28,7 @@
 #include "media_catalog.hpp"
 #include "media_store.hpp"
 #include "modem_uplink.hpp"
-#include "mp4_file_source.hpp"
+#include "mp4_body.hpp"
 #include "mp4_mux.hpp"
 #include "ota_policy.hpp"
 #include "ota_update.hpp"
@@ -181,22 +181,21 @@ HttpResult put_mp4(const std::string &url, const std::string &camera_id,
     size = 0;
     sd_read_us = 0;
     too_large.clear();
-    mp4::FileSource video(
-        camera::store::media_path(camera_id, media_id, "h264"));
-    mp4::FileSource audio(
-        camera::store::media_path(camera_id, media_id, "aac"));
-    if (!video.exists()) {
+    Mp4Body body(camera::store::media_path(camera_id, media_id, "h264"),
+                 camera::store::media_path(camera_id, media_id, "aac"));
+    const Mp4Status status = body.open();
+    if (status == Mp4Status::video_missing) {
         result.error = ESP_ERR_NOT_FOUND;
         return result;
     }
-    mp4::Mp4File file;
-    if (!file.open(video,
-                   audio.exists() && audio.size() > 0 ? &audio : nullptr)) {
+    if (status != Mp4Status::ok) {
         ESP_LOGW(TAG, "Cannot build the MP4 of %s media %lld: %s",
-                 camera_id.c_str(), (long long)media_id, file.error().c_str());
+                 camera_id.c_str(), (long long)media_id,
+                 body.file.error().c_str());
         result.error = ESP_ERR_INVALID_STATE;
         return result;
     }
+    mp4::Mp4File &file = body.file;
     size = file.size();
     VideoLimits limits;
     limits.wifi_bytes = kMaxVideoBytes;
