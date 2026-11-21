@@ -144,4 +144,24 @@ std::string MockServer::log()
     return log_;
 }
 
+Later::Later(int delay_ms, std::function<void()> action)
+    : thread_([delay_ms, action] {
+          std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+          action();
+      })
+{
+}
+
+Later::~Later()
+{
+    join();
+}
+
+void Later::join()
+{
+    if (thread_.joinable()) {
+        thread_.join();
+    }
+}
+
 }  // namespace host_session

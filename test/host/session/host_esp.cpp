@@ -17,6 +17,9 @@
 #include "mbedtls/base64.h"
 #include "sd_writer.hpp"
 #include "time_sync.h"
+#ifdef HOST_VIRTUAL_LINK
+#include "virtual_net.hpp"
+#endif
 
 namespace
 {
@@ -31,9 +34,13 @@ extern "C" {
 
 int64_t esp_timer_get_time(void)
 {
+#ifdef HOST_VIRTUAL_LINK
+    return virtual_net::now_us();
+#else
     using namespace std::chrono;
     return duration_cast<microseconds>(steady_clock::now().time_since_epoch())
         .count();
+#endif
 }
 
 uint32_t esp_random(void)
@@ -66,7 +73,11 @@ size_t heap_caps_get_minimum_free_size(unsigned)
 
 void host_task_delay_ms(uint32_t ms)
 {
+#ifdef HOST_VIRTUAL_LINK
+    virtual_net::advance_us(static_cast<int64_t>(ms) * 1000);
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+#endif
 }
 
 const esp_app_desc_t *esp_app_get_description(void)

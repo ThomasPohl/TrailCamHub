@@ -3,9 +3,13 @@
 // The camera mock (tools/camera_mock/core) on a UDP socket of the host, as
 // tools/camera_mock/main/mock_udp.cpp runs it on an ESP32: the hub's camera
 // session finds it at 127.0.0.1:40611 and runs against it for real, with real
-// sockets and the real time.
+// sockets and the real time. With HOST_VIRTUAL_LINK (session_virtual_tests,
+// #354) the mock is attached to the virtual network of virtual_net.hpp
+// instead: same interface, no thread, virtual time.
 
 #include <atomic>
+#include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -26,7 +30,11 @@ class MockServer
     // False if the port could not be bound.
     bool ok() const
     {
+#ifdef HOST_VIRTUAL_LINK
+        return true;
+#else
         return fd_ >= 0;
+#endif
     }
 
     void set_faults(const camera_mock::Faults &faults);
@@ -37,6 +45,10 @@ class MockServer
     std::string log();
 
   private:
+#ifdef HOST_VIRTUAL_LINK
+    class Link;
+    std::unique_ptr<Link> link_;
+#else
     class UdpOutput;
     void run();
 
@@ -47,6 +59,27 @@ class MockServer
     std::unique_ptr<UdpOutput> output_;
     std::unique_ptr<camera_mock::Camera> camera_;
     std::string log_;
+#endif
+};
+
+// Runs `action` once `delay_ms` has passed while a session runs: on a thread
+// in real time, or on the virtual clock. join() waits for it (real) or
+// cancels it if it has not run (virtual).
+class Later
+{
+  public:
+    Later(int delay_ms, std::function<void()> action);
+    ~Later();
+    Later(const Later &) = delete;
+    Later &operator=(const Later &) = delete;
+    void join();
+
+  private:
+#ifdef HOST_VIRTUAL_LINK
+    int timer_ = -1;
+#else
+    std::thread thread_;
+#endif
 };
 
 }  // namespace host_session

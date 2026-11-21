@@ -235,3 +235,47 @@ if(HOST_TESTS_SANITIZE)
 endif()
 add_test(NAME session_tests COMMAND session_tests)
 set_tests_properties(session_tests PROPERTIES TIMEOUT 300)
+
+# The same session cases on an in-process network with a virtual clock
+# (#354): the camera mock is called from the session's own thread, time only
+# passes while the session waits, and nothing sleeps, so the cases that
+# depend on time are exact. camera_udp_transport.cpp is replaced by the
+# virtual sockets (session/virtual_net.cpp); socket(), bind(), setsockopt()
+# and close() are redirected there by the linker.
+set(session_virtual_link_sources ${session_link_sources})
+list(REMOVE_ITEM session_virtual_link_sources
+    ${link_dir}/camera_udp_transport.cpp)
+add_executable(session_virtual_tests
+    test_main.cpp
+    session/host_esp.cpp
+    session/mock_server_virtual.cpp
+    session/virtual_net.cpp
+    session/test_session.cpp
+    ${session_virtual_link_sources}
+    ${mp4_dir}/mp4_mux.cpp
+    ${time_dir}/time_policy.cpp
+    ${mock_dir}/ble_frames.cpp
+    ${mock_dir}/capture_fixtures.cpp
+    ${mock_dir}/mock_camera.cpp
+    ${mock_dir}/mock_wire.cpp)
+target_include_directories(session_virtual_tests BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/esp_stubs)
+target_include_directories(session_virtual_tests PRIVATE
+    ${link_dir} ${link_dir}/include ${mp4_dir} ${time_dir}
+    ${time_dir}/include ${mock_dir} ${CMAKE_CURRENT_SOURCE_DIR}/session)
+target_include_directories(session_virtual_tests SYSTEM PRIVATE
+    ${doctest_SOURCE_DIR})
+target_compile_definitions(session_virtual_tests PRIVATE
+    HOST_VIRTUAL_LINK=1
+    HOST_SD_ROOT="${CMAKE_BINARY_DIR}/sd-card-virtual"
+    MOCK_FIXTURE_DIR="${repo_root}/tools/camera_mock/fixtures")
+target_compile_options(session_virtual_tests PRIVATE -Wall -Wextra -Werror)
+target_link_options(session_virtual_tests PRIVATE
+    -Wl,--wrap=socket -Wl,--wrap=bind -Wl,--wrap=setsockopt -Wl,--wrap=close)
+target_link_libraries(session_virtual_tests PRIVATE Threads::Threads)
+if(HOST_TESTS_SANITIZE)
+    target_compile_options(session_virtual_tests PRIVATE ${sanitize_flags})
+    target_link_options(session_virtual_tests PRIVATE ${sanitize_flags})
+endif()
+add_test(NAME session_virtual_tests COMMAND session_virtual_tests)
+set_tests_properties(session_virtual_tests PROPERTIES TIMEOUT 120)

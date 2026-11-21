@@ -5,6 +5,10 @@
 // misbehaves. They were written before the session was split up (#65) and
 // run unchanged on the new structure.
 //
+// The same cases also run as session_virtual_tests (HOST_VIRTUAL_LINK, #354):
+// on an in-process network with a virtual clock (virtual_net.hpp), without
+// sleeping. There the cases that depend on time are exact, too.
+//
 // If the environment variable HOST_SESSION_SIGNATURE_DIR names a directory,
 // every case also writes <case>.sig there: result, files on the card and the
 // log without times, so two builds can be compared with diff.
@@ -22,12 +26,16 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "camera_action.hpp"
 #include "camera_actions.hpp"
 #include "camera_protocol.h"
 #include "host_esp.hpp"
 #include "mock_server.hpp"
+#ifdef HOST_VIRTUAL_LINK
+#include "virtual_net.hpp"
+#endif
 
 namespace fs = std::filesystem;
 namespace act = camera::action;
@@ -74,6 +82,11 @@ void reset_world()
     camera_protocol_set_progress_callback(on_progress);
     s_list_lines.clear();
     s_progress.clear();
+#ifdef HOST_VIRTUAL_LINK
+    // The same "random" packet loss every time.
+    std::srand(1);
+    virtual_net::reset();
+#endif
 }
 
 Outcome run_session()
@@ -173,22 +186,21 @@ size_t count_files(const std::string &directory_part, const char *extension)
     return count;
 }
 
-// Writes <case>.sig for comparing two builds. A case whose course depends on
-// the time (a stop after 1.5 s, random packet loss) is `exact` = false: only
-// how it ended is written.
-void write_signature(const char *name, const Outcome &o,
-                     const camera_mock::Stats &stats, bool exact = true)
+// The text of <case>.sig: what a case did, for comparing two builds. A case
+// whose course depends on the time (a stop after 1.5 s, random packet loss)
+// is `exact` = false in real time: only how it ended is written. On the
+// virtual clock every case is exact.
+std::string signature_text(const Outcome &o, const camera_mock::Stats &stats,
+                           bool exact)
 {
-    const char *dir = std::getenv("HOST_SESSION_SIGNATURE_DIR");
-    if (dir == nullptr) {
-        return;
-    }
-    fs::create_directories(dir);
-    std::ofstream out(std::string(dir) + "/" + name + ".sig");
+#ifdef HOST_VIRTUAL_LINK
+    exact = true;
+#endif
+    std::ostringstream out;
     if (!exact) {
         out << "result: error=" << o.error << " completed=" << o.work_completed
             << " id=" << o.camera_id << "\n";
-        return;
+        return out.str();
     }
     out << "result: error=" << o.error << " completed=" << o.work_completed
         << " list_error=" << o.media_list_error << " stored=" << o.stored
@@ -210,6 +222,19 @@ void write_signature(const char *name, const Outcome &o,
     }
     out << "\ncard:\n" << card_snapshot();
     out << "log:\n" << normalized_log();
+    return out.str();
+}
+
+void write_signature(const char *name, const Outcome &o,
+                     const camera_mock::Stats &stats, bool exact = true)
+{
+    const char *dir = std::getenv("HOST_SESSION_SIGNATURE_DIR");
+    if (dir == nullptr) {
+        return;
+    }
+    fs::create_directories(dir);
+    std::ofstream out(std::string(dir) + "/" + name + ".sig");
+    out << signature_text(o, stats, exact);
 }
 
 // A mock with `media` recordings on its card.
@@ -393,10 +418,7 @@ TEST_CASE("session: the camera closing the session ends it")
     reset_world();
     host_session::MockServer mock(options_with(400));
     REQUIRE(mock.ok());
-    std::thread closer([&mock] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-        mock.close_session();
-    });
+    host_session::Later closer(1500, [&mock] { mock.close_session(); });
     const Outcome o = run_session();
     closer.join();
     write_signature("camera_closes", o, mock.stats(), false);
@@ -414,10 +436,7 @@ TEST_CASE("session: a stop request ends it and keeps what was stored")
     reset_world();
     host_session::MockServer mock(options_with(400));
     REQUIRE(mock.ok());
-    std::thread stopper([] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-        camera_protocol_request_stop();
-    });
+    host_session::Later stopper(1500, [] { camera_protocol_request_stop(); });
     const Outcome o = run_session();
     stopper.join();
     write_signature("stop_requested", o, mock.stats(), false);
@@ -478,3 +497,75 @@ TEST_CASE("session: lost and doubled packets do not change the result")
     CHECK(o.work_completed);
     CHECK(count_files("thumb", ".jpg") == 8);
 }
+
+#ifdef HOST_VIRTUAL_LINK
+namespace
+{
+
+// One of the cases that depend on time, run from scratch; the text of what
+// it did.
+std::string timed_case(int which)
+{
+    reset_world();
+    host_session::MockServer mock(options_with(which == 3 ? 8 : 400));
+    camera_mock::Faults faults;
+    std::unique_ptr<host_session::Later> later;
+    if (which == 0) {
+        later.reset(
+            new host_session::Later(1500, [&mock] { mock.close_session(); }));
+    } else if (which == 1) {
+        later.reset(new host_session::Later(
+            1500, [] { camera_protocol_request_stop(); }));
+    } else if (which == 2) {
+        faults.mute = true;
+    } else {
+        faults.drop_percent = 10;
+        faults.duplicate_percent = 10;
+    }
+    mock.set_faults(faults);
+    const Outcome o = run_session();
+    return signature_text(o, mock.stats(), true);
+}
+
+}  // namespace
+
+TEST_CASE("virtual session: the cases that depend on time repeat exactly")
+{
+    // Camera closes, stop request, silent camera, lossy link: the second run
+    // of each is the same as the first, down to the log.
+    for (int which = 0; which < 4; ++which) {
+        const std::string first = timed_case(which);
+        const std::string second = timed_case(which);
+        INFO("case " << which);
+        if (first != second) {
+            // For finding out what differs: diff <dir>/timed_N_*.sig.
+            const char *dir = std::getenv("HOST_SESSION_SIGNATURE_DIR");
+            if (dir != nullptr) {
+                fs::create_directories(dir);
+                std::ofstream(std::string(dir) + "/timed_" +
+                              std::to_string(which) + "_first.sig")
+                    << first;
+                std::ofstream(std::string(dir) + "/timed_" +
+                              std::to_string(which) + "_second.sig")
+                    << second;
+            }
+        }
+        CHECK(first == second);
+        CHECK_FALSE(first.empty());
+    }
+}
+
+TEST_CASE("virtual session: waiting costs no real time")
+{
+    // The silent camera case waits out the session's timeouts: many seconds
+    // of virtual time.
+    const auto started = std::chrono::steady_clock::now();
+    timed_case(2);
+    const auto real_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - started)
+                             .count();
+    const std::int64_t virtual_ms = virtual_net::elapsed_us() / 1000;
+    CHECK(virtual_ms >= 1000);
+    CHECK(real_ms < virtual_ms);
+}
+#endif
