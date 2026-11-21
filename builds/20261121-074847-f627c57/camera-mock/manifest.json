@@ -1,0 +1,15 @@
+{
+  "name": "TrailCamHub camera mock (ESP32-WROOM-32D)",
+  "version": "20261121-074847-f627c57",
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "./camera-mock.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

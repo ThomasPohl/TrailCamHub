@@ -1,0 +1,720 @@
+{
+  "builds": [
+    {
+      "id": "20261121-114644-e7541e2",
+      "date": "2026-11-21T11:46:45Z",
+      "commit": "e7541e2",
+      "branch": "main",
+      "message": "Merge pull request #364 from ThomasPohl/feature/fault-email-ses-265",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-114644-e7541e2/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-114644-e7541e2/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-114644-e7541e2/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-114644-e7541e2/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-114644-e7541e2/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-114644-e7541e2/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-114644-e7541e2/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-114644-e7541e2/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-114644-e7541e2/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-114644-e7541e2/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-114644-e7541e2/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-114644-e7541e2/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-114644-e7541e2/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-114644-e7541e2/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-114644-e7541e2/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-114644-e7541e2/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-114644-e7541e2/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-114644-e7541e2/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-114644-e7541e2/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-114644-e7541e2/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-114644-e7541e2/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-114644-e7541e2/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-114644-e7541e2/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-114644-e7541e2/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-114644-e7541e2/camera-mock/manifest.json",
+        "bin": "builds/20261121-114644-e7541e2/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-112202-03087c4",
+      "date": "2026-11-21T11:22:02Z",
+      "commit": "03087c4",
+      "branch": "main",
+      "message": "Merge pull request #359 from ThomasPohl/test/faults-firmware-update-265",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-112202-03087c4/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-112202-03087c4/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-112202-03087c4/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-112202-03087c4/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-112202-03087c4/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-112202-03087c4/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-112202-03087c4/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-112202-03087c4/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-112202-03087c4/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-112202-03087c4/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-112202-03087c4/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-112202-03087c4/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-112202-03087c4/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-112202-03087c4/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-112202-03087c4/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-112202-03087c4/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-112202-03087c4/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-112202-03087c4/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-112202-03087c4/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-112202-03087c4/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-112202-03087c4/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-112202-03087c4/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-112202-03087c4/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-112202-03087c4/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-112202-03087c4/camera-mock/manifest.json",
+        "bin": "builds/20261121-112202-03087c4/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-100938-d0e09d3",
+      "date": "2026-11-21T10:09:38Z",
+      "commit": "d0e09d3",
+      "branch": "main",
+      "message": "Merge pull request #360 from ThomasPohl/feature/guide-site-build-223",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-100938-d0e09d3/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-100938-d0e09d3/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-100938-d0e09d3/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-100938-d0e09d3/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-100938-d0e09d3/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-100938-d0e09d3/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-100938-d0e09d3/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-100938-d0e09d3/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-100938-d0e09d3/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-100938-d0e09d3/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-100938-d0e09d3/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-100938-d0e09d3/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-100938-d0e09d3/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-100938-d0e09d3/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-100938-d0e09d3/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-100938-d0e09d3/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-100938-d0e09d3/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-100938-d0e09d3/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-100938-d0e09d3/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-100938-d0e09d3/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-100938-d0e09d3/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-100938-d0e09d3/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-100938-d0e09d3/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-100938-d0e09d3/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-100938-d0e09d3/camera-mock/manifest.json",
+        "bin": "builds/20261121-100938-d0e09d3/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-100356-0968a41",
+      "date": "2026-11-21T10:03:56Z",
+      "commit": "0968a41",
+      "branch": "main",
+      "message": "Merge pull request #362 from ThomasPohl/feature/hub-section-149",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-100356-0968a41/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-100356-0968a41/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-100356-0968a41/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-100356-0968a41/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-100356-0968a41/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-100356-0968a41/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-100356-0968a41/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-100356-0968a41/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-100356-0968a41/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-100356-0968a41/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-100356-0968a41/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-100356-0968a41/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-100356-0968a41/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-100356-0968a41/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-100356-0968a41/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-100356-0968a41/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-100356-0968a41/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-100356-0968a41/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-100356-0968a41/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-100356-0968a41/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-100356-0968a41/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-100356-0968a41/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-100356-0968a41/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-100356-0968a41/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-100356-0968a41/camera-mock/manifest.json",
+        "bin": "builds/20261121-100356-0968a41/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-100220-223c8f8",
+      "date": "2026-11-21T10:02:20Z",
+      "commit": "223c8f8",
+      "branch": "main",
+      "message": "Merge pull request #361 from ThomasPohl/fix/session-begin-354",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-100220-223c8f8/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-100220-223c8f8/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-100220-223c8f8/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-100220-223c8f8/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-100220-223c8f8/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-100220-223c8f8/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-100220-223c8f8/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-100220-223c8f8/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-100220-223c8f8/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-100220-223c8f8/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-100220-223c8f8/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-100220-223c8f8/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-100220-223c8f8/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-100220-223c8f8/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-100220-223c8f8/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-100220-223c8f8/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-100220-223c8f8/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-100220-223c8f8/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-100220-223c8f8/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-100220-223c8f8/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-100220-223c8f8/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-100220-223c8f8/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-100220-223c8f8/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-100220-223c8f8/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-100220-223c8f8/camera-mock/manifest.json",
+        "bin": "builds/20261121-100220-223c8f8/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-074847-f627c57",
+      "date": "2026-11-21T07:48:47Z",
+      "commit": "f627c57",
+      "branch": "main",
+      "message": "Merge pull request #357 from ThomasPohl/refactor/uplink-destinations-218",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-074847-f627c57/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-074847-f627c57/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-074847-f627c57/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-074847-f627c57/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-074847-f627c57/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-074847-f627c57/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-074847-f627c57/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-074847-f627c57/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-074847-f627c57/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-074847-f627c57/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-074847-f627c57/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-074847-f627c57/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-074847-f627c57/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-074847-f627c57/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-074847-f627c57/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-074847-f627c57/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-074847-f627c57/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-074847-f627c57/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-074847-f627c57/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-074847-f627c57/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-074847-f627c57/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-074847-f627c57/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-074847-f627c57/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-074847-f627c57/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-074847-f627c57/camera-mock/manifest.json",
+        "bin": "builds/20261121-074847-f627c57/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-074707-9f8414a",
+      "date": "2026-11-21T07:47:07Z",
+      "commit": "9f8414a",
+      "branch": "main",
+      "message": "Merge pull request #356 from ThomasPohl/test/session-virtual-link-354",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-074707-9f8414a/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-074707-9f8414a/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-074707-9f8414a/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-074707-9f8414a/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-074707-9f8414a/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-074707-9f8414a/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-074707-9f8414a/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-074707-9f8414a/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-074707-9f8414a/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-074707-9f8414a/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-074707-9f8414a/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-074707-9f8414a/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-074707-9f8414a/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-074707-9f8414a/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-074707-9f8414a/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-074707-9f8414a/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-074707-9f8414a/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-074707-9f8414a/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-074707-9f8414a/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-074707-9f8414a/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-074707-9f8414a/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-074707-9f8414a/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-074707-9f8414a/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-074707-9f8414a/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-074707-9f8414a/camera-mock/manifest.json",
+        "bin": "builds/20261121-074707-9f8414a/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-062930-e01273b",
+      "date": "2026-11-21T06:29:30Z",
+      "commit": "e01273b",
+      "branch": "main",
+      "message": "Merge pull request #355 from ThomasPohl/feature/uplink-mp4-body",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-062930-e01273b/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-062930-e01273b/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-062930-e01273b/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-062930-e01273b/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-062930-e01273b/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-062930-e01273b/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-062930-e01273b/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-062930-e01273b/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-062930-e01273b/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-062930-e01273b/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-062930-e01273b/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-062930-e01273b/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-062930-e01273b/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-062930-e01273b/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-062930-e01273b/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-062930-e01273b/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-062930-e01273b/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-062930-e01273b/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-062930-e01273b/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-062930-e01273b/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-062930-e01273b/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-062930-e01273b/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-062930-e01273b/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-062930-e01273b/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-062930-e01273b/camera-mock/manifest.json",
+        "bin": "builds/20261121-062930-e01273b/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-061015-97a791c",
+      "date": "2026-11-21T06:10:15Z",
+      "commit": "97a791c",
+      "branch": "main",
+      "message": "Merge pull request #353 from ThomasPohl/feature/camera-session-object",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-061015-97a791c/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-061015-97a791c/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-061015-97a791c/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-061015-97a791c/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-061015-97a791c/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-061015-97a791c/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-061015-97a791c/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-061015-97a791c/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-061015-97a791c/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-061015-97a791c/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-061015-97a791c/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-061015-97a791c/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-061015-97a791c/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-061015-97a791c/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-061015-97a791c/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-061015-97a791c/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-061015-97a791c/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-061015-97a791c/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-061015-97a791c/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-061015-97a791c/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-061015-97a791c/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-061015-97a791c/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-061015-97a791c/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-061015-97a791c/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "mock": {
+        "manifest": "builds/20261121-061015-97a791c/camera-mock/manifest.json",
+        "bin": "builds/20261121-061015-97a791c/camera-mock/camera-mock.bin"
+      }
+    },
+    {
+      "id": "20261121-054003-06adec2",
+      "date": "2026-11-21T05:40:03Z",
+      "commit": "06adec2",
+      "branch": "feature/camera-session-object",
+      "message": "Fix CI findings: clang-format 23 in session test files, clang-tidy in media_store",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261121-054003-06adec2/esp32s3/manifest-dev.json",
+          "release": "builds/20261121-054003-06adec2/esp32s3/manifest-release.json",
+          "devBin": "builds/20261121-054003-06adec2/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261121-054003-06adec2/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261121-054003-06adec2/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261121-054003-06adec2/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261121-054003-06adec2/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261121-054003-06adec2/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261121-054003-06adec2/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261121-054003-06adec2/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261121-054003-06adec2/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261121-054003-06adec2/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261121-054003-06adec2/esp32p4/manifest-dev.json",
+          "release": "builds/20261121-054003-06adec2/esp32p4/manifest-release.json",
+          "devBin": "builds/20261121-054003-06adec2/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261121-054003-06adec2/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261121-054003-06adec2/s3-eth/manifest-dev.json",
+          "release": "builds/20261121-054003-06adec2/s3-eth/manifest-release.json",
+          "devBin": "builds/20261121-054003-06adec2/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261121-054003-06adec2/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261121-054003-06adec2/wroom32d/manifest-dev.json",
+          "release": "builds/20261121-054003-06adec2/wroom32d/manifest-release.json",
+          "devBin": "builds/20261121-054003-06adec2/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261121-054003-06adec2/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      }
+    },
+    {
+      "id": "20261119-142611-3ea6783",
+      "date": "2026-11-19T14:26:11Z",
+      "commit": "3ea6783",
+      "branch": "v0.1.15",
+      "message": "Merge pull request #343 from ThomasPohl/feature/admin-totp",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261119-142611-3ea6783/esp32s3/manifest-dev.json",
+          "release": "builds/20261119-142611-3ea6783/esp32s3/manifest-release.json",
+          "devBin": "builds/20261119-142611-3ea6783/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261119-142611-3ea6783/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261119-142611-3ea6783/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261119-142611-3ea6783/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261119-142611-3ea6783/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261119-142611-3ea6783/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261119-142611-3ea6783/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261119-142611-3ea6783/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261119-142611-3ea6783/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261119-142611-3ea6783/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261119-142611-3ea6783/esp32p4/manifest-dev.json",
+          "release": "builds/20261119-142611-3ea6783/esp32p4/manifest-release.json",
+          "devBin": "builds/20261119-142611-3ea6783/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261119-142611-3ea6783/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261119-142611-3ea6783/s3-eth/manifest-dev.json",
+          "release": "builds/20261119-142611-3ea6783/s3-eth/manifest-release.json",
+          "devBin": "builds/20261119-142611-3ea6783/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261119-142611-3ea6783/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261119-142611-3ea6783/wroom32d/manifest-dev.json",
+          "release": "builds/20261119-142611-3ea6783/wroom32d/manifest-release.json",
+          "devBin": "builds/20261119-142611-3ea6783/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261119-142611-3ea6783/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "version": "v0.1.15"
+    },
+    {
+      "id": "20261117-145239-1d194cd",
+      "date": "2026-11-17T14:52:39Z",
+      "commit": "1d194cd",
+      "branch": "v0.1.14",
+      "message": "Merge pull request #317 from ThomasPohl/feature/admin-app-badge",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261117-145239-1d194cd/esp32s3/manifest-dev.json",
+          "release": "builds/20261117-145239-1d194cd/esp32s3/manifest-release.json",
+          "devBin": "builds/20261117-145239-1d194cd/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261117-145239-1d194cd/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261117-145239-1d194cd/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261117-145239-1d194cd/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261117-145239-1d194cd/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261117-145239-1d194cd/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261117-145239-1d194cd/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261117-145239-1d194cd/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261117-145239-1d194cd/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261117-145239-1d194cd/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261117-145239-1d194cd/esp32p4/manifest-dev.json",
+          "release": "builds/20261117-145239-1d194cd/esp32p4/manifest-release.json",
+          "devBin": "builds/20261117-145239-1d194cd/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261117-145239-1d194cd/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261117-145239-1d194cd/s3-eth/manifest-dev.json",
+          "release": "builds/20261117-145239-1d194cd/s3-eth/manifest-release.json",
+          "devBin": "builds/20261117-145239-1d194cd/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261117-145239-1d194cd/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261117-145239-1d194cd/wroom32d/manifest-dev.json",
+          "release": "builds/20261117-145239-1d194cd/wroom32d/manifest-release.json",
+          "devBin": "builds/20261117-145239-1d194cd/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261117-145239-1d194cd/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "version": "v0.1.14"
+    },
+    {
+      "id": "20261116-141049-81c2efc",
+      "date": "2026-11-16T14:10:49Z",
+      "commit": "81c2efc",
+      "branch": "v0.1.13",
+      "message": "Merge pull request #282 from ThomasPohl/fix/thumbnail-request-no-slot",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261116-141049-81c2efc/esp32s3/manifest-dev.json",
+          "release": "builds/20261116-141049-81c2efc/esp32s3/manifest-release.json",
+          "devBin": "builds/20261116-141049-81c2efc/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261116-141049-81c2efc/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261116-141049-81c2efc/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261116-141049-81c2efc/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261116-141049-81c2efc/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261116-141049-81c2efc/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261116-141049-81c2efc/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261116-141049-81c2efc/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261116-141049-81c2efc/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261116-141049-81c2efc/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261116-141049-81c2efc/esp32p4/manifest-dev.json",
+          "release": "builds/20261116-141049-81c2efc/esp32p4/manifest-release.json",
+          "devBin": "builds/20261116-141049-81c2efc/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261116-141049-81c2efc/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261116-141049-81c2efc/s3-eth/manifest-dev.json",
+          "release": "builds/20261116-141049-81c2efc/s3-eth/manifest-release.json",
+          "devBin": "builds/20261116-141049-81c2efc/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261116-141049-81c2efc/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261116-141049-81c2efc/wroom32d/manifest-dev.json",
+          "release": "builds/20261116-141049-81c2efc/wroom32d/manifest-release.json",
+          "devBin": "builds/20261116-141049-81c2efc/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261116-141049-81c2efc/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "version": "v0.1.13"
+    },
+    {
+      "id": "20261116-133250-152b152",
+      "date": "2026-11-16T13:32:50Z",
+      "commit": "152b152",
+      "branch": "v0.1.12",
+      "message": "Merge pull request #279 from ThomasPohl/feature/gallery-pair-two-pass",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261116-133250-152b152/esp32s3/manifest-dev.json",
+          "release": "builds/20261116-133250-152b152/esp32s3/manifest-release.json",
+          "devBin": "builds/20261116-133250-152b152/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261116-133250-152b152/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261116-133250-152b152/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261116-133250-152b152/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261116-133250-152b152/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261116-133250-152b152/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261116-133250-152b152/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261116-133250-152b152/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261116-133250-152b152/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261116-133250-152b152/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261116-133250-152b152/esp32p4/manifest-dev.json",
+          "release": "builds/20261116-133250-152b152/esp32p4/manifest-release.json",
+          "devBin": "builds/20261116-133250-152b152/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261116-133250-152b152/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261116-133250-152b152/s3-eth/manifest-dev.json",
+          "release": "builds/20261116-133250-152b152/s3-eth/manifest-release.json",
+          "devBin": "builds/20261116-133250-152b152/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261116-133250-152b152/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261116-133250-152b152/wroom32d/manifest-dev.json",
+          "release": "builds/20261116-133250-152b152/wroom32d/manifest-release.json",
+          "devBin": "builds/20261116-133250-152b152/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261116-133250-152b152/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "version": "v0.1.12"
+    },
+    {
+      "id": "20261116-085302-dd33730",
+      "date": "2026-11-16T08:53:02Z",
+      "commit": "dd33730",
+      "branch": "v0.1.10",
+      "message": "Merge pull request #275 from ThomasPohl/feature/gallery-camera-files",
+      "boards": {
+        "esp32s3": {
+          "dev": "builds/20261116-085302-dd33730/esp32s3/manifest-dev.json",
+          "release": "builds/20261116-085302-dd33730/esp32s3/manifest-release.json",
+          "devBin": "builds/20261116-085302-dd33730/esp32s3/trailcamhub-esp32s3-dev.bin",
+          "releaseBin": "builds/20261116-085302-dd33730/esp32s3/trailcamhub-esp32s3-release.bin"
+        },
+        "tdongle-s3": {
+          "dev": "builds/20261116-085302-dd33730/tdongle-s3/manifest-dev.json",
+          "release": "builds/20261116-085302-dd33730/tdongle-s3/manifest-release.json",
+          "devBin": "builds/20261116-085302-dd33730/tdongle-s3/trailcamhub-tdongle-s3-dev.bin",
+          "releaseBin": "builds/20261116-085302-dd33730/tdongle-s3/trailcamhub-tdongle-s3-release.bin"
+        },
+        "tdongle-c5": {
+          "dev": "builds/20261116-085302-dd33730/tdongle-c5/manifest-dev.json",
+          "release": "builds/20261116-085302-dd33730/tdongle-c5/manifest-release.json",
+          "devBin": "builds/20261116-085302-dd33730/tdongle-c5/trailcamhub-tdongle-c5-dev.bin",
+          "releaseBin": "builds/20261116-085302-dd33730/tdongle-c5/trailcamhub-tdongle-c5-release.bin"
+        },
+        "esp32p4": {
+          "dev": "builds/20261116-085302-dd33730/esp32p4/manifest-dev.json",
+          "release": "builds/20261116-085302-dd33730/esp32p4/manifest-release.json",
+          "devBin": "builds/20261116-085302-dd33730/esp32p4/trailcamhub-esp32p4-dev.bin",
+          "releaseBin": "builds/20261116-085302-dd33730/esp32p4/trailcamhub-esp32p4-release.bin"
+        },
+        "s3-eth": {
+          "dev": "builds/20261116-085302-dd33730/s3-eth/manifest-dev.json",
+          "release": "builds/20261116-085302-dd33730/s3-eth/manifest-release.json",
+          "devBin": "builds/20261116-085302-dd33730/s3-eth/trailcamhub-s3-eth-dev.bin",
+          "releaseBin": "builds/20261116-085302-dd33730/s3-eth/trailcamhub-s3-eth-release.bin"
+        },
+        "wroom32d": {
+          "dev": "builds/20261116-085302-dd33730/wroom32d/manifest-dev.json",
+          "release": "builds/20261116-085302-dd33730/wroom32d/manifest-release.json",
+          "devBin": "builds/20261116-085302-dd33730/wroom32d/trailcamhub-wroom32d-dev.bin",
+          "releaseBin": "builds/20261116-085302-dd33730/wroom32d/trailcamhub-wroom32d-release.bin"
+        }
+      },
+      "version": "v0.1.10"
+    }
+  ]
+}
