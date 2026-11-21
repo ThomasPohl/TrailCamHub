@@ -56,6 +56,28 @@ constexpr std::uint8_t kDiscoveryReply[24] = {
 };
 // clang-format on
 
+// The app's flow (pcaps of pwnb0t/trailcam-automation, e.g.
+// trailcam_2-1-connect.pcap, PH970S at 192.168.43.1): the app broadcasts
+// LAN searches (F1 30 00 00) to port 32108; the camera answers from its port
+// 40611 with this 0x41 (the same bytes as the hub's probe), the app sends the
+// 0x41 back, and the camera answers with kCameraAddress, then the 0x42
+// (kDiscoveryReply) and its first DATA.
+// clang-format off
+constexpr std::uint8_t kLanSearchReply[24] = {
+    0xf1, 0x41, 0x00, 0x14, 0x4c, 0x42, 0x43, 0x53, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x43, 0x43, 0x43, 0x4a, 0x4a, 0x00, 0x00, 0x00,
+};
+// 0x43: the device ID, then the camera's address as 00 02, port 40611 and
+// 192.168.43.1, both byte-swapped, and 16 zero bytes. The mock has the same
+// address (main/mock_ap.cpp, main/mock_udp.cpp).
+constexpr std::uint8_t kCameraAddress[48] = {
+    0xf1, 0x43, 0x00, 0x2c, 0x4c, 0x42, 0x43, 0x53, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x43, 0x43, 0x43, 0x4a, 0x4a, 0x00, 0x00, 0x00,
+    0x00, 0x02, 0xa3, 0x9e, 0x01, 0x2b, 0xa8, 0xc0, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+// clang-format on
+
 // Payload of the camera's first DATA packet (index 0), which it sends on its
 // own ~0.4 s after discovery: F1 D0 00 07 D1 00 00 00 "ACK".
 constexpr std::uint8_t kFirstDataPayload[3] = {'A', 'C', 'K'};

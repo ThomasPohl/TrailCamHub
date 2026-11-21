@@ -32,6 +32,10 @@ Packet parse(const std::uint8_t *bytes, std::size_t size)
     }
 
     switch (packet.type) {
+    case kLanSearch:
+        packet.kind =
+            length == 0 ? Packet::Kind::lan_search : Packet::Kind::other;
+        return packet;
     case kDiscoveryRequest:
         packet.kind = Packet::Kind::discovery_request;
         return packet;

@@ -53,6 +53,12 @@ struct Options {
     // Discovery probes this close together belong to one session start (the
     // app sends two); a later one starts a new session.
     std::int64_t discovery_merge_ms = 1000;
+    // A probe (0x41) this soon after a LAN search (0x30) comes from the
+    // vendor app, which also gets the camera's address (0x43) before the
+    // 0x42; the hub sends no LAN search and gets only the 0x42.
+    std::int64_t lan_search_window_ms = 5000;
+    // 0x43 packets per probe of the app (the camera sent ~50 in 0.3 s).
+    unsigned camera_address_repeats = 3;
 };
 
 // Faults the mock injects, switchable at run time (stage 2 of #122). All off
@@ -136,6 +142,8 @@ using Logger = std::function<void(LogLevel, const std::string &)>;
 struct Stats {
     unsigned sessions = 0;
     unsigned discoveries = 0;
+    // LAN searches (0x30) of the vendor app.
+    unsigned lan_searches = 0;
     unsigned pre_logins = 0;
     unsigned data_received = 0;
     unsigned duplicates = 0;
@@ -180,7 +188,8 @@ class Camera
 
     Camera(Output &output, Logger logger, const Options &options = Options());
 
-    // A datagram from the hub. Returns false if it was not a camera packet.
+    // A datagram from the hub or the vendor app (also the app's LAN search to
+    // port 32108). Returns false if it was not a camera packet.
     bool handle_packet(const std::uint8_t *bytes, std::size_t size,
                        std::int64_t now_ms);
     // Timers: first DATA, retransmissions, ALIVE, idle timeout.
@@ -296,6 +305,8 @@ class Camera
     State state_ = State::idle;
     bool logged_in_ = false;
     std::int64_t discovered_ms_ = 0;
+    // Time of the last LAN search; -1 = none yet.
+    std::int64_t lan_search_ms_ = -1;
     std::int64_t last_rx_ms_ = 0;
     std::int64_t last_alive_ms_ = 0;
     std::uint16_t next_tx_index_ = 0;

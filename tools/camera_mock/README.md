@@ -49,6 +49,18 @@ boot.
 The hub stores the "camera" under `C6:1E:0D:E0:0C:FB`, the identity of the
 captured device info.
 
+## Test with the vendor app
+
+The camera's Android app (TrailCam Go) also connects to the mock. It finds
+the mock over BLE, joins its access point and then looks for the camera with
+a **LAN search** (`F1 30 00 00`) that it broadcasts to UDP port 32108; the
+hub does not do this. The mock answers as the camera in the app's captures
+(`trailcam_2-1-connect.pcap`): from port 40611 a `0x41` with the device ID,
+and after the app's own `0x41` the camera's address (`0x43`, three times),
+the `0x42` and the first DATA (`ACK`). After that the session is the same as
+with the hub. `status` counts the LAN searches. Before this the app joined
+the access point and then waited for the camera until its timeout.
+
 ## Console
 
 Serial console at 115200 baud, prompt `mock>`:
@@ -72,6 +84,7 @@ from `components/camera_link`.
 | Login, 512, 768 pages 0 and 1 | ARTEMIS responses from the pcaps of [pwnb0t/trailcam-automation](https://github.com/pwnb0t/trailcam-automation) (PH970S, firmware 2.3.6.5), still encrypted, in `core/capture_fixtures.cpp` |
 | BLE advertisement, notification size, credentials frame | the btsnoop capture of the same repository |
 | Discovery reply, first DATA (`ACK`) | our own TC100 captures |
+| LAN search answer (`0x41`), camera address (`0x43`) | the app's pcaps of the same repository |
 | Fragmentation (1024-byte DATA payloads, header only in the first), PayloadLen = Base64 + 21 | all captured responses |
 
 `core/capture_fixtures.cpp` is generated:

@@ -18,8 +18,14 @@ namespace camera_mock::wire
 {
 
 constexpr std::uint8_t kMagic = 0xf1;
+// The app's LAN search, F1 30 00 00, broadcast to UDP port 32108 (the hub
+// does not send it). The camera answers with a 0x41 carrying its device ID.
+constexpr std::uint8_t kLanSearch = 0x30;
 constexpr std::uint8_t kDiscoveryRequest = 0x41;
 constexpr std::uint8_t kDiscoveryReply = 0x42;
+// Sent by the camera to the app after the app's 0x41: the device ID and the
+// camera's own address (captures of the app).
+constexpr std::uint8_t kCameraAddress = 0x43;
 constexpr std::uint8_t kData = 0xd0;
 constexpr std::uint8_t kAck = 0xd1;
 constexpr std::uint8_t kAlive = 0xe0;
@@ -35,6 +41,7 @@ constexpr std::size_t kMaxDataPayload = 1024;
 struct Packet {
     enum class Kind {
         invalid,
+        lan_search,
         discovery_request,
         pre_login,
         data,
