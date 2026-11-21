@@ -154,6 +154,8 @@ export interface AdminHub {
   uplink?: 'wifi' | 'modem' | 'ethernet';
   /** Modem signal in dBm, only while the hub syncs over the modem. */
   modemSignalDbm?: number;
+  /** Mobile network of the last modem connect; only while the hub syncs over the modem. */
+  modemOperator?: string;
   /** Lowest free memory of the last reported cycle, bytes (#149). */
   memory?: {
     cycle: number;
@@ -171,13 +173,16 @@ export interface AdminHub {
   users: Array<{ userId: number; name?: string; role?: 'user' | 'admin' }>;
   /** Errors first (#265). */
   faults: Fault[];
-  /** The last firmware changes, newest first (#149); absent on older backends. */
-  /** Newest first; `result` only where the hub reported the update itself (#149). */
+  /**
+   * The last firmware events, newest first (#149); absent on older backends.
+   * `result` only where the hub reported the update itself; `skipped` is a
+   * release the hub held back (`to`) for `reason`.
+   */
   firmwareChanges?: Array<{
     at: number;
     from: string;
     to: string;
-    result?: 'installed' | 'rolledBack' | 'failed';
+    result?: 'installed' | 'rolledBack' | 'failed' | 'skipped';
     reason?: string;
   }>;
 }
