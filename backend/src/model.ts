@@ -66,6 +66,8 @@ export interface HubRecord {
   uplink?: HubUplink;
   /** Modem signal when it connected, dBm; only meaningful with uplink "modem". */
   modemSignalDbm?: number;
+  /** Name of the mobile network at the last modem connect; only meaningful with uplink "modem". */
+  modemOperator?: string;
   /** Lowest free memory of the last reported cycle (#149, #244). */
   memory?: HubMemory;
   /** Last check-in, Unix seconds; 0 = never. */
@@ -218,7 +220,11 @@ export interface FirmwareChange {
   reason?: string;
 }
 
-export type FirmwareUpdateResult = 'installed' | 'rolledBack' | 'failed';
+/**
+ * `skipped`: a newer release was offered but the hub held it back (battery,
+ * signal, an earlier rollback, too many failures); `reason` says why (#142).
+ */
+export type FirmwareUpdateResult = 'installed' | 'rolledBack' | 'failed' | 'skipped';
 
 /** The hub's last firmware update, sent once in a check-in (#149). */
 export interface FirmwareUpdateReport {
@@ -282,6 +288,7 @@ export interface AdminHub {
   uplink?: HubUplink;
   /** Only while the hub syncs over the modem. */
   modemSignalDbm?: number;
+  modemOperator?: string;
   memory?: HubMemory;
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
@@ -421,6 +428,8 @@ export interface CheckinRequest {
   /** Transport of this check-in and the modem's signal in dBm (#149). */
   hubUplink?: HubUplink;
   modemSignalDbm?: number;
+  /** Optional: older firmware does not send it. */
+  modemOperator?: string;
   /** Raw; see HubMemory. */
   memory?: unknown;
   /**

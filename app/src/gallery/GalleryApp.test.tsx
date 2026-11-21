@@ -210,10 +210,19 @@ describe('GalleryApp', () => {
     expect(await screen.findByText(/übernimmt den Plan/)).toBeInTheDocument();
     expect(await within(hub).findByText(/alle 1 h \(aus der App\)/)).toBeInTheDocument();
 
-    // Firmware changes (#149).
-    expect(within(hub).getByRole('list', { name: 'Firmware-Wechsel Garten' })).toHaveTextContent(
+    // Connection with the mobile network, and the firmware events (#149): the
+    // latest in the line, the last five on tap.
+    expect(within(hub).getByText('Mobilfunk (Telekom.de), Signal -91 dBm (mittel)')).toBeVisible();
+    expect(
+      within(hub).getByText(/v0\.1\.13 → v0\.1\.14 .*übersprungen: Akku zu schwach/),
+    ).toBeVisible();
+    expect(within(hub).queryByRole('list', { name: 'Firmware-Verlauf Garten' })).toBeNull();
+    fireEvent.click(within(hub).getByRole('button', { name: 'Verlauf (3)' }));
+    expect(within(hub).getByRole('list', { name: 'Firmware-Verlauf Garten' })).toHaveTextContent(
       'v0.1.12 → v0.1.13',
     );
+    fireEvent.click(within(hub).getByRole('button', { name: 'Verlauf ausblenden' }));
+    expect(within(hub).queryByRole('list', { name: 'Firmware-Verlauf Garten' })).toBeNull();
 
     // Battery history (#76), loaded when asked for.
     fireEvent.click(within(hub).getByRole('button', { name: 'Akku-Verlauf (30 Tage)' }));

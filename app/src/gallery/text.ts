@@ -176,9 +176,15 @@ export function cameraHints(camera: GalleryCamera, hubLastContact: number): stri
 
 const UPLINK = { wifi: 'WLAN', modem: 'Mobilfunk', ethernet: 'Ethernet' } as const;
 
-/** "Mobilfunk, Signal -87 dBm (gut)" (#149). */
-export function uplinkText(uplink: keyof typeof UPLINK, signalDbm?: number): string {
-  if (uplink !== 'modem' || signalDbm === undefined) return UPLINK[uplink];
+/** "Mobilfunk (Telekom.de), Signal -87 dBm (gut)" (#149). */
+export function uplinkText(
+  uplink: keyof typeof UPLINK,
+  signalDbm?: number,
+  operator?: string,
+): string {
+  if (uplink !== 'modem') return UPLINK[uplink];
+  const network = operator ? `${UPLINK.modem} (${operator})` : UPLINK.modem;
+  if (signalDbm === undefined) return network;
   const quality =
     signalDbm >= -85
       ? 'gut'
@@ -187,7 +193,22 @@ export function uplinkText(uplink: keyof typeof UPLINK, signalDbm?: number): str
         : signalDbm >= -105
           ? 'schwach'
           : 'sehr schwach';
-  return `${UPLINK.modem}, Signal ${signalDbm} dBm (${quality})`;
+  return `${network}, Signal ${signalDbm} dBm (${quality})`;
+}
+
+/** The hub's reasons for holding back a release (`decision_text()` of the firmware). */
+const SKIP_REASON: Record<string, string> = {
+  'the hub battery is too low': 'Akku zu schwach',
+  'the hub battery is critical': 'Akku kritisch',
+  'the cellular signal is too weak': 'Mobilfunksignal zu schwach',
+  'this version was rolled back before': 'wurde schon einmal zurückgerollt',
+  'its install failed too often; trying again later':
+    'Installation schlug zu oft fehl, neuer Versuch später',
+};
+
+/** Why the hub did not install a release (#142, #149); unknown reasons as sent. */
+export function skipReasonText(reason: string): string {
+  return SKIP_REASON[reason] ?? reason;
 }
 
 /** Bytes as "6.6 KB" or "3.1 MB". */

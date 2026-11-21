@@ -172,6 +172,30 @@ describe('hub faults (#265)', () => {
     );
   });
 
+  it('does not let a held-back release hide an earlier fault (#142, #149)', () => {
+    const rolledBack = {
+      at: NOW - 600,
+      from: 'v0.1.13',
+      to: 'v0.1.12',
+      result: 'rolledBack' as const,
+      reason: 'no check-in',
+    };
+    const skipped = {
+      at: NOW - 60,
+      from: 'v0.1.12',
+      to: 'v0.1.14',
+      result: 'skipped' as const,
+      reason: 'the hub battery is too low',
+    };
+    // Only the rollback is a fault; the skipped release is none, and it does
+    // not take the rollback's place as the latest change.
+    expect(hubFaults(hub(), [], NOW, [skipped])).toEqual([]);
+    expect(kinds(hubFaults(hub(), [], NOW, [skipped, rolledBack]))).toEqual([
+      'firmwareDowngrade',
+      'firmwareUpdateFailed',
+    ]);
+  });
+
   it('notices a camera that is no longer read (#297)', () => {
     const stale = camera({ lastSeen: NOW - 600 - 2 * 86_400 });
     expect(hubFaults(hub(), [{ camera: stale, commands: [] }], NOW)).toEqual([
