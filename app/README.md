@@ -19,7 +19,10 @@ with "Umbenennen" next to its name and hides it with "Ausblenden"
 Cameras the hub heard but does not read yet stand under "Neue Kameras
 gefunden" with "Aufnehmen" (and a name) or "Ignorieren"; "Nicht mehr
 abfragen" next to a camera's name stops reading it, "Doch aufnehmen" takes it
-back (#298). "Nach Kameras suchen" asks the hub to scan at its next contact
+back (#298). A camera taken in stays visible until the hub has read it: it
+gets a tab marked "noch nicht erreicht" and a row in "Kameras verwalten",
+without recordings, and can be renamed or dropped there; once read, its tab
+opens with the recordings. "Nach Kameras suchen" asks the hub to scan at its next contact
 (#308). The texts are German. It can be
 installed as an app (manifest, PNG icons of 192 and 512 px plus a maskable
 one, and a service worker in `public/`), and with Chrome or Edge it writes finished

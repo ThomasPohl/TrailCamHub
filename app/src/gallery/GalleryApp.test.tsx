@@ -310,6 +310,69 @@ describe('GalleryApp', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows a camera taken in before the hub has read it', async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
+    const fresh = await screen.findByRole('group', { name: 'Neue Kamera TC100_77A1' });
+    fireEvent.change(within(fresh).getByLabelText(/Name der Kamera/), {
+      target: { value: 'Futterplatz' },
+    });
+    fireEvent.click(within(fresh).getByRole('button', { name: 'Aufnehmen' }));
+    expect(await screen.findByText(/ohne Aufnahmen bei Ihren Kameras/)).toBeInTheDocument();
+
+    // Listed with the read cameras, not gone until the next scan.
+    const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
+    const row = within(panel).getByRole('row', { name: /Futterplatz/ });
+    expect(row).toHaveTextContent('noch nicht erreicht');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Futterplatz noch nicht erreicht' }));
+    expect(screen.getByRole('heading', { name: 'Kamera „Futterplatz“' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Hinweise zur Kamera' })).toHaveTextContent(
+      /noch nicht erreicht\. Er liest sie beim nächsten Kontakt \(gegen .*\)/,
+    );
+    expect(screen.getByText('Noch keine Aufnahmen.')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Aufnahmen' })).not.toBeInTheDocument();
+
+    // A name given now is the one it gets at its first read.
+    fireEvent.click(screen.getByRole('button', { name: 'Umbenennen' }));
+    fireEvent.change(screen.getByLabelText('Neuer Name der Kamera'), {
+      target: { value: 'Futterstelle' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+    expect(
+      await screen.findByRole('tab', { name: 'Futterstelle noch nicht erreicht' }),
+    ).toHaveAttribute('aria-selected', 'true');
+
+    // Back to a read camera and its recordings.
+    fireEvent.click(screen.getByRole('tab', { name: 'Garten' }));
+    expect(await screen.findAllByRole('listitem')).toHaveLength(16);
+  });
+
+  it('opens the camera with its recordings once the hub has read it', async () => {
+    let reached = false;
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    const foundCameras = api.foundCameras.bind(api);
+    // Stands in for the first read: the waiting camera gets the id of Wiese.
+    api.foundCameras = async () =>
+      (await foundCameras()).map((f) =>
+        reached && f.bleAddress === 'AA:BB:CC:00:77:A1' ? { ...f, camId: 'A1B2C3D4E5F6' } : f,
+      );
+    await api.decideCamera('garten-hub', 'AA:BB:CC:00:77:A1', 'approved', 'Futterplatz');
+    // Polls fast, as the page does every 15 s.
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={50} />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Futterplatz noch nicht erreicht' }));
+    expect(await screen.findByText('Noch keine Aufnahmen.')).toBeInTheDocument();
+
+    reached = true;
+    await waitFor(() =>
+      expect(screen.queryByRole('tab', { name: /noch nicht erreicht/ })).not.toBeInTheDocument(),
+    );
+    expect(await screen.findAllByRole('listitem')).toHaveLength(16);
+    expect(screen.getByRole('tab', { name: 'Wiese' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('shows a recording large and plays its video (#306)', async () => {
     let now = 1_000_000;
     const api = new DemoGalleryApi(() => now, 20);
