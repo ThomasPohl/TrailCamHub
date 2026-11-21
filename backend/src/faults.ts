@@ -60,9 +60,13 @@ export function hubFaults(
 ): Fault[] {
   const faults: Fault[] = [];
 
+  // A held-back release (`skipped`) changes nothing on the hub and must not
+  // hide the fault of an update before it.
+  const changes = firmwareChanges.filter((c) => c.result !== 'skipped');
+
   // A step back to an older version: the bootloader rolled an update back,
   // or someone flashed an old image (#149).
-  const lastChange = [...firmwareChanges].sort((a, b) => b.at - a.at)[0];
+  const lastChange = [...changes].sort((a, b) => b.at - a.at)[0];
   if (
     lastChange &&
     lastChange.at >= now - FAILED_WINDOW_S &&
@@ -87,7 +91,7 @@ export function hubFaults(
   }
 
   // The hub's own report of a failed or rolled-back update (#149).
-  const lastReport = [...firmwareChanges]
+  const lastReport = [...changes]
     .filter((c) => c.result !== undefined)
     .sort((a, b) => b.at - a.at)[0];
   if (

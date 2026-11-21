@@ -342,6 +342,7 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
       batPercent: hub.batPercent,
       uplink: hub.uplink,
       modemSignalDbm: hub.uplink === 'modem' ? hub.modemSignalDbm : undefined,
+      modemOperator: hub.uplink === 'modem' ? hub.modemOperator : undefined,
       memory: hub.memory,
       lastSeen: hub.lastSeen,
       schedule: hub.schedule,
@@ -905,19 +906,41 @@ export function parseMemory(raw: unknown): HubMemory | undefined {
 
 const UPLINKS: readonly HubUplink[] = ['wifi', 'modem', 'ethernet'];
 
-/** Transport and modem signal of a check-in (#149); unknown values are left out. */
-export function uplinkOf(body: CheckinRequest): { uplink?: HubUplink; modemSignalDbm?: number } {
+/**
+ * Transport, modem signal and mobile network of a check-in (#149); unknown
+ * values are left out. A hub without the operator field (older firmware) sends
+ * none.
+ */
+export function uplinkOf(body: CheckinRequest): {
+  uplink?: HubUplink;
+  modemSignalDbm?: number;
+  modemOperator?: string;
+} {
   const uplink = UPLINKS.find((u) => u === body.hubUplink);
   const signal = optionalNumber(body.modemSignalDbm);
-  const out: { uplink?: HubUplink; modemSignalDbm?: number } = {};
+  const out: { uplink?: HubUplink; modemSignalDbm?: number; modemOperator?: string } = {};
   if (uplink) out.uplink = uplink;
   if (uplink === 'modem' && signal !== undefined && signal < 0 && signal > -150) {
     out.modemSignalDbm = Math.round(signal);
   }
+  const operator =
+    typeof body.modemOperator === 'string'
+      ? // eslint-disable-next-line no-control-regex
+        body.modemOperator
+          .replace(/[\u0000-\u001f\u007f]/g, '')
+          .trim()
+          .slice(0, 40)
+      : '';
+  if (uplink === 'modem' && operator) out.modemOperator = operator;
   return out;
 }
 
-const UPDATE_RESULTS: readonly FirmwareUpdateResult[] = ['installed', 'rolledBack', 'failed'];
+const UPDATE_RESULTS: readonly FirmwareUpdateResult[] = [
+  'installed',
+  'rolledBack',
+  'failed',
+  'skipped',
+];
 
 /**
  * The hub's update record (#149) as a firmware change; undefined if absent
