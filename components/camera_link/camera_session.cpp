@@ -130,7 +130,6 @@ void CameraSession::begin_session()
     thumbnails_.release();
     thumbnail_requested_us_ = 0;
     deferred_command_.clear();
-    thumb_emitted_ = false;
     scan_list_.reset();
     work_done_ = false;
     end_session_ = false;
