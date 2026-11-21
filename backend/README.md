@@ -372,13 +372,46 @@ everything else happens through the execution role. Rotate it from time to time
    Admin tasks are only reachable by invoking the function directly; requests
    through the Function URL never trigger them.
 
+## Mail about faults (#265)
+
+The admin view lists every fault of the hubs and cameras. In addition the
+operator gets a mail when a fault **appears**, so a silent hub does not go
+unnoticed. Only the operator is mailed, never an end user.
+
+- A function runs every 30 minutes (`FaultMailFunction`, `src/fault-mail.ts`),
+  looks at every hub with the same rules as the admin view and sends **one mail
+  with the new faults**. A fault that lasts is not mailed again; if it ends and
+  comes back, it is. If sending fails, the next run tries again.
+- Mailed: hub never seen or silent, hub battery critical, camera battery low or
+  critical, SD card missing or full, failed requests, firmware went back or the
+  update failed or was rolled back, camera not read. Early warnings (hub battery
+  low, SD card nearly full, low memory) stay in the admin view.
+- The mail goes through Amazon SES. The first run after switching it on mails
+  all faults that exist at that moment.
+
+Set up once:
+
+1. In SES (same Region as the stack), verify the sender address (Verified
+   identities → Create identity → Email address, then click the link in the
+   mail). A new SES account is in the sandbox: it only sends to verified
+   addresses, so verify the recipient too (the same address is fine).
+2. Add the GitHub secret `FAULT_MAIL_FROM` (the sender address). Optionally
+   `FAULT_MAIL_TO` for another recipient; without it the mail goes to the sender
+   address. Without `FAULT_MAIL_FROM` the function is not deployed at all.
+3. Run the `deploy` command of the bootstrap stack again (see above): the
+   deploy role needs permission for the schedule. Then deploy the backend.
+
+The address is a CloudFormation parameter with `NoEcho` and an environment
+variable of the function; it is not in the repository.
+
 ## Costs
 
 Lambda, DynamoDB (provisioned 5/5) and outbound traffic stay within the AWS
 always-free allowances at this scale. S3 storage is billed normally (cents per
 month for thumbnails). In an AWS project the spend limit caps the costs: close to
 the limit, AWS blocks new resources and Lambda function URL calls instead of
-billing more. In a classic account, set an AWS Budgets alert.
+billing more. In a classic account, set an AWS Budgets alert. The fault mails
+(SES) cost $0.10 per 1,000 mails, so cents per year.
 
 ## Not yet included
 

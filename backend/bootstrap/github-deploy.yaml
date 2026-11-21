@@ -91,6 +91,22 @@ Resources:
                   - iam:ListRolePolicies
                   - iam:ListAttachedRolePolicies
                 Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${BackendStackName}-*'
+              # The schedule of the fault mails (#265). Redeploy this stack
+              # once before deploying a backend with FAULT_MAIL_FROM set.
+              - Sid: Schedule
+                Effect: Allow
+                Action:
+                  - events:PutRule
+                  - events:DeleteRule
+                  - events:DescribeRule
+                  - events:EnableRule
+                  - events:DisableRule
+                  - events:PutTargets
+                  - events:RemoveTargets
+                  - events:ListTargetsByRule
+                  - events:TagResource
+                  - events:UntagResource
+                Resource: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/${BackendStackName}-*'
               - Sid: LogGroups
                 Effect: Allow
                 Action: logs:*
