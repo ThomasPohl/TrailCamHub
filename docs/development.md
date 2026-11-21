@@ -95,6 +95,17 @@ tests compare the result, the files on the card and the normalised log of each
 scenario, so a change to the session code that alters behaviour shows up. A
 run takes about a minute (about five with sanitizers).
 
+`session_virtual_tests` runs the same scenarios without sockets and without
+sleeping (#354). The camera mock is called from the session's own thread
+through virtual UDP sockets (`test/host/session/virtual_net.cpp`: the packet
+I/O of `camera_udp_transport.cpp` is replaced and `socket()`, `bind()`,
+`setsockopt()` and `close()` are redirected by the linker), and the clock only
+moves while the session waits, so the cases that depend on time (the camera
+closes, a stop request, a silent camera, a lossy link) are compared exactly and
+repeat identically. A datagram from the camera takes 1 ms of virtual time. The
+clock starts at the same value in every case; the result of a session can
+depend on the absolute time. The production code is not changed for this.
+
 `test/host/check_camera_session_compile.sh` additionally compiles the session
 sources in four Kconfig variants (photos, all videos, videos on request,
 discard and preview) with `-Wall -Wextra -Werror`.
