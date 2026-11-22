@@ -6,7 +6,6 @@ import type { Fault, GalleryCamera, RecordingState } from './types';
  * code and comments stay English.
  */
 
-import type { BatteryForecast } from './forecast';
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Camera wall clock (docs/clock.md) as "15.11. 14:02". */
