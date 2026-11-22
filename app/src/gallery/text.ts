@@ -98,12 +98,15 @@ export function forecastText(f: BatteryForecast, nowSeconds: number): string {
       : `Verbrauch: ${rate} %/h ${over}, Akku hält praktisch dauerhaft.`;
   }
   const left = f.emptyAt - nowSeconds;
+  const age = nowSeconds - f.lastAt;
+  // The forecast starts at the latest value, so an old value moves it into the past.
+  const since = age > 3 * 3600 ? ` Letzter Wert von ${clockTime(f.lastAt, nowSeconds)}.` : '';
   const when =
     left <= 0
-      ? 'Akku ist vermutlich leer.'
+      ? `Laut Prognose war der Akku ${clockTime(f.emptyAt, nowSeconds)} leer.${since}`
       : left > 365 * 86400
         ? 'Leer: nicht absehbar (mehr als ein Jahr).'
-        : `Leer voraussichtlich ${clockTime(f.emptyAt, nowSeconds)} (in ${durationText(left)}).`;
+        : `Leer voraussichtlich ${clockTime(f.emptyAt, nowSeconds)} (in ${durationText(left)}).${since}`;
   return `Verbrauch: ${rate} %/h ${over}. ${when}`;
 }
 

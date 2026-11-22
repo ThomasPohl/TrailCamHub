@@ -50,6 +50,13 @@ describe('battery forecast', () => {
     const c = batteryForecast(hourly([50, 52, 54]));
     expect(c && forecastText(c, now)).toBe('Lädt: +2,0 %/h (letzte 2 h), keine Prognose.');
     const dead = batteryForecast(hourly([5, 4, 3]));
-    expect(dead && forecastText(dead, 1_000_000 + 100 * H)).toContain('vermutlich leer');
+    expect(dead && forecastText(dead, 1_000_000 + 100 * H)).toMatch(
+      /Laut Prognose war der Akku .* leer\. Letzter Wert von /,
+    );
+    // A latest value from days ago says so, the forecast stays measured from it.
+    const stale = batteryForecast(hourly([100, 99, 98]));
+    expect(stale && forecastText(stale, 1_000_000 + 2 * H + 30 * H)).toMatch(
+      /Leer voraussichtlich .* \(in 3 Tage\)\. Letzter Wert von /,
+    );
   });
 });
