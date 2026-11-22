@@ -17,6 +17,9 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // New in eslint-plugin-react-hooks 6+; the effects below load data on mount
+      // and poll. Refactor separately instead of changing behaviour in a major bump.
+      'react-hooks/set-state-in-effect': 'off',
     },
   },
 );
