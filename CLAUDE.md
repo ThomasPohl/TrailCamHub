@@ -22,7 +22,8 @@ backend with a gallery web app. Protocol and design notes live in `docs/`.
 - `main/`: `app_main` and the start-up order.
 - `boards.json` + `sdkconfig.defaults*`: one entry and one defaults file per
   board (including `wroom32d`). Other options are in each component's `Kconfig`.
-- `tools/`: `camera_mock/` (camera mock for an ESP32-WROOM), `dongle_console.py`.
+- `tools/`: `camera_mock/` (camera mock for an ESP32-WROOM), `dongle_console.py`,
+  `capture/` (decode captures of the camera app).
 - `web/` installer, `app/` Mini App, `backend/` AWS SAM (optional, not being
   extended), `test/host/` host tests.
 
@@ -33,6 +34,7 @@ backend with a gallery web app. Protocol and design notes live in `docs/`.
 - Modes, settings, where a setting lives: `modes.md`
 - Boards, wiring: `hardware.md`, `wiring-wroom32d.md`
 - Wire format, encryption: `udp-protocol.md`, `protocol-analysis.md`
+- Camera settings (512 / 513), capability: `camera-settings.md`
 - Media, SD layout, download, delete: `media-identity.md`, `sd-layout.md`,
   `video-download.md`, `camera-media-delete.md`, `camera-actions.md`
 - Clock: `clock.md`

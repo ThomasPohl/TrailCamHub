@@ -149,6 +149,7 @@ IDs and shapes confirmed against captured app logs)
 | 258 | START_AV | C→D | start audio/video stream |
 | 259 | STOP_AV | C→D | stop stream |
 | 512 | GET_DEV_INFO | C→D | device/firmware/battery/SD info |
+| 513 | SET_DEV_PARAM | C→D | changes settings; carries only the changed fields (seen on firmware 2.3.0.3), see [`camera-settings.md`](camera-settings.md) |
 | 518 | FORMAT_SD_CARD | C→D | erases the card (seen on firmware 2.2.5.9), see [`camera-media-delete.md`](camera-media-delete.md) |
 | 525 | HEARTBEAT | C→D | keep-alive, ~every 3 s, fire-and-forget |
 | 641 | TRIGGER_SNAP | C→D | takes a photo (seen on firmware 2.2.5.9) |
@@ -184,7 +185,8 @@ The camera is sensitive to *when* and *how* commands are sent:
 Request: `{"cmdId":512,"token":<number>}`. The response is a large JSON object (a few KB,
 fragmented — see §5.6) with device identity and state: `devId`, `fwVerName`, `modelName`,
 `subModelName`, `productId`, `batPercent`, `sdTotalMB`, `sdFreeMB`, a `capability` object,
-`result:0`, etc.
+`result:0`, etc. All settings it reports, their values and the `capability`
+object are listed in [`camera-settings.md`](camera-settings.md).
 
 The response also carries the camera's screen unlock code in cleartext
 (`secureCodeOnOff`, `secureCode0` … `secureCode3`). The firmware never logs it:
