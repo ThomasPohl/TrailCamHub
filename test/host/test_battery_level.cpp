@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 
+#include <string>
+
 #include "battery_level.hpp"
 
 using namespace hub_battery;
@@ -115,4 +117,12 @@ TEST_CASE("the modem needs enough cell voltage")
     // Unknown voltage or no limit: allowed.
     CHECK(modem_allowed(-1, 3400));
     CHECK(modem_allowed(3000, 0));
+}
+
+TEST_CASE("gauge failure hint names the I2C bus on a timeout")
+{
+    CHECK(std::string(gauge_failure_hint(true)).find("CAM DIP switch") !=
+          std::string::npos);
+    CHECK(std::string(gauge_failure_hint(false)).find("no cell inserted") !=
+          std::string::npos);
 }

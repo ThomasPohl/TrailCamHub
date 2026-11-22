@@ -39,6 +39,8 @@ i2c_master_dev_handle_t s_device = nullptr;
 // Whether the last read found the gauge, so that a change is logged once.
 bool s_last_ok = true;
 bool s_version_checked = false;
+// Whether the last read failed because the I2C probe timed out.
+bool s_probe_timeout = false;
 
 bool open_bus()
 {
@@ -97,7 +99,11 @@ bool read_gauge(Reading &out)
         return false;
     }
     // Probe first: a transfer to a missing device logs an I2C error each time.
-    if (i2c_master_probe(s_bus, kMax17048Address, kTimeoutMs) != ESP_OK) {
+    s_probe_timeout = false;
+    const esp_err_t probe =
+        i2c_master_probe(s_bus, kMax17048Address, kTimeoutMs);
+    if (probe != ESP_OK) {
+        s_probe_timeout = probe == ESP_ERR_TIMEOUT;
         return false;
     }
     if (!s_version_checked) {
@@ -178,7 +184,7 @@ bool read(Reading &out)
     if (ok != s_last_ok) {
         s_last_ok = ok;
         if (!ok) {
-            ESP_LOGW(TAG, "Battery gauge does not answer (no cell inserted?)");
+            ESP_LOGW(TAG, "%s", gauge_failure_hint(s_probe_timeout));
         }
     }
     if (ok) {

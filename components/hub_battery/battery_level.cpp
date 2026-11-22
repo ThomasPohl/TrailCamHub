@@ -92,4 +92,12 @@ bool modem_allowed(int millivolts, int min_mv)
     return millivolts < 0 || min_mv <= 0 || millivolts >= min_mv;
 }
 
+const char *gauge_failure_hint(bool bus_timeout)
+{
+    return bus_timeout ? "Battery gauge: the I2C bus does not respond "
+                         "(timeout). Check that the CAM DIP switch is ON, the "
+                         "pull-ups on SDA/SCL, and the cell"
+                       : "Battery gauge does not answer (no cell inserted?)";
+}
+
 }  // namespace hub_battery

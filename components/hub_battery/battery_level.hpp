@@ -43,6 +43,12 @@ bool modem_allowed(int millivolts, int min_mv);
 // it the reading is not trusted (no cell, bus error).
 bool plausible_cell_millivolts(int millivolts);
 
+// What to tell in the log when the gauge does not answer. A timeout of the I2C
+// probe (no acknowledge and no idle bus, as opposed to "no device") points at
+// the bus lines before the cell: on the Waveshare board the pull-ups of SDA/SCL
+// only work with the CAM DIP switch ON (#412).
+const char *gauge_failure_hint(bool bus_timeout);
+
 // Percentage of a single Li-ion cell from its voltage, along a typical
 // discharge curve from 3300 mV (0 %) to 4200 mV (100 %). `empty_mv` and
 // `full_mv` move the ends of the curve: the voltage is first scaled linearly
