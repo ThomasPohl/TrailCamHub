@@ -1,4 +1,10 @@
-import type { Camera, HubSchedule, ScheduleConfig } from '../api/types';
+import type {
+  Camera,
+  CameraCapability,
+  CameraSettings,
+  HubSchedule,
+  ScheduleConfig,
+} from '../api/types';
 
 /**
  * The gallery's view of the backend (#258): one end user sorts recordings by
@@ -61,6 +67,14 @@ export interface GalleryCamera {
   sdTotalMB?: number;
   /** Last read, Unix seconds; 0 = never. */
   lastRead?: number;
+  /** The camera's settings and what it offers (#368); absent if unknown. */
+  settings?: CameraSettings;
+  capability?: CameraCapability;
+  /** A change waits for the hub (`requested`) or the hub has it (`delivered`). */
+  settingsPending?: CameraSettings;
+  settingsState?: 'requested' | 'delivered';
+  /** The last change failed: the hub's reason. */
+  settingsError?: string;
 }
 
 /** Longest camera name the backend accepts. */
@@ -204,6 +218,10 @@ export interface GalleryApi {
   renameCamera(camId: string, name: string): Promise<string>;
   /** Hides the camera in the gallery or shows it again (#273). */
   setCameraHidden(camId: string, hidden: boolean): Promise<void>;
+  /** Changes the camera's settings at the next contact; only the changed fields (#368). */
+  changeSettings(camId: string, settings: CameraSettings): Promise<void>;
+  /** Takes back a change the hub has not received yet; false if it has (#368). */
+  withdrawSettings(camId: string): Promise<boolean>;
   /** Cameras the user's hubs heard, read or not (#298). */
   foundCameras(): Promise<FoundCamera[]>;
   /**

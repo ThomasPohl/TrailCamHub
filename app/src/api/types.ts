@@ -55,6 +55,29 @@ export interface Camera {
   hubScheduleConfig: ScheduleConfig;
   /** A camera read was asked for and has not been done yet. */
   readRequested: boolean;
+  /** The camera's settings at the hub's last read (#368); absent if unknown. */
+  settings?: CameraSettings;
+  capability?: CameraCapability;
+  /** Changes asked for that the camera has not confirmed yet, merged. */
+  settingsPending?: CameraSettings;
+  /** `requested`: waits for the hub; `delivered`: the hub has it. */
+  settingsState?: 'requested' | 'delivered';
+  /** The last change failed: the hub's reason. */
+  settingsError?: string;
+}
+
+/**
+ * Camera settings by the field names of the camera's device info
+ * (`workMode`, `pirSens`, ...; docs/camera-settings.md). Only the fields the
+ * camera supports.
+ */
+export type CameraSettings = Record<string, number | boolean | string>;
+
+/** What the camera offers: resolution codes and language codes. */
+export interface CameraCapability {
+  imgResolutions: number[];
+  videoResolutions: number[];
+  languages: string[];
 }
 
 /** Where the hub got a schedule setting from. */

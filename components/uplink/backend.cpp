@@ -152,6 +152,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
         hub_config::uplink_transport(settings) == hub_config::Transport::modem;
     // A deletion was queued or still waits: the camera session runs it.
     bool delete_read = false;
+    bool settings_read = false;
     for (const CameraCheckin &result : response.cameras) {
         SyncCamera *camera = find_camera(cameras, result.cam_id);
         if (camera != nullptr) {
@@ -235,6 +236,13 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
                     camera_ack.commands.push_back(command_result);
                 }
                 continue;
+            }
+            if (command.type == "setSettings") {
+                if (handle_settings_command(result.cam_id, command,
+                                            command_result, settings_read)) {
+                    camera_ack.commands.push_back(command_result);
+                }
+                continue;
             } else {
                 command_result.error = "unsupported command " + command.type;
             }
@@ -249,6 +257,9 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     save_changed(cameras);
     if (delete_read) {
         schedule::request_camera_read("a deletion was requested");
+    }
+    if (settings_read) {
+        schedule::request_camera_read("a settings change was requested");
     }
     ESP_LOGI(TAG,
              "Checked in %d cameras (%d refused), %d media; backend wanted "

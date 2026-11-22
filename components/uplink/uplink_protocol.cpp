@@ -344,6 +344,9 @@ std::string build_checkin_json(const CheckinRequest &request)
         if (!c.ble_address.empty()) {
             out += ",\"bleAddress\":\"" + json_escape(c.ble_address) + "\"";
         }
+        if (!c.settings.empty()) {
+            out += "," + c.settings;
+        }
         out += ",\"media\":[";
         bool first = true;
         for (const MediaRef &m : c.media) {
@@ -484,6 +487,7 @@ bool parse_checkin_response(const std::string &json, CheckinResponse &out)
             if (json_find_string(obj, "id", command.id) &&
                 json_find_string(obj, "type", command.type)) {
                 json_find_int(obj, "mediaId", command.media_id);
+                command.settings = object_of(obj, "settings");
                 if (!json_find_string(obj, "uploadUrl", command.upload_url) ||
                     command.upload_url.rfind("https://", 0) != 0) {
                     command.upload_url.clear();

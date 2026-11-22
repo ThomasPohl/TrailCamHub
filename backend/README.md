@@ -53,6 +53,8 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests                                |
 | POST   | `/v1/cameras/{camId}/name`                     | app user               | `{"name":"Garten"}`, 1–40 characters                                 |
 | POST   | `/v1/cameras/{camId}/hidden`                   | app user               | `{"hidden":true}`: hide in the gallery (#273)                        |
+| POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"setSettings","settings":{"pirSens":1}}` (#368)             |
+| POST   | `/v1/cameras/{camId}/settings/withdraw`        | app user               | Take back a settings change the hub has not received (#368)          |
 | GET    | `/v1/hubs/{hubId}/found-cameras`               | app user               | Cameras the hub found: new, approved, excluded (#297)                |
 | POST   | `/v1/hubs/{hubId}/scan`                        | app user               | Read the cameras at the next contact; the scan finds new ones (#308) |
 | POST   | `/v1/hubs/{hubId}/found-cameras/{bleAddress}`  | app user               | `{"state":"approved","name":"…"}` or `excluded`                      |
@@ -135,6 +137,21 @@ list shows `deleteState` (`requested`, `delivered`, `failed` with
 withdrawn; once the hub has received it, `withdraw` answers 409. Hub firmware
 without delete support acknowledges `failed` ("unsupported command").
 
+**Camera settings** (#368): the hub reports the camera's settings and
+capability with every check-in (see below); `GET /v1/cameras` returns them as
+`settings` and `capability`. `setSettings` changes them: `settings` holds only
+the fields to change, by the names of the camera's device info
+([docs/camera-settings.md](../docs/camera-settings.md)), checked against the
+fields in `src/settings.ts` and the camera's capability (400 otherwise; a field
+the hub did not report is one the camera does not support). A change that
+still waits for the hub takes the new fields; one the hub has received is
+followed by the new one. The camera shows the open change merged as
+`settingsPending` with `settingsState` (`requested`, `delivered`), or
+`settingsError` when the last change failed. The hub gets
+`{"id", "type":"setSettings", "settings":{…}}`, sends it to the camera with
+cmdId 513 in the camera's next session and acknowledges it like a deletion.
+Never part of it: the screen lock code, the clock and unknown fields.
+
 ### Hub check-in cycle
 
 One check-in per cycle covers all cameras the hub read, so a cycle needs a single
@@ -193,6 +210,11 @@ request (and TLS handshake) however many cameras there are — important over LT
      `isSolarCharging` (booleans), `batType` (the camera's code), `bleVersion`
      and `cameraName` (the name set on the camera). The hub reads only these
      fields of the device info (an allowlist), so nothing else reaches the backend.
+   - Optional `settings` (`{"workMode":0,"pirSens":2,"osdInfoEnable":true,
+"languageCode":"en",…}`) and `capability` (`{"imgResolutions":[…],
+"videoResolutions":[…],"languages":[…]}`), #368: the camera's settings
+     from its own allowlist, only those the camera supports. Fields that do
+     not fit are dropped; without `settings` the stored ones are kept.
    - Limits per request: 16 cameras, 2000 media entries.
 
    The response has one entry per reported camera, plus every other camera of the

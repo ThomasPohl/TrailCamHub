@@ -560,6 +560,53 @@ TEST_CASE("camera mock: camera actions (#122 stage 3)")
     CHECK(interpret(Type::delete_media, ask(file)).done);
 }
 
+TEST_CASE("camera mock: settings (513) show in the next device info (#368)")
+{
+    CHECK(settings_fields("{\"cmdId\":513,\"pirSens\":1,\"osdInfoEnable\":"
+                          "false,\"languageCode\":\"de\",\"token\":5,"
+                          "\"seq\":34}") ==
+          std::vector<SettingField>{{"pirSens", "1"},
+                                    {"osdInfoEnable", "false"},
+                                    {"languageCode", "\"de\""}});
+    // Top-level fields only; capability flags keep their value.
+    CHECK(patch_settings("{\"enableAiFilter\":0,\"osdInfoEnable\":true,"
+                         "\"capability\":{\"enableAiFilter\":true}}",
+                         {{"enableAiFilter", "1"},
+                          {"osdInfoEnable", "false"},
+                          {"micVol", "40"}}) ==
+          "{\"micVol\":40,\"enableAiFilter\":1,\"osdInfoEnable\":false,"
+          "\"capability\":{\"enableAiFilter\":true}}");
+
+    Bench bench;
+    bench.discover_and_login();
+    const std::string t = ",\"token\":37817828";
+    bench.hub.command(2,
+                      "{\"cmdId\":513,\"pirSens\":0,\"languageCode\":\"de\","
+                      "\"osdInfoEnable\":false" +
+                          t + ",\"seq\":2}",
+                      bench.now_ms);
+    bench.run();
+    REQUIRE(bench.hub.responses.size() == 2);
+    CHECK(camera::action::interpret(camera::action::Type::settings,
+                                    bench.hub.responses[1])
+              .done);
+    CHECK(bench.camera.stats().settings_changes == 1);
+
+    bench.hub.command(3, "{\"cmdId\":512" + t + "}", bench.now_ms);
+    bench.run();
+    REQUIRE(bench.hub.responses.size() == 3);
+    camera::artemis::DeviceInfo info;
+    REQUIRE(camera::artemis::parse_device_info(bench.hub.responses[2], info));
+    const camera::settings::Value *pir = info.settings.find("pirSens");
+    REQUIRE(pir != nullptr);
+    CHECK(pir->number == 0);
+    CHECK(info.settings.find("languageCode")->text == "de");
+    CHECK(info.settings.find("osdInfoEnable")->number == 0);
+    // The rest as captured.
+    CHECK(info.settings.find("workMode")->number == 0);
+    CHECK(info.settings.capability.present);
+}
+
 TEST_CASE("camera mock: fault switches (#122 stage 2)")
 {
     Faults faults;

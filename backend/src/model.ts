@@ -14,9 +14,10 @@ export type FileType = 0 | 2;
 export type VideoState = 'none' | 'requested' | 'downloading' | 'available' | 'failed';
 /**
  * requestVideo: fetch a video (mediaId); readCamera: read the camera now;
- * deleteMedia: delete a recording on the camera (mediaId).
+ * deleteMedia: delete a recording on the camera (mediaId); setSettings:
+ * change the camera's settings (`settings`, #368).
  */
-export type CommandType = 'requestVideo' | 'readCamera' | 'deleteMedia';
+export type CommandType = 'requestVideo' | 'readCamera' | 'deleteMedia' | 'setSettings';
 /** `cancelled`: withdrawn in the app before the hub picked it up. */
 export type CommandState = 'queued' | 'delivered' | 'done' | 'failed' | 'cancelled';
 
@@ -98,6 +99,21 @@ export interface HubMemory {
  */
 export type SdCardState = 'ok' | 'missing';
 
+/**
+ * The camera's settings as the hub last read them (#368): field names of the
+ * camera's device info (`workMode`, `pirSens`, ...; see settings.ts and
+ * docs/camera-settings.md), numbers, booleans (`osdInfoEnable`,
+ * `WiFiLedEnable`) and the language code. Only fields the camera supports.
+ */
+export type CameraSettings = Record<string, number | boolean | string>;
+
+/** What the camera offers: resolution codes and language codes. */
+export interface CameraCapability {
+  imgResolutions: number[];
+  videoResolutions: number[];
+  languages: string[];
+}
+
 export interface CameraRecord {
   camId: string;
   hubId: string;
@@ -126,6 +142,9 @@ export interface CameraRecord {
   bleVersion?: string;
   /** The name set on the camera itself (often a default such as "0000"). */
   cameraName?: string;
+  /** The camera's settings and capability at the last read (#368). */
+  settings?: CameraSettings;
+  capability?: CameraCapability;
   /** When the hub last read the camera, Unix seconds. */
   lastSeen: number;
 }
@@ -148,8 +167,10 @@ export interface MediaRecord {
 export interface CommandRecord {
   id: string;
   type: CommandType;
-  /** The recording of a requestVideo; 0 for readCamera. */
+  /** The recording of a requestVideo or deleteMedia; 0 otherwise. */
   mediaId: number;
+  /** setSettings: the fields to change. */
+  settings?: CameraSettings;
   state: CommandState;
   created: number;
   updated: number;
@@ -344,6 +365,18 @@ export interface Camera {
   hubScheduleConfig: ScheduleConfig;
   /** A camera read was asked for and has not been done yet. */
   readRequested: boolean;
+  /** The camera's settings at the last read (#368); absent if not known. */
+  settings?: CameraSettings;
+  capability?: CameraCapability;
+  /**
+   * Changes asked for in the gallery that the camera has not confirmed yet,
+   * merged (the latest value per field). `requested`: waits for the hub;
+   * `delivered`: the hub has it.
+   */
+  settingsPending?: CameraSettings;
+  settingsState?: 'requested' | 'delivered';
+  /** The last change failed (and no newer one waits): why. */
+  settingsError?: string;
 }
 
 export interface MediaItem {
@@ -406,6 +439,9 @@ export interface CameraReport {
   cameraName?: string;
   /** The camera's BLE address as the hub connected to it (#296). */
   bleAddress?: string;
+  /** Settings and capability at the read (#368); raw, see settings.ts. */
+  settings?: unknown;
+  capability?: unknown;
   /**
    * Media not reported before (delta). The backend only adds entries, so
    * sending an item again is harmless.
@@ -499,8 +535,15 @@ export interface CameraCheckin {
    * mediaId and uploadUrl only for requestVideo. The hub PUTs the MP4
    * (Content-Type video/mp4) to `uploadUrl` and then acknowledges the command;
    * an open command comes again with every check-in, with a fresh URL.
+   * mediaId also for deleteMedia, settings for setSettings.
    */
-  commands: Array<{ id: string; type: CommandType; mediaId?: number; uploadUrl?: string }>;
+  commands: Array<{
+    id: string;
+    type: CommandType;
+    mediaId?: number;
+    uploadUrl?: string;
+    settings?: CameraSettings;
+  }>;
 }
 
 export interface CheckinResponse {

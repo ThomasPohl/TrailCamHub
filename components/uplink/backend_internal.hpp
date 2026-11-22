@@ -50,6 +50,8 @@ MemoryReport memory_report();
 // backend_commands.cpp
 bool handle_delete_command(const std::string &cam_id, const Command &command,
                            CommandResult &out, bool &read_needed);
+bool handle_settings_command(const std::string &cam_id, const Command &command,
+                             CommandResult &out, bool &read_needed);
 bool handle_video_command(SyncCamera *camera, const std::string &cam_id,
                           const Command &command, bool over_modem,
                           CommandResult &out, Report &report);

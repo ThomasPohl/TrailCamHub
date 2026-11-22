@@ -9,7 +9,14 @@ import { parseAppToken } from './auth/app';
 import { parseDeviceKey, verifySecret } from './auth/device';
 import { verifyTotp } from './auth/totp';
 import { createAppUser, revokeAppUser } from './admin';
-import { requestDelete, requestVideo, withdraw } from './commands';
+import {
+  requestDelete,
+  requestSettings,
+  requestVideo,
+  withdraw,
+  withdrawSettings,
+} from './commands';
+import { parseCapability, parseSettingsReport } from './settings';
 import {
   HttpError,
   json,
@@ -113,6 +120,11 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/withdraw', handler: withdrawMedia },
   { method: 'POST', pattern: '/v1/cameras/:camId/name', handler: renameCameraByUser },
   { method: 'POST', pattern: '/v1/cameras/:camId/hidden', handler: hideCamera },
+  {
+    method: 'POST',
+    pattern: '/v1/cameras/:camId/settings/withdraw',
+    handler: withdrawCameraSettings,
+  },
   { method: 'PUT', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
   // The same as POST: the Function URL's CORS allows no PUT (#286).
   { method: 'POST', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
@@ -278,7 +290,31 @@ function toCamera(
     hubSchedule: hub?.schedule,
     hubScheduleConfig: hub?.scheduleConfig ?? {},
     readRequested: commands.some((c) => c.type === 'readCamera' && isOpen(c)),
+    settings: record.settings,
+    capability: record.capability,
+    ...settingsState(commands),
   };
+}
+
+/**
+ * The open settings changes of a camera, merged in the order they were asked
+ * for, or the error of the last one if it failed (#368).
+ */
+function settingsState(
+  commands: CommandRecord[],
+): Pick<Camera, 'settingsPending' | 'settingsState' | 'settingsError'> {
+  const mine = commands
+    .filter((c) => c.type === 'setSettings')
+    .sort((a, b) => a.created - b.created);
+  const open = mine.filter(isOpen);
+  if (open.length > 0) {
+    return {
+      settingsPending: Object.assign({}, ...open.map((c) => c.settings ?? {})),
+      settingsState: open.some((c) => c.state === 'delivered') ? 'delivered' : 'requested',
+    };
+  }
+  const last = mine.filter((c) => c.state !== 'cancelled').at(-1);
+  return last?.state === 'failed' ? { settingsError: last.error ?? 'failed on the hub' } : {};
 }
 
 /** Who is signed in, so the gallery can offer the admin view (#264). */
@@ -535,6 +571,11 @@ async function createCommand(req: ApiRequest, params: Record<string, string>, de
   const camera = await authUserForCamera(req, params.camId ?? '', deps);
   const body = parseJsonBody<{ type?: unknown; mediaId?: unknown; mediaIds?: unknown }>(req);
   if (body.type === 'readCamera') return createReadCommand(camera, deps);
+  if (body.type === 'setSettings') {
+    const result = await requestSettings(camera, (body as { settings?: unknown }).settings, deps);
+    if (!result.ok) throw new HttpError(result.status, result.error);
+    return json(result.created ? 201 : 200, commandResult(result.command));
+  }
   if (body.type === 'deleteMedia') {
     const ids = body.mediaIds;
     if (
@@ -728,6 +769,12 @@ async function hideCamera(req: ApiRequest, params: Record<string, string>, deps:
   if (typeof hidden !== 'boolean') throw new HttpError(400, 'hidden must be true or false');
   await deps.store.setCameraHidden(camera.camId, hidden);
   return json(200, { camId: camera.camId, hidden });
+}
+
+/** Takes back the settings changes the hub has not received yet (#368). */
+async function withdrawCameraSettings(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const camera = await authUserForCamera(req, params.camId ?? '', deps);
+  return json(200, { withdrawn: await withdrawSettings(camera, deps) });
 }
 
 function commandResult(c: CommandRecord): CommandResult {
@@ -1024,6 +1071,9 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
         bleVersion: optionalString(report.bleVersion),
         cameraName: optionalString(report.cameraName),
         bleAddress: normalizeBleAddress(report.bleAddress),
+        // Absent from older firmware: the stored ones stay (#368).
+        settings: parseSettingsReport(report.settings),
+        capability: parseCapability(report.capability),
       },
       readTime(report.readAt, now),
     );
@@ -1114,7 +1164,9 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
             }
           : c.type === 'deleteMedia'
             ? { id: c.id, type: c.type, mediaId: c.mediaId }
-            : { id: c.id, type: c.type },
+            : c.type === 'setSettings'
+              ? { id: c.id, type: c.type, settings: c.settings ?? {} }
+              : { id: c.id, type: c.type },
       ),
     );
     results.set(camId, result);
@@ -1211,6 +1263,12 @@ async function ack(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
         error = 'the video did not arrive';
       }
       await deps.store.putCommand(camera.camId, { ...command, state, updated: now, error });
+      // The camera took the change: shown until its next read confirms it
+      // (the hub reports the new values with the check-in, too).
+      if (command.type === 'setSettings' && state === 'done' && camera.settings) {
+        camera.settings = { ...camera.settings, ...command.settings };
+        await deps.store.updateCamera(camera.camId, { settings: camera.settings }, camera.lastSeen);
+      }
       if (command.type === 'requestVideo') {
         await deps.store.setVideoState(
           camera.camId,

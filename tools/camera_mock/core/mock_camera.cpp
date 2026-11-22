@@ -538,6 +538,148 @@ std::string patch_device_info(const std::string &json, const Faults &faults)
     return out;
 }
 
+namespace
+{
+
+std::size_t skip_json_space(const std::string &json, std::size_t pos)
+{
+    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t' ||
+                                 json[pos] == '\r' || json[pos] == '\n')) {
+        pos++;
+    }
+    return pos;
+}
+
+// End of the string literal at `pos` (its opening quote), past the closing
+// quote; npos if it does not end.
+std::size_t json_string_end(const std::string &json, std::size_t pos)
+{
+    for (std::size_t i = pos + 1; i < json.size(); i++) {
+        if (json[i] == '\\') {
+            i++;
+        } else if (json[i] == '"') {
+            return i + 1;
+        }
+    }
+    return std::string::npos;
+}
+
+// End of the value at `pos`: a string, an object or array (nesting
+// honoured), or a number / true / false / null.
+std::size_t json_value_end(const std::string &json, std::size_t pos)
+{
+    if (pos >= json.size()) {
+        return std::string::npos;
+    }
+    if (json[pos] == '"') {
+        return json_string_end(json, pos);
+    }
+    if (json[pos] == '{' || json[pos] == '[') {
+        int depth = 0;
+        for (std::size_t i = pos; i < json.size();) {
+            const char c = json[i];
+            if (c == '"') {
+                i = json_string_end(json, i);
+                if (i == std::string::npos) {
+                    return i;
+                }
+                continue;
+            }
+            if (c == '{' || c == '[') {
+                depth++;
+            } else if (c == '}' || c == ']') {
+                if (--depth == 0) {
+                    return i + 1;
+                }
+            }
+            i++;
+        }
+        return std::string::npos;
+    }
+    std::size_t end = pos;
+    while (end < json.size() && json[end] != ',' && json[end] != '}' &&
+           json[end] != ']' && json[end] != ' ') {
+        end++;
+    }
+    return end;
+}
+
+// The top-level fields of a JSON object, in order, with their value text.
+std::vector<SettingField> top_level_fields(const std::string &json)
+{
+    std::vector<SettingField> out;
+    std::size_t pos = skip_json_space(json, 0);
+    if (pos >= json.size() || json[pos] != '{') {
+        return out;
+    }
+    pos = skip_json_space(json, pos + 1);
+    while (pos < json.size() && json[pos] == '"') {
+        const std::size_t key_end = json_string_end(json, pos);
+        if (key_end == std::string::npos) {
+            break;
+        }
+        const std::string key = json.substr(pos + 1, key_end - pos - 2);
+        pos = skip_json_space(json, key_end);
+        if (pos >= json.size() || json[pos] != ':') {
+            break;
+        }
+        pos = skip_json_space(json, pos + 1);
+        const std::size_t end = json_value_end(json, pos);
+        if (end == std::string::npos) {
+            break;
+        }
+        out.emplace_back(key, json.substr(pos, end - pos));
+        pos = skip_json_space(json, end);
+        if (pos < json.size() && json[pos] == ',') {
+            pos = skip_json_space(json, pos + 1);
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+std::vector<SettingField> settings_fields(const std::string &request)
+{
+    std::vector<SettingField> out;
+    for (const SettingField &field : top_level_fields(request)) {
+        if (field.first == "cmdId" || field.first == "token" ||
+            field.first == "seq" || field.second.empty() ||
+            field.second[0] == '{' || field.second[0] == '[') {
+            continue;
+        }
+        out.push_back(field);
+    }
+    return out;
+}
+
+std::string patch_settings(const std::string &json,
+                           const std::vector<SettingField> &settings)
+{
+    std::string out = json;
+    for (const SettingField &setting : settings) {
+        // Only top-level fields: the ones before "capability" in the answer
+        // (its flags have the same names as some settings).
+        const std::size_t capability = out.find("\"capability\"");
+        const std::string needle = "\"" + setting.first + "\":";
+        const std::size_t at = out.find(needle);
+        if (at != std::string::npos &&
+            (capability == std::string::npos || at < capability)) {
+            const std::size_t begin = at + needle.size();
+            const std::size_t end = json_value_end(out, begin);
+            if (end != std::string::npos) {
+                out.replace(begin, end - begin, setting.second);
+                continue;
+            }
+        }
+        const std::size_t open = out.find('{');
+        if (open != std::string::npos) {
+            out.insert(open + 1, needle + setting.second + ",");
+        }
+    }
+    return out;
+}
+
 std::string action_response(int cmd_id, const char *field, int value)
 {
     std::string json = "{";
@@ -978,14 +1120,16 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
     switch (cmd_id) {
     case 512:
         if (faults_.battery_percent >= 0 || faults_.sd_free_mb >= 0 ||
-            !(identity_ == Identity())) {
+            !(identity_ == Identity()) || !settings_.empty()) {
             std::string json;
             if (camera::artemis::decode(
                     cipher_, fixtures::kDeviceInfoResponse.base64, json)) {
-                respond_json(
-                    message.app_sequence,
-                    patch_identity(patch_device_info(json, faults_), identity_),
-                    now_ms);
+                respond_json(message.app_sequence,
+                             patch_settings(patch_identity(patch_device_info(
+                                                               json, faults_),
+                                                           identity_),
+                                            settings_),
+                             now_ms);
                 return;
             }
         }
@@ -1035,6 +1179,29 @@ void Camera::handle_request(const std::uint8_t *bytes, std::size_t size,
     case 518:
         handle_action(cmd_id, message.json, message.app_sequence, now_ms);
         return;
+    case 513: {
+        // Settings (#368): kept, and reported by the next 512. The camera
+        // answers every 513 alike (docs/camera-settings.md); what it does
+        // with a value it cannot take is unknown, so the mock takes all.
+        const std::vector<SettingField> changed = settings_fields(message.json);
+        for (const SettingField &field : changed) {
+            bool replaced = false;
+            for (SettingField &held : settings_) {
+                if (held.first == field.first) {
+                    held.second = field.second;
+                    replaced = true;
+                }
+            }
+            if (!replaced) {
+                settings_.push_back(field);
+            }
+        }
+        stats_.settings_changes++;
+        respond_json(message.app_sequence,
+                     "{\"errorMsg\":\"Success\",\"result\":0,\"cmdId\":513}",
+                     now_ms);
+        return;
+    }
     case 772:
     case 1285:
         handle_media(cmd_id, message.json, message.app_sequence, now_ms);

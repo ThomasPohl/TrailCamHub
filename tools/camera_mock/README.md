@@ -116,6 +116,12 @@ code:
   deletion without them -1. After a format the media list is empty. The
   replayed list still shows deleted files and no new photo or video: it is
   a capture. `status` counts the actions.
+- **Settings** (513, #368): answered `{"errorMsg":"Success","result":0,
+  "cmdId":513}` as the TC100 does (docs/camera-settings.md). Every field of
+  the request but `cmdId`, `token` and `seq` is kept and replaces the
+  captured value in the next device info (512), so a change from the gallery
+  can be followed through. The mock takes any value; what the camera does
+  with one it cannot take is unknown. `status` counts the settings requests.
 - Timing: the mock retransmits unacknowledged DATA every 100 ms (the camera
   ~70 ms), sends ALIVE every 2 s and drops a session after 30 s without a
   packet from the hub.

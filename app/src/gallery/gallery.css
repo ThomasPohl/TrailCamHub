@@ -745,6 +745,53 @@ body {
   margin-top: 18px;
 }
 
+/* Camera settings (#368): long, so the box scrolls. */
+.g-settings {
+  width: min(100%, 560px);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.g-settings__group {
+  margin: 14px 0 0;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--g-border);
+  border-radius: var(--g-radius);
+}
+
+.g-settings__group legend {
+  padding: 0 6px;
+  font-weight: 650;
+}
+
+.g-settings__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.g-settings__row select,
+.g-settings__row input[type='time'] {
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 1px solid var(--g-border);
+  border-radius: 8px;
+  background: var(--g-surface);
+  color: var(--g-text);
+  font: inherit;
+}
+
+.g-settings__row--switch {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.g-settings__row--switch input {
+  width: 22px;
+  height: 22px;
+}
+
 .g-viewer__box {
   display: flex;
   flex-direction: column;

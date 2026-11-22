@@ -356,7 +356,7 @@ TEST_CASE("an action keeps its camera, and the same file of two cameras is "
     REQUIRE(loaded.entries().size() == 2);
     CHECK(loaded.entries()[0].action.cam_id == "CAMA");
     CHECK(loaded.entries()[1].action.cam_id == "CAMB");
-    CHECK(queue.serialize().rfind("v2,", 0) == 0);
+    CHECK(queue.serialize().rfind("v3,", 0) == 0);
 }
 
 TEST_CASE("a v1 file (without camera) is still read")

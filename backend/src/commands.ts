@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Deps } from './api';
-import type { CameraRecord, CommandRecord } from './model';
+import type { CameraRecord, CameraSettings, CommandRecord } from './model';
+import { checkSettingsChange } from './settings';
 
 export type VideoRequest =
   | { ok: true; created: boolean; command: CommandRecord }
@@ -88,6 +89,62 @@ export async function requestDelete(
     commands.push(command);
   }
   return { ok: true, commands };
+}
+
+export type SettingsRequest =
+  | { ok: true; created: boolean; command: CommandRecord }
+  | { ok: false; status: 400; error: string };
+
+/**
+ * Queues a setSettings command (#368). A change that still waits for the hub
+ * takes the new fields (the latest value wins), so the hub gets one 513; one
+ * the hub has received stays as it is and the new one follows it. The caller
+ * has checked that the user may see the camera.
+ */
+export async function requestSettings(
+  camera: CameraRecord,
+  change: unknown,
+  deps: Deps,
+): Promise<SettingsRequest> {
+  const checked = checkSettingsChange(change, camera.settings, camera.capability);
+  if (!checked.ok) return { ok: false, status: 400, error: checked.error };
+
+  const now = deps.now();
+  const queued = (await deps.store.listCommands(camera.camId)).find(
+    (c) => c.type === 'setSettings' && c.state === 'queued',
+  );
+  if (queued) {
+    const settings: CameraSettings = { ...queued.settings, ...checked.settings };
+    const command: CommandRecord = { ...queued, settings, updated: now };
+    await deps.store.putCommand(camera.camId, command);
+    return { ok: true, created: false, command };
+  }
+  const command: CommandRecord = {
+    id: (deps.newId ?? randomUUID)(),
+    type: 'setSettings',
+    mediaId: 0,
+    settings: checked.settings,
+    state: 'queued',
+    created: now,
+    updated: now,
+  };
+  await deps.store.putCommand(camera.camId, command);
+  return { ok: true, created: true, command };
+}
+
+/**
+ * Takes back the settings changes the hub has not received yet (#368).
+ * Returns how many; one the hub has received cannot be taken back.
+ */
+export async function withdrawSettings(camera: CameraRecord, deps: Deps): Promise<number> {
+  const now = deps.now();
+  let withdrawn = 0;
+  for (const c of await deps.store.listCommands(camera.camId)) {
+    if (c.type !== 'setSettings' || c.state !== 'queued') continue;
+    await deps.store.putCommand(camera.camId, { ...c, state: 'cancelled', updated: now });
+    withdrawn++;
+  }
+  return withdrawn;
 }
 
 export type Withdrawal =

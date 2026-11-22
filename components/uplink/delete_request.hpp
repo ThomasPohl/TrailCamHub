@@ -1,8 +1,8 @@
 #pragma once
 
-// What the hub answers to a "deleteMedia" command from the backend (#260),
-// from what the action queue says. Pure logic, host-tested; uplink.cpp queues
-// the action and sends the answer.
+// What the hub answers to a "deleteMedia" (#260) or "setSettings" (#368)
+// command from the backend, from what the action queue says. Pure logic,
+// host-tested; uplink.cpp queues the action and sends the answer.
 //
 // The command is answered only when it is settled. Until then the backend
 // sends it again with every check-in, and the queue recognises it by its key
@@ -35,5 +35,12 @@ std::string delete_key(const std::string &command_id);
 DeleteDecision
 decide_delete(const camera::action::ActionQueue::AddResult &added,
               const camera::action::Entry *entry);
+
+// The same for a "setSettings" command (#368): queued once by its key, run
+// in the camera's next session, answered with the queue's result. Unlike a
+// deletion, every failure is a failure.
+DeleteDecision
+decide_settings(const camera::action::ActionQueue::AddResult &added,
+                const camera::action::Entry *entry);
 
 }  // namespace uplink

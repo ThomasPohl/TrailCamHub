@@ -1,5 +1,5 @@
 import { ApiError } from '../api/http';
-import type { Camera, MediaItem } from '../api/types';
+import type { Camera, CameraSettings, MediaItem } from '../api/types';
 import { compareThumbnails, judge, MAX_MISMATCH, splitMismatchedPairs } from './stamp';
 import { fetchLatestRelease } from './release';
 import { cameraFile, videoFileName } from './text';
@@ -214,6 +214,11 @@ export class HttpGalleryApi implements GalleryApi {
         sdFreeMB: c.sdFreeMB,
         sdTotalMB: c.sdTotalMB,
         lastRead: c.lastSeen,
+        settings: c.settings,
+        capability: c.capability,
+        settingsPending: c.settingsPending,
+        settingsState: c.settingsState,
+        settingsError: c.settingsError,
       })),
     };
   }
@@ -326,6 +331,21 @@ export class HttpGalleryApi implements GalleryApi {
 
   async setCameraHidden(camId: string, hidden: boolean): Promise<void> {
     await this.request('POST', `${this.camera(camId)}/hidden`, { hidden });
+  }
+
+  async changeSettings(camId: string, settings: CameraSettings): Promise<void> {
+    await this.request('POST', `${this.camera(camId)}/commands`, {
+      type: 'setSettings',
+      settings,
+    });
+  }
+
+  async withdrawSettings(camId: string): Promise<boolean> {
+    const result = await this.request<{ withdrawn: number }>(
+      'POST',
+      `${this.camera(camId)}/settings/withdraw`,
+    );
+    return result.withdrawn > 0;
   }
 
   async foundCameras(): Promise<FoundCamera[]> {

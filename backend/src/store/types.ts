@@ -42,6 +42,8 @@ export type CameraTelemetry = Partial<
     | 'bleVersion'
     | 'cameraName'
     | 'bleAddress'
+    | 'settings'
+    | 'capability'
   >
 >;
 

@@ -11,10 +11,10 @@ how that works from every front end. The camera commands are described in
 | `video-stop` | stop it | 644 | console, web UI, backend |
 | `delete` | delete one recording by `mediaId` | 773 | console, web UI, backend |
 | `format` | erase the camera's SD card | 518 | console, web UI |
+| `settings` | change settings, e.g. `workMode=1;pirSens=2` | 513 | backend (gallery); console and web UI not yet (#197) |
 
-Formatting is never remote, and neither is deleting (#196). Both need a
-confirmation. Changing settings (513) is not an action yet; the payload is now
-known from app captures ([`camera-settings.md`](camera-settings.md), #197). Live video
+Formatting is never remote (#196); it and deleting need a confirmation.
+Settings follow [`camera-settings.md`](camera-settings.md) (#368). Live video
 (258/259) is parked (#198).
 
 ## One path for every front end
@@ -36,7 +36,7 @@ SD file); the first three have no ESP-IDF dependency and are host-tested.
 
 The camera answers `result` 0 even when nothing happened. An action is done
 only when its own field says so: `snapRet` (641), `recordRet` (643), `delRet`
-(773), `formatRet` (518). 644 has no such field; there `result` 0 counts. An
+(773), `formatRet` (518). 644 and 513 have no such field; there `result` 0 counts. An
 answer without the field is a failure. A deletion that answers `delRet` -3
 says "no such file".
 
@@ -128,6 +128,14 @@ code from the hub's answer and sends the confirmation.
   camera no longer lists the file (it is gone either way), else `failed`
   with the reason. Pure logic in `components/uplink/delete_request.cpp`.
   Formatting stays local only.
+- **Backend (gallery settings, #368):** a `setSettings` command (`settings`
+  object) is read with `camera::settings::parse_change()` and becomes a
+  `settings` action for that camera, keyed `be:<command id>`, answered like a
+  deletion (but every failure is a failure). The session checks the change
+  against the device info it just read (range, `capability`, `support…`
+  flags) before it sends the 513, adds `seq` as the app does, and after
+  `result` 0 writes the new values into `camera.json`, so the check-in after
+  the read reports them.
 
 ## Hardware test points
 
@@ -145,3 +153,7 @@ Not tested on a camera yet (CI compiles only):
   under the buttons shows `done` or `failed: …` after the session.
 - Power off the hub right after sending (`running` in `actions.csv`): after
   the restart the action is `failed`, not repeated.
+- Settings from the gallery (#368): change e.g. the PIR sensitivity and the
+  language; after the hub's next contact the camera's menu and the TrailCam
+  Go app show the new values, and the gallery shows them without a pending
+  change. A camera that refuses a value: what does it answer to 513?

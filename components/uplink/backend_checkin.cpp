@@ -21,6 +21,7 @@
 #include "backend_config.hpp"
 #include "backend_internal.hpp"
 #include "camera_actions.hpp"
+#include "camera_settings.hpp"
 #include "camera_wifi.h"
 #include "delete_request.hpp"
 #include "destinations.hpp"
@@ -97,6 +98,7 @@ void collect_cameras(CheckinRequest &request, std::vector<SyncCamera> &cameras,
         report.ble_version = info.ble_version;
         report.camera_name = info.camera_name;
         report.ble_address = camera::store::camera_ble_address(id);
+        report.settings = camera::settings::report_fields(info.settings);
         const std::size_t limit = media_budget < kMaxMediaPerCamera
                                       ? media_budget
                                       : kMaxMediaPerCamera;

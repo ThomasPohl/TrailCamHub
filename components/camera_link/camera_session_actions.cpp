@@ -36,6 +36,7 @@
 #include "time_sync.h"
 #include "camera_session.hpp"
 #include "camera_session_config.hpp"
+#include "camera_settings.hpp"
 #include "camera_udp_transport.h"
 #include "catalog_file.hpp"
 #include "deferred_command.hpp"
@@ -93,7 +94,7 @@ bool CameraSession::send_next_action()
             return false;
         }
         const char *name = act::type_name(job.action.type);
-        std::string problem = act::check_camera(job.action.type, device_info_);
+        std::string problem = act::check_camera(job.action, device_info_);
         std::optional<act::Target> target;
         if (problem.empty() && act::needs_media_list(job.action.type)) {
             target = act::find_target(catalog_, job.action.media_id);
@@ -105,8 +106,16 @@ bool CameraSession::send_next_action()
             act::service::finish(job.id, act::failure(problem));
             continue;
         }
-        const std::string fields = act::request_fields(job.action, target);
-        ESP_LOGI(TAG, "Running action %u: %s", (unsigned)job.id, name);
+        std::string fields = act::request_fields(job.action, target);
+        if (job.action.type == act::Type::settings) {
+            // As the app does: the request's own sequence number as "seq"
+            // (docs/camera-settings.md). It is the number this command gets.
+            fields += ",\"seq\":" + std::to_string(next_command_seq_);
+            ESP_LOGI(TAG, "Running action %u: settings %s", (unsigned)job.id,
+                     job.action.params.c_str());
+        } else {
+            ESP_LOGI(TAG, "Running action %u: %s", (unsigned)job.id, name);
+        }
         if (!send_artemis_command(act::cmd_id(job.action.type), fields.c_str(),
                                   name)) {
             act::service::finish(
@@ -147,6 +156,20 @@ void CameraSession::handle_action_response(const std::string &json)
         // its dir/num may belong to a new recording soon.
         catalog_.mark_gone(action_.action.media_id);
         save_session_catalog();
+    }
+    if (outcome.done && action_.action.type == act::Type::settings &&
+        !device_info_.dev_id.empty()) {
+        // The camera took it: the stored copy (and with it the next check-in)
+        // shows the new values until the next device info confirms them.
+        std::vector<camera::settings::Value> change;
+        if (camera::settings::decode_change(action_.action.params, change)) {
+            camera::settings::apply_change(device_info_.settings, change);
+            if (!camera::store::save_camera_info(device_info_,
+                                                 (int64_t)time(NULL))) {
+                ESP_LOGW(TAG,
+                         "Could not store the new settings on the SD card");
+            }
+        }
     }
     advance_after_actions();
 }

@@ -3,6 +3,7 @@
 #include <cctype>
 
 #include "artemis_json.hpp"
+#include "camera_settings.hpp"
 
 namespace camera::action
 {
@@ -20,14 +21,17 @@ const char *type_name(Type type)
         return "delete";
     case Type::format_sd:
         return "format";
+    case Type::settings:
+        return "settings";
     }
     return "unknown";
 }
 
 std::optional<Type> parse_type(const std::string &name)
 {
-    for (const Type type : {Type::photo, Type::video_start, Type::video_stop,
-                            Type::delete_media, Type::format_sd}) {
+    for (const Type type :
+         {Type::photo, Type::video_start, Type::video_stop, Type::delete_media,
+          Type::format_sd, Type::settings}) {
         if (name == type_name(type)) {
             return type;
         }
@@ -48,14 +52,17 @@ std::uint32_t cmd_id(Type type)
         return 773;
     case Type::format_sd:
         return 518;
+    case Type::settings:
+        return 513;
     }
     return 0;
 }
 
 std::optional<Type> type_of_cmd(std::int64_t id)
 {
-    for (const Type type : {Type::photo, Type::video_start, Type::video_stop,
-                            Type::delete_media, Type::format_sd}) {
+    for (const Type type :
+         {Type::photo, Type::video_start, Type::video_stop, Type::delete_media,
+          Type::format_sd, Type::settings}) {
         if (static_cast<std::int64_t>(cmd_id(type)) == id) {
             return type;
         }
@@ -87,6 +94,8 @@ bool allowed(Type type, Source source)
         return true;
     case Type::format_sd:
         return source == Source::console || source == Source::web_ui;
+    case Type::settings:
+        return true;
     }
     return false;
 }
@@ -109,7 +118,30 @@ std::string validate(const Action &action)
     if (action.type != Type::delete_media && action.media_id != 0) {
         return "only a deletion takes a mediaId";
     }
-    return "";
+    if (action.type != Type::settings) {
+        return action.params.empty() ? ""
+                                     : "only a settings change takes "
+                                       "parameters";
+    }
+    std::vector<settings::Value> change;
+    if (!settings::decode_change(action.params, change)) {
+        return "the settings change cannot be read";
+    }
+    // The ranges; what this camera offers is checked in its session.
+    return settings::check_change(change, settings::Settings{});
+}
+
+std::string check_camera(const Action &action, const artemis::DeviceInfo &info)
+{
+    std::string problem = check_camera(action.type, info);
+    if (!problem.empty() || action.type != Type::settings) {
+        return problem;
+    }
+    std::vector<settings::Value> change;
+    if (!settings::decode_change(action.params, change)) {
+        return "the settings change cannot be read";
+    }
+    return settings::check_change(change, info.settings);
 }
 
 std::string check_camera(Type type, const artemis::DeviceInfo &info)
@@ -135,6 +167,12 @@ std::optional<Target> find_target(const artemis::MediaCatalog &catalog,
 std::string request_fields(const Action &action,
                            const std::optional<Target> &target)
 {
+    if (action.type == Type::settings) {
+        std::vector<settings::Value> change;
+        return settings::decode_change(action.params, change)
+                   ? settings::request_fields(change)
+                   : "";
+    }
     if (action.type != Type::delete_media || !target) {
         return "";
     }
@@ -160,6 +198,8 @@ const char *result_field(Type type)
         return "delRet";
     case Type::format_sd:
         return "formatRet";
+    case Type::settings:
+        return "";
     }
     return "";
 }
