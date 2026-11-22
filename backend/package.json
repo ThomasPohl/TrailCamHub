@@ -19,7 +19,7 @@
     "name-camera": "node scripts/name-camera.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.850.0",
+    "@aws-sdk/client-dynamodb": "^3.1172.0",
     "@aws-sdk/client-s3": "^3.850.0",
     "@aws-sdk/client-ssm": "^3.850.0",
     "@aws-sdk/lib-dynamodb": "^3.850.0",
