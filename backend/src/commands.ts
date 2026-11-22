@@ -44,8 +44,7 @@ export async function requestVideo(
 }
 
 export type DeleteRequest =
-  | { ok: true; commands: CommandRecord[] }
-  | { ok: false; status: 404; error: string };
+  { ok: true; commands: CommandRecord[] } | { ok: false; status: 404; error: string };
 
 /**
  * Queues one deleteMedia command per recording (#260). Recordings with an
@@ -148,8 +147,7 @@ export async function withdrawSettings(camera: CameraRecord, deps: Deps): Promis
 }
 
 export type Withdrawal =
-  | { ok: true; withdrawn: number }
-  | { ok: false; status: 409; error: string };
+  { ok: true; withdrawn: number } | { ok: false; status: 409; error: string };
 
 /**
  * Cancels the queued video and delete requests of a recording. A request the
