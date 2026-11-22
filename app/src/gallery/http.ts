@@ -307,7 +307,9 @@ export class HttpGalleryApi implements GalleryApi {
       }
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        throw new Error('Der Hub hat den Auftrag schon erhalten, Zurücknehmen geht nicht mehr.');
+        throw new Error('Der Hub hat den Auftrag schon erhalten, Zurücknehmen geht nicht mehr.', {
+          cause: error,
+        });
       }
       throw error;
     }
