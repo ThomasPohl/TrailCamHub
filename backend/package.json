@@ -34,7 +34,7 @@
     "globals": "^17.14.0",
     "prettier": "3.8.1",
     "typescript": "~5.9.2",
-    "typescript-eslint": "^8.38.0",
+    "typescript-eslint": "^8.73.0",
     "vitest": "^3.2.4"
   }
 }
