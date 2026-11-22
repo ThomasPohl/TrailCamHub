@@ -172,7 +172,10 @@ hub reads it
 - at boot and with every periodic memory log.
 
 The gauge is powered by the cell: without a cell it does not answer and the
-level is unknown. The reported percentage is the gauge's own state of charge
+level is unknown. It also does not answer with the **CAM DIP switch OFF**: the
+log then shows `i2c.master: probe device timeout` and the warning names the I2C
+bus and the switch (`docs/hardware.md`, #412). Without a level the check-in
+leaves out `hubBatPercent`, so no battery history is stored. The reported percentage is the gauge's own state of charge
 (ModelGauge, less affected by the modem's load peaks than the voltage). With
 `CONFIG_HUB_BATTERY_PERCENT_FROM_VOLTAGE` it is computed from the cell voltage
 instead, along a typical Li-ion curve between `CONFIG_HUB_BATTERY_EMPTY_MV`

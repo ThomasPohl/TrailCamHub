@@ -39,7 +39,11 @@ According to the [Waveshare documentation](https://docs.waveshare.com/ESP32-S3-A
   (**USB OFF** = modem on the S3, **4G ON** = modem powered).
 - microSD slot on SDMMC in 1-bit mode (CLK GPIO5, CMD GPIO4, D0 GPIO6).
 - 18650 holder, solar input and a MAX17048 fuel gauge on I2C (0x36,
-  SDA 15, SCL 16).
+  SDA 15, SCL 16). **The CAM DIP switch has to be ON for the gauge** (#412):
+  with it OFF the I2C probe times out (`i2c.master: probe device timeout`) and
+  the battery level stays unknown, even with a cell inserted. Probably the
+  pull-ups of SDA/SCL sit on the switched camera supply; not checked against
+  the schematic. Keep it ON also without a camera.
 - DIP switches for camera, USB hub and modem power, GNSS antenna connector,
   24-pin camera connector.
 
