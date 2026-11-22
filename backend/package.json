@@ -23,7 +23,7 @@
     "@aws-sdk/client-s3": "^3.850.0",
     "@aws-sdk/client-ssm": "^3.850.0",
     "@aws-sdk/lib-dynamodb": "^3.850.0",
-    "@aws-sdk/s3-request-presigner": "^3.850.0"
+    "@aws-sdk/s3-request-presigner": "^3.1172.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",
