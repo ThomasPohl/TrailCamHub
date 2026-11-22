@@ -1,5 +1,6 @@
 /*
- * Commands in the backend's check-in response: deleteMedia and requestVideo.
+ * Commands in the backend's check-in response: deleteMedia, setSettings and
+ * requestVideo.
  */
 
 #include "uplink.hpp"
@@ -19,6 +20,7 @@
 #include "backend_config.hpp"
 #include "backend_internal.hpp"
 #include "camera_actions.hpp"
+#include "camera_settings.hpp"
 #include "camera_wifi.h"
 #include "delete_request.hpp"
 #include "destinations.hpp"
@@ -81,6 +83,48 @@ bool handle_delete_command(const std::string &cam_id, const Command &command,
     out.error = decision.error;
     ESP_LOGI(TAG, "Deletion of %lld on %s: %s", (long long)command.media_id,
              cam_id.c_str(), decision.done ? "done" : decision.error.c_str());
+    return true;
+}
+
+// Answers a setSettings command (#368) like a deletion: checks the change,
+// queues it for the camera's next session (once, recognised by the command
+// id) and answers it when the queue has its result. A change the hub cannot
+// read is refused at once.
+bool handle_settings_command(const std::string &cam_id, const Command &command,
+                             CommandResult &out, bool &read_needed)
+{
+    namespace act = camera::action;
+    std::vector<camera::settings::Value> change;
+    std::string error;
+    if (!camera::settings::parse_change(command.settings, change, error)) {
+        out.done = false;
+        out.error = error;
+        ESP_LOGW(TAG, "Settings for %s refused: %s", cam_id.c_str(),
+                 error.c_str());
+        return true;
+    }
+    act::Action action{act::Type::settings, 0, cam_id,
+                       camera::settings::encode_change(change)};
+    const act::ActionQueue::AddResult added = act::service::submit(
+        action, act::Source::backend, delete_key(command.id));
+    act::Entry entry;
+    const bool known =
+        added.kind == act::ActionQueue::AddResult::Kind::duplicate &&
+        act::service::find(added.id, entry);
+    const DeleteDecision decision =
+        decide_settings(added, known ? &entry : nullptr);
+    read_needed |= decision.read_needed;
+    if (added.kind == act::ActionQueue::AddResult::Kind::added) {
+        ESP_LOGI(TAG, "Settings %s for %s queued (action %u)",
+                 action.params.c_str(), cam_id.c_str(), (unsigned)added.id);
+    }
+    if (!decision.answer) {
+        return false;
+    }
+    out.done = decision.done;
+    out.error = decision.error;
+    ESP_LOGI(TAG, "Settings for %s: %s", cam_id.c_str(),
+             decision.done ? "done" : decision.error.c_str());
     return true;
 }
 

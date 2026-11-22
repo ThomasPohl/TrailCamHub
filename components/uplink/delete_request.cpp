@@ -33,9 +33,14 @@ std::string delete_key(const std::string &command_id)
     return "be:" + command_id;
 }
 
-DeleteDecision
-decide_delete(const camera::action::ActionQueue::AddResult &added,
-              const camera::action::Entry *entry)
+namespace
+{
+
+// Both commands follow the queue's state; `gone_is_done`: a deletion of a
+// file the camera no longer lists is done for the person who asked.
+DeleteDecision decide(const camera::action::ActionQueue::AddResult &added,
+                      const camera::action::Entry *entry, const char *refused,
+                      const char *failed, bool gone_is_done)
 {
     using Kind = camera::action::ActionQueue::AddResult::Kind;
     using camera::action::State;
@@ -48,9 +53,7 @@ decide_delete(const camera::action::ActionQueue::AddResult &added,
         return wait(false);
     case Kind::invalid:
     case Kind::not_allowed:
-        return answer(false, added.reason.empty()
-                                 ? "the hub refused the deletion"
-                                 : added.reason);
+        return answer(false, added.reason.empty() ? refused : added.reason);
     case Kind::duplicate:
         break;
     }
@@ -69,13 +72,31 @@ decide_delete(const camera::action::ActionQueue::AddResult &added,
     case State::done:
         return answer(true, "");
     case State::failed:
-        if (entry->reason.find(kNotListed) != std::string::npos) {
+        if (gone_is_done &&
+            entry->reason.find(kNotListed) != std::string::npos) {
             return answer(true, "");
         }
-        return answer(false, entry->reason.empty() ? "the deletion failed"
-                                                   : entry->reason);
+        return answer(false, entry->reason.empty() ? failed : entry->reason);
     }
     return wait(false);
+}
+
+}  // namespace
+
+DeleteDecision
+decide_delete(const camera::action::ActionQueue::AddResult &added,
+              const camera::action::Entry *entry)
+{
+    return decide(added, entry, "the hub refused the deletion",
+                  "the deletion failed", true);
+}
+
+DeleteDecision
+decide_settings(const camera::action::ActionQueue::AddResult &added,
+                const camera::action::Entry *entry)
+{
+    return decide(added, entry, "the hub refused the settings change",
+                  "the settings change failed", false);
 }
 
 }  // namespace uplink

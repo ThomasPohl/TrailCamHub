@@ -46,6 +46,7 @@ bool parse_device_info(const std::string &json, DeviceInfo &out)
         out.ble_version = s;
     if (json_find_string(json, "cameraName", s))
         out.camera_name = s;
+    out.settings = settings::parse_settings(json);
 
     return true;
 }
@@ -102,6 +103,7 @@ std::string serialize_device_info(const DeviceInfo &info)
         out += ",\"bleVerName\":" + json_quote(info.ble_version);
     if (!info.camera_name.empty())
         out += ",\"cameraName\":" + json_quote(info.camera_name);
+    out += settings::stored_fields(info.settings);
     return out + "}";
 }
 

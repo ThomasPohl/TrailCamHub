@@ -45,6 +45,10 @@ struct CameraReport {
     // BLE address the hub connected to ("AA:BB:CC:DD:EE:FF", #296); empty =
     // unknown, left out.
     std::string ble_address;
+    // The camera's settings and capability as camera::settings::report_fields()
+    // writes them ("settings":{...},"capability":{...}); inserted as they are,
+    // left out when empty (#368).
+    std::string settings;
     // Media the backend does not know yet (delta).
     std::vector<MediaRef> media;
     // mediaIds no longer on the camera's card that the backend was not told
@@ -145,6 +149,8 @@ struct Command {
     // requestVideo: presigned URL to PUT the MP4 to (https only); empty if
     // none was given.
     std::string upload_url;
+    // setSettings (#368): the "settings" object as it came; empty if none.
+    std::string settings;
 };
 
 struct CameraCheckin {

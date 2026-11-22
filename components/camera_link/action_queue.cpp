@@ -13,7 +13,8 @@ namespace camera::action
 namespace
 {
 
-constexpr const char *kHeader = "v2";
+constexpr const char *kHeader = "v3";
+constexpr const char *kHeaderV2 = "v2";
 constexpr const char *kHeaderV1 = "v1";
 
 std::string clean_reason(const std::string &reason)
@@ -92,6 +93,9 @@ std::string describe(const Entry &entry)
     if (entry.action.media_id > 0) {
         text +=
             " " + std::to_string(static_cast<long long>(entry.action.media_id));
+    }
+    if (!entry.action.params.empty()) {
+        text += " " + entry.action.params;
     }
     text += std::string(": ") + state_name(entry.state);
     if (!entry.reason.empty()) {
@@ -338,8 +342,8 @@ bool ActionQueue::mark_notified(std::uint32_t id)
     return true;
 }
 
-// v2: id,type,mediaId,source,state,created,finished,notified,key,cam,reason
-// (v1 had no cam)
+// v3: id,type,mediaId,source,state,created,finished,notified,key,cam,params,
+// reason (v2 had no params, v1 no cam either)
 std::string ActionQueue::serialize() const
 {
     std::ostringstream out;
@@ -349,7 +353,8 @@ std::string ActionQueue::serialize() const
             << e.action.media_id << ',' << source_name(e.source) << ','
             << state_name(e.state) << ',' << e.created_s << ',' << e.finished_s
             << ',' << (e.notified ? 1 : 0) << ',' << e.key << ','
-            << e.action.cam_id << ',' << e.reason << '\n';
+            << e.action.cam_id << ',' << e.action.params << ',' << e.reason
+            << '\n';
     }
     return out.str();
 }
@@ -368,9 +373,10 @@ bool ActionQueue::parse(const std::string &text)
     const std::string version =
         comma == std::string::npos ? "" : line.substr(0, comma);
     const bool v1 = version == kHeaderV1;
+    const bool v2 = version == kHeaderV2;
     // Fields before the reason (which has no commas).
-    const std::size_t field_count = v1 ? 9 : 10;
-    if (comma == std::string::npos || (version != kHeader && !v1) ||
+    const std::size_t field_count = v1 ? 9 : v2 ? 10 : 11;
+    if (comma == std::string::npos || (version != kHeader && !v1 && !v2) ||
         !to_int(line.substr(comma + 1), next) || next < 1 ||
         next > 0x7fffffff) {
         return false;
@@ -409,7 +415,8 @@ bool ActionQueue::parse(const std::string &text)
             continue;
         }
         entry.id = static_cast<std::uint32_t>(id);
-        entry.action = Action{*type, media, v1 ? "" : camera_key(fields[9])};
+        entry.action = Action{*type, media, v1 ? "" : camera_key(fields[9]),
+                              v1 || v2 ? "" : fields[10]};
         entry.source = *source;
         entry.state = *state;
         entry.created_s = created;

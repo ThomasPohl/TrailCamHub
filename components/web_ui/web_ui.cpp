@@ -468,7 +468,7 @@ void refresh_cameras(int64_t now_us)
         if (file == NULL) {
             continue;
         }
-        // The whole file, bounded: the hub writes a few hundred bytes.
+        // The whole file, bounded: the hub writes about 2 KB (settings, #368).
         constexpr size_t kMaxCameraJson = 4096;
         std::string json;
         char buffer[512];

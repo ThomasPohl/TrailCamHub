@@ -30,10 +30,11 @@ enum class Type : std::uint8_t {
     video_stop,    // 644 STOP_RECORD
     delete_media,  // 773 DELETE_MEDIA, one file by mediaId
     format_sd,     // 518 FORMAT_SD_CARD, the whole card
+    settings,      // 513 SET_DEV_PARAM, the fields in Action::params (#368)
 };
 
-// "photo", "video-start", "video-stop", "delete" and "format": the names the
-// console and the queue file use.
+// "photo", "video-start", "video-stop", "delete", "format" and "settings":
+// the names the console and the queue file use.
 const char *type_name(Type type);
 std::optional<Type> parse_type(const std::string &name);
 
@@ -56,7 +57,8 @@ const char *source_name(Source source);
 // hub, its password-protected page, or the backend, where the user of the
 // gallery confirmed it (#260); a chat may not delete. Formatting the card
 // could lose recordings the hub has not fetched, so it is never done
-// remotely (#196).
+// remotely (#196). Settings may come from every front end; the gallery
+// changes them through the backend (#368).
 bool allowed(Type type, Source source);
 
 // The action cannot be undone and the front end must ask for a confirmation
@@ -69,8 +71,10 @@ bool needs_media_list(Type type);
 
 struct Action {
     Action() = default;
-    Action(Type type_, std::int64_t media_id_ = 0, std::string cam_id_ = {})
-        : type(type_), media_id(media_id_), cam_id(std::move(cam_id_))
+    Action(Type type_, std::int64_t media_id_ = 0, std::string cam_id_ = {},
+           std::string params_ = {})
+        : type(type_), media_id(media_id_), cam_id(std::move(cam_id_)),
+          params(std::move(params_))
     {
     }
 
@@ -81,15 +85,20 @@ struct Action {
     // session reads. A deletion from the backend names its camera, because a
     // mediaId is only unique within one camera.
     std::string cam_id;
+    // settings only: the change, camera::settings::encode_change() form
+    // ("workMode=1;pirSens=2"); no commas.
+    std::string params;
 };
 
 // Empty if the action is complete, else why not (e.g. a delete without a
-// mediaId).
+// mediaId, a settings change with a value out of range).
 std::string validate(const Action &action);
 
 // Empty if the camera can do the action in the state its device info (512)
-// reports, else why not (e.g. a photo with a full card).
+// reports, else why not (e.g. a photo with a full card, a setting this camera
+// does not offer).
 std::string check_camera(Type type, const artemis::DeviceInfo &info);
+std::string check_camera(const Action &action, const artemis::DeviceInfo &info);
 
 // Where a file is on the camera right now, taken from the fresh media list.
 struct Target {
@@ -106,8 +115,9 @@ std::optional<Target> find_target(const artemis::MediaCatalog &catalog,
 
 // The fields that follow "cmdId" in the request, e.g.
 // ",\"fileType\":2,\"dirNum\":100,\"mediaNum\":1" for a deletion (note
-// dirNum, not mediaDirNum); empty for the actions without parameters. A
-// deletion needs `target`.
+// dirNum, not mediaDirNum), the changed fields for settings; empty for the
+// actions without parameters. A deletion needs `target`. The session adds
+// "seq" to a settings change (the app sends it, docs/camera-settings.md).
 std::string request_fields(const Action &action,
                            const std::optional<Target> &target);
 
@@ -122,8 +132,8 @@ struct Outcome {
 
 // Judges the camera's answer to an action. Success is the command's own
 // field: snapRet (641), recordRet (643), delRet (773), formatRet (518).
-// 644 has none (`{"errorMsg":"Success","result":0,"cmdId":644}`), so there
-// `result` 0 counts. An answer without the field is a failure.
+// 644 and 513 have none (`{"errorMsg":"Success","result":0,"cmdId":644}`),
+// so there `result` 0 counts. An answer without the field is a failure.
 Outcome interpret(Type type, const std::string &json);
 
 // The failure for an action the camera never answered or that could not be

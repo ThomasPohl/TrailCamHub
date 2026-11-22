@@ -67,6 +67,7 @@ add_executable(host_tests
     test_bulk_stream.cpp
     test_bulk_side_channel.cpp
     test_device_info.cpp
+    test_camera_settings.cpp
     test_action_queue.cpp
     test_camera_action.cpp
     test_catalog_file.cpp
@@ -125,6 +126,7 @@ add_executable(host_tests
     ${link_dir}/playback_record.cpp
     ${link_dir}/playback_stream.cpp
     ${link_dir}/device_info.cpp
+    ${link_dir}/camera_settings.cpp
     ${link_dir}/catalog_file.cpp
     ${link_dir}/camera_action.cpp
     ${link_dir}/action_queue.cpp

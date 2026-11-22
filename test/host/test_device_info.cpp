@@ -150,7 +150,8 @@ TEST_CASE("parse_device_info reads the allowlisted status fields only")
     const std::string stored = serialize_device_info(info);
     CHECK(stored.find("secureCode") == std::string::npos);
     CHECK(stored.find("curBatType") == std::string::npos);
-    CHECK(stored.find("capability") == std::string::npos);
+    // The capability only with its allowlisted parts (#368).
+    CHECK(stored.find("platform") == std::string::npos);
     CHECK(stored.find("emergencyBatPercent") == std::string::npos);
 
     DeviceInfo parsed;

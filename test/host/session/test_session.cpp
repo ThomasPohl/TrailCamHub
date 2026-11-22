@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <regex>
 #include <sstream>
@@ -411,6 +412,48 @@ TEST_CASE("session: a short session for actions reads no media")
     CHECK(mock.stats().photos == 1);
     CHECK(mock.stats().requests.count(768) == 0);
     CHECK(mock.stats().requests.count(772) == 0);
+}
+
+TEST_CASE("session: a settings change goes to the camera and is stored")
+{
+    reset_world();
+    act::service::init();
+    // For this camera only (its directory name, as the backend's camId).
+    const auto change = act::service::submit(
+        act::Action(act::Type::settings, 0, "C6_1E_0D_E0_0C_FB",
+                    "pirSens=0;languageCode=de"),
+        act::Source::backend, "be:host-test-settings");
+    REQUIRE(change.kind == act::ActionQueue::AddResult::Kind::added);
+    // Not offered by the captured camera (supportSpkVolume false): refused
+    // without a 513.
+    const auto refused = act::service::submit(
+        act::Action(act::Type::settings, 0, "C6_1E_0D_E0_0C_FB", "spkVol=10"),
+        act::Source::backend, "be:host-test-settings-2");
+    REQUIRE(refused.kind == act::ActionQueue::AddResult::Kind::added);
+    host_session::MockServer mock(options_with(3));
+    REQUIRE(mock.ok());
+    camera_protocol_set_actions_only(true);
+    const Outcome o = run_session();
+
+    CHECK(o.error == ESP_OK);
+    CHECK(o.work_completed);
+    CHECK(mock.stats().settings_changes == 1);
+    CHECK(mock.stats().requests.at(513) == 1);
+    act::Entry entry;
+    REQUIRE(act::service::find(change.id, entry));
+    CHECK(entry.state == act::State::done);
+    REQUIRE(act::service::find(refused.id, entry));
+    CHECK(entry.state == act::State::failed);
+    CHECK(entry.reason == "the camera does not support spkVol");
+
+    // The stored copy has the new values for the next check-in.
+    std::ifstream file(std::string(HOST_SD_ROOT) +
+                       "/C6_1E_0D_E0_0C_FB/camera.json");
+    const std::string stored((std::istreambuf_iterator<char>(file)),
+                             std::istreambuf_iterator<char>());
+    CHECK(stored.find("\"pirSens\":0") != std::string::npos);
+    CHECK(stored.find("\"languageCode\":\"de\"") != std::string::npos);
+    CHECK(stored.find("secureCode") == std::string::npos);
 }
 
 TEST_CASE("session: the camera closing the session ends it")

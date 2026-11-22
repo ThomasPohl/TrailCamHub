@@ -18,6 +18,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "artemis_aes128.hpp"
@@ -125,6 +126,19 @@ std::string describe(const Faults &faults);
 // The device info with the faults' battery and SD values put in.
 std::string patch_device_info(const std::string &json, const Faults &faults);
 
+// A setting as the app or the hub sends it with 513: the field name and its
+// JSON value as text ("1", "true", "\"de\"").
+using SettingField = std::pair<std::string, std::string>;
+
+// The fields a settings request (513) changes: every top-level field but
+// cmdId, token and seq. Nested values are skipped.
+std::vector<SettingField> settings_fields(const std::string &request);
+
+// The device info with the changed settings: an existing top-level field is
+// replaced, a missing one is added. `capability` is left as it is.
+std::string patch_settings(const std::string &json,
+                           const std::vector<SettingField> &settings);
+
 // Outgoing UDP datagrams to the hub.
 class Output
 {
@@ -161,6 +175,8 @@ struct Stats {
     unsigned photos = 0;
     unsigned deletions = 0;
     unsigned formats = 0;
+    // Settings requests (513) answered (#368).
+    unsigned settings_changes = 0;
     // Bulk channel (#122 stage 2/3): thumbnails (772), photos (1285).
     unsigned thumbnails = 0;
     unsigned downloads = 0;
@@ -248,6 +264,12 @@ class Camera
     const Stats &stats() const
     {
         return stats_;
+    }
+    // The settings changed with 513 since start, latest value per field;
+    // the next device info (512) reports them.
+    const std::vector<SettingField> &settings() const
+    {
+        return settings_;
     }
 
   private:
@@ -340,6 +362,7 @@ class Camera
     std::vector<std::uint8_t> play_stream_;
     // Recordings deleted with 773, as "fileType/dirNum/mediaNum".
     std::vector<std::string> deleted_;
+    std::vector<SettingField> settings_;
 };
 
 // The answer to a camera action (#122 stage 3). No capture holds one: the

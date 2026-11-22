@@ -7,11 +7,14 @@
 //
 // Only the fields listed in DeviceInfo are read, stored, logged and sent on
 // (an allowlist): the answer differs between camera firmware versions and may
-// carry fields we do not know, secrets among them (secureCode0..3).
+// carry fields we do not know, secrets among them (secureCode0..3). The
+// camera's settings have their own allowlist (camera_settings.hpp, #368).
 
 #include <cstdint>
 #include <optional>
 #include <string>
+
+#include "camera_settings.hpp"
 
 namespace camera::artemis
 {
@@ -44,6 +47,8 @@ struct DeviceInfo {
     std::optional<std::int64_t> bat_type;       // "batType" (camera's code)
     std::string ble_version;                    // "bleVerName"
     std::string camera_name;                    // "cameraName"
+    // workMode, pirSens, ... and the capability (camera_settings.hpp).
+    settings::Settings settings;
     // Not part of the camera's response; kept in the stored copy.
     SdCard sd_card = SdCard::unknown;  // "sdCard"
     std::string sd_error;              // "sdError": the camera's errorMsg

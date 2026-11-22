@@ -312,7 +312,8 @@ std::string status()
            std::to_string(stats.bulk_retransmissions) + "\n";
     out += "actions: photos " + std::to_string(stats.photos) + ", deletions " +
            std::to_string(stats.deletions) + ", formats " +
-           std::to_string(stats.formats) +
+           std::to_string(stats.formats) + ", settings " +
+           std::to_string(stats.settings_changes) +
            (s_camera->recording() ? ", recording a video" : "") +
            (s_camera->formatted() ? ", card formatted (empty list)" : "") +
            "\n";
