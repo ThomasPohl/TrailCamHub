@@ -1033,6 +1033,9 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       memory: parseMemory(body.memory),
     },
     now,
+    // A hub without a battery reading omits the field: drop the old value, so
+    // the admin view shows "unknown" and not a stale percentage.
+    optionalNumber(body.hubBatPercent) === undefined ? ['batPercent'] : [],
   );
   await recordSample(
     deps,
