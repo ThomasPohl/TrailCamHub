@@ -32,6 +32,16 @@ Fields that belong together are sent together: switching the mode sent
 sends all eight vertex fields; the screen lock sends the switch and all four
 digits. The next 512 response shows the new values.
 
+The camera answers every 513 with the same short JSON **[verified]**:
+
+```json
+{"errorMsg":"Success","result":0,"cmdId":513}
+```
+
+`result` 0 means accepted; there is no setting-specific result field (unlike
+the actions, see [`camera-actions.md`](camera-actions.md)). To confirm a
+change, read the device info (512) again.
+
 ### Write names differ from read names
 
 | 512 reports | 513 sets with |
@@ -145,5 +155,5 @@ logged, shown in the web UI, stored in `camera.json` or sent to a destination
   `infraRedLum` 2, whether `enableAiFilter: 1` turns the area on.
 - `recordMode`, `lum`, `pwrFreq`, `cameraWorkMode`, `customName`,
   `cameraNameOnOff`, GPS.
-- The answer to 513 (shape and result field) still has to be written down from
-  the captures.
+- What the camera answers to an invalid value (only accepted changes were
+  captured).
