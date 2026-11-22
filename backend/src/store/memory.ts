@@ -43,10 +43,17 @@ export class MemoryStore implements Store {
     return hub && { ...hub };
   }
 
-  async updateHub(hubId: string, telemetry: HubTelemetry, lastSeen: number): Promise<void> {
+  async updateHub(
+    hubId: string,
+    telemetry: HubTelemetry,
+    lastSeen: number,
+    clear: ReadonlyArray<keyof HubTelemetry> = [],
+  ): Promise<void> {
     const hub = this.hubs.get(hubId);
     if (!hub) throw new Error(`Unknown hub ${hubId}`);
-    this.hubs.set(hubId, { ...hub, ...defined(telemetry), lastSeen });
+    const updated = { ...hub, ...defined(telemetry), lastSeen };
+    for (const field of clear) delete (updated as Record<string, unknown>)[field];
+    this.hubs.set(hubId, updated);
   }
 
   async setHubScheduleConfig(hubId: string, config: ScheduleConfig): Promise<void> {

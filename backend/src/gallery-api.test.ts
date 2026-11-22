@@ -322,6 +322,19 @@ describe('delete batches (#261)', () => {
 });
 
 describe('battery history (#76)', () => {
+  it('forgets the hub battery when a check-in no longer reports it', async () => {
+    const world = await galleryWorld();
+    const checkin = (body: object) =>
+      handleRequest(hubRequest('/v1/device/checkin', world.hubKey, body), world.deps);
+    await checkin({ hubBatPercent: 65 });
+    expect((await world.deps.store.getHub(HUB_ID))?.batPercent).toBe(65);
+    // The gauge does not answer: no value, and no stale 65 % in the admin view.
+    await checkin({});
+    expect((await world.deps.store.getHub(HUB_ID))?.batPercent).toBeUndefined();
+    await checkin({ hubBatPercent: 60 });
+    expect((await world.deps.store.getHub(HUB_ID))?.batPercent).toBe(60);
+  });
+
   it('keeps one sample per hour for hub and camera and shows them to the admin', async () => {
     const world = await galleryWorld();
     let now = NOW;

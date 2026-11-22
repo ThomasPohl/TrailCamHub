@@ -114,8 +114,13 @@ export class DynamoStore implements Store {
     return ids.sort();
   }
 
-  async updateHub(hubId: string, telemetry: HubTelemetry, lastSeen: number): Promise<void> {
-    await this.updateFields(hubPk(hubId), 'META', { ...telemetry, lastSeen });
+  async updateHub(
+    hubId: string,
+    telemetry: HubTelemetry,
+    lastSeen: number,
+    clear: ReadonlyArray<keyof HubTelemetry> = [],
+  ): Promise<void> {
+    await this.updateFields(hubPk(hubId), 'META', { ...telemetry, lastSeen }, clear);
   }
 
   async setHubScheduleConfig(hubId: string, config: ScheduleConfig): Promise<void> {
@@ -430,15 +435,29 @@ export class DynamoStore implements Store {
     return Item ? strip<T>(Item) : undefined;
   }
 
-  private async updateFields(pk: string, sk: string, fields: Record<string, unknown>) {
-    const entries = Object.entries(fields).filter(([, value]) => value !== undefined);
+  /** Sets the defined `fields` and removes the attributes named in `remove`. */
+  private async updateFields(
+    pk: string,
+    sk: string,
+    fields: Record<string, unknown>,
+    remove: readonly string[] = [],
+  ) {
+    const entries = Object.entries(fields).filter(
+      ([key, value]) => value !== undefined && !remove.includes(key),
+    );
     await this.db.send(
       new UpdateCommand({
         TableName: this.table,
         Key: { PK: pk, SK: sk },
         ConditionExpression: 'attribute_exists(PK)',
-        UpdateExpression: 'SET ' + entries.map((_, i) => `#f${i} = :v${i}`).join(', '),
-        ExpressionAttributeNames: Object.fromEntries(entries.map(([key], i) => [`#f${i}`, key])),
+        UpdateExpression:
+          'SET ' +
+          entries.map((_, i) => `#f${i} = :v${i}`).join(', ') +
+          (remove.length > 0 ? ' REMOVE ' + remove.map((_, i) => `#r${i}`).join(', ') : ''),
+        ExpressionAttributeNames: {
+          ...Object.fromEntries(entries.map(([key], i) => [`#f${i}`, key])),
+          ...Object.fromEntries(remove.map((key, i) => [`#r${i}`, key])),
+        },
         ExpressionAttributeValues: Object.fromEntries(
           entries.map(([, value], i) => [`:v${i}`, value]),
         ),
