@@ -1,0 +1,45 @@
+# Dependabot version updates. Minor and patch updates are merged by
+# .github/workflows/dependabot-auto-merge.yml once the required checks pass;
+# major updates only get the normal CI run and are merged by hand.
+#
+# Not covered: the ESP-IDF container image (espressif/idf in the workflows and
+# .devcontainer/Dockerfile) and the registry components in
+# components/*/idf_component.yml. Dependabot cannot update the first without
+# desyncing CI and dev container, and does not support the second at all.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    commit-message:
+      prefix: "app"
+    labels:
+      - dependencies
+
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    commit-message:
+      prefix: "backend"
+    labels:
+      - dependencies
