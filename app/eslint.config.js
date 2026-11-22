@@ -17,6 +17,10 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // New in eslint-plugin-react-hooks 6+. The flagged effects load data on
+      // mount and poll; refactor them separately instead of changing runtime
+      // behaviour in a dependency bump.
+      'react-hooks/set-state-in-effect': 'off',
     },
   },
 );
