@@ -1,7 +1,7 @@
 import { placeholderThumb } from '../api/demo';
 import { ApiError } from '../api/http';
 import { toCameraWallClock } from '../format';
-import type { Camera, ScheduleConfig } from '../api/types';
+import type { Camera, CameraCapability, CameraSettings, ScheduleConfig } from '../api/types';
 import type {
   AdminHub,
   AuditEntry,
@@ -15,9 +15,51 @@ import type {
 } from './types';
 import { cameraFile, videoFileName } from './text';
 
+/** Settings as a PH970S reports them (the mock's capture, #368). */
+const DEMO_SETTINGS: CameraSettings = {
+  workMode: 0,
+  shootMode: 2,
+  picResolution: 6,
+  videoResolution: 2,
+  continuousShootCnt: 1,
+  recordDuration: 10,
+  recordAudio: 1,
+  timelapseInterval: 3600,
+  pirSens: 2,
+  pirCoolingTime: 20,
+  workTimeOnOff: 0,
+  workTimeStartHour: 0,
+  workTimeStartMin: 0,
+  workTimeEndHour: 23,
+  workTimeEndMin: 59,
+  infraRedLum: 3,
+  osdInfoEnable: true,
+  WiFiLedEnable: true,
+  dateFormat: 1,
+  timeFormat: 0,
+  languageCode: 'en',
+  micVol: 90,
+};
+
+const DEMO_CAPABILITY: CameraCapability = {
+  imgResolutions: [1, 2, 4, 6, 8, 9, 10],
+  videoResolutions: [1, 2, 3, 4, 5],
+  languages: ['en', 'de', 'fr', 'es', 'du', 'it', 'pl', 'cn', 'jp', 'ru'],
+};
+
 const CAMERAS: GalleryCamera[] = [
-  { camId: 'F4C15606ED3B', name: 'Garten' },
-  { camId: 'A1B2C3D4E5F6', name: 'Wiese' },
+  {
+    camId: 'F4C15606ED3B',
+    name: 'Garten',
+    settings: { ...DEMO_SETTINGS },
+    capability: DEMO_CAPABILITY,
+  },
+  {
+    camId: 'A1B2C3D4E5F6',
+    name: 'Wiese',
+    settings: { ...DEMO_SETTINGS, workMode: 1 },
+    capability: DEMO_CAPABILITY,
+  },
 ];
 
 /** How often the simulated hub "checks in" in the demo. */
@@ -151,6 +193,22 @@ export class DemoGalleryApi implements GalleryApi {
     const camera = this.cameras.find((c) => c.camId === camId);
     if (!camera) throw new Error(`Unbekannte Kamera ${camId}`);
     camera.hidden = hidden || undefined;
+  }
+
+  async changeSettings(camId: string, settings: CameraSettings): Promise<void> {
+    const camera = this.cameras.find((c) => c.camId === camId);
+    if (!camera) throw new ApiError(404, 'Camera not found');
+    camera.settingsPending = { ...camera.settingsPending, ...settings };
+    camera.settingsState = 'requested';
+    camera.settingsError = undefined;
+  }
+
+  async withdrawSettings(camId: string): Promise<boolean> {
+    const camera = this.cameras.find((c) => c.camId === camId);
+    if (!camera?.settingsPending) return false;
+    camera.settingsPending = undefined;
+    camera.settingsState = undefined;
+    return true;
   }
 
   async foundCameras(): Promise<FoundCamera[]> {
@@ -345,6 +403,13 @@ export class DemoGalleryApi implements GalleryApi {
     while (now >= this.lastCheckin + this.checkinS) {
       this.lastCheckin += this.checkinS;
       this.readRequested.clear();
+      // The demo hub passes a settings change on and the camera takes it.
+      for (const camera of this.cameras) {
+        if (!camera.settingsPending) continue;
+        camera.settings = { ...camera.settings, ...camera.settingsPending };
+        camera.settingsPending = undefined;
+        camera.settingsState = undefined;
+      }
       for (const list of this.media.values()) {
         for (const r of list) {
           if (r.state === 'deleteRequested') r.state = 'deleted';

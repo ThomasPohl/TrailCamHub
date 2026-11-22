@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '../api/http';
+import type { CameraSettings } from '../api/types';
 import { AdminView } from './AdminView';
 import { showFaultBadge } from './badge';
 import { FoundCameras } from './FoundCameras';
+import { SettingsDialog } from './SettingsDialog';
 import { PencilIcon, PlayIcon, SaveIcon, SearchIcon, TrashIcon, UndoIcon } from './Icons';
 import { Viewer } from './Viewer';
 import * as realFolder from './folder';
@@ -108,6 +110,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [pendingKey, setPendingKey] = useState<string>();
   // A recording shown large, with its video if asked for (#306).
   const [viewing, setViewing] = useState<{ recording: Recording; video: boolean }>();
+  // The camera whose settings dialog is open (#368).
+  const [settingsFor, setSettingsFor] = useState<string>();
   const saving = useRef(false);
 
   const reload = useCallback(async () => {
@@ -167,6 +171,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const cameraName = status?.cameras.find((c) => c.camId === camId)?.name ?? 'Kamera';
   const shownCameras = status?.cameras.filter((c) => !c.hidden) ?? [];
   const currentCamera = status?.cameras.find((c) => c.camId === camId);
+  const settingsCamera = status?.cameras.find((c) => c.camId === settingsFor);
   const notReached = found.filter(notReachedYet);
   // The open camera that waits for its first read; without a read camera
   // the first waiting one is open.
@@ -340,6 +345,39 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   };
 
   const renameCamera = (id: string, name: string) => rename(() => api.renameCamera(id, name));
+
+  // Returns whether the change was stored, so the dialog can close (#368).
+  const saveSettings = async (id: string, changed: CameraSettings): Promise<boolean> => {
+    setBusy(true);
+    try {
+      await api.changeSettings(id, changed);
+      setNotice('Die Einstellungen gehen beim nächsten Kontakt mit dem Hub an die Kamera.');
+      await reload();
+      return true;
+    } catch (error) {
+      setNotice(`Speichern hat nicht geklappt: ${errorText(error)}`);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const withdrawSettings = async (id: string) => {
+    setBusy(true);
+    try {
+      const withdrawn = await api.withdrawSettings(id);
+      setNotice(
+        withdrawn
+          ? 'Die Änderung ist zurückgenommen.'
+          : 'Der Hub hat die Änderung schon erhalten, Zurücknehmen geht nicht mehr.',
+      );
+      await reload();
+    } catch (error) {
+      setNotice(`Das hat nicht geklappt: ${errorText(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
   // A camera not read yet keeps the name and takes it at its first read.
   const renamePending = (camera: FoundCamera, name: string) =>
     rename(async () => {
@@ -586,6 +624,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                           : entry
                             ? 'wird abgefragt'
                             : '',
+                        c.settingsState ? 'Einstellungen werden geändert' : '',
                       ].filter(Boolean);
                       return (
                         <tr key={c.camId}>
@@ -611,6 +650,16 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                           <td>{state.join(' · ')}</td>
                           <td>
                             <div className="g-cams__actions">
+                              {c.settings && (
+                                <button
+                                  type="button"
+                                  className="g-btn g-btn--quiet"
+                                  disabled={busy}
+                                  onClick={() => setSettingsFor(c.camId)}
+                                >
+                                  Einstellungen
+                                </button>
+                              )}
                               {c.hidden ? (
                                 <button
                                   type="button"
@@ -911,6 +960,17 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               recording={viewing.recording}
               video={viewing.video}
               onClose={() => setViewing(undefined)}
+            />
+          )}
+
+          {settingsCamera && (
+            <SettingsDialog
+              key={settingsCamera.camId}
+              camera={settingsCamera}
+              busy={busy}
+              onSave={(changed) => saveSettings(settingsCamera.camId, changed)}
+              onWithdraw={() => void withdrawSettings(settingsCamera.camId)}
+              onClose={() => setSettingsFor(undefined)}
             />
           )}
 

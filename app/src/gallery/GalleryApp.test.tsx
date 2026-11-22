@@ -251,6 +251,65 @@ describe('GalleryApp', () => {
     expect(within(panel).queryByLabelText('Neuer Name der Kamera')).not.toBeInTheDocument();
   });
 
+  it('changes camera settings and sends only what changed (#368)', async () => {
+    let now = 1_000_000;
+    const api = new DemoGalleryApi(() => now, 20);
+    const change = vi.spyOn(api, 'changeSettings');
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
+    const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
+    const garten = within(panel).getByRole('row', { name: /Garten/ });
+    fireEvent.click(within(garten).getByRole('button', { name: 'Einstellungen' }));
+
+    let dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Einstellungen der Kamera „Garten“');
+    expect(within(dialog).getByLabelText('Empfindlichkeit')).toHaveValue('2');
+    // timeFormat 0 is the factory setting: 24 hours.
+    expect(within(dialog).getByLabelText('Uhrzeit')).toHaveDisplayValue('24 Stunden');
+    // The camera did not report spkVol: not offered.
+    expect(within(dialog).queryByLabelText('Lautsprecher')).not.toBeInTheDocument();
+    // Only with working hours switched on.
+    expect(within(dialog).queryByLabelText('Von')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Speichern' })).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByLabelText('Empfindlichkeit'), { target: { value: '0' } });
+    fireEvent.click(within(dialog).getByLabelText('Datum und Uhrzeit im Bild'));
+    fireEvent.click(within(dialog).getByLabelText('Nur zu bestimmten Zeiten aufnehmen'));
+    fireEvent.change(within(dialog).getByLabelText('Von'), { target: { value: '18:00' } });
+    fireEvent.change(within(dialog).getByLabelText('Sprache der Kamera'), {
+      target: { value: 'de' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(change).toHaveBeenCalledWith('F4C15606ED3B', {
+      pirSens: 0,
+      osdInfoEnable: false,
+      workTimeOnOff: 1,
+      workTimeStartHour: 18,
+      languageCode: 'de',
+    });
+    expect(
+      await screen.findByText(/beim nächsten Kontakt mit dem Hub an die Kamera/),
+    ).toBeInTheDocument();
+    expect(within(garten).getByText(/Einstellungen werden geändert/)).toBeInTheDocument();
+
+    // While it waits, the dialog shows the new values and can take it back.
+    fireEvent.click(within(garten).getByRole('button', { name: 'Einstellungen' }));
+    dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByLabelText('Empfindlichkeit')).toHaveValue('0');
+    expect(within(dialog).getByLabelText('Von')).toHaveValue('18:00');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Zurücknehmen' }));
+    expect(await screen.findByText('Die Änderung ist zurückgenommen.')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Schließen' }));
+
+    // A change the demo hub delivers ends up in the camera's settings.
+    await api.changeSettings('F4C15606ED3B', { pirSens: 1 });
+    now += 20;
+    expect((await api.status()).cameras[0]?.settings?.pirSens).toBe(1);
+  });
+
   it('hides a camera and shows it again (#273)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
