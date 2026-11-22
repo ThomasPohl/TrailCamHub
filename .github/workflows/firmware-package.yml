@@ -437,7 +437,7 @@ jobs:
       # A problem with it must never stop the installer deploy, so it only
       # warns here; docs-guide.yml fails the pull request that breaks a link.
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
