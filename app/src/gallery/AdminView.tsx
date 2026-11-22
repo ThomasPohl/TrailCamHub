@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/http';
 import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
+import { batteryForecast } from './forecast';
 import { isNewer } from './release';
-import { clockTime, faultText, memoryText, skipReasonText, uplinkText } from './text';
+import { clockTime, faultText, forecastText, memoryText, skipReasonText, uplinkText } from './text';
 import type { AdminHub, AuditEntry, GalleryApi, HubHistory, Sample } from './types';
 
 /**
@@ -498,7 +499,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             </tbody>
           </table>
 
-          <HistoryPanel api={api} hubId={hub.hubId} />
+          <HistoryPanel api={api} hubId={hub.hubId} now={t} />
 
           <ScheduleForm
             key={`${hub.hubId}:${hub.scheduleConfig.cameraPlan ?? ''}:${hub.scheduleConfig.checkinIntervalS ?? ''}`}
@@ -590,7 +591,7 @@ function FirmwareHistory({
 }
 
 /** Battery history of the last 30 days, loaded on request (#76). */
-function HistoryPanel({ api, hubId }: { api: GalleryApi; hubId: string }) {
+function HistoryPanel({ api, hubId, now }: { api: GalleryApi; hubId: string; now: number }) {
   const [history, setHistory] = useState<HubHistory>();
   const [error, setError] = useState<string>();
   const [open, setOpen] = useState(false);
@@ -622,9 +623,14 @@ function HistoryPanel({ api, hubId }: { api: GalleryApi; hubId: string }) {
       {open && error && <p className="g-error">Verlauf nicht geladen: {error}</p>}
       {open && history && (
         <div className="g-history__charts">
-          <BatteryChart label="Hub" samples={history.hub} />
+          <BatteryChart label="Hub" samples={history.hub} now={now} />
           {history.cameras.map((c) => (
-            <BatteryChart key={c.camId} label={`Kamera „${c.name}“`} samples={c.samples} />
+            <BatteryChart
+              key={c.camId}
+              label={`Kamera „${c.name}“`}
+              samples={c.samples}
+              now={now}
+            />
           ))}
         </div>
       )}
@@ -636,7 +642,15 @@ const CHART_W = 320;
 const CHART_H = 64;
 
 /** A small line of the battery level, 0-100 %, over the samples' time span. */
-export function BatteryChart({ label, samples }: { label: string; samples: Sample[] }) {
+export function BatteryChart({
+  label,
+  samples,
+  now,
+}: {
+  label: string;
+  samples: Sample[];
+  now: number;
+}) {
   const points = samples.filter((s) => s.batPercent !== undefined);
   const first = points[0];
   const last = points[points.length - 1];
@@ -656,9 +670,11 @@ export function BatteryChart({ label, samples }: { label: string; samples: Sampl
     })
     .join(' ');
   const summary = `${label}: Akku ${first.batPercent} % → ${last.batPercent} %`;
+  const forecast = batteryForecast(samples);
   return (
     <figure className="g-chart">
       <figcaption>{summary}</figcaption>
+      {forecast && <p className="g-chart__forecast">{forecastText(forecast, now)}</p>}
       <svg
         viewBox={`-2 -2 ${CHART_W + 4} ${CHART_H + 4}`}
         width={CHART_W}

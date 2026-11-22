@@ -230,6 +230,8 @@ describe('GalleryApp', () => {
     expect(
       within(hub).getByRole('img', { name: 'Kamera „Garten“: Akku 95 % → 66 %' }),
     ).toBeInTheDocument();
+    // Consumption per hour and the forecast for the empty battery.
+    expect(within(hub).getAllByText(/Verbrauch: \d+,\d %\/h/).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Zur Galerie' }));
     expect(await screen.findAllByRole('listitem')).toHaveLength(16);

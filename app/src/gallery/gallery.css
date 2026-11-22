@@ -925,6 +925,10 @@ body {
   font-size: 0.85rem;
 }
 
+.g-chart__forecast {
+  margin: 2px 0 0;
+}
+
 .g-chart svg {
   display: block;
   margin-top: 4px;
