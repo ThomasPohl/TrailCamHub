@@ -1,3 +1,4 @@
+import type { BatteryForecast } from './forecast';
 import type { Fault, GalleryCamera, RecordingState } from './types';
 
 /**
@@ -85,6 +86,25 @@ export function durationText(seconds: number): string {
   if (seconds < 90 * 60) return `${Math.max(1, Math.round(seconds / 60))} min`;
   if (seconds < 48 * 3600) return `${Math.round(seconds / 3600)} h`;
   return `${Math.round(seconds / 86400)} Tage`;
+}
+
+/** Consumption and empty-battery forecast (docs: admin view) in German. */
+export function forecastText(f: BatteryForecast, nowSeconds: number): string {
+  const rate = Math.abs(f.drainPerHour).toFixed(1).replace('.', ',');
+  const over = `(letzte ${durationText(f.windowS)})`;
+  if (f.emptyAt === undefined) {
+    return f.drainPerHour <= -0.05
+      ? `Lädt: +${rate} %/h ${over}, keine Prognose.`
+      : `Verbrauch: ${rate} %/h ${over}, Akku hält praktisch dauerhaft.`;
+  }
+  const left = f.emptyAt - nowSeconds;
+  const when =
+    left <= 0
+      ? 'Akku ist vermutlich leer.'
+      : left > 365 * 86400
+        ? 'Leer: nicht absehbar (mehr als ein Jahr).'
+        : `Leer voraussichtlich ${clockTime(f.emptyAt, nowSeconds)} (in ${durationText(left)}).`;
+  return `Verbrauch: ${rate} %/h ${over}. ${when}`;
 }
 
 /** A fault for the admin (#265) in German; `camera` is the camera's name. */
