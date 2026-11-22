@@ -141,6 +141,24 @@ For the hub this means: take the allowed values from `capability` instead of
 hard-coding them, hide a setting whose `support…` flag is false, and do not
 trust the value of such a setting (see `sidePirOnOff`).
 
+## In the hub, the backend and the gallery (#368)
+
+- **Reading:** `components/camera_link/camera_settings.cpp` reads the
+  settings of the table above with an allowlist (never `secureCode…`, the
+  clock or the fields whose meaning is unknown: `recordMode`, `lum`,
+  `pwrFreq`, GPS, `customName`, `cameraNameOnOff`) and the `capability`
+  (`languages`, `imgResolutions`, `videoResolutions`, the `support…` flags
+  that are false). Both are kept in `camera.json` in the 512 form.
+- **Check-in:** each camera carries `"settings":{…}` with only the fields
+  the camera supports and `"capability":{"imgResolutions":[…],
+  "videoResolutions":[…],"languages":[…]}` (backend/README.md).
+- **Changing:** the gallery's dialog sends only the changed fields; the
+  backend checks them (`backend/src/settings.ts`), the hub checks them again
+  against the device info of the session that sends the 513
+  ([`camera-actions.md`](camera-actions.md)). Writable: the same fields as
+  read, except the detection area, which the gallery does not offer yet (it
+  needs the live picture, #198).
+
 ## Secrets
 
 `secureCode0` … `secureCode3` is the screen lock code in cleartext, in every
