@@ -13,8 +13,9 @@ how that works from every front end. The camera commands are described in
 | `format` | erase the camera's SD card | 518 | console, web UI |
 
 Formatting is never remote, and neither is deleting (#196). Both need a
-confirmation. Changing settings (513) is blocked until a capture of the app
-doing it exists (#197); live video (258/259) is parked (#198).
+confirmation. Changing settings (513) is not an action yet; the payload is now
+known from app captures ([`camera-settings.md`](camera-settings.md), #197). Live video
+(258/259) is parked (#198).
 
 ## One path for every front end
 
