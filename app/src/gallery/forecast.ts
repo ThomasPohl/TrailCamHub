@@ -12,6 +12,8 @@ export interface BatteryForecast {
   emptyAt?: number;
   /** Seconds covered by the measurement. */
   windowS: number;
+  /** Time of the latest value, Unix seconds; the forecast starts there. */
+  lastAt: number;
 }
 
 /**
@@ -39,7 +41,12 @@ export function batteryForecast(samples: Sample[]): BatteryForecast | undefined 
   });
   const drainPerHour = varX === 0 ? 0 : -cov / varX;
   const windowS = last.at - first.at;
-  if (drainPerHour < MIN_DRAIN_PER_HOUR) return { drainPerHour, windowS };
+  if (drainPerHour < MIN_DRAIN_PER_HOUR) return { drainPerHour, windowS, lastAt: last.at };
   const level = last.batPercent ?? 0;
-  return { drainPerHour, windowS, emptyAt: last.at + (level / drainPerHour) * 3600 };
+  return {
+    drainPerHour,
+    windowS,
+    lastAt: last.at,
+    emptyAt: last.at + (level / drainPerHour) * 3600,
+  };
 }
