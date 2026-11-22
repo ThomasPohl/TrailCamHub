@@ -62,7 +62,7 @@ jobs:
         run: ../.github/scripts/run-annotated.sh Tests npm test
 
       - name: Set up AWS SAM CLI
-        uses: aws-actions/setup-sam@v2
+        uses: aws-actions/setup-sam@v3
         with:
           use-installer: true
 
@@ -109,7 +109,7 @@ jobs:
           if [[ -f package-lock.json ]]; then npm ci; else npm install --no-audit --no-fund; fi
 
       - name: Set up AWS SAM CLI
-        uses: aws-actions/setup-sam@v2
+        uses: aws-actions/setup-sam@v3
         with:
           use-installer: true
 
