@@ -1,6 +1,6 @@
 # Camera mock (ESP32-WROOM)
 
-A cheap ESP32-WROOM-32 that stands in for a TC100 camera, so the hub can be
+A cheap ESP32-WROOM-32 (or ESP32-S3-WROOM-1) that stands in for a TC100 camera, so the hub can be
 developed and tested on the bench without the real camera, its battery or the
 garden (#122). To the hub it looks like a camera: BLE peripheral, Wi-Fi access
 point and the PPPP/ARTEMIS session over UDP.
@@ -21,12 +21,28 @@ idf.py -C tools/camera_mock -B build-camera-mock set-target esp32
 idf.py -C tools/camera_mock -B build-camera-mock build flash monitor
 ```
 
-The CI job "Build camera mock (ESP32)" also uploads a merged image
-(`camera-mock-esp32`), which can be flashed at offset 0:
+The CI job "Build camera mock" also uploads a merged image per chip
+(`camera-mock-esp32`, `camera-mock-esp32s3`), which can be flashed at offset 0:
 
 ```bash
 esptool.py --chip esp32 write_flash 0 camera-mock.bin
+esptool.py --chip esp32s3 write_flash 0 camera-mock.bin
 ```
+
+### ESP32-S3-WROOM-1
+
+The same mock builds for an ESP32-S3 (for example a DevKitC-1):
+
+```bash
+idf.py -C tools/camera_mock -B build-camera-mock-s3 set-target esp32s3
+idf.py -C tools/camera_mock -B build-camera-mock-s3 build flash monitor
+```
+
+Chip-specific settings are in `sdkconfig.defaults.esp32` and
+`sdkconfig.defaults.esp32s3`. The console is on UART0: use the port marked
+"UART" on the DevKitC-1, not the native "USB" port. Flash size 4 MB and no
+PSRAM, so every WROOM-1 variant (N4, N8, N16, R2, R8) runs it. Only compiled
+in CI so far; not run on hardware (#222).
 
 Without a toolchain, the web installer's **Camera mock** view
 (<https://thomaspohl.github.io/TrailCamHub/#mock>) flashes the same image and
