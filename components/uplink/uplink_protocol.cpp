@@ -272,9 +272,14 @@ std::string build_checkin_json(const CheckinRequest &request)
     }
     const FirmwareUpdateReport &update = request.firmware_update;
     if (update.present) {
+        // A `skipped` record from before the manifest was read names no
+        // release: `to` is left out (#363).
         out += ",\"firmwareUpdate\":{\"from\":\"" + json_escape(update.from) +
-               "\",\"to\":\"" + json_escape(update.to) + "\",\"result\":\"" +
-               json_escape(update.result) + "\"";
+               "\"";
+        if (!update.to.empty()) {
+            out += ",\"to\":\"" + json_escape(update.to) + "\"";
+        }
+        out += ",\"result\":\"" + json_escape(update.result) + "\"";
         if (!update.reason.empty()) {
             out += ",\"reason\":\"" + json_escape(update.reason) + "\"";
         }
