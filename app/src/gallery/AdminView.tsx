@@ -700,14 +700,7 @@ export function BatteryChart({
           className="g-chart__low"
         />
         {ticks.map((tx) => (
-          <line
-            key={tx}
-            x1={tx}
-            y1={0}
-            x2={tx}
-            y2={CHART_H}
-            className="g-chart__charging"
-          />
+          <line key={tx} x1={tx} y1={0} x2={tx} y2={CHART_H} className="g-chart__charging" />
         ))}
         {lines.map((xy) => (
           <polyline key={xy} points={xy} className="g-chart__line" />

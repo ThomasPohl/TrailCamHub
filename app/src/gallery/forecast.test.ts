@@ -52,20 +52,28 @@ describe('battery forecast', () => {
     expect(charging && forecastText(charging, 1795423229)).toMatch(/Lädt oder ist voll/);
   });
 
-  it('trusts the hub's charging flag over the 100 % rule (#421)', () => {
-    const flagged = (rows: [number, number, boolean?][]) =>
-      rows.map(([h, batPercent, charging]) => ({ at: 1_000_000 + h * H, batPercent, charging }));
+  it('trusts the charging flag of the hub over the 100 % rule (#421)', () => {
+    const flagged = (hours: number[], percents: number[], charging: (boolean | undefined)[]) =>
+      hours.map((h, i) => ({
+        at: 1_000_000 + h * H,
+        batPercent: percents[i],
+        charging: charging[i],
+      }));
     // A real 100 % at rest (flag false) is a value like any other.
-    const rest = batteryForecast(flagged([[0, 100, false], [2, 98, false], [4, 96, false]]));
+    const rest = batteryForecast(flagged([0, 2, 4], [100, 98, 96], [false, false, false]));
     expect(rest?.drainPerHour).toBeCloseTo(1, 5);
     // Charging below 100 %: dropped, and the run starts after it.
     const f = batteryForecast(
-      flagged([[0, 80], [1, 78], [2, 90, true], [3, 95, true], [4, 70], [6, 66]]),
+      flagged(
+        [0, 1, 2, 3, 4, 6],
+        [80, 78, 90, 95, 70, 66],
+        [undefined, undefined, true, true, undefined, undefined],
+      ),
     );
     expect(f?.drainPerHour).toBeCloseTo(2, 5);
     expect(f?.windowS).toBe(2 * H);
     // Latest value flagged: charging, no forecast.
-    const now = batteryForecast(flagged([[0, 80], [2, 78], [3, 90, true]]));
+    const now = batteryForecast(flagged([0, 2, 3], [80, 78, 90], [undefined, undefined, true]));
     expect(now?.charging).toBe(true);
     expect(now?.emptyAt).toBeUndefined();
     expect(now && forecastText(now, 1_000_000 + 3 * H)).toBe('Lädt, keine Prognose.');
