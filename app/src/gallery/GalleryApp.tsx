@@ -153,6 +153,13 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   // The camera whose settings dialog is open (#368).
   const [settingsFor, setSettingsFor] = useState<string>();
   const saving = useRef(false);
+  // The chosen camera, readable in a reload that started before a switch: a
+  // slow reload must not undo the user's choice (#431).
+  const camIdRef = useRef<string | undefined>(undefined);
+  const chooseCam = useCallback((id: string | undefined) => {
+    camIdRef.current = id;
+    setCamId(id);
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -167,19 +174,22 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       setFound(f);
       const shown = s.cameras.filter((c) => !c.hidden);
       // "All cameras" is the default as soon as there is more than one.
+      const current = camIdRef.current;
       let id: string | undefined;
-      if (camId === ALL && shown.length > 1) id = ALL;
-      else if (camId && camId !== ALL && shown.some((c) => c.camId === camId)) id = camId;
+      if (current === ALL && shown.length > 1) id = ALL;
+      else if (current && current !== ALL && shown.some((c) => c.camId === current)) id = current;
       else id = shown.length > 1 ? ALL : shown[0]?.camId;
-      setCamId(id);
+      chooseCam(id);
       const ids = id === ALL ? shown.map((c) => c.camId) : id ? [id] : [];
       const lists = await Promise.all(ids.map((c) => api.recordings(c)));
+      // Switched meanwhile: the switch loads its own recordings.
+      if (camIdRef.current !== id) return;
       setItems(newestFirst(lists.flat()));
       setLoadError(undefined);
     } catch (error) {
       setLoadError(error instanceof ApiError && error.status === 401 ? 'signin' : errorText(error));
     }
-  }, [api, camId]);
+  }, [api, chooseCam]);
 
   useEffect(() => {
     void reload();
@@ -237,10 +247,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     if (entry && notReachedYet(entry)) return;
     setPendingKey(undefined);
     if (entry?.camId && status?.cameras.some((c) => c.camId === entry.camId && !c.hidden)) {
-      setCamId(entry.camId);
+      chooseCam(entry.camId);
       setItems(undefined);
+      void reload();
     }
-  }, [found, pendingKey, status]);
+  }, [found, pendingKey, status, chooseCam, reload]);
 
   const decide = async (camera: FoundCamera, state: 'approved' | 'excluded', name?: string) => {
     setBusy(true);
@@ -293,8 +304,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       // After the reload, which keeps the camera shown before; changing the
       // camera loads its recordings.
       if (!hidden) {
+        chooseCam(id);
         setItems(undefined);
-        setCamId(id);
+        await reload();
       }
     } catch (error) {
       setNotice(`Das hat nicht geklappt: ${errorText(error)}`);
@@ -485,11 +497,12 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     setManage(false);
     setRenaming(undefined);
     setPendingKey(undefined);
-    if (id !== camId) {
-      setCamId(id);
+    if (id !== camIdRef.current) {
+      chooseCam(id);
       setItems(undefined);
       clearSelection();
       setStateFilter('all');
+      void reload();
     }
   };
   const openWaiting = (camera: FoundCamera) => {
