@@ -23,6 +23,7 @@
 #include "camera_wifi.h"
 #include "delete_request.hpp"
 #include "destinations.hpp"
+#include "data_usage_store.hpp"
 #include "device_info.hpp"
 #include "cycle_trace.hpp"
 #include "hub_battery.hpp"
@@ -67,6 +68,7 @@ HttpResult post_json(const std::string &url, const std::string &device_key,
     const std::string authorization = "Bearer " + device_key;
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_header(client, "Authorization", authorization.c_str());
+    const std::uint64_t sent_bytes = body.size();
     result.error = esp_http_client_open(client, body.size());
     if (result.error == ESP_OK) {
         if (esp_http_client_write(client, body.data(), body.size()) !=
@@ -84,6 +86,7 @@ HttpResult post_json(const std::string &url, const std::string &device_key,
     }
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+    usage::record(sent_bytes, result.body.size());
     return result;
 }
 
@@ -125,6 +128,7 @@ HttpResult put_file(const std::string &url, const std::string &path)
     fclose(file);
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+    usage::record((std::uint64_t)size, result.body.size());
     return result;
 }
 
@@ -195,6 +199,7 @@ HttpResult put_mp4(const std::string &url, const std::string &camera_id,
     }
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+    usage::record(size, result.body.size());
     if (!over_modem) {
         camera_wifi_set_full_power(false);
     }

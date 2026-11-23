@@ -61,9 +61,20 @@ Failures that end early instead of after 120 s:
 
 While the modem is not on USB yet, the log shows `Waiting for the modem on USB` once; the driver's `AT parser is stopped` errors of that phase are muted. If it never appears, the error names the DIP switches (USB OFF, 4G ON).
 
+## Data volume
+
+The hub counts the bytes of every request and response body of its uplink (check-in, thumbnails, videos, acknowledgements, WebDAV), split into sent and received and by transport (`wifi`, `modem`, `ethernet`) (#415). Not counted: the camera's own Wi-Fi traffic and BLE.
+
+- `components/uplink/data_usage.cpp` holds the counting (host-tested), `data_usage_store.cpp` keeps the totals in NVS (namespace `trailcam_usage`, written once at the end of a sync, so a reset in the middle can lose the last sync's uploads).
+- Per request a fixed 400 B / 250 B stands for the request line and headers. At report time `CONFIG_UPLINK_DATA_OVERHEAD_PERCENT` (default 110) is added for TLS and TCP/IP. The figure is an estimate (`"estimate":true`); compare it with the provider's statement and adjust.
+- The check-in carries `dataUsage: [{transport, txBytes, rxBytes, estimate}]`, the part not reported yet. Only after the backend answered the check-in is that part taken off, so a failed check-in neither loses nor double counts bytes. If the backend stored the check-in but the answer got lost, the next one counts the bytes again.
+- The backend adds the entries to a sum per hub, UTC day and transport (`USE#<day>#<transport>`, kept half a year). Old firmware sends nothing. `GET /v1/admin/hubs/:hubId/usage` returns the previous and the current month; `POST /v1/admin/hubs/:hubId/data-budget` with `{"budgetMB": n}` (or `null`) sets the optional monthly plan.
+- The admin view shows the used volume of the calendar month (in the browser's time zone; UTC days are assigned by their noon), the rate of the last 7 days (fewer while the data is younger), the forecast for the end of the month and, with a plan, the percentage and the day it runs out.
+- Not decided yet: whether the modem has its own data counter (to prefer for the modem transport) and the real overhead factor; both need a hardware test against the provider's figure (#358).
+
 ## Not covered yet
 
-- Data volume: requested videos go over the modem up to `CONFIG_UPLINK_VIDEO_MAX_MB_MODEM` (15 MB, about 20 s of 1080p and 5 min of transmitting at the measured ~50 KB/s; see `docs/video-download.md`). A monthly volume budget was considered and left out.
+- Data volume: requested videos go over the modem up to `CONFIG_UPLINK_VIDEO_MAX_MB_MODEM` (15 MB, about 20 s of 1080p and 5 min of transmitting at the measured ~50 KB/s; see `docs/video-download.md`). The volume is measured, not limited: see [Data volume](#data-volume).
 - Firmware updates (`docs/ota.md`) go over the modem too: the manifest at most once a day, an update only with enough battery and a signal of at least `CONFIG_OTA_MODEM_MIN_SIGNAL_DBM` (−105 dBm, measured during the attach). The hub restarts into a new firmware only after the modem is down.
 - Modem status in the app (#144); GNSS and SMS (#146).
 - A USB connection lost during a data call can leave the driver waiting; the next deep sleep resets the hub.

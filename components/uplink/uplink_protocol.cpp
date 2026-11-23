@@ -283,6 +283,18 @@ std::string build_checkin_json(const CheckinRequest &request)
         }
         out += "}";
     }
+    if (!request.data_usage.empty()) {
+        out += ",\"dataUsage\":[";
+        for (std::size_t i = 0; i < request.data_usage.size(); i++) {
+            const DataUsageEntry &e = request.data_usage[i];
+            out += std::string(i > 0 ? "," : "") + "{\"transport\":\"" +
+                   json_escape(e.transport) +
+                   "\",\"txBytes\":" + std::to_string(e.tx_bytes) +
+                   ",\"rxBytes\":" + std::to_string(e.rx_bytes) +
+                   ",\"estimate\":true}";
+        }
+        out += "]";
+    }
     const MemoryReport &memory = request.memory;
     if (memory.present) {
         out += ",\"memory\":{\"cycle\":" + std::to_string(memory.cycle) +

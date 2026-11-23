@@ -23,4 +23,15 @@ config UPLINK_VIDEO_MAX_MB_MODEM
         larger video is answered as failed with the reason; a hub syncs
         over one transport only, so it is not kept for a Wi-Fi sync.
 
+config UPLINK_DATA_OVERHEAD_PERCENT
+    int "Data usage: HTTP bytes as a percentage on the wire"
+    range 100 200
+    default 110
+    help
+        The hub counts the bytes of every request and response body and
+        reports them to the backend as the data volume of the uplink (#415).
+        TLS records and TCP/IP headers are not visible there: this factor
+        (110 = +10 %) covers them. The figure stays an estimate; compare it
+        with the provider's statement and adjust.
+
 endmenu

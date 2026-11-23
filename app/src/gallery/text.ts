@@ -1,4 +1,5 @@
 import type { BatteryForecast } from './forecast';
+import type { UsageSummary } from './usage';
 import type { Fault, GalleryCamera, RecordingState } from './types';
 
 /**
@@ -264,4 +265,48 @@ export function memoryText(m: {
     .map(([name, bytes]) => `${name} ${kilobytes(bytes)}`);
   if (stacks.length > 0) parts.push(`Stack: ${stacks.join(', ')}`);
   return parts.join(' · ');
+}
+
+/** Megabytes in plain German, "0,4 MB", "12 MB" or "1,3 GB" (decimal, like the provider). */
+export function megabyteText(bytes: number): string {
+  const mb = bytes / 1_000_000;
+  if (mb >= 1000) return `${(mb / 1000).toFixed(1).replace('.', ',')} GB`;
+  if (mb >= 10) return `${Math.round(mb)} MB`;
+  return `${mb.toFixed(1).replace('.', ',')} MB`;
+}
+
+const TRANSPORT_WORDS: Record<string, string> = {
+  wifi: 'WLAN',
+  modem: 'Mobilfunk',
+  ethernet: 'Ethernet',
+};
+
+/** The lines of the data usage display (#415) in German; the figures are estimates. */
+export function usageLines(u: UsageSummary | undefined, nowSeconds: number): string[] {
+  if (!u) return ['Noch keine Daten zur Datenmenge.'];
+  const via = u.transports.map((t) => TRANSPORT_WORDS[t] ?? t).join(', ');
+  const days = `${u.windowDays} ${u.windowDays === 1 ? 'Tag' : 'Tage'}`;
+  const lines = [
+    `Diesen Monat: ${megabyteText(u.usedBytes)}${via ? ` (${via})` : ''}.`,
+    `Verbrauch: ${megabyteText(u.perDayBytes)} pro Tag (letzte ${days}).`,
+  ];
+  if (u.budgetBytes === undefined || u.fraction === undefined) {
+    lines.push(`Bis Monatsende voraussichtlich: ${megabyteText(u.forecastBytes)}.`);
+  } else {
+    const percent = Math.round(u.fraction * 100);
+    lines.push(`${percent} % von ${megabyteText(u.budgetBytes)} verbraucht.`);
+    if (u.exhausted) {
+      lines.push('Das Kontingent ist aufgebraucht.');
+    } else if (u.runsOutAt !== undefined) {
+      const when = clockTime(u.runsOutAt, nowSeconds).replace(/ \d\d:\d\d Uhr$/, '');
+      lines.push(
+        `Reicht voraussichtlich nur bis ${when} (Monatsende: ${megabyteText(u.forecastBytes)}).`,
+      );
+    } else {
+      lines.push(`Reicht bis Monatsende (voraussichtlich ${megabyteText(u.forecastBytes)}).`);
+    }
+  }
+  const last = `${u.lastDay.slice(8)}.${u.lastDay.slice(5, 7)}.`;
+  lines.push(`Letzter Wert vom ${last} Geschätzt, mit Aufschlag für die Verschlüsselung.`);
+  return lines;
 }

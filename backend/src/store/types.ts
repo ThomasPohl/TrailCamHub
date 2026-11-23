@@ -7,6 +7,8 @@ import type {
   MediaRecord,
   FirmwareChange,
   FoundCamera,
+  DataUsageDay,
+  DataUsageReport,
   Sample,
   SampleOwner,
   ScheduleConfig,
@@ -67,6 +69,12 @@ export interface Store {
   ): Promise<void>;
   /** Replaces the schedule set in the app (an empty object removes it). */
   setHubScheduleConfig(hubId: string, config: ScheduleConfig): Promise<void>;
+  /** Sets the monthly data plan in MB (#415); undefined removes it. */
+  setHubDataBudget(hubId: string, budgetMB: number | undefined): Promise<void>;
+  /** Adds bytes to the sum of a hub's UTC day (`YYYY-MM-DD`) and transport (#415). */
+  addDataUsage(hubId: string, day: string, report: DataUsageReport): Promise<void>;
+  /** The day sums from `sinceDay` on (`YYYY-MM-DD`), oldest first. */
+  listDataUsage(hubId: string, sinceDay: string): Promise<DataUsageDay[]>;
 
   /**
    * Creates the camera for `hubId` unless it exists. Returns the stored record

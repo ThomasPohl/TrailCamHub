@@ -1,5 +1,7 @@
 #include "http_util.hpp"
 
+#include "data_usage_store.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -211,6 +213,7 @@ HttpResult send(const Request &request, std::int64_t *read_us)
     }
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+    usage::record(request.body_size, result.body.size());
     return result;
 }
 

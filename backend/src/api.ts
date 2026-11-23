@@ -32,6 +32,8 @@ import type {
   Camera,
   CameraCheckin,
   CameraRecord,
+  DataUsageReport,
+  HubUsage,
   CameraReport,
   CheckinRequest,
   CheckinResponse,
@@ -68,6 +70,7 @@ import {
   ID_PATTERN,
   isMediaId,
   MAX_CAMERA_NAME,
+  MAX_DATA_BUDGET_MB,
   normalizeBleAddress,
   POWER_SETTINGS,
   validCameraName,
@@ -140,6 +143,8 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   },
   { method: 'GET', pattern: '/v1/admin/hubs', handler: adminHubs },
   { method: 'GET', pattern: '/v1/admin/hubs/:hubId/history', handler: adminHistory },
+  { method: 'GET', pattern: '/v1/admin/hubs/:hubId/usage', handler: adminUsage },
+  { method: 'POST', pattern: '/v1/admin/hubs/:hubId/data-budget', handler: setDataBudget },
   { method: 'POST', pattern: '/v1/admin/elevate', handler: elevate },
   { method: 'POST', pattern: '/v1/admin/users/:userId/rotate', handler: rotateUser },
   { method: 'POST', pattern: '/v1/admin/users/:userId/revoke', handler: revokeUser },
@@ -373,6 +378,7 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
       modemSignalDbm: hub.uplink === 'modem' ? hub.modemSignalDbm : undefined,
       modemOperator: hub.uplink === 'modem' ? hub.modemOperator : undefined,
       memory: hub.memory,
+      dataBudgetMB: hub.dataBudgetMB,
       lastSeen: hub.lastSeen,
       schedule: hub.schedule,
       scheduleConfig: hub.scheduleConfig ?? {},
@@ -499,6 +505,47 @@ async function adminHistory(req: ApiRequest, params: Record<string, string>, dep
     });
   }
   return json(200, history);
+}
+
+/** UTC day of a Unix time, `YYYY-MM-DD`. */
+function utcDay(seconds: number): string {
+  return new Date(seconds * 1000).toISOString().slice(0, 10);
+}
+
+/**
+ * The day sums of the previous and the current month, with a day of slack on
+ * both sides so that the app can assign days to the month of its own time zone.
+ */
+async function adminUsage(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  requireAdmin(await authUser(req, deps));
+  const hubId = params.hubId ?? '';
+  const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
+  if (!hub) throw new HttpError(404, 'Hub not found');
+  const now = new Date(deps.now() * 1000);
+  const previousMonth = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1) / 1000;
+  const usage: HubUsage = {
+    budgetMB: hub.dataBudgetMB,
+    days: await deps.store.listDataUsage(hubId, utcDay(previousMonth - 24 * 3600)),
+  };
+  return json(200, usage);
+}
+
+/** Sets or removes the monthly data plan of a hub (#415). */
+async function setDataBudget(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  requireAdmin(await authUser(req, deps));
+  const hubId = params.hubId ?? '';
+  const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
+  if (!hub) throw new HttpError(404, 'Hub not found');
+  const value = parseJsonBody<{ budgetMB?: unknown } | null>(req)?.budgetMB;
+  if (value === null || value === undefined) {
+    await deps.store.setHubDataBudget(hubId, undefined);
+    return json(200, { hubId });
+  }
+  if (!Number.isInteger(value) || (value as number) < 1 || (value as number) > MAX_DATA_BUDGET_MB) {
+    throw new HttpError(400, `budgetMB must be a whole number of 1-${MAX_DATA_BUDGET_MB}, or null`);
+  }
+  await deps.store.setHubDataBudget(hubId, value as number);
+  return json(200, { hubId, budgetMB: value });
 }
 
 async function listCameras(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
@@ -974,6 +1021,31 @@ export function powerModeOf(body: CheckinRequest): HubPowerMode | undefined {
 
 const UPLINKS: readonly HubUplink[] = ['wifi', 'modem', 'ethernet'];
 
+/** Entries of a check-in's `dataUsage` that are looked at; a hub sends one per transport. */
+const MAX_USAGE_ENTRIES = 8;
+
+/** More than a hub can send in one check-in (a few GB over a day is a lot). */
+const MAX_REPORTED_BYTES = 1_000_000_000_000;
+
+/**
+ * The `dataUsage` of a check-in (#415). Malformed entries are skipped; one
+ * entry per transport, so a faulty hub cannot inflate the sums by repeating.
+ */
+function parseDataUsage(raw: unknown): DataUsageReport[] {
+  if (!Array.isArray(raw)) return [];
+  const out = new Map<HubUplink, DataUsageReport>();
+  for (const item of raw.slice(0, MAX_USAGE_ENTRIES) as Array<Record<string, unknown> | null>) {
+    const transport = UPLINKS.find((u) => u === item?.transport);
+    const tx = item?.txBytes;
+    const rx = item?.rxBytes;
+    const valid = (n: unknown): n is number =>
+      typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= MAX_REPORTED_BYTES;
+    if (!transport || !valid(tx) || !valid(rx) || (tx === 0 && rx === 0)) continue;
+    out.set(transport, { transport, txBytes: tx, rxBytes: rx });
+  }
+  return [...out.values()];
+}
+
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
 
@@ -1074,6 +1146,10 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       ...(powerModeOf(body) === undefined ? (['powerMode'] as const) : []),
     ],
   );
+  // The data volume since the last check-in, added to the sum of today (#415).
+  for (const entry of parseDataUsage(body.dataUsage)) {
+    await deps.store.addDataUsage(hub.hubId, utcDay(now), entry);
+  }
   await recordSample(
     deps,
     { hubId: hub.hubId },

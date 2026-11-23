@@ -11,6 +11,7 @@ import type {
   FoundCamera,
   GalleryStatus,
   HubHistory,
+  HubUsage,
   Me,
   Recording,
   RecordingState,
@@ -409,6 +410,16 @@ export class HttpGalleryApi implements GalleryApi {
 
   adminHistory(hubId: string): Promise<HubHistory> {
     return this.request<HubHistory>('GET', `/v1/admin/hubs/${encodeURIComponent(hubId)}/history`);
+  }
+
+  adminUsage(hubId: string): Promise<HubUsage> {
+    return this.request<HubUsage>('GET', `/v1/admin/hubs/${encodeURIComponent(hubId)}/usage`);
+  }
+
+  async setDataBudget(hubId: string, budgetMB: number | undefined): Promise<void> {
+    await this.request<unknown>('POST', `/v1/admin/hubs/${encodeURIComponent(hubId)}/data-budget`, {
+      budgetMB: budgetMB ?? null,
+    });
   }
 
   elevated(): boolean {

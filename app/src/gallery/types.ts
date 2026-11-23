@@ -131,6 +131,22 @@ export interface Sample {
   temperature?: number;
 }
 
+/** A hub's data volume on one UTC day and transport (#415); an estimate. */
+export interface DataUsageDay {
+  /** UTC day, `YYYY-MM-DD`. */
+  day: string;
+  transport: 'wifi' | 'modem' | 'ethernet';
+  txBytes: number;
+  rxBytes: number;
+}
+
+/** Data volume of a hub: the previous and the current month (#415). */
+export interface HubUsage {
+  /** Monthly plan in MB, set by the admin. */
+  budgetMB?: number;
+  days: DataUsageDay[];
+}
+
 /** The last 30 days of a hub and its cameras, oldest first. */
 export interface HubHistory {
   hub: Sample[];
@@ -176,6 +192,8 @@ export interface AdminHub {
   modemSignalDbm?: number;
   /** Mobile network of the last modem connect; only while the hub syncs over the modem. */
   modemOperator?: string;
+  /** Monthly data plan in MB, set by the admin (#415). */
+  dataBudgetMB?: number;
   /** Lowest free memory of the last reported cycle, bytes (#149). */
   memory?: {
     cycle: number;
@@ -248,6 +266,10 @@ export interface GalleryApi {
   adminHubs(): Promise<AdminHub[]>;
   /** Admin only: battery history of a hub and its cameras (#76). */
   adminHistory(hubId: string): Promise<HubHistory>;
+  /** Admin only: data volume of a hub, previous and current month (#415). */
+  adminUsage(hubId: string): Promise<HubUsage>;
+  /** Admin only: sets the monthly data plan in MB; undefined removes it (#415). */
+  setDataBudget(hubId: string, budgetMB: number | undefined): Promise<void>;
   /** Whether an admin session is active; without one the admin view asks for a code (#259). */
   elevated(): boolean;
   /**

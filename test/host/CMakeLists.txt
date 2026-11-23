@@ -98,6 +98,7 @@ add_executable(host_tests
     test_web_paths.cpp
     test_hub_console.cpp
     test_uplink_protocol.cpp
+    test_data_usage.cpp
     test_push_protocol.cpp
     test_video_request.cpp
     test_delete_request.cpp
@@ -151,6 +152,7 @@ add_executable(host_tests
     ${uplink_dir}/video_request.cpp
     ${uplink_dir}/delete_request.cpp
     ${uplink_dir}/mp4_body.cpp
+    ${uplink_dir}/data_usage.cpp
     ${uplink_dir}/push_protocol.cpp
     ${mp4_dir}/mp4_mux.cpp
     ${mp4_dir}/mp4_file_source.cpp

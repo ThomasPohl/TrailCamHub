@@ -24,6 +24,7 @@
 #include "camera_wifi.h"
 #include "delete_request.hpp"
 #include "destinations.hpp"
+#include "data_usage_store.hpp"
 #include "device_info.hpp"
 #include "cycle_trace.hpp"
 #include "hub_battery.hpp"
@@ -91,6 +92,28 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
 {
     report = Report{};
     const std::string base = hub_config::api_base(settings.api_url);
+    usage::init();
+    {
+        usage::Transport transport = usage::Transport::wifi;
+        switch (hub_config::uplink_transport(settings)) {
+        case hub_config::Transport::wifi:
+            break;
+        case hub_config::Transport::modem:
+            transport = usage::Transport::modem;
+            break;
+        case hub_config::Transport::ethernet:
+            transport = usage::Transport::ethernet;
+            break;
+        }
+        usage::set_transport(transport);
+    }
+    // The totals are written once at the end of the sync, not per request.
+    struct PersistUsage {
+        ~PersistUsage()
+        {
+            usage::persist();
+        }
+    } persist_usage;
 
     CheckinRequest request;
     request.hub_firmware = esp_app_get_description()->version;
@@ -122,6 +145,20 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     case hub_config::Transport::ethernet:
         request.hub_uplink = "ethernet";
         break;
+    }
+    // The data volume since the last acknowledged check-in (#415). Only the
+    // part counted before this snapshot is taken off after the answer.
+    const usage::Totals usage_reported = usage::snapshot();
+    for (std::size_t i = 0; i < usage::kTransports; i++) {
+        const usage::Bytes &b = usage_reported.by_transport[i];
+        if (!b.empty()) {
+            request.data_usage.push_back(
+                {usage::transport_name((usage::Transport)i),
+                 usage::with_overhead(b.tx,
+                                      CONFIG_UPLINK_DATA_OVERHEAD_PERCENT),
+                 usage::with_overhead(b.rx,
+                                      CONFIG_UPLINK_DATA_OVERHEAD_PERCENT)});
+        }
     }
     // The last firmware update, once (#149).
     ota::UpdateRecord update;
@@ -170,6 +207,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
         return checkin.error != ESP_OK ? checkin.error : ESP_FAIL;
     }
     std::string().swap(checkin.body);
+    usage::acknowledge(usage_reported);
     report.server_time = response.server_time;
     if (has_update) {
         ota::mark_update_reported(update);

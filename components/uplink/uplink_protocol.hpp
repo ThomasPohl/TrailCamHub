@@ -105,6 +105,15 @@ struct DiscoveredCamera {
     std::int64_t seen_at = 0;  // hub clock; 0 = unknown, left out
 };
 
+// Data volume since the last acknowledged check-in (#415), per transport; an
+// estimate (HTTP bytes plus a fixed share for TLS and TCP/IP). Entries
+// without bytes are left out.
+struct DataUsageEntry {
+    std::string transport;  // "wifi", "modem", "ethernet"
+    std::uint64_t tx_bytes = 0;
+    std::uint64_t rx_bytes = 0;
+};
+
 struct CheckinRequest {
     std::string hub_firmware;
     // Board and build variant ("esp32s3", "release"): which firmware image
@@ -135,6 +144,7 @@ struct CheckinRequest {
     std::int64_t max_thumb_uploads = -1;
     ScheduleReport schedule;
     MemoryReport memory;
+    std::vector<DataUsageEntry> data_usage;  // left out when empty
     FirmwareUpdateReport firmware_update;
     std::vector<CameraReport> cameras;
     // Cameras heard in BLE scans, read or not (#296). Sent as "discovered"
