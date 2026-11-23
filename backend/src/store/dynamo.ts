@@ -17,6 +17,8 @@ import type {
   AuditEntry,
   CameraRecord,
   CommandRecord,
+  DataUsageDay,
+  DataUsageReport,
   HubRecord,
   MediaRecord,
   FirmwareChange,
@@ -125,6 +127,61 @@ export class DynamoStore implements Store {
 
   async setHubScheduleConfig(hubId: string, config: ScheduleConfig): Promise<void> {
     await this.updateFields(hubPk(hubId), 'META', { scheduleConfig: config });
+  }
+
+  async setHubDataBudget(hubId: string, budgetMB: number | undefined): Promise<void> {
+    if (budgetMB !== undefined) {
+      await this.updateFields(hubPk(hubId), 'META', { dataBudgetMB: budgetMB });
+      return;
+    }
+    await this.db.send(
+      new UpdateCommand({
+        TableName: this.table,
+        Key: { PK: hubPk(hubId), SK: 'META' },
+        ConditionExpression: 'attribute_exists(PK)',
+        UpdateExpression: 'REMOVE dataBudgetMB',
+      }),
+    );
+  }
+
+  async addDataUsage(hubId: string, day: string, report: DataUsageReport): Promise<void> {
+    // ADD is atomic: two check-ins on one day cannot overwrite each other.
+    await this.db.send(
+      new UpdateCommand({
+        TableName: this.table,
+        Key: { PK: hubPk(hubId), SK: `USE#${day}#${report.transport}` },
+        UpdateExpression:
+          'ADD txBytes :tx, rxBytes :rx SET #day = :day, transport = :t, #ttl = :ttl',
+        ExpressionAttributeNames: { '#day': 'day', '#ttl': 'ttl' },
+        ExpressionAttributeValues: {
+          ':tx': report.txBytes,
+          ':rx': report.rxBytes,
+          ':day': day,
+          ':t': report.transport,
+          ':ttl': Math.floor(Date.parse(`${day}T00:00:00Z`) / 1000) + HISTORY_KEEP_S,
+        },
+      }),
+    );
+  }
+
+  async listDataUsage(hubId: string, sinceDay: string): Promise<DataUsageDay[]> {
+    const page = await this.db.send(
+      new QueryCommand({
+        TableName: this.table,
+        KeyConditionExpression: 'PK = :pk AND SK BETWEEN :from AND :to',
+        ExpressionAttributeValues: {
+          ':pk': hubPk(hubId),
+          ':from': `USE#${sinceDay}`,
+          ':to': 'USE#~',
+        },
+      }),
+    );
+    return (page.Items ?? []).map((item) => ({
+      day: String(item.day),
+      transport: item.transport as DataUsageDay['transport'],
+      txBytes: Number(item.txBytes ?? 0),
+      rxBytes: Number(item.rxBytes ?? 0),
+    }));
   }
 
   // ---- Cameras -------------------------------------------------------------

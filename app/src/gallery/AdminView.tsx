@@ -8,9 +8,18 @@ import type {
   ScheduleStretch,
 } from '../api/types';
 import { batteryForecast } from './forecast';
+import { monthlyUsage } from './usage';
 import { isNewer } from './release';
-import { clockTime, faultText, forecastText, memoryText, skipReasonText, uplinkText } from './text';
-import type { AdminHub, AuditEntry, GalleryApi, HubHistory, Sample } from './types';
+import {
+  clockTime,
+  faultText,
+  forecastText,
+  memoryText,
+  skipReasonText,
+  uplinkText,
+  usageLines,
+} from './text';
+import type { AdminHub, AuditEntry, GalleryApi, HubHistory, HubUsage, Sample } from './types';
 
 /**
  * The admin view (#264): every hub with its state, cameras and users, the
@@ -506,6 +515,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
           </table>
 
           <HistoryPanel api={api} hubId={hub.hubId} now={t} />
+          <UsagePanel api={api} hubId={hub.hubId} now={t} />
 
           <ScheduleForm
             key={`${hub.hubId}:${hub.scheduleConfig.cameraPlan ?? ''}:${hub.scheduleConfig.checkinIntervalS ?? ''}:${hub.scheduleConfig.powerSetting ?? ''}`}
@@ -638,6 +648,89 @@ function HistoryPanel({ api, hubId, now }: { api: GalleryApi; hubId: string; now
               now={now}
             />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Data volume of the month with a forecast and the optional plan size (#415). */
+function UsagePanel({ api, hubId, now }: { api: GalleryApi; hubId: string; now: number }) {
+  const [usage, setUsage] = useState<HubUsage>();
+  const [error, setError] = useState<string>();
+  const [open, setOpen] = useState(false);
+  const [budget, setBudget] = useState('');
+
+  const load = async () => {
+    try {
+      const loaded = await api.adminUsage(hubId);
+      setUsage(loaded);
+      setBudget(loaded.budgetMB !== undefined ? String(loaded.budgetMB) : '');
+      setError(undefined);
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+  const toggle = async () => {
+    setOpen(!open);
+    if (!open) await load();
+  };
+  const save = async (value: number | undefined) => {
+    try {
+      await api.setDataBudget(hubId, value);
+      await load();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+  const parsed = Number(budget);
+  const valid = Number.isInteger(parsed) && parsed >= 1 && parsed <= 1_000_000;
+
+  return (
+    <div className="g-history">
+      <button
+        type="button"
+        className="g-btn g-btn--plain"
+        aria-expanded={open}
+        onClick={() => void toggle()}
+      >
+        {open ? 'Datenmenge ausblenden' : 'Datenmenge (Monat)'}
+      </button>
+      {open && error && <p className="g-error">Datenmenge nicht geladen: {error}</p>}
+      {open && usage && (
+        <div className="g-usage">
+          {usageLines(monthlyUsage(usage.days, now, usage.budgetMB), now).map((line) => (
+            <p key={line} className="g-chart__forecast">
+              {line}
+            </p>
+          ))}
+          <label>
+            Kontingent pro Monat (MB, leer = keins){' '}
+            <input
+              type="number"
+              min={1}
+              max={1000000}
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+            />
+          </label>{' '}
+          <button
+            type="button"
+            className="g-btn"
+            disabled={!valid}
+            onClick={() => void save(parsed)}
+          >
+            Speichern
+          </button>{' '}
+          {usage.budgetMB !== undefined && (
+            <button
+              type="button"
+              className="g-btn g-btn--plain"
+              onClick={() => void save(undefined)}
+            >
+              Entfernen
+            </button>
+          )}
         </div>
       )}
     </div>

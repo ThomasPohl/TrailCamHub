@@ -10,6 +10,7 @@ import type {
   GalleryCamera,
   GalleryStatus,
   HubHistory,
+  HubUsage,
   Me,
   Recording,
 } from './types';
@@ -98,6 +99,7 @@ export class DemoGalleryApi implements GalleryApi {
   private readonly cameras = CAMERAS.map((c) => ({ ...c }));
   private lastCheckin: number;
   private scheduleConfig: ScheduleConfig = {};
+  private dataBudgetMB: number | undefined = 3000;
   private readonly readRequested = new Set<string>();
   // The demo hub hears its two cameras and one more in range (#298).
   private readonly found: FoundCamera[] = [
@@ -369,6 +371,26 @@ export class DemoGalleryApi implements GalleryApi {
         ],
       },
     ];
+  }
+
+  async adminUsage(): Promise<HubUsage> {
+    this.requireSession();
+    // Ten days of a modem hub: a few MB a day and a video now and then.
+    const days = Array.from({ length: 10 }, (_, i) => {
+      const at = this.now() - (9 - i) * 86_400;
+      return {
+        day: new Date(at * 1000).toISOString().slice(0, 10),
+        transport: 'modem' as const,
+        txBytes: (i % 3 === 0 ? 14_000_000 : 400_000) + i * 20_000,
+        rxBytes: 150_000 + i * 5_000,
+      };
+    });
+    return { budgetMB: this.dataBudgetMB, days };
+  }
+
+  async setDataBudget(_hubId: string, budgetMB: number | undefined): Promise<void> {
+    this.requireSession();
+    this.dataBudgetMB = budgetMB;
   }
 
   async adminHistory(): Promise<HubHistory> {

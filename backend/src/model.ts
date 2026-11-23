@@ -83,6 +83,8 @@ export interface HubRecord {
   modemOperator?: string;
   /** Lowest free memory of the last reported cycle (#149, #244). */
   memory?: HubMemory;
+  /** Monthly data plan in MB, set by the admin (#415); absent = none. */
+  dataBudgetMB?: number;
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   /** As reported at the last check-in. */
@@ -91,6 +93,37 @@ export interface HubRecord {
 }
 
 export type HubUplink = 'wifi' | 'modem' | 'ethernet';
+
+/**
+ * Data volume of a hub on one transport on one UTC day (#415): the sum of what
+ * the hub reported at its check-ins that day. HTTP bytes plus a fixed share
+ * for TLS and TCP/IP, so an estimate.
+ */
+export interface DataUsageDay {
+  /** UTC day, `YYYY-MM-DD`. */
+  day: string;
+  transport: HubUplink;
+  txBytes: number;
+  rxBytes: number;
+}
+
+/** One entry of the check-in's `dataUsage` (bytes since the last check-in). */
+export interface DataUsageReport {
+  transport: HubUplink;
+  txBytes: number;
+  rxBytes: number;
+}
+
+/** The data volume of a hub for the admin view (#415). */
+export interface HubUsage {
+  /** Monthly plan in MB, set by the admin; absent = none. */
+  budgetMB?: number;
+  /** The previous and the current month (plus a day each side), oldest first. */
+  days: DataUsageDay[];
+}
+
+/** Largest monthly budget the admin can set, MB. */
+export const MAX_DATA_BUDGET_MB = 1_000_000;
 export type HubPowerMode = 'mains' | 'battery';
 
 /** The hub's memory report, bytes (check-in `memory`, #236). */
@@ -330,6 +363,8 @@ export interface AdminHub {
   modemSignalDbm?: number;
   modemOperator?: string;
   memory?: HubMemory;
+  /** Monthly data plan in MB (#415); absent = none set. */
+  dataBudgetMB?: number;
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   /** As reported at the last check-in. */
@@ -493,6 +528,8 @@ export interface CheckinRequest {
   modemOperator?: string;
   /** Raw; see HubMemory. */
   memory?: unknown;
+  /** Raw list of DataUsageReport (#415); older firmware does not send it. */
+  dataUsage?: unknown;
   /**
    * The most thumbnail uploads the hub takes from this check-in. A hub with
    * little memory keeps the response small with it; the backend's own limit

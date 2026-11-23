@@ -5,6 +5,8 @@ import type {
   CommandRecord,
   HubRecord,
   MediaRecord,
+  DataUsageDay,
+  DataUsageReport,
   FirmwareChange,
   FoundCamera,
   Sample,
@@ -31,6 +33,7 @@ export class MemoryStore implements Store {
   private readonly audit: AuditEntry[] = [];
   private readonly samples = new Map<string, Sample[]>();
   private readonly firmwareChanges = new Map<string, FirmwareChange[]>();
+  private readonly usage = new Map<string, DataUsageDay & { hubId: string }>();
   private readonly found = new Map<string, Map<string, FoundCamera>>();
   private notifiedFaults: string[] = [];
 
@@ -60,6 +63,33 @@ export class MemoryStore implements Store {
     const hub = this.hubs.get(hubId);
     if (!hub) throw new Error(`Unknown hub ${hubId}`);
     this.hubs.set(hubId, { ...hub, scheduleConfig: defined(config) });
+  }
+
+  async setHubDataBudget(hubId: string, budgetMB: number | undefined): Promise<void> {
+    const hub = this.hubs.get(hubId);
+    if (!hub) throw new Error(`Unknown hub ${hubId}`);
+    const updated = { ...hub, dataBudgetMB: budgetMB };
+    if (budgetMB === undefined) delete updated.dataBudgetMB;
+    this.hubs.set(hubId, updated);
+  }
+
+  async addDataUsage(hubId: string, day: string, report: DataUsageReport): Promise<void> {
+    const key = `${hubId}#${day}#${report.transport}`;
+    const old = this.usage.get(key);
+    this.usage.set(key, {
+      day,
+      transport: report.transport,
+      txBytes: (old?.txBytes ?? 0) + report.txBytes,
+      rxBytes: (old?.rxBytes ?? 0) + report.rxBytes,
+      hubId,
+    });
+  }
+
+  async listDataUsage(hubId: string, sinceDay: string): Promise<DataUsageDay[]> {
+    return [...this.usage.values()]
+      .filter((u) => u.hubId === hubId && u.day >= sinceDay)
+      .sort((a, b) => a.day.localeCompare(b.day) || a.transport.localeCompare(b.transport))
+      .map(({ day, transport, txBytes, rxBytes }) => ({ day, transport, txBytes, rxBytes }));
   }
 
   async claimCamera(camId: string, hubId: string) {
