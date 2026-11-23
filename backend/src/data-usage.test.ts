@@ -106,10 +106,11 @@ describe('data usage of a hub (#415)', () => {
     const usage = body<HubUsage>(response);
     expect(usage.budgetMB).toBeUndefined();
     expect(usage.days.map((d) => d.day)).toEqual(['2026-12-15', TODAY]);
-    expect(
-      (await handleRequest(adminRequest(session, 'GET', '/v1/admin/hubs/nope/usage'), world.deps))
-        .status,
-    ).toBe(404);
+    const unknown = await handleRequest(
+      adminRequest(session, 'GET', '/v1/admin/hubs/nope/usage'),
+      world.deps,
+    );
+    expect(unknown.statusCode).toBe(404);
   });
 
   it('sets and removes the monthly budget, validated', async () => {

@@ -48,9 +48,9 @@ describe('monthlyUsage', () => {
   it('with a budget: percentage and the day it runs out', () => {
     const now = at(2026, 11, 15);
     const days = [day('2026-11-13', 50_000_000), day('2026-11-14', 50_000_000)];
-    const u = monthlyUsage(days, now, 500);
-    expect(u?.fraction).toBeCloseTo(0.2);
-    // 100 MB over 7 days is ~14 MB/day: 400 MB left last ~28 days, longer than the month.
+    const u = monthlyUsage(days, now, 1000);
+    expect(u?.fraction).toBeCloseTo(0.1);
+    // The data is 3 days old: ~33 MB/day, ~620 MB at the end of the month, within the plan.
     expect(u?.runsOutAt).toBeUndefined();
     const tight = monthlyUsage(days, now, 150);
     expect(tight?.runsOutAt).toBeGreaterThan(now);
