@@ -65,6 +65,8 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     request.hub_variant = ota::variant();
     // -1 (left out of the check-in) on boards without a measurement.
     request.hub_bat_percent = hub_battery::percent();
+    request.hub_power_mode =
+        hub_config::power_name(hub_config::mode(settings).power);
     request.max_thumb_uploads = kMaxThumbUploads;
     request.schedule = schedule_report();
     request.memory = memory_report();

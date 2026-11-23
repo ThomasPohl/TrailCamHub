@@ -63,6 +63,8 @@ export interface HubRecord {
   keyHash: string;
   firmware?: string;
   batPercent?: number;
+  /** Power mode the hub runs in, as reported at the last check-in (#416). */
+  powerMode?: HubPowerMode;
   /** How the last check-in came in (#149). */
   uplink?: HubUplink;
   /** Modem signal when it connected, dBm; only meaningful with uplink "modem". */
@@ -79,6 +81,7 @@ export interface HubRecord {
 }
 
 export type HubUplink = 'wifi' | 'modem' | 'ethernet';
+export type HubPowerMode = 'mains' | 'battery';
 
 /** The hub's memory report, bytes (check-in `memory`, #236). */
 export interface HubMemory {
@@ -285,6 +288,7 @@ export interface Fault {
     | 'firmwareDowngrade'
     | 'firmwareUpdateFailed'
     | 'hubMemoryLow'
+    | 'powerModeMismatch'
     | 'cameraNotRead';
   level: 'error' | 'warning';
   /** The camera it is about; absent for the hub. */
@@ -306,6 +310,7 @@ export interface AdminHub {
   name: string;
   firmware?: string;
   batPercent?: number;
+  powerMode?: HubPowerMode;
   uplink?: HubUplink;
   /** Only while the hub syncs over the modem. */
   modemSignalDbm?: number;
@@ -461,6 +466,8 @@ export interface CheckinRequest {
   hubBoard?: string;
   hubVariant?: string;
   hubBatPercent?: number;
+  /** "mains" or "battery" (#416); older firmware does not send it. */
+  hubPowerMode?: HubPowerMode;
   /** Transport of this check-in and the modem's signal in dBm (#149). */
   hubUplink?: HubUplink;
   modemSignalDbm?: number;

@@ -220,6 +220,10 @@ std::string build_checkin_json(const CheckinRequest &request)
     if (request.hub_bat_percent >= 0) {
         out += ",\"hubBatPercent\":" + std::to_string(request.hub_bat_percent);
     }
+    if (!request.hub_power_mode.empty()) {
+        out +=
+            ",\"hubPowerMode\":\"" + json_escape(request.hub_power_mode) + "\"";
+    }
     if (!request.hub_uplink.empty()) {
         out += ",\"hubUplink\":\"" + json_escape(request.hub_uplink) + "\"";
     }
