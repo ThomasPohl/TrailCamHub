@@ -127,6 +127,24 @@ TEST_CASE("gauge failure hint names the I2C bus on a timeout")
           std::string::npos);
 }
 
+TEST_CASE("the gauge is retried at once three times, then with back-off (#412)")
+{
+    CHECK(gauge_retry_delay_ms(0) == 0);
+    CHECK(gauge_retry_delay_ms(2) == 0);
+    CHECK(gauge_retry_delay_ms(3) == 2000);
+    CHECK(gauge_retry_delay_ms(4) == 4000);
+    CHECK(gauge_retry_delay_ms(5) == 8000);
+    CHECK(gauge_retry_delay_ms(30) == kGaugeBackoffMaxMs);
+    CHECK(gauge_retry_delay_ms(1000000) == kGaugeBackoffMaxMs);
+}
+
+TEST_CASE("the I2C bus is reset only after timeouts past the free attempts")
+{
+    CHECK_FALSE(gauge_should_reset_bus(2, true));
+    CHECK(gauge_should_reset_bus(3, true));
+    CHECK_FALSE(gauge_should_reset_bus(10, false));
+}
+
 TEST_CASE("a cell is only lost after several boots without an answer (#417)")
 {
     int misses = 0;

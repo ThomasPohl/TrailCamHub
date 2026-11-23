@@ -13,6 +13,7 @@
 
 #include "esp_attr.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
@@ -45,6 +46,10 @@ bool s_last_ok = true;
 bool s_version_checked = false;
 // Whether the last read failed because the I2C probe timed out.
 bool s_probe_timeout = false;
+// Failures in a row and the time before which the gauge is not asked again
+// (#412).
+int s_failures = 0;
+std::int64_t s_next_try_ms = 0;
 
 bool open_bus()
 {
@@ -96,11 +101,23 @@ bool read_register(std::uint8_t reg, std::uint16_t &value)
     return true;
 }
 
-// Reads the gauge; the lock is held.
-bool read_gauge(Reading &out)
+// One attempt at the gauge; the lock is held.
+// `attempted` is false when the back-off skipped the attempt.
+bool read_gauge_once(Reading &out, bool &attempted)
 {
+    attempted = true;
     if (!open_bus()) {
         return false;
+    }
+    // While the gauge keeps failing, ask less often (the console, the uplink
+    // and the memory log poll about once a second).
+    const std::int64_t now_ms = esp_timer_get_time() / 1000;
+    if (s_failures >= kGaugeFreeAttempts && now_ms < s_next_try_ms) {
+        attempted = false;
+        return false;
+    }
+    if (gauge_should_reset_bus(s_failures, s_probe_timeout)) {
+        i2c_master_bus_reset(s_bus);
     }
     // Probe first: a transfer to a missing device logs an I2C error each time.
     s_probe_timeout = false;
@@ -148,6 +165,25 @@ bool read_gauge(Reading &out)
     out.percent = out.gauge_percent;
 #endif
     return true;
+}
+
+// Reads the gauge and keeps the failure count and the next try; the lock is
+// held.
+bool read_gauge(Reading &out)
+{
+    bool attempted = true;
+    const bool ok = read_gauge_once(out, attempted);
+    if (ok) {
+        s_failures = 0;
+        s_next_try_ms = 0;
+    } else if (attempted) {
+        if (s_failures < 1000) {
+            ++s_failures;
+        }
+        s_next_try_ms =
+            esp_timer_get_time() / 1000 + gauge_retry_delay_ms(s_failures);
+    }
+    return ok;
 }
 
 #endif  // CONFIG_HUB_BATTERY_MAX17048
