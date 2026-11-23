@@ -133,6 +133,26 @@ TEST_CASE("a check-in response without a schedule leaves it to the hub")
     CHECK(response.checkin_interval_s == -1);
 }
 
+TEST_CASE("a check-in response carries the power setting only when valid")
+{
+    const auto parse = [](const std::string &config) {
+        CheckinResponse response;
+        REQUIRE(parse_checkin_response(
+            "{\"serverTime\":1,\"cameras\":[],\"config\":" + config + "}",
+            response));
+        return response.power_setting;
+    };
+    for (const char *value : {"auto", "mains", "battery"}) {
+        CHECK(parse(std::string("{\"powerSetting\":\"") + value + "\"}") ==
+              value);
+    }
+    // Unknown values, null and an older backend leave the setting alone.
+    CHECK(parse("{\"powerSetting\":\"solar\"}").empty());
+    CHECK(parse("{\"powerSetting\":null}").empty());
+    CHECK(parse("{\"powerSetting\":\"MAINS\"}").empty());
+    CHECK(parse("{\"cameraPlan\":\"*=60\"}").empty());
+}
+
 TEST_CASE("the check-in carries the schedule")
 {
     CheckinRequest request;

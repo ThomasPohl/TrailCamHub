@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiError } from '../api/http';
-import type { Camera, ScheduleConfig, ScheduleOrigin, ScheduleStretch } from '../api/types';
+import type {
+  Camera,
+  PowerSetting,
+  ScheduleConfig,
+  ScheduleOrigin,
+  ScheduleStretch,
+} from '../api/types';
 import { batteryForecast } from './forecast';
 import { isNewer } from './release';
 import { clockTime, faultText, forecastText, memoryText, skipReasonText, uplinkText } from './text';
@@ -502,7 +508,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
           <HistoryPanel api={api} hubId={hub.hubId} now={t} />
 
           <ScheduleForm
-            key={`${hub.hubId}:${hub.scheduleConfig.cameraPlan ?? ''}:${hub.scheduleConfig.checkinIntervalS ?? ''}`}
+            key={`${hub.hubId}:${hub.scheduleConfig.cameraPlan ?? ''}:${hub.scheduleConfig.checkinIntervalS ?? ''}:${hub.scheduleConfig.powerSetting ?? ''}`}
             hub={hub}
             disabled={busy}
             onSave={(config) =>
@@ -742,12 +748,14 @@ function ScheduleForm({
   const [interval, setIntervalText] = useState(
     hub.scheduleConfig.checkinIntervalS ? String(hub.scheduleConfig.checkinIntervalS / 60) : '',
   );
+  const [power, setPower] = useState<PowerSetting | ''>(hub.scheduleConfig.powerSetting ?? '');
   const minutesValue = interval.trim() === '' ? undefined : Number(interval);
   const invalid =
     minutesValue !== undefined &&
     !(Number.isInteger(minutesValue) && minutesValue >= 5 && minutesValue <= 1440);
   const planId = `g-plan-${hub.hubId}`;
   const intervalId = `g-interval-${hub.hubId}`;
+  const powerId = `g-power-${hub.hubId}`;
 
   return (
     <form
@@ -758,6 +766,7 @@ function ScheduleForm({
         const config: ScheduleConfig = {};
         if (plan.trim()) config.cameraPlan = plan.trim();
         if (minutesValue !== undefined) config.checkinIntervalS = minutesValue * 60;
+        if (power !== '') config.powerSetting = power;
         void onSave(config);
       }}
     >
@@ -782,6 +791,21 @@ function ScheduleForm({
         aria-invalid={invalid}
         onChange={(event) => setIntervalText(event.target.value)}
       />
+      <label htmlFor={powerId}>Stromversorgung</label>
+      <select
+        id={powerId}
+        value={power}
+        onChange={(event) => setPower(event.target.value as PowerSetting | '')}
+      >
+        <option value="">Der Hub behält seine Einstellung</option>
+        <option value="auto">Automatisch (Akku erkennen)</option>
+        <option value="mains">Netzbetrieb (kein Tiefschlaf)</option>
+        <option value="battery">Akkubetrieb (Tiefschlaf)</option>
+      </select>
+      <p className="g-hint">
+        Der Hub speichert die Einstellung, wenn sein Board sie kann, und nutzt sie ab dem nächsten
+        Start. Akkubetrieb am Netz-Hub: Er ist dann nur noch zu den Kontaktzeiten erreichbar.
+      </p>
       <div className="g-card__actions">
         <button type="submit" className="g-btn" disabled={disabled || invalid}>
           Übernehmen

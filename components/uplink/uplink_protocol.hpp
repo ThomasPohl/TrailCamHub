@@ -176,6 +176,10 @@ struct CheckinResponse {
     bool has_camera_plan = false;
     std::string camera_plan;
     std::int64_t checkin_interval_s = -1;  // -1 = not set
+    // The hub's `power` setting from the gallery (#197): "auto", "mains" or
+    // "battery"; empty = not set (the hub keeps its own). Any other value is
+    // dropped by the parser.
+    std::string power_setting;
     // BLE addresses of the cameras approved in the gallery (#297, #299);
     // absent (old backend) = leave the stored list as it is.
     bool has_approved_cameras = false;

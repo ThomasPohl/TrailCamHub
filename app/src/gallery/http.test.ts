@@ -158,9 +158,16 @@ describe('HttpGalleryApi', () => {
     expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
       cameraPlan: null,
       checkinIntervalS: 3600,
+      powerSetting: null,
+    });
+    await api.setSchedule('h1', { powerSetting: 'battery' });
+    expect(JSON.parse(String(calls[3]?.init?.body))).toEqual({
+      cameraPlan: null,
+      checkinIntervalS: null,
+      powerSetting: 'battery',
     });
     await api.readCamera('CAM1');
-    expect(JSON.parse(String(calls[3]?.init?.body))).toEqual({ type: 'readCamera' });
+    expect(JSON.parse(String(calls[4]?.init?.body))).toEqual({ type: 'readCamera' });
   });
 
   it('lists the cameras every hub found and sends a decision (#298)', async () => {

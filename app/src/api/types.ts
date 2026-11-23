@@ -105,9 +105,14 @@ export interface HubSchedule {
   stretch?: ScheduleStretch;
 }
 
+/** What the hub's `power` setting can be set to from the app (#197). */
+export type PowerSetting = 'auto' | 'mains' | 'battery';
+
 export interface ScheduleConfig {
   cameraPlan?: string;
   checkinIntervalS?: number;
+  /** The hub stores it if its board can use it; absent: it keeps what it has. */
+  powerSetting?: PowerSetting;
 }
 
 /** 0 = photo, 2 = video, as reported in the camera's media list. */

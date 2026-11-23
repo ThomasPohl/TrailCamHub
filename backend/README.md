@@ -257,8 +257,9 @@ request (and TLS handshake) however many cameras there are — important over LT
      [docs/sd-layout.md](../docs/sd-layout.md#logscyclesjsonl)). Sent by the
      hub; this backend ignores it (it is not extended, #150).
    - `config` (response): the schedule set in the app for this hub
-     (`cameraPlan`, `checkinIntervalS`); a missing field leaves the setting to the
-     hub. See [docs/power-and-schedule.md](../docs/power-and-schedule.md).
+     (`cameraPlan`, `checkinIntervalS`) and its power setting (`powerSetting`:
+     `auto`, `mains` or `battery`, #197); a missing field leaves the setting to
+     the hub. See [docs/power-and-schedule.md](../docs/power-and-schedule.md).
 
    - `thumbUploads`: missing thumbnails, newest first over all cameras, at most 30
      per check-in, each with a presigned `PUT` URL. A hub can ask for fewer with
@@ -307,7 +308,10 @@ request (and TLS handshake) however many cameras there are — important over LT
 is linked to. `null` or a missing field hands that setting back to the hub. The
 plan is validated and normalized like on the hub (time windows with an interval
 in minutes, `*` for the rest of the day, `off` for no reads); check-in intervals
-are 300–86400 seconds. The hub takes the change at its next check-in.
+are 300–86400 seconds. `"powerSetting": "auto" | "mains" | "battery"` (#197)
+sets the hub's `power` setting (`docs/modes.md`); the hub stores it if its board can
+use it, and it applies from the hub's next start. The hub takes the change at its
+next check-in.
 
 `serverTime` lets the hub set its clock (and the camera's `utcTime`).
 

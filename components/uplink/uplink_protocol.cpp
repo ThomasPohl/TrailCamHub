@@ -471,6 +471,11 @@ bool parse_checkin_response(const std::string &json, CheckinResponse &out)
             out.checkin_interval_s < 0) {
             out.checkin_interval_s = -1;
         }
+        std::string power;
+        if (json_find_string(config, "powerSetting", power) &&
+            (power == "auto" || power == "mains" || power == "battery")) {
+            out.power_setting = power;
+        }
     }
 
     out.has_approved_cameras =

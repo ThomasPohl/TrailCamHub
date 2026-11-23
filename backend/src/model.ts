@@ -54,7 +54,17 @@ export interface HubSchedule {
 export interface ScheduleConfig {
   cameraPlan?: string;
   checkinIntervalS?: number;
+  /**
+   * The hub's `power` setting (docs/modes.md). The hub stores it as its own
+   * setting when its board can use it and applies it from the next start.
+   * Absent: the hub keeps what it has.
+   */
+  powerSetting?: PowerSetting;
 }
+
+/** What the hub's `power` setting can be set to from the app (#197). */
+export const POWER_SETTINGS = ['auto', 'mains', 'battery'] as const;
+export type PowerSetting = (typeof POWER_SETTINGS)[number];
 
 export interface HubRecord {
   hubId: string;

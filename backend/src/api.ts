@@ -42,6 +42,7 @@ import type {
   HubRecord,
   HubMemory,
   HubPowerMode,
+  PowerSetting,
   HubUplink,
   HubHistory,
   HubSchedule,
@@ -68,6 +69,7 @@ import {
   isMediaId,
   MAX_CAMERA_NAME,
   normalizeBleAddress,
+  POWER_SETTINGS,
   validCameraName,
 } from './model';
 import {
@@ -706,7 +708,11 @@ async function setSchedule(req: ApiRequest, params: Record<string, string>, deps
   if (!hub || !(await mayUseHub(user, hubId, deps))) {
     throw new HttpError(404, 'Hub not found');
   }
-  const body = parseJsonBody<{ cameraPlan?: unknown; checkinIntervalS?: unknown }>(req);
+  const body = parseJsonBody<{
+    cameraPlan?: unknown;
+    checkinIntervalS?: unknown;
+    powerSetting?: unknown;
+  }>(req);
   const config: ScheduleConfig = {};
   if (body.cameraPlan !== undefined && body.cameraPlan !== null && body.cameraPlan !== '') {
     if (typeof body.cameraPlan !== 'string' || body.cameraPlan.length > MAX_PLAN_LENGTH) {
@@ -726,6 +732,12 @@ async function setSchedule(req: ApiRequest, params: Record<string, string>, deps
       throw new HttpError(400, 'checkinIntervalS must be 300-86400 seconds');
     }
     config.checkinIntervalS = value as number;
+  }
+  if (body.powerSetting !== undefined && body.powerSetting !== null) {
+    if (!POWER_SETTINGS.includes(body.powerSetting as PowerSetting)) {
+      throw new HttpError(400, 'powerSetting must be auto, mains or battery');
+    }
+    config.powerSetting = body.powerSetting as PowerSetting;
   }
   await deps.store.setHubScheduleConfig(hubId, config);
   return json(200, config);

@@ -444,6 +444,7 @@ export class HttpGalleryApi implements GalleryApi {
     await this.request('POST', `/v1/hubs/${encodeURIComponent(hubId)}/schedule`, {
       cameraPlan: config.cameraPlan ?? null,
       checkinIntervalS: config.checkinIntervalS ?? null,
+      powerSetting: config.powerSetting ?? null,
     });
   }
 
