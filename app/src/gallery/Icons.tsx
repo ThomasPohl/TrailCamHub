@@ -64,3 +64,12 @@ export function PencilIcon() {
     </svg>
   );
 }
+
+export function CameraIcon() {
+  return (
+    <svg {...base}>
+      <path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <circle cx="12" cy="12.5" r="3.5" />
+    </svg>
+  );
+}

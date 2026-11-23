@@ -5,7 +5,16 @@ import { AdminView } from './AdminView';
 import { showFaultBadge } from './badge';
 import { FoundCameras } from './FoundCameras';
 import { SettingsDialog } from './SettingsDialog';
-import { PencilIcon, PlayIcon, SaveIcon, SearchIcon, TrashIcon, UndoIcon } from './Icons';
+import { hubStatusLine } from './hubStatus';
+import {
+  CameraIcon,
+  PencilIcon,
+  PlayIcon,
+  SaveIcon,
+  SearchIcon,
+  TrashIcon,
+  UndoIcon,
+} from './Icons';
 import { Viewer } from './Viewer';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
@@ -426,17 +435,13 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   return (
     <div className="gallery">
       <header className="g-header">
-        <h1>Wildkamera</h1>
-        {status && (
-          <p className="g-status">
-            {status.lastContact > 0
-              ? `Letzter Kontakt zum Hub: ${clockTime(status.lastContact, t)}`
-              : 'Der Hub hat sich noch nicht gemeldet.'}
-            {status.nextContact !== undefined &&
-              ` · Nächster Kontakt: gegen ${clockTime(status.nextContact, t)}`}
-            {status.hubBatPercent !== undefined && ` · Akku des Hubs ${status.hubBatPercent} %`}
-          </p>
-        )}
+        <div className="g-brand">
+          <span className="g-logo" aria-hidden="true">
+            <CameraIcon />
+          </span>
+          <h1>Wildkamera</h1>
+        </div>
+        {status && <HubChip status={status} now={t} />}
         {isAdmin && (
           <button
             type="button"
@@ -1079,6 +1084,39 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         </main>
       )}
     </div>
+  );
+}
+
+/**
+ * The hub's state as one chip (#431): dot, word and next contact; a tap opens
+ * the facts the old status line showed.
+ */
+function HubChip({ status, now }: { status: GalleryStatus; now: number }) {
+  const line = hubStatusLine(status.lastContact, status.nextContact, now);
+  return (
+    <details className="g-hubchip">
+      <summary>
+        <span className={`g-dot g-dot--${line.light}`} aria-hidden="true" />
+        <span className="g-hubchip__title">{line.title}</span>
+        {line.next && <span className="g-hubchip__next">· nächster Kontakt {line.next}</span>}
+      </summary>
+      <dl className="g-hubchip__facts">
+        <dt>Letzter Kontakt</dt>
+        <dd>{status.lastContact > 0 ? clockTime(status.lastContact, now) : 'noch keiner'}</dd>
+        {status.nextContact !== undefined && (
+          <>
+            <dt>Nächster Kontakt</dt>
+            <dd>gegen {clockTime(status.nextContact, now)}</dd>
+          </>
+        )}
+        {status.hubBatPercent !== undefined && (
+          <>
+            <dt>Akku des Hubs</dt>
+            <dd>{status.hubBatPercent} %</dd>
+          </>
+        )}
+      </dl>
+    </details>
   );
 }
 
