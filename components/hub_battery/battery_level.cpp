@@ -100,4 +100,15 @@ const char *gauge_failure_hint(bool bus_timeout)
                        : "Battery gauge does not answer (no cell inserted?)";
 }
 
+bool power_mode_mismatch(bool mains, int gauge_millivolts)
+{
+    return mains && plausible_cell_millivolts(gauge_millivolts);
+}
+
+const char *power_mode_mismatch_text()
+{
+    return "battery detected but power=mains: no deep sleep, the battery "
+           "drains fast (set power to battery)";
+}
+
 }  // namespace hub_battery

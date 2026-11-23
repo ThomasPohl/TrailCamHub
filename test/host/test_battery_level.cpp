@@ -126,3 +126,14 @@ TEST_CASE("gauge failure hint names the I2C bus on a timeout")
     CHECK(std::string(gauge_failure_hint(false)).find("no cell inserted") !=
           std::string::npos);
 }
+
+TEST_CASE("a detected battery with power mains is flagged")
+{
+    CHECK(power_mode_mismatch(true, 3900));
+    CHECK_FALSE(power_mode_mismatch(false, 3900));  // battery mode: fine
+    CHECK_FALSE(power_mode_mismatch(true, -1));     // no gauge answer
+    CHECK_FALSE(power_mode_mismatch(true, 0));      // implausible voltage
+    CHECK_FALSE(power_mode_mismatch(true, 6000));
+    CHECK(std::string(power_mode_mismatch_text()).find("power=mains") !=
+          std::string::npos);
+}

@@ -6,6 +6,7 @@
 
 #include "hub_battery.hpp"
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <mutex>
@@ -215,6 +216,22 @@ bool modem_allowed(int &millivolts)
 #else
     return true;
 #endif
+}
+
+const char *power_mode_warning(bool mains, bool log_once)
+{
+    if (!mains || !supported()) {
+        return nullptr;
+    }
+    Reading reading;
+    if (!read(reading) || !power_mode_mismatch(mains, reading.millivolts)) {
+        return nullptr;
+    }
+    static std::atomic<bool> logged{false};
+    if (log_once && !logged.exchange(true)) {
+        ESP_LOGW(TAG, "%s", power_mode_mismatch_text());
+    }
+    return power_mode_mismatch_text();
 }
 
 void log_reading(const char *stage)

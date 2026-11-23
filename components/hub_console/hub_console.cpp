@@ -360,6 +360,10 @@ void print_schedule()
               ", destination " +
               hub_config::destination_name(mode.destination) + "; " +
               (effective.sleeps ? "deep sleep between cycles" : "stays awake"));
+    if (const char *warning = hub_battery::power_mode_warning(
+            mode.power == hub_config::Power::mains, false)) {
+        reply("INFO", warning);
+    }
     reply("INFO", "camera plan " + effective.camera_plan + " (" +
                       schedule::origin_name(effective.camera_plan_origin) +
                       ")");
