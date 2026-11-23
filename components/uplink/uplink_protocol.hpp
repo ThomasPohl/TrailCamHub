@@ -112,6 +112,10 @@ struct CheckinRequest {
     std::string hub_board;
     std::string hub_variant;
     std::int64_t hub_bat_percent = -1;  // -1 = unknown
+    // The cell is being charged, -1 = unknown (#421). The gauge reads 100 %
+    // while charging, so the percentage means little then.
+    int hub_charging = -1;
+    std::int64_t hub_bat_millivolts = -1;  // cell voltage, -1 = unknown
     // How this check-in reaches the backend (#149): "wifi", "modem" or
     // "ethernet"; left out when empty.
     std::string hub_uplink;

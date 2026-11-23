@@ -52,6 +52,25 @@ describe('battery forecast', () => {
     expect(charging && forecastText(charging, 1795423229)).toMatch(/Lädt oder ist voll/);
   });
 
+  it('trusts the hub's charging flag over the 100 % rule (#421)', () => {
+    const flagged = (rows: [number, number, boolean?][]) =>
+      rows.map(([h, batPercent, charging]) => ({ at: 1_000_000 + h * H, batPercent, charging }));
+    // A real 100 % at rest (flag false) is a value like any other.
+    const rest = batteryForecast(flagged([[0, 100, false], [2, 98, false], [4, 96, false]]));
+    expect(rest?.drainPerHour).toBeCloseTo(1, 5);
+    // Charging below 100 %: dropped, and the run starts after it.
+    const f = batteryForecast(
+      flagged([[0, 80], [1, 78], [2, 90, true], [3, 95, true], [4, 70], [6, 66]]),
+    );
+    expect(f?.drainPerHour).toBeCloseTo(2, 5);
+    expect(f?.windowS).toBe(2 * H);
+    // Latest value flagged: charging, no forecast.
+    const now = batteryForecast(flagged([[0, 80], [2, 78], [3, 90, true]]));
+    expect(now?.charging).toBe(true);
+    expect(now?.emptyAt).toBeUndefined();
+    expect(now && forecastText(now, 1_000_000 + 3 * H)).toBe('Lädt, keine Prognose.');
+  });
+
   it('forecasts from the first discharge after a charge once two values are an hour apart', () => {
     expect(batteryForecast(real(1794897225))).toBeUndefined(); // only 93 %
     const f = batteryForecast(real(1794901249)); // 93, 85 over 1.1 h

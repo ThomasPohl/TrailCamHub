@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hubFaults } from './faults';
 import { createAppUser, revokeAppUser } from './admin';
 import { createAdminSession } from './auth/admin-session';
-import { handleRequest } from './api';
+import { chargingSample, handleRequest } from './api';
 import type { ApiRequest, ApiResponse } from './http';
 import type { CheckinRequest, CheckinResponse, MediaItem } from './model';
 import { CAM_ID, HUB_ID, hubRequest, NOW, setup } from './test-utils';
@@ -440,6 +440,18 @@ describe('memory report (#149, #244)', () => {
     });
     await checkin({ heapMin: 'lots' });
     expect((await world.deps.store.getHub(HUB_ID))?.memory?.cycle).toBe(12);
+  });
+});
+
+describe('charging state of the hub (#421)', () => {
+  it('stores the flag and the voltage with the battery sample, ignoring odd values', () => {
+    expect(chargingSample({ hubCharging: true, hubBatMillivolts: 4187 })).toEqual({
+      charging: true,
+      millivolts: 4187,
+    });
+    expect(chargingSample({ hubCharging: false })).toEqual({ charging: false });
+    expect(chargingSample({ hubCharging: 'yes', hubBatMillivolts: 12 } as never)).toEqual({});
+    expect(chargingSample({ hubBatMillivolts: 4187.5 })).toEqual({});
   });
 });
 

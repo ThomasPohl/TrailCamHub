@@ -222,6 +222,10 @@ export interface Sample {
   /** Unix seconds: the hub's check-in, or when the hub read the camera. */
   at: number;
   batPercent?: number;
+  /** The hub was charging at this value; the gauge reads 100 % then (#421). */
+  charging?: boolean;
+  /** Cell voltage of the hub, mV (#421). */
+  millivolts?: number;
   sdFreeMB?: number;
   temperature?: number;
 }
@@ -468,6 +472,10 @@ export interface CheckinRequest {
   hubBatPercent?: number;
   /** "mains" or "battery" (#416); older firmware does not send it. */
   hubPowerMode?: HubPowerMode;
+  /** The cell is being charged (#421); older firmware does not send it. */
+  hubCharging?: boolean;
+  /** Cell voltage in mV (#421). */
+  hubBatMillivolts?: number;
   /** Transport of this check-in and the modem's signal in dBm (#149). */
   hubUplink?: HubUplink;
   modemSignalDbm?: number;
