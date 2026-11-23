@@ -53,6 +53,38 @@ const char *TAG = "trailcamhub_uplink";
 
 }  // namespace
 
+namespace
+{
+
+// Stores the `power` setting the gallery asked for (#197). It is the hub's own
+// setting afterwards, the same as `config set power`, so it holds until
+// someone changes it again; it applies from the next start, because the mode
+// is resolved once per start. A value the board cannot use is refused with
+// the reason (once per value and start); nothing else about the hub changes.
+void apply_remote_power(const std::string &wanted)
+{
+    static std::string s_refused;
+    if (wanted.empty() || wanted == s_refused) {
+        return;
+    }
+    hub_config::Settings stored;
+    if (hub_config::load(stored) != ESP_OK || stored.power == wanted) {
+        return;
+    }
+    std::string reason;
+    if (hub_config::set(hub_config::Key::power, wanted, &reason) != ESP_OK) {
+        s_refused = wanted;
+        ESP_LOGW(TAG, "Ignoring power %s from the backend: %s", wanted.c_str(),
+                 reason.empty() ? "could not be stored" : reason.c_str());
+        return;
+    }
+    ESP_LOGI(TAG, "Power %s from the backend stored; it applies after the "
+                  "next restart",
+             wanted.c_str());
+}
+
+}  // namespace
+
 // The sync with the own backend (check-in, thumbnails, commands, ack).
 esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
 {
@@ -149,6 +181,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     remote.camera_plan = response.camera_plan;
     remote.checkin_interval_s = response.checkin_interval_s;
     schedule::apply_remote(remote);
+    apply_remote_power(response.power_setting);
     // The cameras approved in the gallery: the next scans read only these
     // (#299). An empty list keeps reading every camera.
     if (response.has_approved_cameras) {

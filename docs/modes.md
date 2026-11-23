@@ -38,6 +38,20 @@ time and stored on the hub (NVS), without another firmware image (concept:
 - **destination** is where push goes: the own backend (AWS, optional), a
   or a WebDAV folder. See "Destinations" below.
 
+## Changing hub settings from the gallery (#197)
+
+The gallery's admin view sets some hub settings through the check-in response
+(`config`, see `backend/README.md`). Each setting was checked for whether a
+remote change can lock the hub out or leak a secret:
+
+| Setting | From the gallery | Why |
+| ------- | ---------------- | --- |
+| `camera_plan`, `checkin_min` | yes (kept apart from the hub's own, origin "remote") | the schedule, [`power-and-schedule.md`](power-and-schedule.md) |
+| `power` | yes, `powerSetting` | the hub stores it as its own setting if the board can use it (`power auto` needs a gauge, `battery` needs deep sleep; a refused value is only logged) and uses it **from the next start**. A battery hub restarts every cycle; a mains hub keeps its mode until someone restarts it. `battery` on a mains hub puts it to sleep between cycles, so the web UI is then reachable only around the contact times. No value: the hub keeps what it has |
+| `direction`, `transport`, `destination`, `wifi_ssid`, `api_url`, `device_key` | no | a wrong value cuts the hub off from the gallery, and nothing can undo it remotely |
+| `wifi_password`, `sim_pin`, `apn`, `webdav_*`, `web_password`, `camera_user`, `camera_password` | no | secrets or credentials; they must not pass through the backend |
+| `health_url`, `webdav_videos` | no | only for the WebDAV destination, which has no gallery |
+
 The web installer's setup assistant asks for the mode in plain words and sets
 these settings (and the transport's and destination's own settings) for you.
 

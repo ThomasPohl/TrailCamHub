@@ -674,6 +674,21 @@ describe('wake-up schedule (app → hub, hub → app)', () => {
     expect(body<CheckinResponse>(after).config).toEqual({ checkinIntervalS: 900 });
   });
 
+  it('sends the power setting set in the app and checks it (#197)', async () => {
+    const { deps, hubKey } = await setup();
+    const put = (b: unknown) => handleRequest(appRequest('PUT', schedulePath, b), deps);
+    expect((await put({ powerSetting: 'battery' })).statusCode).toBe(200);
+    const res = await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
+    expect(body<CheckinResponse>(res).config).toEqual({ powerSetting: 'battery' });
+    // Null hands it back: the hub keeps what it has.
+    await put({ powerSetting: null, checkinIntervalS: 900 });
+    const after = await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
+    expect(body<CheckinResponse>(after).config).toEqual({ checkinIntervalS: 900 });
+    for (const bad of ['solar', 'MAINS', 1, true]) {
+      expect((await put({ powerSetting: bad })).statusCode).toBe(400);
+    }
+  });
+
   it('validates the schedule and the hub', async () => {
     const { deps } = await setup();
     const put = (path: string, b: unknown, token?: string) =>
