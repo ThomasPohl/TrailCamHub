@@ -475,6 +475,42 @@ describe('GalleryApp', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('moves through the recordings in the large view and acts on them (#431)', async () => {
+    const now = 1_000_000;
+    const api = new DemoGalleryApi(() => now, 20);
+    render(
+      <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
+    );
+    await openCamera('Garten');
+    const [card] = await screen.findAllByRole('listitem');
+    fireEvent.click(within(card!).getByRole('button', { name: /^Groß anzeigen/ }));
+
+    let viewer = screen.getByRole('dialog', { name: /^Aufnahme vom/ });
+    expect(viewer).toHaveTextContent('Garten · 1 von 16');
+    expect(viewer).toHaveTextContent('Video noch nicht angefordert');
+    expect(within(viewer).getByRole('button', { name: 'Vorherige Aufnahme' })).toBeDisabled();
+    fireEvent.keyDown(viewer, { key: 'ArrowRight' });
+    viewer = screen.getByRole('dialog', { name: /^Aufnahme vom/ });
+    expect(viewer).toHaveTextContent('Garten · 2 von 16');
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Vorherige Aufnahme' }));
+    expect(screen.getByRole('dialog', { name: /^Aufnahme vom/ })).toHaveTextContent('1 von 16');
+
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Video holen' }));
+    expect(
+      await within(viewer).findByText(/Video angefordert – der Hub holt es gegen/),
+    ).toBeInTheDocument();
+    expect(within(viewer).getByRole('button', { name: 'Zurücknehmen' })).toBeInTheDocument();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Zurücknehmen' }));
+    expect(await within(viewer).findByText('Video noch nicht angefordert')).toBeInTheDocument();
+
+    // Delete asks first; the keyboard shortcut does the same.
+    fireEvent.keyDown(viewer, { key: 'Delete' });
+    expect(screen.getByText('1 Aufnahme löschen?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }));
+    fireEvent.keyDown(viewer, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it("shows the camera's battery and what needs a look (#304)", async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);

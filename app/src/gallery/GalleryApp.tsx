@@ -149,7 +149,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   // A camera taken in but not read yet, opened in its tab (foundKey).
   const [pendingKey, setPendingKey] = useState<string>();
   // A recording shown large, with its video if asked for (#306).
-  const [viewing, setViewing] = useState<{ recording: Recording; video: boolean }>();
+  const [viewing, setViewing] = useState<{ key: string; video: boolean }>();
   // The camera whose settings dialog is open (#368).
   const [settingsFor, setSettingsFor] = useState<string>();
   const saving = useRef(false);
@@ -475,6 +475,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const counts = countByFilter(items ?? []);
   const visible = applyFilter(items ?? [], stateFilter);
   const days = groupByDay(visible, t);
+  const viewIndex = viewing ? visible.findIndex((r) => recordingKey(r) === viewing.key) : -1;
+  const viewed = viewIndex >= 0 ? visible[viewIndex] : undefined;
   const chosen = items?.filter((r) => selected.has(recordingKey(r)) && selectable(r)) ?? [];
   const chosenVideos = chosen.filter(videoWanted);
 
@@ -1009,7 +1011,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                           type="button"
                           className="g-tile__zoom"
                           aria-label={`Groß anzeigen: ${cameraTime(r.mediaTime)}`}
-                          onClick={() => setViewing({ recording: r, video: false })}
+                          onClick={() => setViewing({ key, video: false })}
                         >
                           <img src={r.thumbUrl} alt={`Aufnahme vom ${cameraTime(r.mediaTime)}`} />
                         </button>
@@ -1039,7 +1041,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                             className="g-tile__play"
                             aria-label="Video ansehen"
                             title="Video ansehen"
-                            onClick={() => setViewing({ recording: r, video: true })}
+                            onClick={() => setViewing({ key, video: true })}
                           >
                             <PlayIcon />
                           </button>
@@ -1101,10 +1103,27 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               </section>
             ))}
 
-          {viewing && (
+          {viewing && viewIndex >= 0 && viewed && (
             <Viewer
-              recording={viewing.recording}
+              recordings={visible}
+              index={viewIndex}
               video={viewing.video}
+              cameraName={nameOf(viewed.camId)}
+              saved={saved.has(viewed.mediaId)}
+              nextContact={status?.nextContact}
+              now={t}
+              busy={busy}
+              onGo={(i) => {
+                const next = visible[i];
+                if (next) setViewing({ key: recordingKey(next), video: false });
+              }}
+              onVideo={(on) => setViewing({ key: viewing.key, video: on })}
+              onRequestVideo={() =>
+                void act(() => api.requestVideos(viewed.camId, [viewed.mediaId]))
+              }
+              onSave={() => void saveOne(viewed)}
+              onWithdraw={() => void act(() => api.withdraw(viewed.camId, viewed))}
+              onDelete={() => setConfirm({ question: '1 Aufnahme löschen?', items: [viewed] })}
               onClose={() => setViewing(undefined)}
             />
           )}
