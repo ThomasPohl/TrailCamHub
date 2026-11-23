@@ -122,6 +122,7 @@ async function refreshStatus() {
         : "now";
     }
     showSync(s);
+    showSettings(s.cameras || []);
     syncClock(s);
     $("ap").textContent = s.ap;
     activeLog = s.log;
@@ -628,6 +629,152 @@ $("act-delete").onclick = () => {
   }
   runAction("delete", id);
 };
+
+// --- Camera settings (#197) --------------------------------------------------
+
+// Labels for the settings the camera reports (docs/camera-settings.md); a name
+// without a label is shown as it is. `options` lists named values, a number
+// without it is a number field.
+const SETTING_LABELS = {
+  workMode: ["Work mode", { 0: "Photo", 1: "Video", 2: "Photo + video" }],
+  shootMode: ["Shoot mode"],
+  picResolution: ["Photo resolution"],
+  videoResolution: ["Video resolution"],
+  continuousShootCnt: ["Photos per trigger"],
+  recordDuration: ["Video length (s)"],
+  recordAudio: ["Record audio", { 0: "Off", 1: "On" }],
+  timelapseInterval: ["Time-lapse interval (s)"],
+  pirSens: ["Motion sensitivity", { 0: "Low", 1: "Medium", 2: "High" }],
+  pirCoolingTime: ["Cool-down (s)"],
+  sidePirOnOff: ["Side sensors", { 0: "Off", 1: "On" }],
+  workTimeOnOff: ["Active hours", { 0: "Off", 1: "On" }],
+  workTimeStartHour: ["Active from (hour)"],
+  workTimeStartMin: ["Active from (minute)"],
+  workTimeEndHour: ["Active until (hour)"],
+  workTimeEndMin: ["Active until (minute)"],
+  enableAiFilter: ["AI filter", { 0: "Off", 1: "On" }],
+  infraRedLum: ["Infrared brightness"],
+  osdInfoEnable: ["Info overlay", { 0: "Off", 1: "On" }],
+  WiFiLedEnable: ["Wi-Fi LED", { 0: "Off", 1: "On" }],
+  dateFormat: ["Date format"],
+  timeFormat: ["Time format"],
+  languageCode: ["Language"],
+  micVol: ["Microphone volume"],
+  spkVol: ["Speaker volume"],
+};
+
+// The settings as last built into the form, to leave the form alone while the
+// person edits it and the status poll brings the same values.
+let builtSettings = "";
+let settingsCameras = [];
+
+function settingControl(name, value, capability) {
+  const label = SETTING_LABELS[name] || [name];
+  const choices =
+    name === "picResolution" ? capability.imgResolutions :
+    name === "videoResolution" ? capability.videoResolutions :
+    name === "languageCode" ? capability.languages : null;
+  let control;
+  if (choices && choices.length) {
+    control = document.createElement("select");
+    for (const choice of choices) {
+      control.appendChild(new Option(String(choice), String(choice)));
+    }
+  } else if (label[1]) {
+    control = document.createElement("select");
+    for (const key of Object.keys(label[1])) {
+      control.appendChild(new Option(label[1][key], key));
+    }
+  } else {
+    control = document.createElement("input");
+    control.type = "number";
+    control.inputMode = "numeric";
+  }
+  control.value = String(value);
+  control.dataset.setting = name;
+  control.dataset.reported = String(value);
+  control.id = "set-" + name;
+  const row = element("p", "actions");
+  const caption = element("label", "", label[0]);
+  caption.htmlFor = control.id;
+  row.append(caption, control);
+  return row;
+}
+
+function showSettings(cameras) {
+  settingsCameras = cameras.filter((c) => c.settings && Object.keys(c.settings).length);
+  const section = $("settings-section");
+  section.hidden = !settingsCameras.length;
+  if (!settingsCameras.length) {
+    builtSettings = "";
+    return;
+  }
+  const select = $("set-cam");
+  const chosen = select.value;
+  const signature = JSON.stringify(settingsCameras.map((c) => [c.id, c.settings, c.capability]));
+  if (signature === builtSettings) {
+    return;
+  }
+  // Never rebuild under the person's hands.
+  if (section.contains(document.activeElement) && builtSettings) {
+    return;
+  }
+  builtSettings = signature;
+  select.textContent = "";
+  for (const camera of settingsCameras) {
+    select.appendChild(new Option(camera.id + (camera.model ? " (" + camera.model + ")" : ""), camera.id));
+  }
+  if (settingsCameras.some((c) => c.id === chosen)) {
+    select.value = chosen;
+  }
+  buildSettingsForm();
+}
+
+function buildSettingsForm() {
+  const camera = settingsCameras.find((c) => c.id === $("set-cam").value) || settingsCameras[0];
+  const form = $("set-form");
+  form.textContent = "";
+  for (const name of Object.keys(camera.settings)) {
+    form.appendChild(settingControl(name, camera.settings[name], camera.capability || {}));
+  }
+}
+
+function showSettingsMessage(text, isError) {
+  const message = $("set-msg");
+  message.hidden = false;
+  message.textContent = text;
+  message.classList.toggle("error", !!isError);
+}
+
+async function applySettings() {
+  const change = {};
+  for (const control of document.querySelectorAll("#set-form [data-setting]")) {
+    if (control.value === control.dataset.reported) {
+      continue;
+    }
+    change[control.dataset.setting] =
+      control.dataset.setting === "languageCode" ? control.value : Number(control.value);
+  }
+  if (!Object.keys(change).length) {
+    showSettingsMessage("Nothing changed.");
+    return;
+  }
+  try {
+    const reply = await (
+      await fetch("/api/settings?cam=" + encodeURIComponent($("set-cam").value), {
+        method: "POST",
+        body: JSON.stringify(change),
+      })
+    ).json();
+    showSettingsMessage(reply.text || (reply.ok ? "Queued." : "Failed."), !reply.ok);
+  } catch (e) {
+    showSettingsMessage("No connection to the hub.", true);
+  }
+  refreshActions();
+}
+
+$("set-cam").onchange = buildSettingsForm;
+$("set-apply").onclick = applySettings;
 
 // --- Start ------------------------------------------------------------------
 
