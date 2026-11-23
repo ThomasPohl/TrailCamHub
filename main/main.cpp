@@ -31,6 +31,7 @@
 #include "cycle_trace.hpp"
 #include "dongle_ui.h"
 #include "ethernet_uplink.h"
+#include "hub_battery.hpp"
 #include "hub_config.hpp"
 #include "hub_console.h"
 #include "ota_update.hpp"
@@ -236,6 +237,10 @@ extern "C" void app_main(void)
         error = nvs_flash_init();
     }
     ESP_ERROR_CHECK(error);
+
+    // `power auto` (#417) follows the battery gauge: read it before anything
+    // asks for the mode.
+    hub_config::set_battery_detected(hub_battery::detect_cell());
 
     // Restores the schedule after a wake-up from deep sleep.
     schedule::init();

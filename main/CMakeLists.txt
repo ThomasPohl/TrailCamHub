@@ -1,7 +1,7 @@
 idf_component_register(SRCS "main.cpp"
                        PRIV_REQUIRES boot_button camera_ble camera_link coprocessor_update
                                      diagnostics dongle_ui esp_event esp_netif
-                                     ethernet_uplink hub_config hub_console
+                                     ethernet_uplink hub_battery hub_config hub_console
                                      nvs_flash oled_ui
                                      ota_update schedule_state scheduler sd_log
                                      sd_storage session_controller

@@ -37,6 +37,12 @@ int percent();
 // `millivolts` receives the voltage read (-1 unknown).
 bool modem_allowed(int &millivolts);
 
+// `power auto` (#417): whether a cell is present, from the gauge at boot. It
+// tries a few times and keeps the last answer over deep sleep (a hiccup does
+// not lose a cell, see `cell_present()`); false on boards without a gauge.
+// Call once at start.
+bool detect_cell();
+
 // Checks the mode against the gauge: returns the warning text when a battery
 // is detected while the hub runs in mains mode, otherwise nullptr. Reads the
 // gauge. With `log_once` the warning is also logged, at most once per boot.
