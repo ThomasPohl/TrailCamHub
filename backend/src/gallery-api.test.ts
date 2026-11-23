@@ -854,3 +854,94 @@ describe('camera names (#273)', () => {
     ]);
   });
 });
+
+describe('what a user may do and see (#431)', () => {
+  const schedule = `/v1/hubs/${HUB_ID}/schedule`;
+
+  async function adminOf(world: Awaited<ReturnType<typeof galleryWorld>>) {
+    const admin = await createAppUser(
+      { admin: 'createAppUser', name: 'Thomas', role: 'admin' },
+      world.deps,
+    );
+    if (!admin.ok) throw new Error(admin.error);
+    const session = await adminSession(world, admin.userId);
+    return (method: string, path: string, data?: unknown) =>
+      handleRequest(adminRequest(session, method, path, data), world.deps);
+  }
+
+  it('lets a user set wake times and the contact interval, but not the power supply', async () => {
+    const world = await galleryWorld();
+    const ok = await world.call('POST', schedule, { cameraPlan: '*=120', checkinIntervalS: 900 });
+    expect(ok.statusCode).toBe(200);
+    const denied = await world.call('POST', schedule, { powerSetting: 'battery' });
+    expect(denied.statusCode).toBe(403);
+    expect((await world.store.getHub(HUB_ID))?.scheduleConfig).toEqual({
+      cameraPlan: '*=120',
+      checkinIntervalS: 900,
+    });
+  });
+
+  it('lets the admin set the power supply, which a later user change keeps', async () => {
+    const world = await galleryWorld();
+    const asAdmin = await adminOf(world);
+    expect((await asAdmin('POST', schedule, { powerSetting: 'battery' })).statusCode).toBe(200);
+    const res = await handleRequest(
+      hubRequest('/v1/device/checkin', world.hubKey, checkinBody),
+      world.deps,
+    );
+    expect(body<CheckinResponse>(res).config).toEqual({ powerSetting: 'battery' });
+    // Null hands it back: the hub keeps what it has.
+    await asAdmin('POST', schedule, { powerSetting: null, checkinIntervalS: 900 });
+    expect((await world.store.getHub(HUB_ID))?.scheduleConfig).toEqual({ checkinIntervalS: 900 });
+    for (const bad of ['solar', 'MAINS', 1, true]) {
+      expect((await asAdmin('POST', schedule, { powerSetting: bad })).statusCode).toBe(400);
+    }
+
+    await asAdmin('POST', schedule, { powerSetting: 'mains' });
+    const user = await world.call('POST', schedule, { cameraPlan: '*=60' });
+    expect(user.statusCode).toBe(200);
+    expect(body(user)).toEqual({ cameraPlan: '*=60', powerSetting: 'mains' });
+  });
+
+  it('shows a user the history and the data volume of his own hub only', async () => {
+    const world = await galleryWorld();
+    const history = await world.call('GET', `/v1/hubs/${HUB_ID}/history`);
+    expect(history.statusCode).toBe(200);
+    expect(
+      body<{ cameras: Array<{ camId: string }> }>(history).cameras.map((c) => c.camId),
+    ).toEqual([CAM_ID]);
+    const usage = await world.call('GET', `/v1/hubs/${HUB_ID}/usage`);
+    expect(usage.statusCode).toBe(200);
+    expect(body<{ days: unknown[] }>(usage).days).toEqual(expect.any(Array));
+    for (const what of ['history', 'usage', 'hints']) {
+      expect((await world.call('GET', `/v1/hubs/other-hub/${what}`)).statusCode).toBe(404);
+    }
+  });
+
+  it('gives the user the hints he can act on, not the technical faults', async () => {
+    const world = await galleryWorld();
+    // A full SD card is a hint; a failed request is the admin's business.
+    await handleRequest(
+      hubRequest('/v1/device/checkin', world.hubKey, {
+        cameras: [
+          {
+            camId: CAM_ID,
+            readAt: NOW - 60,
+            sdCard: 'ok',
+            sdFreeMB: 100,
+            sdTotalMB: 30_000,
+            media: [],
+          },
+        ],
+      }),
+      world.deps,
+    );
+    const res = await world.call('GET', `/v1/hubs/${HUB_ID}/hints`);
+    expect(res.statusCode).toBe(200);
+    const kinds = body<Array<{ kind: string }>>(res).map((f) => f.kind);
+    expect(kinds).toContain('sdFull');
+    for (const technical of ['requestsFailed', 'firmwareDowngrade', 'hubMemoryLow']) {
+      expect(kinds).not.toContain(technical);
+    }
+  });
+});
