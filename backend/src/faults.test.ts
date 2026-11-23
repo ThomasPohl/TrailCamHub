@@ -231,6 +231,7 @@ describe('userFaults (#431)', () => {
     const faults = hubFaults(
       hub({
         lastSeen: NOW - 7200,
+        schedule: { ...hub().schedule!, nextCheckinAt: NOW - 7200 },
         powerMode: 'mains',
         batPercent: 12,
         memory: { heapMin: 1000 } as HubRecord['memory'],
