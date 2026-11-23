@@ -3,26 +3,76 @@
  * colour, small controls with generous click targets, icons with tooltips.
  */
 :root {
-  --g-bg: #f5f6f8;
+  /* Design tokens (#431): one place for gallery and admin; dark follows the system. */
+  --g-bg: #f6f7f5;
   --g-surface: #ffffff;
+  --g-surface-2: #eef0ec;
   --g-card: #ffffff;
-  --g-border: #e2e5ea;
-  --g-text: #1d2330;
-  --g-hint: #5f6878;
-  --g-accent: #1f5f9e;
-  --g-accent-soft: #e8f0f8;
+  --g-border: #e2e5df;
+  --g-border-strong: #c9cec6;
+  --g-text: #1b1f1c;
+  --g-hint: #5f6860;
+  --g-accent: #2f6b4f;
+  --g-accent-hover: #255640;
+  --g-accent-ink: #ffffff;
+  --g-accent-soft: #e3efe8;
   --g-danger: #b3261e;
+  --g-danger-hover: #8f1e18;
   --g-danger-soft: #fdecea;
-  --g-ok: #2e7d32;
+  --g-danger-border: #f3c3be;
+  --g-ok: #2f855a;
   --g-ok-soft: #e7f3e8;
+  --g-ok-border: #c6e2c8;
+  --g-warn: #b7791f;
   --g-warn-soft: #fff6d6;
+  --g-warn-border: #f1df9c;
+  --g-new: #2b6cb0;
+  --g-del: #718096;
   --g-radius: 10px;
+  --g-radius-lg: 14px;
   --g-shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   font-size: 15px;
   line-height: 1.45;
   color: var(--g-text);
   background: var(--g-bg);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --g-bg: #111412;
+    --g-surface: #1a1e1b;
+    --g-surface-2: #232824;
+    --g-card: #1a1e1b;
+    --g-border: #2c322e;
+    --g-border-strong: #3a413c;
+    --g-text: #e9ece9;
+    --g-hint: #9aa39c;
+    --g-accent: #6fbf93;
+    --g-accent-hover: #86cca6;
+    --g-accent-ink: #0d1f16;
+    --g-accent-soft: #1f3328;
+    --g-danger: #e5675f;
+    --g-danger-hover: #ee8982;
+    --g-danger-soft: #3a1f1d;
+    --g-danger-border: #6b2f2b;
+    --g-ok: #68d391;
+    --g-ok-soft: #1c3025;
+    --g-ok-border: #2d5a41;
+    --g-warn: #f6ad55;
+    --g-warn-soft: #3a3118;
+    --g-warn-border: #6b5a22;
+    --g-new: #63b3ed;
+    --g-del: #a0aec0;
+    --g-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  }
 }
 
 * {
@@ -55,27 +105,118 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 20px;
-  padding: 12px 24px;
-  background: var(--g-surface);
+  gap: 8px 16px;
+  padding: 10px 24px;
+  background: color-mix(in srgb, var(--g-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--g-border);
 }
 
-.g-header h1 {
+.g-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+}
+
+.g-brand h1 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 
-.g-status {
-  flex: 1;
-  color: var(--g-hint);
-  font-size: 0.9rem;
+.g-logo {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--g-accent);
+  color: var(--g-accent-ink);
 }
 
-.g-header__switch {
-  margin-left: auto;
+.g-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--g-ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-ok) 25%, transparent);
+}
+
+.g-dot--late {
+  background: var(--g-warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-warn) 25%, transparent);
+}
+
+.g-dot--silent {
+  background: var(--g-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-danger) 25%, transparent);
+}
+
+.g-hubchip {
+  position: relative;
+  font-size: 0.85rem;
+}
+
+.g-hubchip summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--g-border);
+  border-radius: 999px;
+  background: var(--g-surface);
+  color: var(--g-hint);
+  cursor: pointer;
+  list-style: none;
+}
+
+.g-hubchip summary::-webkit-details-marker {
+  display: none;
+}
+
+.g-hubchip__title {
+  color: var(--g-text);
+  font-weight: 550;
+}
+
+.g-hubchip__facts {
+  position: absolute;
+  right: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 16px;
+  min-width: 240px;
+  margin: 6px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--g-border);
+  border-radius: var(--g-radius);
+  background: var(--g-surface);
+  box-shadow: var(--g-shadow);
+}
+
+.g-hubchip__facts dt {
+  color: var(--g-hint);
+}
+
+.g-hubchip__facts dd {
+  margin: 0;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .g-header {
+    padding: 10px 14px;
+  }
+
+  .g-hubchip__next {
+    display: none;
+  }
 }
 
 .g-main,
@@ -106,12 +247,12 @@ body {
 .g-banner,
 .g-folder--todo {
   background: var(--g-warn-soft);
-  border-color: #f1df9c;
+  border-color: var(--g-warn-border);
 }
 
 .g-notice {
   background: var(--g-ok-soft);
-  border-color: #c6e2c8;
+  border-color: var(--g-ok-border);
 }
 
 .g-notice > span {
@@ -120,7 +261,7 @@ body {
 
 .g-error {
   background: var(--g-danger-soft);
-  border-color: #f3c3be;
+  border-color: var(--g-danger-border);
 }
 
 .g-folder {
@@ -160,7 +301,7 @@ body {
   border: 1px solid var(--g-accent);
   border-radius: 8px;
   background: var(--g-accent);
-  color: #fff;
+  color: var(--g-accent-ink);
   font: inherit;
   font-size: 0.9rem;
   font-weight: 600;
@@ -173,8 +314,8 @@ body {
 }
 
 .g-btn:hover:not(:disabled) {
-  background: #194f84;
-  border-color: #194f84;
+  background: var(--g-accent-hover);
+  border-color: var(--g-accent-hover);
 }
 
 .g-btn:disabled {
@@ -194,8 +335,8 @@ body {
 }
 
 .g-btn--danger:hover:not(:disabled) {
-  background: #8f1e18;
-  border-color: #8f1e18;
+  background: var(--g-danger-hover);
+  border-color: var(--g-danger-hover);
 }
 
 .g-btn--quiet,
@@ -207,8 +348,8 @@ body {
 
 .g-btn--quiet:hover:not(:disabled),
 .g-btn--plain:hover:not(:disabled) {
-  background: #eef0f3;
-  border-color: #cfd4db;
+  background: var(--g-surface-2);
+  border-color: var(--g-border-strong);
 }
 
 .g-btn--danger-text {
@@ -217,7 +358,7 @@ body {
 
 .g-btn--danger-text:hover:not(:disabled) {
   background: var(--g-danger-soft);
-  border-color: #f3c3be;
+  border-color: var(--g-danger-border);
 }
 
 .g-icon-btn {
@@ -237,7 +378,7 @@ body {
 }
 
 .g-icon-btn:hover:not(:disabled) {
-  background: #eef0f3;
+  background: var(--g-surface-2);
   color: var(--g-text);
 }
 
@@ -328,7 +469,7 @@ body {
   padding: 0 5px;
   border-radius: 9px;
   background: var(--g-accent);
-  color: #fff;
+  color: var(--g-accent-ink);
   font-size: 0.75rem;
   line-height: 18px;
   text-align: center;
@@ -382,9 +523,10 @@ body {
 .g-schedule input {
   min-height: 34px;
   padding: 6px 10px;
-  border: 1px solid #c9ced6;
+  border: 1px solid var(--g-border-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--g-surface);
+  color: var(--g-text);
   font: inherit;
 }
 
@@ -565,7 +707,7 @@ body {
   margin-top: 2px !important;
   padding: 1px 8px;
   border-radius: 999px;
-  background: #eef0f3;
+  background: var(--g-surface-2);
   color: var(--g-hint);
   font-size: 0.8rem;
   font-weight: 600;
@@ -653,7 +795,7 @@ body {
   padding: 12px 14px;
   border: 1px solid var(--g-border);
   border-radius: var(--g-radius);
-  background: #fafbfc;
+  background: var(--g-surface-2);
   margin-bottom: 8px;
 }
 
@@ -881,7 +1023,7 @@ body {
 
 .g-fault--warning {
   background: var(--g-warn-soft);
-  border-color: #e0a800;
+  border-color: var(--g-warn);
 }
 
 .g-notice--ok {
@@ -933,7 +1075,7 @@ body {
   display: block;
   margin-top: 4px;
   border-radius: 6px;
-  background: #f3f5f8;
+  background: var(--g-surface-2);
 }
 
 .g-chart__line {
@@ -945,7 +1087,7 @@ body {
 
 /* 25 %: below it the admin view reports a low battery (#265). */
 .g-chart__low {
-  stroke: #e0a800;
+  stroke: var(--g-warn);
   stroke-width: 1;
   stroke-dasharray: 4 4;
 }
