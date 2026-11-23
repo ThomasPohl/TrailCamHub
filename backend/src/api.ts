@@ -1021,6 +1021,9 @@ export function powerModeOf(body: CheckinRequest): HubPowerMode | undefined {
 
 const UPLINKS: readonly HubUplink[] = ['wifi', 'modem', 'ethernet'];
 
+/** Entries of a check-in's `dataUsage` that are looked at; a hub sends one per transport. */
+const MAX_USAGE_ENTRIES = 8;
+
 /** More than a hub can send in one check-in (a few GB over a day is a lot). */
 const MAX_REPORTED_BYTES = 1_000_000_000_000;
 
@@ -1031,7 +1034,7 @@ const MAX_REPORTED_BYTES = 1_000_000_000_000;
 function parseDataUsage(raw: unknown): DataUsageReport[] {
   if (!Array.isArray(raw)) return [];
   const out = new Map<HubUplink, DataUsageReport>();
-  for (const item of raw.slice(0, UPLINKS.length) as Array<Record<string, unknown> | null>) {
+  for (const item of raw.slice(0, MAX_USAGE_ENTRIES) as Array<Record<string, unknown> | null>) {
     const transport = UPLINKS.find((u) => u === item?.transport);
     const tx = item?.txBytes;
     const rx = item?.rxBytes;
