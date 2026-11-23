@@ -90,6 +90,7 @@ export function durationText(seconds: number): string {
 
 /** Consumption and empty-battery forecast (docs: admin view) in German. */
 export function forecastText(f: BatteryForecast, nowSeconds: number): string {
+  if (f.atFull) return 'Lädt oder ist voll (Messwert 100 %), keine Prognose.';
   const rate = Math.abs(f.drainPerHour).toFixed(1).replace('.', ',');
   const over = `(letzte ${durationText(f.windowS)})`;
   if (f.emptyAt === undefined) {
