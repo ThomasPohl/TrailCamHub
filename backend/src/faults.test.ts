@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, FAILED_WINDOW_S, hubFaults, SILENT_GRACE_S } from './faults';
+import { compareVersions, FAILED_WINDOW_S, hubFaults, SILENT_GRACE_S, userFaults } from './faults';
 import type { CameraRecord, CommandRecord, HubRecord } from './model';
 
 const NOW = 1_800_000_000;
@@ -223,5 +223,29 @@ describe('hub faults (#265)', () => {
     );
     const off = hub({ schedule: { ...hub().schedule!, cameraPlan: 'off' } });
     expect(hubFaults(off, [{ camera: stale, commands: [] }], NOW)).toEqual([]);
+  });
+});
+
+describe('userFaults (#431)', () => {
+  it('keeps what a user can act on and drops the technical faults', () => {
+    const faults = hubFaults(
+      hub({
+        lastSeen: NOW - 7200,
+        schedule: { ...hub().schedule!, nextCheckinAt: NOW - 7200 },
+        powerMode: 'mains',
+        batPercent: 12,
+        memory: { heapMin: 1000 } as HubRecord['memory'],
+      }),
+      [{ camera: camera({ batPercent: 8, sdCard: 'missing' }), commands: [] }],
+      NOW,
+    );
+    const all = faults.map((f) => f.kind);
+    expect(all).toEqual(expect.arrayContaining(['hubMemoryLow', 'powerModeMismatch']));
+    const kinds = userFaults(faults).map((f) => f.kind);
+    expect(kinds).toEqual(
+      expect.arrayContaining(['hubSilent', 'hubBatteryLow', 'cameraBatteryCritical', 'sdMissing']),
+    );
+    expect(kinds).not.toContain('hubMemoryLow');
+    expect(kinds).not.toContain('powerModeMismatch');
   });
 });
