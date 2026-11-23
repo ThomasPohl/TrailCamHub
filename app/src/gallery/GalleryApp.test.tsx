@@ -18,6 +18,12 @@ function fakeFolder(state: FolderState): FolderOps & { saved: string[] } {
   };
 }
 
+/** The default view shows every camera; most tests look at one (#431). */
+async function openCamera(name: string) {
+  fireEvent.click(await screen.findByRole('tab', { name }));
+  expect(await screen.findByRole('heading', { name: `Kamera „${name}“` })).toBeInTheDocument();
+}
+
 describe('GalleryApp', () => {
   it('requests a video, saves it into the folder after the check-in', async () => {
     let now = 1_000_000;
@@ -25,13 +31,13 @@ describe('GalleryApp', () => {
     const folder = fakeFolder({ kind: 'ready', name: 'Wildkamera' });
     render(<GalleryApp api={api} folder={folder} now={() => now} pollMs={0} />);
 
+    await openCamera('Garten');
     const cards = await screen.findAllByRole('listitem');
     expect(cards).toHaveLength(16);
-    expect(screen.getByRole('heading', { name: 'Kamera „Garten“' })).toBeInTheDocument();
-    expect(within(cards[0]!).getByText('DSCF0120.JPG')).toBeInTheDocument();
-    expect(within(cards[0]!).getByText('DSCF0119.AVI')).toBeInTheDocument();
+    // The camera's file names are not on the tile any more (#431).
+    expect(within(cards[0]!).queryByText('DSCF0120.JPG')).not.toBeInTheDocument();
     fireEvent.click(within(cards[0]!).getByRole('button', { name: 'Video holen' }));
-    expect(await within(cards[0]!).findByText(/Video kommt/)).toBeInTheDocument();
+    expect(await within(cards[0]!).findByText(/^Kommt gegen/)).toBeInTheDocument();
 
     now += 20;
     fireEvent.click(within(cards[0]!).getByRole('button', { name: 'Zurücknehmen' }));
@@ -48,9 +54,15 @@ describe('GalleryApp', () => {
       <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Alle neuen löschen (16)' }));
+    await openCamera('Garten');
+    await screen.findAllByRole('listitem');
+    // "Alle auswählen" of every day, then delete.
+    for (const button of screen.getAllByRole('button', { name: /^Alle auswählen:/ })) {
+      fireEvent.click(button);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Löschen (16)' }));
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveTextContent('Alle 16 neuen Aufnahmen löschen?');
+    expect(dialog).toHaveTextContent('16 ausgewählte Aufnahmen löschen?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ja, löschen' }));
     expect(await screen.findAllByText('Wird gelöscht')).toHaveLength(16);
 
@@ -66,6 +78,7 @@ describe('GalleryApp', () => {
     render(
       <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
     );
+    await openCamera('Garten');
     const cards = await screen.findAllByRole('listitem');
     expect(screen.queryByRole('region', { name: 'Auswahl' })).not.toBeInTheDocument();
 
@@ -75,7 +88,7 @@ describe('GalleryApp', () => {
     const bar = screen.getByRole('region', { name: 'Auswahl' });
     expect(bar).toHaveTextContent('3 Aufnahmen ausgewählt');
     fireEvent.click(within(bar).getByRole('button', { name: 'Videos holen (3)' }));
-    expect(await screen.findAllByText(/Video kommt/)).toHaveLength(3);
+    expect(await screen.findAllByText(/^Kommt gegen/)).toHaveLength(3);
     // Asked-for recordings cannot be chosen; the selection is gone.
     expect(screen.queryByRole('region', { name: 'Auswahl' })).not.toBeInTheDocument();
     expect(within(cards[0]!).queryByRole('checkbox')).not.toBeInTheDocument();
@@ -89,12 +102,13 @@ describe('GalleryApp', () => {
     expect(dialog).toHaveTextContent('2 ausgewählte Aufnahmen löschen?');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ja, löschen' }));
     expect(await screen.findAllByText('Wird gelöscht')).toHaveLength(2);
-    expect(screen.getAllByText(/Video kommt/)).toHaveLength(3);
+    expect(screen.getAllByText(/^Kommt gegen/)).toHaveLength(3);
   });
 
   it('forgets the selection when it is cancelled', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    await openCamera('Garten');
     const [card] = await screen.findAllByRole('listitem');
     const box = within(card!).getByRole('checkbox', { name: 'Auswählen' });
     fireEvent.click(box);
@@ -107,7 +121,7 @@ describe('GalleryApp', () => {
   it('renames the camera', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    await openCamera('Garten');
     fireEvent.click(screen.getByRole('button', { name: 'Umbenennen' }));
 
     const input = screen.getByLabelText('Neuer Name der Kamera');
@@ -234,13 +248,13 @@ describe('GalleryApp', () => {
     expect(within(hub).getAllByText(/Verbrauch: \d+,\d %\/h/).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Zur Galerie' }));
-    expect(await screen.findAllByRole('listitem')).toHaveLength(16);
+    expect(await screen.findAllByRole('listitem')).toHaveLength(32);
   });
 
   it('renames a camera in the manage tab (#273)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
     fireEvent.click(within(panel).getByRole('button', { name: 'Wiese umbenennen' }));
@@ -258,7 +272,7 @@ describe('GalleryApp', () => {
     const api = new DemoGalleryApi(() => now, 20);
     const change = vi.spyOn(api, 'changeSettings');
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
     const garten = within(panel).getByRole('row', { name: /Garten/ });
@@ -315,7 +329,7 @@ describe('GalleryApp', () => {
   it('hides a camera and shows it again (#273)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
     const garten = within(panel).getByRole('row', { name: /Garten/ });
@@ -343,7 +357,7 @@ describe('GalleryApp', () => {
   it('takes a found camera in and stops reading one (#298)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    await screen.findByRole('heading', { name: 'Alle Kameras' });
     // The tab counts the new camera.
     fireEvent.click(await screen.findByRole('tab', { name: /^Kameras verwalten.*1 neu/ }));
     const fresh = await screen.findByRole('group', { name: 'Neue Kamera TC100_77A1' });
@@ -374,7 +388,7 @@ describe('GalleryApp', () => {
   it('shows a camera taken in before the hub has read it', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     const fresh = await screen.findByRole('group', { name: 'Neue Kamera TC100_77A1' });
     fireEvent.change(within(fresh).getByLabelText(/Name der Kamera/), {
@@ -430,7 +444,8 @@ describe('GalleryApp', () => {
     await waitFor(() =>
       expect(screen.queryByRole('tab', { name: /noch nicht erreicht/ })).not.toBeInTheDocument(),
     );
-    expect(await screen.findAllByRole('listitem')).toHaveLength(16);
+    // A poll that started before the switch may show all cameras for a moment.
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(16));
     expect(screen.getByRole('tab', { name: 'Wiese' })).toHaveAttribute('aria-selected', 'true');
   });
 
@@ -440,6 +455,7 @@ describe('GalleryApp', () => {
     render(
       <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
     );
+    await openCamera('Garten');
     const [card] = await screen.findAllByRole('listitem');
     fireEvent.click(within(card!).getByRole('button', { name: /^Groß anzeigen/ }));
     const viewer = screen.getByRole('dialog', { name: /^Aufnahme vom/ });
@@ -448,7 +464,7 @@ describe('GalleryApp', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     fireEvent.click(within(card!).getByRole('button', { name: 'Video holen' }));
-    await within(card!).findByText(/Video kommt/);
+    await within(card!).findByText(/^Kommt gegen/);
     now += 20;
     fireEvent.click(screen.getByRole('tab', { name: 'Wiese' }));
     fireEvent.click(await screen.findByRole('tab', { name: 'Garten' }));
@@ -463,7 +479,12 @@ describe('GalleryApp', () => {
   it("shows the camera's battery and what needs a look (#304)", async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    await screen.findByRole('heading', { name: 'Alle Kameras' });
+    // The view of all cameras lists the hints of every camera.
+    expect(screen.getByRole('status', { name: 'Hinweise zu den Kameras' })).toHaveTextContent(
+      'Kamera „Wiese“: Der Akku der Kamera wird schwach (18 %).',
+    );
+    await openCamera('Garten');
     expect(screen.getByText(/^Akku 76 % · zuletzt gelesen/)).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Hinweise zur Kamera' })).not.toBeInTheDocument();
 
@@ -476,12 +497,39 @@ describe('GalleryApp', () => {
   it('asks the hub to look for cameras (#308)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
-    await screen.findByRole('heading', { name: 'Kamera „Garten“' });
+    await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Nach Kameras suchen' }));
     expect(
       await screen.findByText(/Der Hub sucht beim nächsten Kontakt \(gegen .*\) nach Kameras/),
     ).toBeInTheDocument();
+  });
+
+  it('shows all cameras by day and filters by state (#431)', async () => {
+    const now = 1_000_000;
+    const api = new DemoGalleryApi(() => now, 20);
+    render(
+      <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
+    );
+    expect(await screen.findByRole('heading', { name: 'Alle Kameras' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Alle Kameras' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    const tiles = await screen.findAllByRole('listitem');
+    expect(tiles).toHaveLength(32);
+    // The newest recordings are today's; the camera is named on the tile.
+    expect(screen.getByRole('heading', { name: 'Heute' })).toBeInTheDocument();
+    expect(within(tiles[0]!).getByText(/^(Garten|Wiese)$/)).toBeInTheDocument();
+
+    // Nothing is ready or failed yet: those filters are not offered.
+    const filters = screen.getByRole('group', { name: 'Zustand' });
+    expect(within(filters).queryByRole('button', { name: /^Video da/ })).not.toBeInTheDocument();
+    fireEvent.click(within(tiles[0]!).getByRole('button', { name: 'Video holen' }));
+    fireEvent.click(await within(filters).findByRole('button', { name: /^Wartet/ }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    fireEvent.click(within(filters).getByRole('button', { name: /^Alle$/ }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(32);
   });
 
   it('asks for a folder when none is chosen', async () => {

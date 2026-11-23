@@ -7,7 +7,11 @@ import { FoundCameras } from './FoundCameras';
 import { SettingsDialog } from './SettingsDialog';
 import { hubStatusLine } from './hubStatus';
 import {
+  AlertIcon,
   CameraIcon,
+  CheckIcon,
+  ClockIcon,
+  GearIcon,
   PencilIcon,
   PlayIcon,
   SaveIcon,
@@ -18,7 +22,18 @@ import {
 import { Viewer } from './Viewer';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
-import { cameraHints, cameraTime, clockTime, folderName, stateText } from './text';
+import { batteryLevel } from '../format';
+import {
+  STATE_FILTERS,
+  applyFilter,
+  countByFilter,
+  filterOf,
+  groupByDay,
+  newestFirst,
+  recordingKey,
+  type StateFilter,
+} from './grouping';
+import { badgeText, cameraClock, cameraHints, cameraTime, clockTime, folderName } from './text';
 import {
   MAX_CAMERA_NAME,
   type FoundCamera,
@@ -87,8 +102,21 @@ const notReachedYet = (f: FoundCamera) => f.state === 'approved' && !f.camId;
 
 interface DeleteQuestion {
   question: string;
-  mediaIds: number[];
+  items: Recording[];
 }
+
+/** "All cameras": the recordings of every shown camera, newest first (#431). */
+const ALL = 'all';
+
+const byCamera = (items: Recording[]): Map<string, Recording[]> => {
+  const map = new Map<string, Recording[]>();
+  for (const r of items) {
+    const list = map.get(r.camId);
+    if (list) list.push(r);
+    else map.set(r.camId, [r]);
+  }
+  return map;
+};
 
 export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 15_000 }: Props) {
   const [status, setStatus] = useState<GalleryStatus>();
@@ -100,7 +128,10 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [notice, setNotice] = useState<string>();
   const [confirm, setConfirm] = useState<DeleteQuestion>();
   // Chosen recordings by their key; ones that left the list are ignored.
-  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  // Selection mode: the checkboxes stay visible without hovering (#431).
+  const [selecting, setSelecting] = useState(false);
+  const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [busy, setBusy] = useState(false);
   // The admin gets a second view with every hub (#264).
   const [isAdmin, setIsAdmin] = useState(false);
@@ -122,6 +153,13 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   // The camera whose settings dialog is open (#368).
   const [settingsFor, setSettingsFor] = useState<string>();
   const saving = useRef(false);
+  // The chosen camera, readable in a reload that started before a switch: a
+  // slow reload must not undo the user's choice (#431).
+  const camIdRef = useRef<string | undefined>(undefined);
+  const chooseCam = useCallback((id: string | undefined) => {
+    camIdRef.current = id;
+    setCamId(id);
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -135,14 +173,23 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       setStatus(s);
       setFound(f);
       const shown = s.cameras.filter((c) => !c.hidden);
-      const id = camId && shown.some((c) => c.camId === camId) ? camId : shown[0]?.camId;
-      setCamId(id);
-      setItems(id ? await api.recordings(id) : []);
+      // "All cameras" is the default as soon as there is more than one.
+      const current = camIdRef.current;
+      let id: string | undefined;
+      if (current === ALL && shown.length > 1) id = ALL;
+      else if (current && current !== ALL && shown.some((c) => c.camId === current)) id = current;
+      else id = shown.length > 1 ? ALL : shown[0]?.camId;
+      chooseCam(id);
+      const ids = id === ALL ? shown.map((c) => c.camId) : id ? [id] : [];
+      const lists = await Promise.all(ids.map((c) => api.recordings(c)));
+      // Switched meanwhile: the switch loads its own recordings.
+      if (camIdRef.current !== id) return;
+      setItems(newestFirst(lists.flat()));
       setLoadError(undefined);
     } catch (error) {
       setLoadError(error instanceof ApiError && error.status === 401 ? 'signin' : errorText(error));
     }
-  }, [api, camId]);
+  }, [api, chooseCam]);
 
   useEffect(() => {
     void reload();
@@ -177,9 +224,10 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     folder.folderState().then(setFolderInfo, () => setFolderInfo({ kind: 'unsupported' }));
   }, [folder]);
 
-  const cameraName = status?.cameras.find((c) => c.camId === camId)?.name ?? 'Kamera';
+  const nameOf = (id: string) => status?.cameras.find((c) => c.camId === id)?.name ?? 'Kamera';
+  const allCameras = camId === ALL;
   const shownCameras = status?.cameras.filter((c) => !c.hidden) ?? [];
-  const currentCamera = status?.cameras.find((c) => c.camId === camId);
+  const currentCamera = allCameras ? undefined : status?.cameras.find((c) => c.camId === camId);
   const settingsCamera = status?.cameras.find((c) => c.camId === settingsFor);
   const notReached = found.filter(notReachedYet);
   // The open camera that waits for its first read; without a read camera
@@ -199,10 +247,11 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     if (entry && notReachedYet(entry)) return;
     setPendingKey(undefined);
     if (entry?.camId && status?.cameras.some((c) => c.camId === entry.camId && !c.hidden)) {
-      setCamId(entry.camId);
+      chooseCam(entry.camId);
       setItems(undefined);
+      void reload();
     }
-  }, [found, pendingKey, status]);
+  }, [found, pendingKey, status, chooseCam, reload]);
 
   const decide = async (camera: FoundCamera, state: 'approved' | 'excluded', name?: string) => {
     setBusy(true);
@@ -255,8 +304,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
       // After the reload, which keeps the camera shown before; changing the
       // camera loads its recordings.
       if (!hidden) {
+        chooseCam(id);
         setItems(undefined);
-        setCamId(id);
+        await reload();
       }
     } catch (error) {
       setNotice(`Das hat nicht geklappt: ${errorText(error)}`);
@@ -280,12 +330,13 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     const pending = items.filter((r) => r.state === 'videoReady' && !saved.has(r.mediaId));
     if (pending.length === 0) return;
     saving.current = true;
+    const nameFor = (id: string) => status?.cameras.find((c) => c.camId === id)?.name ?? 'Kamera';
     void (async () => {
       const done: number[] = [];
       try {
         for (const r of pending) {
           const data = await api.download(r);
-          await folder.saveToFolder(folderName(cameraName), r.fileName, data);
+          await folder.saveToFolder(folderName(nameFor(r.camId)), r.fileName, data);
           done.push(r.mediaId);
         }
       } catch (error) {
@@ -303,7 +354,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
         saving.current = false;
       }
     })();
-  }, [items, folderInfo, saved, api, folder, cameraName, markSaved]);
+  }, [items, folderInfo, saved, api, folder, status, markSaved]);
 
   const act = async (run: () => Promise<void>, success?: string) => {
     setBusy(true);
@@ -322,7 +373,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     try {
       const data = await api.download(r);
       if (folderInfo.kind === 'ready') {
-        await folder.saveToFolder(folderName(cameraName), r.fileName, data);
+        await folder.saveToFolder(folderName(nameOf(r.camId)), r.fileName, data);
         setNotice(`Video gespeichert im Ordner „${folderInfo.name}“.`);
       } else {
         folder.downloadFile(r.fileName, data);
@@ -402,16 +453,41 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     }
   };
 
-  const toggle = (mediaId: number) =>
+  const toggle = (key: string) =>
     setSelected((current) => {
       const next = new Set(current);
-      if (!next.delete(mediaId)) next.add(mediaId);
+      if (!next.delete(key)) next.add(key);
       return next;
     });
 
+  const clearSelection = () => {
+    setSelected(new Set());
+    setSelecting(false);
+  };
+
+  // Several cameras at once: one request per camera.
+  const requestVideosFor = async (list: Recording[]) => {
+    for (const [id, rs] of byCamera(list)) {
+      await api.requestVideos(
+        id,
+        rs.map((r) => r.mediaId),
+      );
+    }
+  };
+  const requestDeleteFor = async (list: Recording[]) => {
+    for (const [id, rs] of byCamera(list)) {
+      await api.requestDelete(
+        id,
+        rs.flatMap((r) => r.mediaIds),
+      );
+    }
+  };
+
   const t = now();
-  const newOnes = items?.filter((r) => r.state === 'new') ?? [];
-  const chosen = items?.filter((r) => selected.has(r.mediaId) && selectable(r)) ?? [];
+  const counts = countByFilter(items ?? []);
+  const visible = applyFilter(items ?? [], stateFilter);
+  const days = groupByDay(visible, t);
+  const chosen = items?.filter((r) => selected.has(recordingKey(r)) && selectable(r)) ?? [];
   const chosenVideos = chosen.filter(videoWanted);
 
   const newFound = found.filter((f) => f.state === 'new').length;
@@ -419,10 +495,12 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     setManage(false);
     setRenaming(undefined);
     setPendingKey(undefined);
-    if (id !== camId) {
-      setCamId(id);
+    if (id !== camIdRef.current) {
+      chooseCam(id);
       setItems(undefined);
-      setSelected(new Set());
+      clearSelection();
+      setStateFilter('all');
+      void reload();
     }
   };
   const openWaiting = (camera: FoundCamera) => {
@@ -498,93 +576,147 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
           )}
 
           {status && (
-            <div className="g-tabs" role="tablist" aria-label="Kameras">
-              {shownCameras.map((c) => {
-                const active = showCamera && c.camId === camId;
-                if (active && renaming === c.camId) {
-                  return (
-                    <RenameForm
-                      key={c.camId}
-                      name={c.name}
-                      disabled={busy}
-                      onRename={(name) => renameCamera(c.camId, name)}
-                      onCancel={() => setRenaming(undefined)}
-                    />
-                  );
-                }
-                return (
-                  <span key={c.camId} className="g-tab-wrap">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      className="g-tab"
-                      onClick={() => switchCamera(c.camId)}
-                    >
-                      {c.name}
-                    </button>
-                    {active && (
-                      <RenameButton
-                        label="Umbenennen"
+            <div className="g-filters">
+              <div className="g-chips" role="tablist" aria-label="Kameras">
+                {shownCameras.length > 1 && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={showCamera && allCameras}
+                    className="g-chip"
+                    onClick={() => switchCamera(ALL)}
+                  >
+                    Alle Kameras
+                  </button>
+                )}
+                {shownCameras.map((c) => {
+                  const active = showCamera && c.camId === camId;
+                  if (active && renaming === c.camId) {
+                    return (
+                      <RenameForm
+                        key={c.camId}
+                        name={c.name}
                         disabled={busy}
-                        onClick={() => setRenaming(c.camId)}
+                        onRename={(name) => renameCamera(c.camId, name)}
+                        onCancel={() => setRenaming(undefined)}
                       />
-                    )}
-                  </span>
-                );
-              })}
-              {notReached.map((f) => {
-                const key = foundKey(f);
-                const active = openPending === f;
-                if (active && renaming === key) {
+                    );
+                  }
+                  const read = c.batPercent !== undefined && (c.lastRead ?? 0) > 0;
+                  const low = read && batteryLevel(c.batPercent ?? 100) !== 'ok';
                   return (
-                    <RenameForm
-                      key={key}
-                      name={f.name}
-                      disabled={busy}
-                      onRename={(name) => renamePending(f, name)}
-                      onCancel={() => setRenaming(undefined)}
-                    />
+                    <span key={c.camId} className="g-chip-wrap">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        aria-label={c.name}
+                        className="g-chip"
+                        onClick={() => switchCamera(c.camId)}
+                      >
+                        {c.name}
+                        {read && (
+                          <span
+                            className={low ? 'g-chip__bat g-chip__bat--low' : 'g-chip__bat'}
+                            title={low ? 'Akku schwach' : 'Akku'}
+                          >
+                            {c.batPercent} %{low && ' ⚠'}
+                          </span>
+                        )}
+                      </button>
+                      {active && (
+                        <RenameButton
+                          label="Umbenennen"
+                          disabled={busy}
+                          onClick={() => setRenaming(c.camId)}
+                        />
+                      )}
+                    </span>
                   );
-                }
-                return (
-                  <span key={key} className="g-tab-wrap">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      className="g-tab g-tab--waiting"
-                      onClick={() => openWaiting(f)}
-                    >
-                      {f.name} <span className="g-tab__note">noch nicht erreicht</span>
-                    </button>
-                    {active && (
-                      <RenameButton
-                        label="Umbenennen"
+                })}
+                {notReached.map((f) => {
+                  const key = foundKey(f);
+                  const active = openPending === f;
+                  if (active && renaming === key) {
+                    return (
+                      <RenameForm
+                        key={key}
+                        name={f.name}
                         disabled={busy}
-                        onClick={() => setRenaming(key)}
+                        onRename={(name) => renamePending(f, name)}
+                        onCancel={() => setRenaming(undefined)}
                       />
-                    )}
-                  </span>
-                );
-              })}
+                    );
+                  }
+                  return (
+                    <span key={key} className="g-chip-wrap">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className="g-chip g-chip--waiting"
+                        onClick={() => openWaiting(f)}
+                      >
+                        {f.name} <span className="g-chip__note">noch nicht erreicht</span>
+                      </button>
+                      {active && (
+                        <RenameButton
+                          label="Umbenennen"
+                          disabled={busy}
+                          onClick={() => setRenaming(key)}
+                        />
+                      )}
+                    </span>
+                  );
+                })}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={manage}
+                  className="g-chip g-chip--manage"
+                  onClick={() => {
+                    setManage(true);
+                    setRenaming(undefined);
+                    setPendingKey(undefined);
+                  }}
+                >
+                  <GearIcon /> Kameras verwalten
+                  {newFound > 0 && (
+                    <span className="g-count" aria-label={`${newFound} neu`}>
+                      {newFound}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showCamera && items && items.length > 0 && (
+            <div className="g-subfilters">
+              <div className="g-statefilter" role="group" aria-label="Zustand">
+                {STATE_FILTERS.filter(
+                  (f) => f.id === 'all' || counts[f.id] > 0 || stateFilter === f.id,
+                ).map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-pressed={stateFilter === f.id}
+                    className={`g-sfilter g-sfilter--${f.id}`}
+                    onClick={() => setStateFilter(f.id)}
+                  >
+                    {f.id !== 'all' && <i className="g-sfilter__dot" aria-hidden="true" />}
+                    {f.label}
+                    {f.id !== 'all' && <span className="g-sfilter__n"> {counts[f.id]}</span>}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
-                role="tab"
-                aria-selected={manage}
-                className="g-tab g-tab--manage"
-                onClick={() => {
-                  setManage(true);
-                  setRenaming(undefined);
-                  setPendingKey(undefined);
-                }}
+                className="g-btn g-btn--quiet g-btn--small"
+                aria-pressed={selecting}
+                onClick={() => (selecting ? clearSelection() : setSelecting(true))}
               >
-                Kameras verwalten
-                {newFound > 0 && (
-                  <span className="g-count" aria-label={`${newFound} neu`}>
-                    {newFound}
-                  </span>
-                )}
+                {selecting ? 'Fertig' : 'Auswählen'}
               </button>
             </div>
           )}
@@ -766,36 +898,24 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             <WaitingCamera camera={openPending} nextContact={status.nextContact} now={t} />
           )}
 
-          {showCamera && status && camId && (
+          {showCamera && status && camId && !allCameras && (
             <div className="g-camera-bar">
-              {/* The tab shows the name; the heading is for screen readers. */}
-              <h2 className="g-visually-hidden">Kamera „{cameraName}“</h2>
+              {/* The chip shows the name; the heading is for screen readers. */}
+              <h2 className="g-visually-hidden">Kamera „{nameOf(camId)}“</h2>
               {currentCamera && <CameraFacts camera={currentCamera} now={t} />}
-              {items && newOnes.length > 0 && (
-                <button
-                  type="button"
-                  className="g-btn g-btn--quiet g-btn--danger-text g-camera-bar__end"
-                  disabled={busy}
-                  onClick={() =>
-                    setConfirm({
-                      question:
-                        newOnes.length === 1
-                          ? '1 neue Aufnahme löschen?'
-                          : `Alle ${newOnes.length} neuen Aufnahmen löschen?`,
-                      mediaIds: newOnes.flatMap((r) => r.mediaIds),
-                    })
-                  }
-                >
-                  <TrashIcon /> Alle neuen löschen ({newOnes.length})
-                </button>
-              )}
             </div>
+          )}
+          {showCamera && status && allCameras && (
+            <h2 className="g-visually-hidden">Alle Kameras</h2>
           )}
           {showCamera && status && currentCamera && (
             <CameraHints camera={currentCamera} hubLastContact={status.lastContact} />
           )}
+          {showCamera && status && allCameras && (
+            <AllCameraHints cameras={shownCameras} hubLastContact={status.lastContact} />
+          )}
 
-          {showCamera && camId && chosen.length > 0 && (
+          {showCamera && chosen.length > 0 && (
             <div className="g-selbar" role="region" aria-label="Auswahl">
               <p>
                 {chosen.length === 1
@@ -810,11 +930,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                     disabled={busy}
                     onClick={() =>
                       void act(async () => {
-                        await api.requestVideos(
-                          camId,
-                          chosenVideos.map((r) => r.mediaId),
-                        );
-                        setSelected(new Set());
+                        await requestVideosFor(chosenVideos);
+                        clearSelection();
                       })
                     }
                   >
@@ -831,17 +948,13 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                         chosen.length === 1
                           ? '1 ausgewählte Aufnahme löschen?'
                           : `${chosen.length} ausgewählte Aufnahmen löschen?`,
-                      mediaIds: chosen.flatMap((r) => r.mediaIds),
+                      items: chosen,
                     })
                   }
                 >
                   Löschen ({chosen.length})
                 </button>
-                <button
-                  type="button"
-                  className="g-btn g-btn--quiet"
-                  onClick={() => setSelected(new Set())}
-                >
+                <button type="button" className="g-btn g-btn--quiet" onClick={clearSelection}>
                   Auswahl aufheben
                 </button>
               </div>
@@ -857,108 +970,149 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </p>
           )}
 
-          {showCamera && items && items.length > 0 && camId && (
-            <ul className="g-grid" aria-label="Aufnahmen">
-              {items.map((r) => (
-                <li
-                  key={r.mediaId}
-                  className={`g-card g-card--${r.state}${chosen.includes(r) ? ' g-card--chosen' : ''}`}
-                >
-                  <div className="g-card__media">
+          {showCamera && items && items.length > 0 && visible.length === 0 && (
+            <p className="g-empty">
+              Keine Aufnahmen mit diesem Filter.{' '}
+              <button type="button" className="g-link" onClick={() => setStateFilter('all')}>
+                Filter zurücksetzen
+              </button>
+            </p>
+          )}
+
+          {showCamera &&
+            items &&
+            days.map((group) => (
+              <section key={group.day} className="g-day" aria-label={group.title}>
+                <div className="g-day__head">
+                  <h2>{group.title}</h2>
+                  <span>
+                    {group.subtitle && `${group.subtitle} · `}
+                    {group.items.length === 1 ? '1 Aufnahme' : `${group.items.length} Aufnahmen`}
+                  </span>
+                  {group.items.some(selectable) && (
                     <button
                       type="button"
-                      className="g-card__zoom"
-                      aria-label={`Groß anzeigen: ${cameraTime(r.mediaTime)}`}
-                      onClick={() => setViewing({ recording: r, video: false })}
+                      className="g-btn g-btn--quiet g-btn--small g-day__select"
+                      aria-label={`Alle auswählen: ${group.title}`}
+                      onClick={() => {
+                        setSelecting(true);
+                        setSelected((current) => {
+                          const next = new Set(current);
+                          group.items.filter(selectable).forEach((r) => next.add(recordingKey(r)));
+                          return next;
+                        });
+                      }}
                     >
-                      <img
-                        src={r.thumbUrl}
-                        alt={`Aufnahme ${r.cameraFiles.join(', ')} vom ${cameraTime(r.mediaTime)}`}
-                      />
+                      Alle auswählen
                     </button>
-                    {selectable(r) && (
-                      <label className="g-card__select" title="Auswählen">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(r.mediaId)}
-                          onChange={() => toggle(r.mediaId)}
-                        />
-                        <span className="g-visually-hidden">Auswählen</span>
-                      </label>
-                    )}
-                    {r.state === 'videoReady' && (
-                      <button
-                        type="button"
-                        className="g-card__play"
-                        aria-label="Video ansehen"
-                        title="Video ansehen"
-                        onClick={() => setViewing({ recording: r, video: true })}
+                  )}
+                </div>
+                <ul className="g-grid" aria-label={`Aufnahmen ${group.title}`}>
+                  {group.items.map((r) => {
+                    const key = recordingKey(r);
+                    const picked = selected.has(key) && selectable(r);
+                    return (
+                      <li
+                        key={key}
+                        className={`g-tile g-tile--${r.state}${picked ? ' g-tile--chosen' : ''}${
+                          selecting || selected.size > 0 ? ' g-tile--selecting' : ''
+                        }`}
                       >
-                        <PlayIcon />
-                      </button>
-                    )}
-                    {r.fileType === 2 && r.state !== 'videoReady' && (
-                      <span className="g-card__kind" title="Aufnahme mit Video">
-                        Video
-                      </span>
-                    )}
-                  </div>
-                  <div className="g-card__body">
-                    <p className="g-card__time">{cameraTime(r.mediaTime)}</p>
-                    <p className="g-card__files" title="Dateien auf der Kamera">
-                      {r.cameraFiles.map((name) => (
-                        <span key={name}>{name}</span>
-                      ))}
-                    </p>
-                    <p className={`g-card__state g-pill g-pill--${r.state}`}>
-                      {stateText(r.state, saved.has(r.mediaId), status?.nextContact, t)}
-                      {r.state === 'failed' && r.failReason && ` – ${r.failReason}`}
-                    </p>
-                    <div className="g-card__actions">
-                      {(r.state === 'new' || r.state === 'failed') && r.fileType === 2 && (
                         <button
                           type="button"
-                          className="g-btn g-btn--small"
-                          disabled={busy}
-                          onClick={() => void act(() => api.requestVideos(camId, [r.mediaId]))}
+                          className="g-tile__zoom"
+                          aria-label={`Groß anzeigen: ${cameraTime(r.mediaTime)}`}
+                          onClick={() => setViewing({ recording: r, video: false })}
                         >
-                          Video holen
+                          <img src={r.thumbUrl} alt={`Aufnahme vom ${cameraTime(r.mediaTime)}`} />
                         </button>
-                      )}
-                      <span className="g-card__spacer" />
-                      {r.state === 'videoReady' && (
-                        <IconButton
-                          label={saved.has(r.mediaId) ? 'Nochmal speichern' : 'Video speichern'}
-                          onClick={() => void saveOne(r)}
+                        {selectable(r) && (
+                          <label className="g-tile__select" title="Auswählen">
+                            <input
+                              type="checkbox"
+                              checked={selected.has(key)}
+                              onChange={() => toggle(key)}
+                            />
+                            <span className="g-visually-hidden">Auswählen</span>
+                          </label>
+                        )}
+                        <span
+                          className={`g-tile__state g-tile__state--${filterOf(r.state) ?? 'new'}`}
+                          title={r.failReason}
                         >
-                          <SaveIcon />
-                        </IconButton>
-                      )}
-                      {(r.state === 'videoRequested' || r.state === 'deleteRequested') && (
-                        <IconButton
-                          label="Zurücknehmen"
-                          disabled={busy}
-                          onClick={() => void act(() => api.withdraw(camId, r))}
-                        >
-                          <UndoIcon />
-                        </IconButton>
-                      )}
-                      {(r.state === 'new' || r.state === 'failed' || r.state === 'videoReady') && (
-                        <IconButton
-                          label="Löschen"
-                          danger
-                          disabled={busy}
-                          onClick={() => void act(() => api.requestDelete(camId, r.mediaIds))}
-                        >
-                          <TrashIcon />
-                        </IconButton>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                          <StateIcon state={r.state} />
+                          {badgeText(r.state, saved.has(r.mediaId), status?.nextContact, t)}
+                          {r.state === 'failed' && r.failReason && (
+                            <span className="g-visually-hidden"> – {r.failReason}</span>
+                          )}
+                        </span>
+                        {r.state === 'videoReady' && (
+                          <button
+                            type="button"
+                            className="g-tile__play"
+                            aria-label="Video ansehen"
+                            title="Video ansehen"
+                            onClick={() => setViewing({ recording: r, video: true })}
+                          >
+                            <PlayIcon />
+                          </button>
+                        )}
+                        {r.state === 'videoRequested' && (
+                          <span className="g-tile__progress" aria-hidden="true" />
+                        )}
+                        <div className="g-tile__meta">
+                          <span className="g-tile__time">{cameraClock(r.mediaTime)}</span>
+                          {allCameras && <span className="g-tile__cam">{nameOf(r.camId)}</span>}
+                          {r.fileType === 0 && <span className="g-tile__cam">Foto</span>}
+                        </div>
+                        <div className="g-tile__actions">
+                          {videoWanted(r) && (
+                            <button
+                              type="button"
+                              className="g-btn g-btn--small g-tile__main"
+                              disabled={busy}
+                              onClick={() =>
+                                void act(() => api.requestVideos(r.camId, [r.mediaId]))
+                              }
+                            >
+                              Video holen
+                            </button>
+                          )}
+                          <span className="g-tile__spacer" />
+                          {r.state === 'videoReady' && (
+                            <IconButton
+                              label={saved.has(r.mediaId) ? 'Nochmal speichern' : 'Video speichern'}
+                              onClick={() => void saveOne(r)}
+                            >
+                              <SaveIcon />
+                            </IconButton>
+                          )}
+                          {(r.state === 'videoRequested' || r.state === 'deleteRequested') && (
+                            <IconButton
+                              label="Zurücknehmen"
+                              disabled={busy}
+                              onClick={() => void act(() => api.withdraw(r.camId, r))}
+                            >
+                              <UndoIcon />
+                            </IconButton>
+                          )}
+                          {selectable(r) && (
+                            <IconButton
+                              label="Löschen"
+                              danger
+                              disabled={busy}
+                              onClick={() => void act(() => api.requestDelete(r.camId, r.mediaIds))}
+                            >
+                              <TrashIcon />
+                            </IconButton>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
 
           {viewing && (
             <Viewer
@@ -1048,7 +1202,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
             </div>
           )}
 
-          {confirm && camId && (
+          {confirm && (
             <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-confirm">
               <div className="g-dialog__box">
                 <p id="g-confirm">{confirm.question}</p>
@@ -1068,9 +1222,9 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                     className="g-btn g-btn--danger"
                     onClick={() => {
                       setConfirm(undefined);
-                      setSelected(new Set());
+                      clearSelection();
                       void act(
-                        () => api.requestDelete(camId, confirm.mediaIds),
+                        () => requestDeleteFor(confirm.items),
                         'Die Aufnahmen werden beim nächsten Kontakt gelöscht.',
                       );
                     }}
@@ -1192,6 +1346,44 @@ function WaitingCamera({
       </div>
       <p className="g-empty">Noch keine Aufnahmen.</p>
     </>
+  );
+}
+
+/** The icon in a tile's state badge (#431). */
+function StateIcon({ state }: { state: Recording['state'] }) {
+  switch (state) {
+    case 'new':
+      return <i className="g-tile__dot" aria-hidden="true" />;
+    case 'videoRequested':
+      return <ClockIcon />;
+    case 'videoReady':
+      return <CheckIcon />;
+    case 'deleteRequested':
+    case 'deleted':
+      return <TrashIcon />;
+    case 'failed':
+      return <AlertIcon />;
+  }
+}
+
+/** The hints of every shown camera, for the view of all cameras (#431). */
+function AllCameraHints({
+  cameras,
+  hubLastContact,
+}: {
+  cameras: GalleryCamera[];
+  hubLastContact: number;
+}) {
+  const hints = cameras.flatMap((c) =>
+    cameraHints(c, hubLastContact).map((h) => `Kamera „${c.name}“: ${h}`),
+  );
+  if (hints.length === 0) return null;
+  return (
+    <div className="g-banner g-camera-hints" role="status" aria-label="Hinweise zu den Kameras">
+      {hints.map((h) => (
+        <p key={h}>{h}</p>
+      ))}
+    </div>
   );
 }
 

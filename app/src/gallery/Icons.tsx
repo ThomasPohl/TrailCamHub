@@ -73,3 +73,37 @@ export function CameraIcon() {
     </svg>
   );
 }
+
+export function ClockIcon() {
+  return (
+    <svg {...base} width={14} height={14}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+export function CheckIcon() {
+  return (
+    <svg {...base} width={14} height={14}>
+      <path d="m5 12 5 5 9-10" />
+    </svg>
+  );
+}
+
+export function AlertIcon() {
+  return (
+    <svg {...base} width={14} height={14}>
+      <path d="M12 3 2 20h20zM12 10v4m0 3h.01" />
+    </svg>
+  );
+}
+
+export function GearIcon() {
+  return (
+    <svg {...base}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" />
+    </svg>
+  );
+}
