@@ -9,6 +9,12 @@ import type { Fault, GalleryCamera, RecordingState } from './types';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+/** Camera wall clock (docs/clock.md) as "14:02", for tiles grouped by day (#431). */
+export function cameraClock(cameraSeconds: number): string {
+  const d = new Date(cameraSeconds * 1000);
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
 /** Camera wall clock (docs/clock.md) as "15.11. 14:02". */
 export function cameraTime(cameraSeconds: number): string {
   const d = new Date(cameraSeconds * 1000);
@@ -309,4 +315,32 @@ export function usageLines(u: UsageSummary | undefined, nowSeconds: number): str
   const last = `${u.lastDay.slice(8)}.${u.lastDay.slice(5, 7)}.`;
   lines.push(`Letzter Wert vom ${last} Geschätzt, mit Aufschlag für die Verschlüsselung.`);
   return lines;
+}
+
+/**
+ * The short state on a tile (#431): one or two words, with the time when the
+ * hub brings the video. The long form is `stateText`.
+ */
+export function badgeText(
+  state: RecordingState,
+  saved: boolean,
+  nextContact: number | undefined,
+  now: number,
+): string {
+  switch (state) {
+    case 'new':
+      return 'Neu';
+    case 'videoRequested':
+      return nextContact
+        ? `Kommt gegen ${clockTime(nextContact, now)}`
+        : 'Kommt beim nächsten Kontakt';
+    case 'videoReady':
+      return saved ? 'Gespeichert' : 'Video da';
+    case 'deleteRequested':
+      return 'Wird gelöscht';
+    case 'deleted':
+      return 'Gelöscht';
+    case 'failed':
+      return 'Fehlgeschlagen';
+  }
 }

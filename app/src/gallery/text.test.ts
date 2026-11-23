@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  badgeText,
   cameraFile,
   cameraHints,
   cameraTime,
@@ -128,5 +129,20 @@ describe('hub memory (#149)', () => {
     expect(
       memoryText({ heapMin: 41_200, psramMin: 3_250_000, stackSession: 1400, stackUplink: 2048 }),
     ).toBe('intern min. 40.2 KB frei · PSRAM min. 3.1 MB · Stack: Sitzung 1.4 KB, Upload 2.0 KB');
+  });
+});
+
+describe('badgeText', () => {
+  it('is short and names the contact time for a requested video', () => {
+    expect(badgeText('new', false, undefined, 1_000_000)).toBe('Neu');
+    expect(badgeText('videoReady', true, undefined, 1_000_000)).toBe('Gespeichert');
+    expect(badgeText('videoReady', false, undefined, 1_000_000)).toBe('Video da');
+    expect(badgeText('videoRequested', false, undefined, 1_000_000)).toBe(
+      'Kommt beim nächsten Kontakt',
+    );
+    expect(badgeText('videoRequested', false, 1_000_600, 1_000_000)).toMatch(
+      /^Kommt gegen \d\d:\d\d Uhr$/,
+    );
+    expect(badgeText('failed', false, undefined, 1_000_000)).toBe('Fehlgeschlagen');
   });
 });
