@@ -148,6 +148,8 @@ export function faultText(fault: Fault, camera: string | undefined, nowSeconds: 
         (fault.since ? `, seit ${clockTime(fault.since, nowSeconds)}` : '') +
         ' – Update zurückgerollt?'
       );
+    case 'powerModeMismatch':
+      return 'Der Hub hat einen Akku, läuft aber im Netzbetrieb (power=mains): kein Deep Sleep, der Akku leert sich schnell. In den Einstellungen auf „battery“ stellen.';
     case 'hubMemoryLow':
       return `Der Hub hatte zuletzt wenig freien Speicher (${kilobytes(fault.value ?? 0)}); Kontakte können scheitern.`;
     case 'firmwareUpdateFailed':

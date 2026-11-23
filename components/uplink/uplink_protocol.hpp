@@ -115,6 +115,9 @@ struct CheckinRequest {
     // How this check-in reaches the backend (#149): "wifi", "modem" or
     // "ethernet"; left out when empty.
     std::string hub_uplink;
+    // The resolved mode, "mains" or "battery" (#416): lets the backend flag a
+    // battery that is left on mains. Left out when empty.
+    std::string hub_power_mode;
     // Modem signal measured when connecting, dBm; left out when 0 (unknown
     // or no modem).
     int modem_signal_dbm = 0;

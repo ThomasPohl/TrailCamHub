@@ -18,6 +18,7 @@ export type HubTelemetry = Partial<
     HubRecord,
     | 'firmware'
     | 'batPercent'
+    | 'powerMode'
     | 'schedule'
     | 'uplink'
     | 'modemSignalDbm'

@@ -149,6 +149,7 @@ export interface Fault {
     | 'firmwareDowngrade'
     | 'firmwareUpdateFailed'
     | 'hubMemoryLow'
+    | 'powerModeMismatch'
     | 'cameraNotRead';
   level: 'error' | 'warning';
   camId?: string;
@@ -165,6 +166,7 @@ export interface AdminHub {
   firmware?: string;
   batPercent?: number;
   /** How the last check-in came in (#149). */
+  powerMode?: 'mains' | 'battery';
   uplink?: 'wifi' | 'modem' | 'ethernet';
   /** Modem signal in dBm, only while the hub syncs over the modem. */
   modemSignalDbm?: number;

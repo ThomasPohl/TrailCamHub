@@ -41,6 +41,7 @@ import type {
   FirmwareUpdateResult,
   HubRecord,
   HubMemory,
+  HubPowerMode,
   HubUplink,
   HubHistory,
   HubSchedule,
@@ -365,6 +366,7 @@ async function adminHubs(req: ApiRequest, _p: Record<string, string>, deps: Deps
       name: hub.name,
       firmware: hub.firmware,
       batPercent: hub.batPercent,
+      powerMode: hub.powerMode,
       uplink: hub.uplink,
       modemSignalDbm: hub.uplink === 'modem' ? hub.modemSignalDbm : undefined,
       modemOperator: hub.uplink === 'modem' ? hub.modemOperator : undefined,
@@ -940,6 +942,13 @@ export function parseMemory(raw: unknown): HubMemory | undefined {
   return memory;
 }
 
+/** The power mode of a check-in; anything but "mains" or "battery" is ignored (#416). */
+export function powerModeOf(body: CheckinRequest): HubPowerMode | undefined {
+  return body.hubPowerMode === 'mains' || body.hubPowerMode === 'battery'
+    ? body.hubPowerMode
+    : undefined;
+}
+
 const UPLINKS: readonly HubUplink[] = ['wifi', 'modem', 'ethernet'];
 
 // eslint-disable-next-line no-control-regex
@@ -1028,6 +1037,7 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     {
       firmware,
       batPercent: optionalNumber(body.hubBatPercent),
+      powerMode: powerModeOf(body),
       schedule: sanitizeSchedule(body.schedule, now),
       ...uplinkOf(body),
       memory: parseMemory(body.memory),
@@ -1035,7 +1045,11 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     now,
     // A hub without a battery reading omits the field: drop the old value, so
     // the admin view shows "unknown" and not a stale percentage.
-    optionalNumber(body.hubBatPercent) === undefined ? ['batPercent'] : [],
+    [
+      ...(optionalNumber(body.hubBatPercent) === undefined ? (['batPercent'] as const) : []),
+      // Older firmware sends no mode: do not keep an old one as current.
+      ...(powerModeOf(body) === undefined ? (['powerMode'] as const) : []),
+    ],
   );
   await recordSample(
     deps,

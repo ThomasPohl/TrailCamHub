@@ -63,6 +63,8 @@ export function faultLine(fault: Fault, cameraName: string): string {
       return `${camera}: SD card full (${fault.value ?? '?'} MB free)`;
     case 'requestsFailed':
       return `${camera}: ${fault.value ?? 'some'} request(s) failed${detail}`;
+    case 'powerModeMismatch':
+      return 'battery detected but power mode is mains (no deep sleep)';
     case 'firmwareDowngrade':
       return `firmware went back to an older version (${fault.detail ?? '?'})`;
     case 'firmwareUpdateFailed':

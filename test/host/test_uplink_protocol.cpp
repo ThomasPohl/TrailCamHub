@@ -359,6 +359,16 @@ TEST_CASE("uplink: firmware update in the check-in (#149)")
           std::string::npos);
 }
 
+TEST_CASE("uplink: power mode in the check-in (#416)")
+{
+    CheckinRequest request;
+    CHECK(build_checkin_json(request).find("hubPowerMode") ==
+          std::string::npos);
+    request.hub_power_mode = "mains";
+    CHECK(build_checkin_json(request).find("\"hubPowerMode\":\"mains\"") !=
+          std::string::npos);
+}
+
 TEST_CASE("uplink: transport and modem signal in the check-in (#149)")
 {
     CheckinRequest request;

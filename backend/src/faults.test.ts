@@ -70,6 +70,16 @@ describe('hub faults (#265)', () => {
     expect(kinds(hubFaults(noPlan, [], NOW))).toEqual(['hubSilent']);
   });
 
+  it('flags a battery that runs in mains mode (#416)', () => {
+    expect(kinds(hubFaults(hub({ batPercent: 80, powerMode: 'mains' }), [], NOW))).toEqual([
+      'powerModeMismatch',
+    ]);
+    // Battery mode, no cell reading or an older firmware without the mode: no fault.
+    expect(hubFaults(hub({ batPercent: 80, powerMode: 'battery' }), [], NOW)).toEqual([]);
+    expect(hubFaults(hub({ powerMode: 'mains', batPercent: undefined }), [], NOW)).toEqual([]);
+    expect(hubFaults(hub({ batPercent: 80 }), [], NOW)).toEqual([]);
+  });
+
   it('reports low batteries of hub and cameras', () => {
     expect(kinds(hubFaults(hub({ batPercent: 8 }), [], NOW))).toEqual(['hubBatteryCritical']);
     expect(kinds(hubFaults(hub({ batPercent: 20 }), [], NOW))).toEqual(['hubBatteryLow']);

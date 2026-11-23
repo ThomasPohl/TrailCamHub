@@ -90,6 +90,12 @@ export function hubFaults(
     });
   }
 
+  // A cell is reporting while the hub runs in mains mode: no deep sleep, the
+  // battery drains within hours (#416).
+  if (hub.powerMode === 'mains' && hub.batPercent !== undefined) {
+    faults.push({ kind: 'powerModeMismatch', level: 'warning' });
+  }
+
   // The hub's own report of a failed or rolled-back update (#149).
   const lastReport = [...changes]
     .filter((c) => c.result !== undefined)

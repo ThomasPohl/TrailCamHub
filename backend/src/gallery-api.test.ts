@@ -443,6 +443,26 @@ describe('memory report (#149, #244)', () => {
   });
 });
 
+describe('power mode (#416)', () => {
+  it('stores the mode, ignores other values and drops it when it is no longer sent', async () => {
+    const world = await galleryWorld();
+    const checkin = (body: Record<string, unknown>) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, { cameras: [], ...body }),
+        world.deps,
+      );
+    const mode = async () => (await world.deps.store.getHub(HUB_ID))?.powerMode;
+    await checkin({ hubPowerMode: 'mains' });
+    expect(await mode()).toBe('mains');
+    await checkin({ hubPowerMode: 'solar' });
+    expect(await mode()).toBeUndefined();
+    await checkin({ hubPowerMode: 'battery' });
+    expect(await mode()).toBe('battery');
+    await checkin({});
+    expect(await mode()).toBeUndefined();
+  });
+});
+
 describe('transport and modem signal (#149)', () => {
   it('stores them and shows the signal only over the modem', async () => {
     const world = await galleryWorld();
