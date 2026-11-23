@@ -16,7 +16,9 @@ time and stored on the hub (NVS), without another firmware image (concept:
 - **power** decides deep sleep between cycles and Wi-Fi modem sleep (battery),
   and the default schedule (`docs/power-and-schedule.md`). Battery needs a
   build with deep sleep (`CONFIG_POWER_DEEP_SLEEP`, all boards except the
-  ESP32-P4-NANO).
+  ESP32-P4-NANO). On a board with a battery gauge, `power mains` with a cell
+  inserted drains it within hours (no deep sleep); `status` and the boot log
+  then say "battery detected but power=mains" (#416).
 - **direction**: with *push* the hub checks in with its destination after
   reads and on its check-in interval; with *pull* it does not, and people
   fetch thumbnails and media from its web UI. Pull needs a build with the web

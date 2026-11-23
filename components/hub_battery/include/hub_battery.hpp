@@ -37,6 +37,11 @@ int percent();
 // `millivolts` receives the voltage read (-1 unknown).
 bool modem_allowed(int &millivolts);
 
+// Checks the mode against the gauge: returns the warning text when a battery
+// is detected while the hub runs in mains mode, otherwise nullptr. Reads the
+// gauge. With `log_once` the warning is also logged, at most once per boot.
+const char *power_mode_warning(bool mains, bool log_once);
+
 // Writes the reading to the log, with `stage` naming the occasion.
 void log_reading(const char *stage);
 

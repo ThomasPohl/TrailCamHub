@@ -49,6 +49,15 @@ bool plausible_cell_millivolts(int millivolts);
 // only work with the CAM DIP switch ON (#412).
 const char *gauge_failure_hint(bool bus_timeout);
 
+// A battery is detected (the gauge answers with a plausible cell voltage) but
+// the hub runs in mains mode: no deep sleep and no Wi-Fi modem sleep, so the
+// cell drains within hours (#416). `gauge_millivolts` is -1 when the gauge
+// does not answer.
+bool power_mode_mismatch(bool mains, int gauge_millivolts);
+
+// The line `status` and the log show for that case.
+const char *power_mode_mismatch_text();
+
 // Percentage of a single Li-ion cell from its voltage, along a typical
 // discharge curve from 3300 mV (0 %) to 4200 mV (100 %). `empty_mv` and
 // `full_mv` move the ends of the curve: the voltage is first scaled linearly

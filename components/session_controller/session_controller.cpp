@@ -746,6 +746,9 @@ void load_settings_for_cycle()
     if (hub_config::load(s_settings) != ESP_OK) {
         s_settings = hub_config::Settings{};
     }
+    // A battery with power=mains drains fast: log once per boot (#416).
+    hub_battery::power_mode_warning(
+        hub_config::mode(s_settings).power == hub_config::Power::mains, true);
     s_fsm.set_uplink_enabled(hub_config::uplink_ready(s_settings) &&
                              !s_list_only && !s_actions_only);
     // Modem sleep on the home Wi-Fi only on battery power.
