@@ -417,11 +417,9 @@ export class HttpGalleryApi implements GalleryApi {
   }
 
   async setDataBudget(hubId: string, budgetMB: number | undefined): Promise<void> {
-    await this.request<unknown>(
-      'POST',
-      `/v1/admin/hubs/${encodeURIComponent(hubId)}/data-budget`,
-      { budgetMB: budgetMB ?? null },
-    );
+    await this.request<unknown>('POST', `/v1/admin/hubs/${encodeURIComponent(hubId)}/data-budget`, {
+      budgetMB: budgetMB ?? null,
+    });
   }
 
   elevated(): boolean {

@@ -109,7 +109,10 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     }
     // The totals are written once at the end of the sync, not per request.
     struct PersistUsage {
-        ~PersistUsage() { usage::persist(); }
+        ~PersistUsage()
+        {
+            usage::persist();
+        }
     } persist_usage;
 
     CheckinRequest request;
@@ -151,7 +154,8 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
         if (!b.empty()) {
             request.data_usage.push_back(
                 {usage::transport_name((usage::Transport)i),
-                 usage::with_overhead(b.tx, CONFIG_UPLINK_DATA_OVERHEAD_PERCENT),
+                 usage::with_overhead(b.tx,
+                                      CONFIG_UPLINK_DATA_OVERHEAD_PERCENT),
                  usage::with_overhead(b.rx,
                                       CONFIG_UPLINK_DATA_OVERHEAD_PERCENT)});
         }

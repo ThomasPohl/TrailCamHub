@@ -35,7 +35,8 @@ describe('data usage of a hub (#415)', () => {
     const { world } = await adminWorld();
     const send = (dataUsage: unknown) =>
       handleRequest(hubRequest('/v1/device/checkin', world.hubKey, { dataUsage }), world.deps);
-    expect((await send([{ transport: 'modem', txBytes: 1000, rxBytes: 200 }])).status).toBe(200);
+    const first = await send([{ transport: 'modem', txBytes: 1000, rxBytes: 200 }]);
+    expect(first.statusCode).toBe(200);
     await send([
       { transport: 'modem', txBytes: 500, rxBytes: 100 },
       { transport: 'wifi', txBytes: 7, rxBytes: 8 },
@@ -53,7 +54,7 @@ describe('data usage of a hub (#415)', () => {
       hubRequest('/v1/device/checkin', world.hubKey, { hubBatPercent: 80 }),
       world.deps,
     );
-    expect(response.status).toBe(200);
+    expect(response.statusCode).toBe(200);
     expect(await world.store.listDataUsage(HUB_ID, '2000-01-01')).toEqual([]);
   });
 
@@ -80,7 +81,7 @@ describe('data usage of a hub (#415)', () => {
       hubRequest('/v1/device/checkin', world.hubKey, { dataUsage: 'lots' }),
       world.deps,
     );
-    expect(garbage.status).toBe(200);
+    expect(garbage.statusCode).toBe(200);
   });
 
   it('returns the previous and the current month with the budget, for the admin only', async () => {
@@ -98,9 +99,10 @@ describe('data usage of a hub (#415)', () => {
     });
     await world.store.addDataUsage(HUB_ID, TODAY, { transport: 'modem', txBytes: 4, rxBytes: 5 });
     const path = `/v1/admin/hubs/${HUB_ID}/usage`;
-    expect((await handleRequest(adminRequest('nope', 'GET', path), world.deps)).status).toBe(401);
+    const denied = await handleRequest(adminRequest('nope', 'GET', path), world.deps);
+    expect(denied.statusCode).toBe(401);
     const response = await handleRequest(adminRequest(session, 'GET', path), world.deps);
-    expect(response.status).toBe(200);
+    expect(response.statusCode).toBe(200);
     const usage = body<HubUsage>(response);
     expect(usage.budgetMB).toBeUndefined();
     expect(usage.days.map((d) => d.day)).toEqual(['2026-12-15', TODAY]);
@@ -115,16 +117,16 @@ describe('data usage of a hub (#415)', () => {
     const path = `/v1/admin/hubs/${HUB_ID}/data-budget`;
     const post = (data: unknown) =>
       handleRequest(adminRequest(session, 'POST', path, data), world.deps);
-    expect((await post({ budgetMB: 5000 })).status).toBe(200);
+    expect((await post({ budgetMB: 5000 })).statusCode).toBe(200);
     expect((await world.store.getHub(HUB_ID))?.dataBudgetMB).toBe(5000);
     const hubs = body<Array<{ hubId: string; dataBudgetMB?: number }>>(
       await handleRequest(adminRequest(session, 'GET', '/v1/admin/hubs'), world.deps),
     );
     expect(hubs.find((h) => h.hubId === HUB_ID)?.dataBudgetMB).toBe(5000);
     for (const bad of [0, -1, 1.5, '100', 2_000_000]) {
-      expect((await post({ budgetMB: bad })).status).toBe(400);
+      expect((await post({ budgetMB: bad })).statusCode).toBe(400);
     }
-    expect((await post({ budgetMB: null })).status).toBe(200);
+    expect((await post({ budgetMB: null })).statusCode).toBe(200);
     expect((await world.store.getHub(HUB_ID))?.dataBudgetMB).toBeUndefined();
   });
 });
