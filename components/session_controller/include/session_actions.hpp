@@ -42,6 +42,14 @@ struct Reply {
 Reply request(From from, const std::string &type, long long media_id,
               const std::string &code);
 
+// A change of camera settings (#197): `change` is a flat JSON object of known
+// fields, the same form as the backend's setSettings (parse_change()), e.g.
+// {"pirSens":2,"languageCode":"de"}. `cam_id` names the camera (its devId);
+// empty: whichever camera the next session reads. The camera's capability is
+// checked in the session, against its fresh device info. Never blocks.
+Reply request_settings(From from, const std::string &cam_id,
+                       const std::string &change);
+
 // `{"ok":true,"id":3,"started":true,"text":"…"}`, or with "needsCode":true and
 // "code":"4821". Valid JSON for any text.
 std::string to_json(const Reply &reply);

@@ -6,6 +6,7 @@
 
 #include "artemis_json.hpp"
 #include "camera_actions.hpp"
+#include "camera_settings.hpp"
 #include "session_controller.h"
 
 namespace session_actions
@@ -18,6 +19,44 @@ Reply refuse(const std::string &text)
 {
     Reply reply;
     reply.text = text;
+    return reply;
+}
+
+// Queues a checked action and starts the session that runs it.
+Reply queue(const camera::action::Action &action, camera::action::Source source)
+{
+    using namespace camera::action;
+    const ActionQueue::AddResult added = service::submit(action, source, "");
+    Reply reply;
+    reply.id = added.id;
+    switch (added.kind) {
+    case ActionQueue::AddResult::Kind::added:
+        break;
+    case ActionQueue::AddResult::Kind::duplicate:
+        reply.ok = true;
+        reply.text = "already queued";
+        return reply;
+    case ActionQueue::AddResult::Kind::full:
+        return refuse("too many actions are waiting");
+    case ActionQueue::AddResult::Kind::invalid:
+    case ActionQueue::AddResult::Kind::not_allowed:
+        return refuse(added.reason);
+    }
+    reply.ok = true;
+    // A photo is followed by a scan, so that the picture is read and pushed;
+    // the others by a short session.
+    const esp_err_t error = action.type == Type::photo
+                                ? session_controller_request_scan()
+                                : session_controller_request_actions();
+    if (error == ESP_OK) {
+        reply.session_started = true;
+        reply.text = "queued; the camera session has started";
+    } else if (error == ESP_ERR_INVALID_STATE) {
+        reply.text = "queued; it runs in the next camera session";
+    } else {
+        reply.text = std::string("queued; the session could not be started: ") +
+                     esp_err_to_name(error);
+    }
     return reply;
 }
 
@@ -65,38 +104,26 @@ Reply request(From from, const std::string &type_name_text, long long media_id,
         }
     }
 
-    const ActionQueue::AddResult added = service::submit(action, source, "");
-    Reply reply;
-    reply.id = added.id;
-    switch (added.kind) {
-    case ActionQueue::AddResult::Kind::added:
-        break;
-    case ActionQueue::AddResult::Kind::duplicate:
-        reply.ok = true;
-        reply.text = "already queued";
-        return reply;
-    case ActionQueue::AddResult::Kind::full:
-        return refuse("too many actions are waiting");
-    case ActionQueue::AddResult::Kind::invalid:
-    case ActionQueue::AddResult::Kind::not_allowed:
-        return refuse(added.reason);
+    return queue(action, source);
+}
+
+Reply request_settings(From from, const std::string &cam_id,
+                       const std::string &change)
+{
+    using namespace camera::action;
+    std::vector<camera::settings::Value> values;
+    std::string error;
+    if (!camera::settings::parse_change(change, values, error)) {
+        return refuse(error);
     }
-    reply.ok = true;
-    // A photo is followed by a scan, so that the picture is read and pushed;
-    // the others by a short session.
-    const esp_err_t error = *type == Type::photo
-                                ? session_controller_request_scan()
-                                : session_controller_request_actions();
-    if (error == ESP_OK) {
-        reply.session_started = true;
-        reply.text = "queued; the camera session has started";
-    } else if (error == ESP_ERR_INVALID_STATE) {
-        reply.text = "queued; it runs in the next camera session";
-    } else {
-        reply.text = std::string("queued; the session could not be started: ") +
-                     esp_err_to_name(error);
+    const Action action{Type::settings, 0, cam_id,
+                        camera::settings::encode_change(values)};
+    const std::string problem = validate(action);
+    if (!problem.empty()) {
+        return refuse(problem);
     }
-    return reply;
+    return queue(action,
+                 from == From::console ? Source::console : Source::web_ui);
 }
 
 std::string to_json(const Reply &reply)

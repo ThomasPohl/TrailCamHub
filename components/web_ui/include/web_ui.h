@@ -37,6 +37,14 @@ typedef struct {
                       char *out, size_t size);
     /* Writes the JSON list of the queued actions into `out`. */
     void (*on_actions)(char *out, size_t size);
+    /*
+     * A change of camera settings (POST /api/settings?cam=<devId>): `change`
+     * is a flat JSON object of settings, e.g. {"pirSens":2}. Writes the same
+     * JSON answer as on_action into `out`. May be NULL: the page then offers
+     * no settings.
+     */
+    void (*on_settings)(const char *cam_id, const char *change, char *out,
+                        size_t size);
 } web_ui_callbacks_t;
 
 /*
