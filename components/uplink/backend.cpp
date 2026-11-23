@@ -78,8 +78,9 @@ void apply_remote_power(const std::string &wanted)
                  reason.empty() ? "could not be stored" : reason.c_str());
         return;
     }
-    ESP_LOGI(TAG, "Power %s from the backend stored; it applies after the "
-                  "next restart",
+    ESP_LOGI(TAG,
+             "Power %s from the backend stored; it applies after the next "
+             "restart",
              wanted.c_str());
 }
 
