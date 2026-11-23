@@ -359,6 +359,22 @@ TEST_CASE("uplink: firmware update in the check-in (#149)")
           std::string::npos);
 }
 
+TEST_CASE("uplink: charging state and cell voltage in the check-in (#421)")
+{
+    CheckinRequest request;
+    std::string json = build_checkin_json(request);
+    CHECK(json.find("hubCharging") == std::string::npos);
+    CHECK(json.find("hubBatMillivolts") == std::string::npos);
+    request.hub_charging = 1;
+    request.hub_bat_millivolts = 4187;
+    json = build_checkin_json(request);
+    CHECK(json.find("\"hubCharging\":true") != std::string::npos);
+    CHECK(json.find("\"hubBatMillivolts\":4187") != std::string::npos);
+    request.hub_charging = 0;
+    CHECK(build_checkin_json(request).find("\"hubCharging\":false") !=
+          std::string::npos);
+}
+
 TEST_CASE("uplink: power mode in the check-in (#416)")
 {
     CheckinRequest request;

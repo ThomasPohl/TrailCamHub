@@ -662,13 +662,23 @@ export function BatteryChart({
     );
   }
   const span = Math.max(1, last.at - first.at);
-  const xy = points
-    .map((s) => {
-      const x = ((s.at - first.at) / span) * CHART_W;
-      const y = CHART_H - ((s.batPercent ?? 0) / 100) * CHART_H;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
+  // Values taken while charging say little about the level (#421): the line
+  // skips them and a tick marks where they were.
+  const x = (at: number) => ((at - first.at) / span) * CHART_W;
+  const y = (percent: number) => CHART_H - (percent / 100) * CHART_H;
+  const charging = (s: Sample) => s.charging ?? (s.batPercent ?? 0) >= 100;
+  const lines: string[] = [];
+  let current: string[] = [];
+  for (const s of points) {
+    if (charging(s)) {
+      if (current.length > 0) lines.push(current.join(' '));
+      current = [];
+    } else {
+      current.push(`${x(s.at).toFixed(1)},${y(s.batPercent ?? 0).toFixed(1)}`);
+    }
+  }
+  if (current.length > 0) lines.push(current.join(' '));
+  const ticks = points.filter(charging).map((s) => x(s.at));
   const summary = `${label}: Akku ${first.batPercent} % → ${last.batPercent} %`;
   const forecast = batteryForecast(samples);
   return (
@@ -689,7 +699,12 @@ export function BatteryChart({
           y2={CHART_H * 0.75}
           className="g-chart__low"
         />
-        <polyline points={xy} className="g-chart__line" />
+        {ticks.map((tx) => (
+          <line key={tx} x1={tx} y1={0} x2={tx} y2={CHART_H} className="g-chart__charging" />
+        ))}
+        {lines.map((xy) => (
+          <polyline key={xy} points={xy} className="g-chart__line" />
+        ))}
       </svg>
     </figure>
   );

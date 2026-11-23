@@ -942,6 +942,17 @@ export function parseMemory(raw: unknown): HubMemory | undefined {
   return memory;
 }
 
+/** Charging flag and cell voltage of a check-in, only what is plausible (#421). */
+export function chargingSample(
+  body: Pick<CheckinRequest, 'hubCharging' | 'hubBatMillivolts'>,
+): Pick<Sample, 'charging' | 'millivolts'> {
+  const sample: Pick<Sample, 'charging' | 'millivolts'> = {};
+  if (typeof body.hubCharging === 'boolean') sample.charging = body.hubCharging;
+  const mv = optionalNumber(body.hubBatMillivolts);
+  if (mv !== undefined && Number.isInteger(mv) && mv >= 2000 && mv <= 5000) sample.millivolts = mv;
+  return sample;
+}
+
 /** The power mode of a check-in; anything but "mains" or "battery" is ignored (#416). */
 export function powerModeOf(body: CheckinRequest): HubPowerMode | undefined {
   return body.hubPowerMode === 'mains' || body.hubPowerMode === 'battery'
@@ -1057,6 +1068,7 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     {
       at: now,
       batPercent: optionalNumber(body.hubBatPercent),
+      ...chargingSample(body),
     },
   );
 

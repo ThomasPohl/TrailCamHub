@@ -15,8 +15,13 @@ export interface BatteryForecast {
   /** Time of the latest value, Unix seconds; the forecast starts there. */
   lastAt: number;
   /**
-   * The latest value is 100 %: charging or full. The gauge reads 100 % while the
-   * charger is active, whatever the real level, so there is no usable rate.
+   * The latest value comes from a charging cell (flag from the hub, #421): the
+   * gauge reads 100 % then, whatever the real level. No rate, no empty time.
+   */
+  charging?: boolean;
+  /**
+   * The latest value is 100 % from firmware without the charging flag: charging
+   * or full, no usable rate.
    */
   atFull?: boolean;
 }
@@ -43,17 +48,27 @@ function drainOf(points: Sample[]): number {
 }
 
 /**
+ * A value that says little about the level: flagged as charging by the hub
+ * (#421). Older firmware sends no flag; its 100 % is then taken as "charging
+ * or full", since the gauge reads 100 % while charging.
+ */
+function unreliable(s: Sample): boolean {
+  return s.charging ?? (s.batPercent ?? 0) >= 100;
+}
+
+/**
  * Current consumption and an empty-battery forecast from the battery samples
  * (oldest first), extended from the latest value. Needs two values at least an
  * hour apart.
  *
  * Charging is taken out of the measurement:
- * - 100 % is not a measurement: the gauge reads 100 % while charging, whatever
- *   the real level. Such values are dropped, and a latest value of 100 % means
- *   "charging or full" without a forecast.
+ * - Values the hub flags as charging are dropped, and so are 100 % values
+ *   without a flag. A latest value like that means "charging or full" without
+ *   a forecast.
  * - Only the current discharge counts: going back from the latest value, the
- *   run ends where an older value is lower than a newer one (charged in
- *   between). A least-squares line through that run, at most 24 h, is the rate.
+ *   run ends at a dropped value or where an older value is lower than a newer
+ *   one (charged in between). A least-squares line through that run, at most
+ *   24 h, is the rate.
  * - If the latest values rise, the hub is charging: the rate of that rise is
  *   shown, without an empty time.
  */
@@ -61,14 +76,22 @@ export function batteryForecast(samples: Sample[]): BatteryForecast | undefined 
   const raw = samples.filter((s) => s.batPercent !== undefined);
   const latest = raw[raw.length - 1];
   if (!latest) return undefined;
-  if ((latest.batPercent ?? 0) >= 100) {
-    return { drainPerHour: 0, windowS: 0, lastAt: latest.at, atFull: true };
+  if (unreliable(latest)) {
+    return {
+      drainPerHour: 0,
+      windowS: 0,
+      lastAt: latest.at,
+      ...(latest.charging ? { charging: true } : { atFull: true }),
+    };
   }
-  const points = raw.filter((s) => (s.batPercent ?? 0) < 100);
-  const last = points[points.length - 1];
-  if (!last) return undefined;
+  const points = raw
+    .map((sample, index) => ({ sample, index }))
+    .filter((p) => !unreliable(p.sample));
+  const lastPoint = points[points.length - 1];
+  if (!lastPoint) return undefined;
+  const last = lastPoint.sample;
 
-  const prev = points[points.length - 2];
+  const prev = points[points.length - 2]?.sample;
   const charging =
     prev !== undefined && (prev.batPercent ?? 0) < (last.batPercent ?? 0) - NOISE_PERCENT;
   // Walk back to the start of the current run (discharging or charging).
@@ -77,12 +100,14 @@ export function batteryForecast(samples: Sample[]): BatteryForecast | undefined 
     const older = points[startIndex - 1];
     const newer = points[startIndex];
     if (!older || !newer) break;
-    const delta = (newer.batPercent ?? 0) - (older.batPercent ?? 0);
+    // A dropped value in between: the hub charged there.
+    if (newer.index - older.index > 1) break;
+    const delta = (newer.sample.batPercent ?? 0) - (older.sample.batPercent ?? 0);
     if (charging ? delta < NOISE_PERCENT : delta > NOISE_PERCENT) break;
-    if (last.at - older.at > FORECAST_WINDOW_S) break;
+    if (last.at - older.sample.at > FORECAST_WINDOW_S) break;
     startIndex -= 1;
   }
-  const run = points.slice(startIndex);
+  const run = points.slice(startIndex).map((p) => p.sample);
   const first = run[0];
   if (!first || last.at - first.at < 3600) return undefined;
 

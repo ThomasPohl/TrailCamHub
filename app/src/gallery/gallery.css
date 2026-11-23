@@ -950,6 +950,13 @@ body {
   stroke-dasharray: 4 4;
 }
 
+/* Values taken while charging: the gauge reads 100 % then (#421). */
+.g-chart__charging {
+  stroke: var(--g-accent);
+  stroke-width: 1;
+  opacity: 0.25;
+}
+
 @media (max-width: 640px) {
   .g-header,
   .g-main,

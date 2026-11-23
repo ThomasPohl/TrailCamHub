@@ -123,6 +123,10 @@ export interface FoundCamera {
 export interface Sample {
   at: number;
   batPercent?: number;
+  /** The hub was charging at this value, so the percentage means little (#421). */
+  charging?: boolean;
+  /** Cell voltage of the hub, mV (#421). */
+  millivolts?: number;
   sdFreeMB?: number;
   temperature?: number;
 }

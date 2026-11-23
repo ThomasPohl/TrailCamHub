@@ -217,6 +217,14 @@ std::string build_checkin_json(const CheckinRequest &request)
     if (!request.hub_variant.empty()) {
         out += ",\"hubVariant\":\"" + json_escape(request.hub_variant) + "\"";
     }
+    if (request.hub_charging >= 0) {
+        out += std::string(",\"hubCharging\":") +
+               (request.hub_charging != 0 ? "true" : "false");
+    }
+    if (request.hub_bat_millivolts >= 0) {
+        out += ",\"hubBatMillivolts\":" +
+               std::to_string(request.hub_bat_millivolts);
+    }
     if (request.hub_bat_percent >= 0) {
         out += ",\"hubBatPercent\":" + std::to_string(request.hub_bat_percent);
     }
