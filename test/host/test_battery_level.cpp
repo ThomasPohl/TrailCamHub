@@ -127,6 +127,26 @@ TEST_CASE("gauge failure hint names the I2C bus on a timeout")
           std::string::npos);
 }
 
+TEST_CASE("a cell is only lost after several boots without an answer (#417)")
+{
+    int misses = 0;
+    // Answers: present, counter reset.
+    CHECK(cell_present(true, false, misses));
+    CHECK(misses == 0);
+    // Never seen: stays absent.
+    CHECK_FALSE(cell_present(false, false, misses));
+    // Seen before: two silent boots keep it, the third loses it.
+    CHECK(cell_present(false, true, misses));
+    CHECK(misses == 1);
+    CHECK(cell_present(false, true, misses));
+    CHECK_FALSE(cell_present(false, true, misses));
+    // An answer in between starts over.
+    misses = 2;
+    CHECK(cell_present(true, true, misses));
+    CHECK(misses == 0);
+    CHECK(cell_present(false, true, misses));
+}
+
 TEST_CASE("a detected battery with power mains is flagged")
 {
     CHECK(power_mode_mismatch(true, 3900));

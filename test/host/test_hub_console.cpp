@@ -329,6 +329,49 @@ TEST_CASE("PIN attempts from AT+SPIC")
     CHECK(parse_spic_pin_attempts("+CPIN: READY") == -1);
 }
 
+TEST_CASE("power auto follows the battery gauge (#417)")
+{
+    using namespace hub_config;
+    Capabilities main_board;
+    main_board.battery_gauge = true;
+    main_board.deep_sleep = true;
+    Preset preset;
+    preset.power = Power::battery;
+    preset.power_auto = true;
+
+    Settings settings;  // empty: the preset follows the gauge
+    Mode mode = resolve_mode(settings, main_board, preset, true);
+    CHECK(mode.power == Power::battery);
+    CHECK(mode.power_origin == ModeOrigin::detected);
+    CHECK(sleeps(mode, main_board));
+    mode = resolve_mode(settings, main_board, preset, false);
+    CHECK(mode.power == Power::mains);
+    CHECK_FALSE(sleeps(mode, main_board));
+
+    settings.power = "auto";
+    mode = resolve_mode(settings, main_board, preset, false);
+    CHECK(mode.power == Power::mains);
+    CHECK(std::string(origin_name(mode.power_origin)) == "detected");
+
+    // Explicit settings win over the gauge.
+    settings.power = "mains";
+    CHECK(resolve_mode(settings, main_board, preset, true).power ==
+          Power::mains);
+    settings.power = "battery";
+    CHECK(resolve_mode(settings, main_board, preset, false).power ==
+          Power::battery);
+
+    // Without a gauge `auto` is refused and ignored.
+    Capabilities dongle;
+    dongle.deep_sleep = true;
+    CHECK(capability_problem(Key::power, "auto", dongle) != "");
+    CHECK(capability_problem(Key::power, "auto", main_board).empty());
+    settings.power = "auto";
+    CHECK(resolve_mode(settings, dongle, Preset{}, true).power == Power::mains);
+    CHECK(validate(Key::power, "auto").empty());
+    CHECK(validate(Key::power, "solar") != "");
+}
+
 TEST_CASE("mode: settings override the preset where the board allows")
 {
     using namespace hub_config;

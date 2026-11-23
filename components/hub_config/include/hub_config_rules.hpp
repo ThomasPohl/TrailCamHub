@@ -162,9 +162,13 @@ struct Capabilities {
 struct Preset {
     Power power = Power::mains;
     Direction direction = Direction::pull;
+    // The power mode follows the battery gauge (`power auto`, #417) while the
+    // setting is empty; `power` is then only the fallback without a gauge.
+    bool power_auto = false;
 };
 
-enum class ModeOrigin { preset, setting };
+// `detected`: the power mode was chosen from the battery gauge (#417).
+enum class ModeOrigin { preset, setting, detected };
 
 struct Mode {
     Power power = Power::mains;
@@ -177,8 +181,12 @@ struct Mode {
 
 // The mode from the stored settings and the board. A setting the board
 // cannot use (pull without a web UI) falls back to the preset.
+//
+// `battery_detected`: a cell answered at the gauge at boot. It only counts for
+// `power auto` (the setting, or the preset of a board with a gauge): a cell
+// means battery, no cell means mains.
 Mode resolve_mode(const Settings &settings, const Capabilities &caps,
-                  const Preset &preset);
+                  const Preset &preset, bool battery_detected = false);
 
 const char *power_name(Power power);
 const char *direction_name(Direction direction);

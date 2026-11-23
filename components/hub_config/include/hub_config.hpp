@@ -47,5 +47,8 @@ esp_err_t store_state(const char *key, const std::string &value);
 const Capabilities &capabilities();
 const Preset &preset();
 Mode mode(const Settings &settings);
+// Whether a cell answered at the gauge at boot (#417). Only `power auto`
+// reads it; call it once at start, before the first `mode()`.
+void set_battery_detected(bool detected);
 
 }  // namespace hub_config

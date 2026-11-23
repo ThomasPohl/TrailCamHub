@@ -11,7 +11,10 @@
 #include <cstdlib>
 #include <mutex>
 
+#include "esp_attr.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "sdkconfig.h"
 
 #include "battery_level.hpp"
@@ -215,6 +218,34 @@ bool modem_allowed(int &millivolts)
                                       CONFIG_HUB_BATTERY_MODEM_MIN_MV);
 #else
     return true;
+#endif
+}
+
+bool detect_cell()
+{
+#if CONFIG_HUB_BATTERY_MAX17048
+    // Survive deep sleep; zero after a power-on.
+    static RTC_DATA_ATTR bool was_present = false;
+    static RTC_DATA_ATTR int misses = 0;
+    bool answered = false;
+    for (int attempt = 0; attempt < 3 && !answered; ++attempt) {
+        Reading reading;
+        answered = read(reading);
+        if (!answered) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+    const bool present = cell_present(answered, was_present, misses);
+    if (was_present && !present) {
+        ESP_LOGW(TAG,
+                 "The battery gauge did not answer on %d boots: treating "
+                 "the cell as absent (power auto -> mains)",
+                 kMissesToLoseCell);
+    }
+    was_present = present;
+    return present;
+#else
+    return false;
 #endif
 }
 

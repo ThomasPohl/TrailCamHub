@@ -240,9 +240,9 @@ std::string validate(Key key, const std::string &value)
         }
         return "";
     case Key::power:
-        return value == "mains" || value == "battery"
+        return value == "mains" || value == "battery" || value == "auto"
                    ? ""
-                   : "power must be mains or battery";
+                   : "power must be mains, battery or auto";
     case Key::direction:
         return value == "push" || value == "pull"
                    ? ""
@@ -486,11 +486,18 @@ int parse_spic_pin_attempts(const std::string &line)
 }
 
 Mode resolve_mode(const Settings &settings, const Capabilities &caps,
-                  const Preset &preset)
+                  const Preset &preset, bool battery_detected)
 {
     Mode mode;
     mode.power = preset.power;
-    if (settings.power == "mains" || settings.power == "battery") {
+    const bool follow_gauge =
+        caps.battery_gauge && (settings.power == "auto" ||
+                               (settings.power.empty() && preset.power_auto));
+    if (follow_gauge) {
+        mode.power =
+            battery_detected && caps.deep_sleep ? Power::battery : Power::mains;
+        mode.power_origin = ModeOrigin::detected;
+    } else if (settings.power == "mains" || settings.power == "battery") {
         mode.power =
             settings.power == "battery" ? Power::battery : Power::mains;
         mode.power_origin = ModeOrigin::setting;
@@ -535,7 +542,14 @@ const char *destination_name(Destination destination)
 
 const char *origin_name(ModeOrigin origin)
 {
-    return origin == ModeOrigin::setting ? "setting" : "preset";
+    switch (origin) {
+    case ModeOrigin::setting:
+        return "setting";
+    case ModeOrigin::detected:
+        return "detected";
+    default:
+        return "preset";
+    }
 }
 
 bool sleeps(const Mode &mode, const Capabilities &caps)
@@ -572,6 +586,10 @@ std::string capability_problem(Key key, const std::string &value,
     }
     if (key == Key::direction && value == "pull" && !caps.web_ui) {
         return "pull needs the web UI, which this build does not have";
+    }
+    if (key == Key::power && value == "auto" && !caps.battery_gauge) {
+        return "power auto needs a battery gauge, which this board does not "
+               "have";
     }
     if (key == Key::power && value == "battery" && !caps.deep_sleep) {
         return "this build has no deep sleep for battery power";

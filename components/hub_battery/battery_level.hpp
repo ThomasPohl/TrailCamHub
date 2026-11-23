@@ -58,6 +58,14 @@ bool power_mode_mismatch(bool mains, int gauge_millivolts);
 // The line `status` and the log show for that case.
 const char *power_mode_mismatch_text();
 
+// `power auto` (#417): whether a cell counts as present. A boot that finds the
+// gauge answers yes at once. A boot that does not keeps a cell that was
+// present before (`was_present`) for `kMissesToLoseCell` boots in a row, so a
+// single I2C hiccup does not switch a hub in the field to mains. `misses` is
+// the number of boots in a row without an answer; it is updated.
+constexpr int kMissesToLoseCell = 3;
+bool cell_present(bool answered, bool was_present, int &misses);
+
 // Percentage of a single Li-ion cell from its voltage, along a typical
 // discharge curve from 3300 mV (0 %) to 4200 mV (100 %). `empty_mv` and
 // `full_mv` move the ends of the curve: the voltage is first scaled linearly

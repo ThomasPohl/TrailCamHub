@@ -6,13 +6,20 @@ time and stored on the hub (NVS), without another firmware image (concept:
 
 | Setting       | Values                        | Preset (empty)                                    | Console                          |
 | ------------- | ----------------------------- | ------------------------------------------------- | -------------------------------- |
-| `power`       | `mains`, `battery`            | battery on the S3-A7670E, mains elsewhere          | `config set power battery`       |
+| `power`       | `mains`, `battery`, `auto`    | auto on the S3-A7670E (battery if a cell answers), mains elsewhere | `config set power battery` |
 | `direction`   | `push`, `pull`                | push on the S3-A7670E, pull elsewhere              | `config set direction push`      |
 | `transport`   | `wifi`, `ethernet`, `modem`   | Ethernet if the board has it, else the home Wi-Fi if one is set, otherwise the modem | `config set transport modem` |
 | `destination` | `backend`, `webdav`             | `backend`                                       | `config set destination webdav`  |
 
 `config clear` (or the installer's "Erase") returns everything to the preset.
 
+- **power auto** (boards with a battery gauge, #417): the gauge is read at
+  boot. A cell that answers means `battery`, none means `mains`. A cell that
+  answered before is kept until three boots in a row get no answer, so one I2C
+  hiccup does not switch a hub in the field. `status` shows "power battery
+  (detected)". A hub on a bench (installer connected) still stays awake for a
+  while after each command. A mains-powered hub with a backup cell looks like a
+  battery hub: set `power mains` there. Without a gauge `auto` is refused.
 - **power** decides deep sleep between cycles and Wi-Fi modem sleep (battery),
   and the default schedule (`docs/power-and-schedule.md`). Battery needs a
   build with deep sleep (`CONFIG_POWER_DEEP_SLEEP`, all boards except the

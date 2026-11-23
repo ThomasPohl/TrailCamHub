@@ -7,6 +7,7 @@
 
 #include "sdkconfig.h"
 
+#include <atomic>
 #include <vector>
 
 #include "esp_check.h"
@@ -183,6 +184,8 @@ const Preset &preset()
 #if CONFIG_HUB_PROFILE_AUTONOMOUS
         p.power = Power::battery;
         p.direction = Direction::push;
+        // With a gauge the mode follows the cell (#417).
+        p.power_auto = capabilities().battery_gauge;
 #else
         p.power = Power::mains;
         p.direction = Direction::pull;
@@ -192,9 +195,19 @@ const Preset &preset()
     return value;
 }
 
+namespace
+{
+std::atomic<bool> s_battery_detected{false};
+}
+
+void set_battery_detected(bool detected)
+{
+    s_battery_detected = detected;
+}
+
 Mode mode(const Settings &settings)
 {
-    return resolve_mode(settings, capabilities(), preset());
+    return resolve_mode(settings, capabilities(), preset(), s_battery_detected);
 }
 
 std::string load_state(const char *key)

@@ -100,6 +100,22 @@ const char *gauge_failure_hint(bool bus_timeout)
                        : "Battery gauge does not answer (no cell inserted?)";
 }
 
+bool cell_present(bool answered, bool was_present, int &misses)
+{
+    if (answered) {
+        misses = 0;
+        return true;
+    }
+    if (!was_present) {
+        misses = 0;
+        return false;
+    }
+    if (misses < kMissesToLoseCell) {
+        ++misses;
+    }
+    return misses < kMissesToLoseCell;
+}
+
 bool power_mode_mismatch(bool mains, int gauge_millivolts)
 {
     return mains && plausible_cell_millivolts(gauge_millivolts);
