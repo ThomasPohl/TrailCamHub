@@ -827,4 +827,30 @@ describe('camera names (#273)', () => {
       'Futterplatz',
     );
   });
+
+  it('stores a skipped record without a release (#363)', async () => {
+    const world = await galleryWorld();
+    const send = (firmwareUpdate: unknown) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, {
+          hubFirmware: 'v0.1.13',
+          firmwareUpdate,
+          cameras: [],
+        }),
+        world.deps,
+      );
+    await send({ from: 'v0.1.13', result: 'skipped', reason: 'the hub battery is too low' });
+    // Only a skipped record may come without `to`.
+    await send({ from: 'v0.1.13', result: 'failed', reason: 'x' });
+    const changes = await world.deps.store.listFirmwareChanges(HUB_ID, 10);
+    expect(changes).toEqual([
+      {
+        at: NOW,
+        from: 'v0.1.13',
+        to: '',
+        result: 'skipped',
+        reason: 'the hub battery is too low',
+      },
+    ]);
+  });
 });

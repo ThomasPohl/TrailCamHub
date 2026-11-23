@@ -647,6 +647,12 @@ void check_for_update(const Conditions &conditions)
         ESP_LOGI(TAG, "No update check: %s", decision_text(first));
         set_last_check_text(std::string("update check skipped: ") +
                             decision_text(first));
+        // Stopped before the manifest was read: the backend hears of it once
+        // per reason, with no release named (#363).
+        UpdateRecord record = load_update_record();
+        if (update_record_skipped(record, running, "", first, record_time())) {
+            store_update_record(record);
+        }
         return;
     }
     const std::int64_t now = now_unix();

@@ -214,7 +214,8 @@ export interface AdminHub {
   /**
    * The last firmware events, newest first (#149); absent on older backends.
    * `result` only where the hub reported the update itself; `skipped` is a
-   * release the hub held back (`to`) for `reason`.
+   * release the hub held back (`to`, empty if the hub was stopped
+   * before it read the manifest) for `reason`.
    */
   firmwareChanges?: Array<{
     at: number;

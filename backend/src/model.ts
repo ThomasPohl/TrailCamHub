@@ -281,6 +281,7 @@ export interface FirmwareChange {
   /** Check-in that reported the new version, Unix seconds. */
   at: number;
   from: string;
+  /** Empty for a `skipped` event of a hub that was stopped before it read the manifest (#363). */
   to: string;
   /**
    * The hub's own record of an update (#149); absent for a change the

@@ -1090,9 +1090,11 @@ export function parseFirmwareUpdate(raw: unknown, now: number): FirmwareChange |
   if (typeof raw !== 'object' || raw === null) return undefined;
   const r = raw as Record<string, unknown>;
   const from = optionalString(r.from)?.slice(0, 40);
-  const to = optionalString(r.to)?.slice(0, 40);
   const result = UPDATE_RESULTS.find((x) => x === r.result);
-  if (!from || !to || !result) return undefined;
+  // A `skipped` record may come without `to`: the hub was stopped before it
+  // read the manifest and names no release (#363). It is stored with `to: ''`.
+  const to = optionalString(r.to)?.slice(0, 40) ?? (result === 'skipped' ? '' : undefined);
+  if (!from || to === undefined || !result) return undefined;
   const reason = optionalString(r.reason)?.slice(0, 200);
   const at = optionalNumber(r.at);
   const change: FirmwareChange = {
