@@ -40,7 +40,7 @@ describe('grouping', () => {
       rec(4, wall(9, 3)),
     ]);
     const groups = groupByDay(items, NOW);
-    expect(groups.map((g) => g.title)).toEqual(['Heute', 'Gestern', 'Donnerstag, 19. November']);
+    expect(groups.map((g) => g.title)).toEqual(['Heute', 'Gestern', 'Freitag, 20. November']);
     expect(groups[0]?.subtitle).toBe('Montag, 23. November');
     expect(groups[0]?.items.map((r) => r.mediaId)).toEqual([1, 2]);
     expect(groups[2]?.subtitle).toBe('');

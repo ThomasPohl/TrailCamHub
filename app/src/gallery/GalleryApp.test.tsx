@@ -444,7 +444,8 @@ describe('GalleryApp', () => {
     await waitFor(() =>
       expect(screen.queryByRole('tab', { name: /noch nicht erreicht/ })).not.toBeInTheDocument(),
     );
-    expect(await screen.findAllByRole('listitem')).toHaveLength(16);
+    // A poll that started before the switch may show all cameras for a moment.
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(16));
     expect(screen.getByRole('tab', { name: 'Wiese' })).toHaveAttribute('aria-selected', 'true');
   });
 
