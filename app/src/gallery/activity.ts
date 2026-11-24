@@ -166,8 +166,7 @@ export function summaryText(byHour: readonly number[]): string {
 }
 
 export type PlanSuggestion =
-  | { ok: true; plan: string; windows: string[]; coverage: number }
-  | { ok: false; reason: string };
+  { ok: true; plan: string; windows: string[]; coverage: number } | { ok: false; reason: string };
 
 /** Interval inside a suggested window and for the rest of the day, minutes. */
 const WINDOW_MIN = 30;
