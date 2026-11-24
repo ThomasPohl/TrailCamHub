@@ -110,9 +110,36 @@ are none unless `config set quiet …` is used.
 - Without a valid clock the window is ignored, as the read windows are.
 - `status` prints `quiet hours … (origin)`.
 
-Not yet there: an energy factor from the battery history, a GNSS location at
-start, alignment of reads and check-ins, and the fields in the installer and
-the app (all planned in #436).
+Not yet there: a GNSS location at start, alignment of reads and check-ins, the
+energy factor in the check-in report and the app, and the fields in the
+installer and the app (all planned in #436).
+
+### Energy factor
+
+With a battery gauge the hub learns from its own values of the last days
+whether it can check in more often (#436). No network and no forecast.
+
+- **Record per local day** (seven days, NVS blob `energy`, written once a day):
+  the charge at the first reading of the day (the morning, at rest, so after
+  the end of the quiet hours) and the minutes the cell sat at 98 % or more
+  while charging (energy that was lost).
+- **Factor** for the check-in interval, decided in the morning, in steps 1.0,
+  0.75, 0.5: one step towards 0.5 if the morning charge is at least the target
+  (`CONFIG_SCHEDULE_ENERGY_TARGET_PERCENT`, 60 %) plus 15 % and the trend (mean
+  of the last three day-to-day changes) is not falling, or the cell sat full
+  for more than 30 minutes the day before; one step back if the morning is
+  below the target or the trend falls faster than 5 % a day. Otherwise it
+  stays. Two days of history are needed first.
+- **Full cell:** from 95 % the interval is halved at once, for the rest of the
+  day (not kept: it follows the charge).
+- Not inside quiet hours, not at a low or critical hub battery level, never
+  shorter than `CONFIG_SCHEDULE_MIN_INTERVAL_MIN` (10 min), and back-off after
+  failed check-ins is applied on top. **Camera reads are not changed**: they
+  cost the camera's own battery, which the hub's solar panel does not charge.
+- A morning charge that jumps by more than 30 % from the day before means a
+  new cell: the history starts again. Power-on or reset keeps the history
+  (NVS); the day's running count of full minutes is kept across deep sleep only.
+- `status` prints `energy factor 0.75 (morning 82 %, trend +4 %/day)`.
 
 ### Where the settings come from
 

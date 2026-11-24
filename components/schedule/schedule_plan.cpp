@@ -669,7 +669,18 @@ Times next_times(const Settings &settings, const State &state, std::int64_t now,
                 settings.power.low_checkin_factor > 1) {
                 factor *= settings.power.low_checkin_factor;
             }
-            interval_min = stretched(settings.checkin_min, factor);
+            std::uint32_t base = settings.checkin_min;
+            if (settings.checkin_energy_permille < 1000 &&
+                !hub_stretch_low(settings, state)) {
+                const std::uint32_t reduced = static_cast<std::uint32_t>(
+                    (std::uint64_t)base * settings.checkin_energy_permille /
+                    1000);
+                const std::uint32_t floor_min = settings.min_interval_min < base
+                                                    ? settings.min_interval_min
+                                                    : base;
+                base = reduced > floor_min ? reduced : floor_min;
+            }
+            interval_min = stretched(base, factor);
             if (settings.checkin_max_min > 0 &&
                 interval_min > settings.checkin_max_min) {
                 interval_min = settings.checkin_max_min > settings.checkin_min

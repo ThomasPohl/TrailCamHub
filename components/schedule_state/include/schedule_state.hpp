@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <string>
 
+#include "energy.hpp"
 #include "schedule_plan.hpp"
 
 namespace schedule
@@ -49,6 +50,13 @@ struct Effective {
     Origin location_origin = Origin::built_in;
     Location position;
     bool location_fallback = false;
+    // Energy factor for the check-in interval (1/1000) and what it is based
+    // on: the morning charge, the trend (% per day) and whether they are
+    // known (#436).
+    std::uint16_t energy_permille = 1000;
+    int energy_morning = -1;
+    int energy_trend = 0;
+    bool energy_trend_known = false;
     // Deep sleep between cycles (battery power, see hub_config::sleeps()).
     bool sleeps = false;
 };
