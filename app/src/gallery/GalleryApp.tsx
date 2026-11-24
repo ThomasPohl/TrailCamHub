@@ -19,6 +19,7 @@ import {
   TrashIcon,
   UndoIcon,
 } from './Icons';
+import { ShareDialog } from './ShareDialog';
 import { Viewer } from './Viewer';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
@@ -152,6 +153,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [viewing, setViewing] = useState<{ key: string; video: boolean }>();
   // The camera whose settings dialog is open (#368).
   const [settingsFor, setSettingsFor] = useState<string>();
+  const [sharing, setSharing] = useState<Recording>();
   const saving = useRef(false);
   // The chosen camera, readable in a reload that started before a switch: a
   // slow reload must not undo the user's choice (#431).
@@ -1144,9 +1146,20 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                 void act(() => api.requestVideos(viewed.camId, [viewed.mediaId]))
               }
               onSave={() => void saveOne(viewed)}
+              onShare={() => setSharing(viewed)}
               onWithdraw={() => void act(() => api.withdraw(viewed.camId, viewed))}
               onDelete={() => setConfirm({ question: '1 Aufnahme löschen?', items: [viewed] })}
               onClose={() => setViewing(undefined)}
+            />
+          )}
+
+          {sharing && (
+            <ShareDialog
+              api={api}
+              recording={sharing}
+              cameraName={nameOf(sharing.camId)}
+              now={t}
+              onClose={() => setSharing(undefined)}
             />
           )}
 

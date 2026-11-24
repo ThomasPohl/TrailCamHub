@@ -1,5 +1,14 @@
 import { useEffect, useRef } from 'react';
-import { AlertIcon, CheckIcon, ClockIcon, PlayIcon, SaveIcon, TrashIcon, UndoIcon } from './Icons';
+import {
+  AlertIcon,
+  CheckIcon,
+  ClockIcon,
+  PlayIcon,
+  SaveIcon,
+  ShareIcon,
+  TrashIcon,
+  UndoIcon,
+} from './Icons';
 import { progressSteps } from './progress';
 import { cameraTime } from './text';
 import type { Recording } from './types';
@@ -19,6 +28,7 @@ interface Props {
   onVideo(on: boolean): void;
   onRequestVideo(): void;
   onSave(): void;
+  onShare(): void;
   onWithdraw(): void;
   onDelete(): void;
   onClose(): void;
@@ -45,6 +55,7 @@ export function Viewer({
   onVideo,
   onRequestVideo,
   onSave,
+  onShare,
   onWithdraw,
   onDelete,
   onClose,
@@ -195,6 +206,11 @@ export function Viewer({
                   <SaveIcon /> {saved ? 'Nochmal speichern' : 'Speichern'}
                 </button>
               </>
+            )}
+            {recording.state !== 'deleted' && recording.state !== 'deleteRequested' && (
+              <button type="button" className="g-btn g-btn--quiet" onClick={onShare}>
+                <ShareIcon /> Teilen
+              </button>
             )}
             {(recording.state === 'videoRequested' || recording.state === 'deleteRequested') && (
               <button

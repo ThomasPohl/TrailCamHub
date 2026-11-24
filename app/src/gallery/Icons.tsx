@@ -32,6 +32,14 @@ export function SaveIcon() {
   );
 }
 
+export function ShareIcon() {
+  return (
+    <svg {...base}>
+      <path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6" />
+    </svg>
+  );
+}
+
 export function UndoIcon() {
   return (
     <svg {...base}>

@@ -14,6 +14,8 @@ import type {
   HubUsage,
   Me,
   Recording,
+  ShareLink,
+  ShareOptions,
   RecordingState,
 } from './types';
 
@@ -314,6 +316,38 @@ export class HttpGalleryApi implements GalleryApi {
       }
       throw error;
     }
+  }
+
+  async shareRecording(
+    recording: Recording,
+    options: ShareOptions,
+  ): Promise<ShareLink & { url: string }> {
+    // The thumbnail and the video of a recording hang on its key mediaId.
+    try {
+      return await this.request<ShareLink & { url: string }>(
+        'POST',
+        `${this.camera(recording.camId)}/media/${recording.mediaId}/share`,
+        options,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 429) {
+        throw new Error('Es gibt schon 50 aktive Links. Bitte erst einen zurückziehen.', {
+          cause: error,
+        });
+      }
+      if (error instanceof ApiError && error.status === 409) {
+        throw new Error('Dafür ist noch kein Bild oder Video in der Cloud.', { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  async shares(): Promise<ShareLink[]> {
+    return this.request<ShareLink[]>('GET', '/v1/shares');
+  }
+
+  async revokeShare(id: string): Promise<void> {
+    await this.request('POST', `/v1/shares/${encodeURIComponent(id)}/revoke`);
   }
 
   async download(recording: Recording): Promise<Blob> {

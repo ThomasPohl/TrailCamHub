@@ -51,6 +51,10 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | PUT    | `/v1/hubs/{hubId}/schedule`                    | app user               | Wake-up schedule of a hub (see below)                                |
 | POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`                              |
 | POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests                                |
+| POST   | `/v1/cameras/{camId}/media/{mediaId}/share`    | app user               | Link to the picture or video for people without the app (#444)       |
+| GET    | `/v1/shares`                                   | app user               | The user's active share links                                        |
+| POST   | `/v1/shares/{shareId}/revoke`                  | app user               | Make a share link useless at once                                    |
+| GET    | `/v1/s/{token}`                                | none (token is secret) | The page of a share link: the picture or video, nothing else         |
 | POST   | `/v1/cameras/{camId}/name`                     | app user               | `{"name":"Garten"}`, 1–40 characters                                 |
 | POST   | `/v1/cameras/{camId}/hidden`                   | app user               | `{"hidden":true}`: hide in the gallery (#273)                        |
 | POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"setSettings","settings":{"pirSens":1}}` (#368)             |
@@ -458,6 +462,33 @@ In the SES sandbox every recipient must be verified. For users outside the team
 SES needs production access (request in the AWS console, once). Unsubscribe
 links and mail addresses set by the users themselves are not built; the admin
 removes the address with `--no-email`.
+
+## Share links (#444)
+
+A user can share one recording with someone who has no app token: the viewer's
+**Teilen** button creates a link for 1, 7 or 30 days, picture or (if it is in
+the cloud) video. Nothing else of the account is visible behind it.
+
+- The link is `<API URL>/v1/s/<token>`. The token is 128 random bits; only its
+  SHA-256 is stored (`SHARE#<hash>` and `USER#<id>` / `SHARE#…`, with `ttl` a day
+  after it expires). A presigned S3 URL cannot be the link: it stops working when
+  the function's temporary credentials expire. The page therefore signs a fresh
+  15-minute (picture) or 60-minute (video) URL at every visit.
+- The page shows the recording and the camera's time. Hub name and camera name
+  are **not** shown unless the user ticks "Namen der Kamera zeigen" (a name like
+  "Waldrand" can give away where the camera hangs). Headers: `private, no-store`,
+  `no-referrer`, `noindex`, and a CSP that allows only the bucket's picture or video.
+- Unknown, malformed, expired and revoked tokens all answer the same 410 page.
+  A link also ends when the recording is gone from the backend (deleted on the
+  camera and confirmed) or the video is not available any more.
+- Per user at most 50 active links (429 above that). Creating and revoking are
+  written to the admin audit log (`shareCreated`, `shareRevoked`).
+- Revoking is a POST, because the Function URL's CORS allows only GET and POST.
+- No rate limit on `GET /v1/s/*`: Function URLs have none, and a 128-bit token
+  cannot be guessed. Limit the function's concurrency in the console if you want
+  a cap on abuse of a leaked link.
+- Decision 24.11.: validity 1, 7 or 30 days, no "until revoked", no admin switch.
+  Albums (several recordings per link) and passwords are not built.
 
 ## Costs
 
