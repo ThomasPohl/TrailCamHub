@@ -43,6 +43,12 @@ struct Effective {
     // Quiet hours as text ("off" for none) and their origin (#436).
     std::string quiet;
     Origin quiet_origin = Origin::built_in;
+    // The position for the sun times (#436): as text ("" if none is set), its
+    // origin, the position in use and whether it is the fallback.
+    std::string location;
+    Origin location_origin = Origin::built_in;
+    Location position;
+    bool location_fallback = false;
     // Deep sleep between cycles (battery power, see hub_config::sleeps()).
     bool sleeps = false;
 };
@@ -68,6 +74,10 @@ bool apply_remote(const Remote &remote);
 State state();
 
 // Next camera read and check-in from now with the effective settings.
+// Sunrise and sunset of the local day of `unix_time` for a position, as local
+// minutes of the day; -1 where unknown.
+SunDay sun_day(const Location &position, std::int64_t unix_time);
+
 Times next_times();
 Times next_times(const Effective &effective);
 

@@ -25,7 +25,8 @@
     api_url: [(v) => /^https:\/\/\S+$/.test(v), "The API URL must start with https://."],
     device_key: [(v) => /^[A-Za-z0-9_-]{1,64}\.[A-Za-z0-9_-]{16,128}$/.test(v), "The device key must look like <hubId>.<secret>."],
     // The hub checks the plan in full.
-    camera_plan: [(v) => /^(off|((\d\d:\d\d-\d\d:\d\d|\*)=\d{1,4}[,; ]*)+)$/.test(v), "The camera plan must look like 05:00-09:00=30,*=120 (or off)."],
+    camera_plan: [(v) => /^(off|(((\d\d:\d\d|sunrise([+-]\d{1,3})?|sunset([+-]\d{1,3})?)\.\.(\d\d:\d\d|sunrise([+-]\d{1,3})?|sunset([+-]\d{1,3})?)|\d\d:\d\d-\d\d:\d\d|\*)=\d{1,4}[,; ]*)+)$/.test(v), "The camera plan must look like 05:00-09:00=30,*=120 or sunrise-60..sunrise+90=30,*=120 (or off)."],
+    location: [(v) => /^-?\d{1,2}(\.\d+)?[,; ] ?-?\d{1,3}(\.\d+)?$/.test(v), "The location must look like 52.5,13.4."],
     checkin_min: [(v) => /^\d{1,4}$/.test(v) && Number(v) <= 1440, "The check-in interval must be 0 to 1440 minutes."],
     webdav_url: [(v) => /^https?:\/\/\S+$/.test(v), "The WebDAV folder URL must start with https:// or http://."],
     health_url: [(v) => /^https?:\/\/\S+$/.test(v), "The health check URL must start with https:// or http://."],

@@ -36,6 +36,17 @@ config SCHEDULE_QUIET
         a valid clock, otherwise it is ignored.
         Overridden by "config set quiet".
 
+config SCHEDULE_LOCATION
+    string "Location of the hub (LAT,LON in decimal degrees)"
+    default ""
+    help
+        For the sun times of read windows such as
+        "sunrise-60..sunrise+90=30" in the camera plan, for example
+        "52.5,13.4" (rounded to 0.1 degrees, about 10 km). Empty: the
+        hub uses the middle of Germany (51.0,10.0), which is off by up to
+        about 25 minutes at the borders, and tells it in "status".
+        Overridden by "config set location".
+
 config SCHEDULE_CHECKIN_INTERVAL_MIN
     int "Backend check-in interval (minutes, 0 = off)"
     range 0 1440

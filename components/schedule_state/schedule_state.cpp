@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <memory>
 #include <sys/time.h>
 #include <time.h>
 
@@ -156,6 +157,56 @@ int local_minute_at(std::int64_t t, std::int64_t now_mono,
     return local.tm_hour * 60 + local.tm_min;
 }
 
+}  // namespace
+
+namespace
+{
+
+// Days since 1970-01-01 of a civil date (proleptic Gregorian).
+std::int64_t days_from_civil(int year, int month, int day)
+{
+    year -= month <= 2 ? 1 : 0;
+    const std::int64_t era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(year - era * 400);
+    const unsigned doy =
+        (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + static_cast<std::int64_t>(doe) - 719468;
+}
+
+}  // namespace
+
+SunDay sun_day(const Location &position, std::int64_t unix_time)
+{
+    SunDay day;
+    if (!position.valid || unix_time <= 0) {
+        return day;
+    }
+    const time_t wall = static_cast<time_t>(unix_time);
+    struct tm local = {};
+    localtime_r(&wall, &local);
+    double sunrise = 0;
+    double sunset = 0;
+    if (!sun_utc_minutes(position.latitude, position.longitude,
+                         local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+                         sunrise, sunset)) {
+        return day;
+    }
+    // newlib's struct tm has no tm_gmtoff: the offset is the local fields read
+    // as UTC minus the real time.
+    const std::int64_t as_utc =
+        days_from_civil(local.tm_year + 1900, local.tm_mon + 1, local.tm_mday) *
+            86400 +
+        local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec;
+    const int offset_min = static_cast<int>((as_utc - unix_time) / 60);
+    day.sunrise = local_minutes(sunrise, offset_min);
+    day.sunset = local_minutes(sunset, offset_min);
+    return day;
+}
+
+namespace
+{
+
 Times times_for(const Effective &effective, const State &state)
 {
     const std::int64_t mono = now();
@@ -166,7 +217,23 @@ Times times_for(const Effective &effective, const State &state)
     const LocalMinute local = [mono, wall](std::int64_t t) {
         return local_minute_at(t, mono, wall);
     };
-    return next_times(effective.settings, state, mono, local);
+    // The sun times change once a day: keep the last day's.
+    struct Cache {
+        std::int64_t day = -1;
+        SunDay sun;
+    };
+    auto cache = std::make_shared<Cache>();
+    const Location position = effective.position;
+    const SunMinutes sun = [mono, wall, position, cache](std::int64_t t) {
+        const std::int64_t unix_time = wall + (t - mono);
+        const std::int64_t day = (unix_time + 12 * 3600) / 86400;
+        if (day != cache->day) {
+            cache->day = day;
+            cache->sun = sun_day(position, unix_time);
+        }
+        return cache->sun;
+    };
+    return next_times(effective.settings, state, mono, local, sun);
 }
 
 std::uint32_t minutes_of(const std::string &text, std::uint32_t fallback)
@@ -294,6 +361,23 @@ Effective effective()
         out.settings.quiet = Quiet{};
     }
     out.quiet = format_quiet(out.settings.quiet);
+    out.location =
+        pick(nullptr, &local.location, std::string(CONFIG_SCHEDULE_LOCATION),
+             &out.location_origin);
+    if (!out.location.empty() &&
+        parse_location(out.location, out.position, &error)) {
+        out.location = format_location(out.position);
+    } else {
+        if (!out.location.empty()) {
+            ESP_LOGW(TAG, "Location \"%s\" ignored: %s", out.location.c_str(),
+                     error.c_str());
+        }
+        out.location.clear();
+        out.position.latitude = kFallbackLatitude;
+        out.position.longitude = kFallbackLongitude;
+        out.position.valid = true;
+        out.location_fallback = true;
+    }
     out.settings.uplink = uplink;
     out.sleeps = hub_config::sleeps(mode, hub_config::capabilities());
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;

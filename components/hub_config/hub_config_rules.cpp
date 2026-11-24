@@ -65,6 +65,8 @@ const char *key_name(Key key)
         return "webdav_videos";
     case Key::quiet:
         return "quiet";
+    case Key::location:
+        return "location";
     case Key::web_password:
         return "web_password";
     case Key::camera_user:
@@ -136,6 +138,8 @@ std::string &field(Settings &settings, Key key)
         return settings.webdav_videos;
     case Key::quiet:
         return settings.quiet;
+    case Key::location:
+        return settings.location;
     case Key::device_key:
         break;
     }
@@ -196,6 +200,17 @@ std::string validate(Key key, const std::string &value)
         }
         if (!schedule::parse_plan(value, plan, &reason)) {
             return "camera plan: " + reason;
+        }
+        return "";
+    }
+    case Key::location: {
+        schedule::Location location;
+        std::string reason;
+        if (value.size() > 40 || has_control_chars(value)) {
+            return "location is too long or contains invalid characters";
+        }
+        if (!schedule::parse_location(value, location, &reason)) {
+            return reason;
         }
         return "";
     }
@@ -333,7 +348,8 @@ std::string display_value(Key key, const std::string &value)
                        key == Key::power || key == Key::direction ||
                        key == Key::destination || key == Key::web_password ||
                        key == Key::camera_user || key == Key::camera_password ||
-                       key == Key::webdav_videos || key == Key::quiet
+                       key == Key::webdav_videos || key == Key::quiet ||
+                       key == Key::location
                    ? "(default)"
                    : "(not set)";
     }

@@ -1,4 +1,4 @@
 # Pure schedule logic (plans, due times, read requests); no ESP-IDF
 # dependencies, also built by the host tests.
-idf_component_register(SRCS "schedule_plan.cpp"
+idf_component_register(SRCS "schedule_plan.cpp" "sun.cpp"
                        INCLUDE_DIRS ".")

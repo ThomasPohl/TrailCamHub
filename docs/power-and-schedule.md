@@ -11,6 +11,7 @@ behaviour:
 | Camera read plan (`SCHEDULE_CAMERA_PLAN`)     | `*=120` (every 2 h)    | `*=120` with push to a configured destination, else empty (no reads) |
 | Check-in interval (`SCHEDULE_CHECKIN_...`)   | 30 min with push, 0 with pull | the same        |
 | Quiet hours (`SCHEDULE_QUIET`)                | `23:00-06:00`          | none                   |
+| Location (`SCHEDULE_LOCATION`)                | empty (fallback)       | empty (fallback)       |
 | Deep sleep between cycles (`POWER_DEEP_...`) | on (if built in)       | off                    |
 | Modem sleep on the home Wi-Fi                | on                     | off                    |
 
@@ -57,6 +58,34 @@ minutes, and `*` for the rest of the day:
 - Without a valid clock the windows are ignored and the `*` interval applies
   (if it is 0 or missing, the longest window interval).
 
+#### Windows at the sun
+
+A window can start or end at sunrise or sunset (#436), so that it follows the
+sun through the year (Berlin: sunrise 04:45 in June, 08:15 in December):
+
+```
+sunrise-60..sunrise+90=30,sunset-90..sunset+60=30,*=120
+```
+
+- A bound is `HH:MM`, `sunrise` or `sunset`, the last two with `+N` or `-N`
+  minutes (at most 720). `..` separates the bounds; `HH:MM-HH:MM` stays valid
+  and the forms can be mixed (`05:00..sunrise+30=15`).
+- The times come from the hub's position (setting `location`, see below) and
+  are computed on the hub for each local day, about ±2 minutes. A window whose
+  sun time is unknown (polar day or night) is skipped for that day.
+- The backend's own plan editor does not know this form yet; set it on the hub
+  (`config set camera_plan …`).
+
+#### Location
+
+Setting `location` is `LAT,LON` in decimal degrees (for example `52.5,13.4`),
+stored rounded to 0.1° (about 10 km, which changes the sun times by less than a
+minute). Set it with `config set location 52.5,13.4` or in the build
+(`CONFIG_SCHEDULE_LOCATION`). Without one the hub uses the middle of Germany
+(51.0, 10.0), which is off by up to about 25 minutes at the borders, and says
+so in `status` (`location … (fallback, no location set …)`); `status` also
+shows today's sunrise and sunset to check the value.
+
 ### Quiet hours
 
 Setting `quiet`, a window in local time (`CONFIG_TIME_ZONE`) that may span
@@ -72,12 +101,18 @@ are none unless `config set quiet …` is used.
   are handled together. A read asked for by the app waits too; the app can
   show when the hub is next awake.
 - A power-on, a reset and the BOOT button still start a cycle by hand.
+- **Read windows at the sun win over the quiet hours.** With the default plan
+  in summer the morning window starts before 06:00 (sunrise − 60 min, ~03:45
+  in June), and the quiet hours end there; in winter they stay 23:00–06:00. In
+  the evening a window that runs past 23:00 keeps the hub awake until it ends.
+  Without sun times (no location is no problem: the fallback applies) the
+  fixed window holds.
 - Without a valid clock the window is ignored, as the read windows are.
 - `status` prints `quiet hours … (origin)`.
 
-Not yet there: ending the window early in summer, sun-relative read windows
-and the location, an energy factor from the battery history, and a GNSS
-location at start (all planned in #436).
+Not yet there: an energy factor from the battery history, a GNSS location at
+start, alignment of reads and check-ins, and the fields in the installer and
+the app (all planned in #436).
 
 ### Where the settings come from
 
