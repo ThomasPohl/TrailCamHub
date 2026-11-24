@@ -29,6 +29,9 @@ const MAILED: ReadonlySet<Fault['kind']> = new Set([
   'cameraNotRead',
 ]);
 
+/** Keys of the mails to end users (#445) share the list but belong to `user-mail.ts`. */
+export const USER_KEY_PREFIX = 'user:';
+
 /** Identifies a fault across runs: it is the same one while hub, kind and camera match. */
 export function faultKey(hubId: string, fault: Fault): string {
   return `${hubId}|${fault.kind}|${fault.camId ?? ''}`;
@@ -108,7 +111,9 @@ export async function runFaultMail(
     }
   }
 
-  const known = new Set(await store.getNotifiedFaults());
+  const stored = await store.getNotifiedFaults();
+  const userKeys = stored.filter((k) => k.startsWith(USER_KEY_PREFIX));
+  const known = new Set(stored.filter((k) => !k.startsWith(USER_KEY_PREFIX)));
   const fresh = [...lines].filter(([key]) => !known.has(key)).map(([, line]) => line);
   if (fresh.length > 0) {
     await mailer.send({
@@ -120,7 +125,7 @@ export async function runFaultMail(
   // Faults that ended are forgotten, so a return is mailed again.
   const holding = [...lines.keys()].sort();
   if (fresh.length > 0 || holding.length !== known.size || holding.some((k) => !known.has(k))) {
-    await store.putNotifiedFaults(holding, now);
+    await store.putNotifiedFaults([...holding, ...userKeys], now);
   }
   return { current: lines.size, sent: fresh.length };
 }

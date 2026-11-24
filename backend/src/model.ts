@@ -233,6 +233,10 @@ export interface AppUser {
   role: 'user' | 'admin';
   tokenHash: string;
   created: number;
+  /** Mail address for hub notices (#445), set by the admin. Absent: no mail. */
+  email?: string;
+  /** Which notices are mailed to `email` (#445); everything off when absent. */
+  notify?: UserNotify;
   /** Admin only (#259): base32 TOTP secret, the second factor for the admin session. */
   totpSecret?: string;
   /** Last accepted TOTP time step; a code works only once. */
@@ -241,6 +245,16 @@ export interface AppUser {
   totpFailures?: number;
   /** Unix seconds until which codes are refused after too many wrong ones. */
   totpLockedUntil?: number;
+}
+
+/** Notices mailed to an end user (#445). */
+export interface UserNotify {
+  /** The hub has not checked in (and when it is back). */
+  hubSilent: boolean;
+  /** A camera was not read for a day although the hub checks in. */
+  cameraNotRead: boolean;
+  /** A battery is critical (hub or camera). */
+  battery: boolean;
 }
 
 /** One line of the admin audit log (#259), kept for AUDIT_KEEP_S. */
