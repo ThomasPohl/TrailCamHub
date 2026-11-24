@@ -113,6 +113,29 @@ discard and preview) with `-Wall -Wextra -Werror`.
 Files covered by host tests must not include ESP-IDF headers. New parsing or
 protocol logic belongs in such files, with a test in `test/host`.
 
+### Whole-cycle host test: inventory (#446, phase 1)
+
+Goal of #446: one host test that runs complete wake cycles (scheduler decision,
+camera sessions, SD catalog, uploads, check-in, commands) against the real
+backend code. These are the ESP-IDF calls the cycle components make today, and
+so the seams a host build needs (only where the test needs one):
+
+| Component | Direct ESP-IDF use | Seam needed |
+| --- | --- | --- |
+| `session_controller` | `xTaskCreate`, `xQueue*`, `xSemaphore*`, `esp_timer_*` | none beyond the FreeRTOS stubs: run the task body on a thread, or step the state machine (`session_fsm`, already pure) from the driver |
+| `scheduler` | `esp_deep_sleep_start`, `esp_sleep_*`, `esp_wifi_stop`, `xTaskCreate`, `vTaskDelay` | a small `Sleep` interface: "sleep until T" returns to the driver, which starts the next cycle with the stored state |
+| `schedule_state` | `nvs_*` (blob and string), `esp_reset_reason`, `esp_timer_get_time` | an in-memory NVS stub (map of namespace/key) and a settable reset reason |
+| `uplink` (`backend_http`, `http_util`) | `esp_http_client_*` (init/open/write/fetch_headers/read), `esp_err_to_name`, `esp_log_level_*` | an `HttpTransport` interface, or an `esp_http_client` stub that forwards to a local port; the stub is the smaller step |
+| `uplink` (`data_usage_store`) | `nvs_*` | the same NVS stub |
+| `uplink` (`backend`, `destinations`, `backend_commands`) | `esp_app_get_description`, `esp_timer_get_time` | the existing `esp_app_desc.h` and `esp_timer.h` stubs, with a virtual clock |
+| `uplink` (`backend_checkin`, `sync_cameras`, `video_request`, `delete_request`) | none | none (already pure or stub-only) |
+
+Not needed in phase 1: BLE wake (a no-op that opens the mock's AP state), RTC
+memory (a struct kept by the driver across "deep sleeps"), modem and Ethernet.
+The backend side is `backend/src/handler.ts` with `store/memory.ts` (phase 2).
+Phase 1 is therefore: NVS stub, `esp_http_client` stub, `Sleep` seam in
+`scheduler`, then the scenario "first cycle" with two mock cameras.
+
 ## Camera mock
 
 For bench tests without the real camera, an ESP32-WROOM can play the TC100:
