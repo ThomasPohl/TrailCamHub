@@ -262,9 +262,36 @@ export interface AuditEntry {
   at: number;
   /** User id of the admin (or the user who tried to become one). */
   actor: number;
-  action: 'elevate' | 'elevateFailed' | 'elevateLocked' | 'rotateUser' | 'revokeUser';
+  action:
+    | 'elevate'
+    | 'elevateFailed'
+    | 'elevateLocked'
+    | 'rotateUser'
+    | 'revokeUser'
+    | 'shareCreated'
+    | 'shareRevoked';
   /** User the action was about, if any. */
   target?: number;
+}
+
+/**
+ * A link to one recording that works without an app token (#444). Only the
+ * hash of the token is stored. The record lives until `expiresAt` (plus a
+ * day, then DynamoDB removes it) or until the user revokes it.
+ */
+export interface ShareRecord {
+  /** Short random id the owner uses to list and revoke; not secret. */
+  shareId: string;
+  /** SHA-256 of the token in the link. */
+  tokenHash: string;
+  camId: string;
+  mediaId: number;
+  kind: 'thumb' | 'video';
+  /** Show the camera name on the page; default off (it can give away the place). */
+  showCamera: boolean;
+  createdBy: number;
+  created: number;
+  expiresAt: number;
 }
 
 export const AUDIT_KEEP_S = 90 * 24 * 60 * 60;

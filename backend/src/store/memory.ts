@@ -1,6 +1,7 @@
 import type {
   AppUser,
   AuditEntry,
+  ShareRecord,
   CameraRecord,
   CommandRecord,
   HubRecord,
@@ -36,6 +37,7 @@ export class MemoryStore implements Store {
   private readonly usage = new Map<string, DataUsageDay & { hubId: string }>();
   private readonly found = new Map<string, Map<string, FoundCamera>>();
   private notifiedFaults: string[] = [];
+  private readonly shares = new Map<string, ShareRecord>();
 
   async putHub(hub: HubRecord): Promise<void> {
     this.hubs.set(hub.hubId, { ...hub });
@@ -162,6 +164,30 @@ export class MemoryStore implements Store {
   async getAppUser(userId: number): Promise<AppUser | undefined> {
     const user = this.appUsers.get(userId);
     return user && { ...user };
+  }
+
+  async putShare(share: ShareRecord): Promise<void> {
+    this.shares.set(share.tokenHash, { ...share });
+  }
+
+  async getShareByTokenHash(tokenHash: string): Promise<ShareRecord | undefined> {
+    const share = this.shares.get(tokenHash);
+    return share && { ...share };
+  }
+
+  async getUserShare(userId: number, shareId: string): Promise<ShareRecord | undefined> {
+    return (await this.listUserShares(userId)).find((s) => s.shareId === shareId);
+  }
+
+  async listUserShares(userId: number): Promise<ShareRecord[]> {
+    return [...this.shares.values()]
+      .filter((s) => s.createdBy === userId)
+      .sort((a, b) => b.created - a.created)
+      .map((s) => ({ ...s }));
+  }
+
+  async deleteShare(share: ShareRecord): Promise<void> {
+    this.shares.delete(share.tokenHash);
   }
 
   async addAudit(entry: AuditEntry): Promise<void> {

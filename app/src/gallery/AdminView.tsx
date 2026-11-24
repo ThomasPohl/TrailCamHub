@@ -57,6 +57,8 @@ const AUDIT_TEXT: Record<AuditEntry['action'], string> = {
   elevateLocked: 'Falscher Code, Konto vorübergehend gesperrt',
   rotateUser: 'Neuer Link erstellt',
   revokeUser: 'Gesperrt',
+  shareCreated: 'Link zum Teilen erstellt',
+  shareRevoked: 'Link zum Teilen zurückgezogen',
 };
 
 /** What went wrong with a code, in words for the admin (#259). */

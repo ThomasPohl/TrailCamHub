@@ -84,6 +84,7 @@ import {
 } from './schedule';
 import type { MediaStorage } from './storage';
 import type { CameraTelemetry, Store } from './store/types';
+import { createShare, listShares, revokeShare, showShare } from './share';
 
 export interface Deps {
   store: Store;
@@ -124,6 +125,16 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'GET', pattern: '/v1/cameras/:camId/media', handler: listMedia },
   { method: 'POST', pattern: '/v1/cameras/:camId/commands', handler: createCommand },
   { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/withdraw', handler: withdrawMedia },
+  { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/share', handler: shareMedia },
+  { method: 'GET', pattern: '/v1/shares', handler: listOwnShares },
+  // POST, not DELETE: the Function URL's CORS allows only GET and POST.
+  { method: 'POST', pattern: '/v1/shares/:shareId/revoke', handler: revokeOwnShare },
+  // Public: opens without a token (#444); the token in the path is the secret.
+  {
+    method: 'GET',
+    pattern: '/v1/s/:token',
+    handler: async (_r, p, d) => showShare(p.token ?? '', d),
+  },
   { method: 'POST', pattern: '/v1/cameras/:camId/name', handler: renameCameraByUser },
   { method: 'POST', pattern: '/v1/cameras/:camId/hidden', handler: hideCamera },
   {
@@ -836,6 +847,22 @@ async function setSchedule(req: ApiRequest, params: Record<string, string>, deps
  * Withdraws the open requests (video, delete) for a recording that the hub
  * has not picked up yet. Once delivered, the hub may already be at work.
  */
+async function shareMedia(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const user = await authUser(req, deps);
+  const camera = await authUserForCamera(req, params.camId ?? '', deps);
+  const mediaId = Number(params.mediaId);
+  if (!isMediaId(mediaId)) throw new HttpError(400, 'mediaId must be a valid media id');
+  return createShare(req, camera, mediaId, user.userId, deps);
+}
+
+async function listOwnShares(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
+  return listShares((await authUser(req, deps)).userId, deps);
+}
+
+async function revokeOwnShare(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  return revokeShare((await authUser(req, deps)).userId, params.shareId ?? '', deps);
+}
+
 async function withdrawMedia(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const camera = await authUserForCamera(req, params.camId ?? '', deps);
   const mediaId = Number(params.mediaId);

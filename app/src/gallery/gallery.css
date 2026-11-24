@@ -1117,6 +1117,42 @@ body {
   margin-top: 18px;
 }
 
+/* Share link (#444). */
+.g-share {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.g-share__link {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.g-share__link input {
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 1px solid var(--g-border);
+  border-radius: 8px;
+  background: var(--g-surface);
+  color: var(--g-text);
+  font: inherit;
+}
+
+.g-share__list {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-share__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 /* Camera settings (#368): long, so the box scrolls. */
 .g-settings {
   width: min(100%, 560px);

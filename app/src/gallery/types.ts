@@ -100,7 +100,14 @@ export interface Me {
 export interface AuditEntry {
   at: number;
   actor: number;
-  action: 'elevate' | 'elevateFailed' | 'elevateLocked' | 'rotateUser' | 'revokeUser';
+  action:
+    | 'elevate'
+    | 'elevateFailed'
+    | 'elevateLocked'
+    | 'rotateUser'
+    | 'revokeUser'
+    | 'shareCreated'
+    | 'shareRevoked';
   target?: number;
 }
 
@@ -226,6 +233,26 @@ export interface AdminHub {
   }>;
 }
 
+/** A link to one recording that opens without the app (#444). */
+export interface ShareLink {
+  id: string;
+  camId: string;
+  mediaId: number;
+  /** `thumb`: the picture; `video`: the video (only when it is in the cloud). */
+  kind: 'thumb' | 'video';
+  /** The page shows the camera's name. */
+  showCamera: boolean;
+  created: number;
+  /** Unix seconds. */
+  expiresAt: number;
+}
+
+export interface ShareOptions {
+  days: 1 | 7 | 30;
+  kind: 'thumb' | 'video';
+  showCamera: boolean;
+}
+
 export interface GalleryApi {
   readonly isDemo: boolean;
   status(): Promise<GalleryStatus>;
@@ -237,6 +264,12 @@ export interface GalleryApi {
   requestDelete(camId: string, mediaIds: number[]): Promise<void>;
   /** Withdraws the requests for a recording the hub has not picked up yet. */
   withdraw(camId: string, recording: Recording): Promise<void>;
+  /** Makes a link to the picture or video of a recording (#444); `url` is shown only now. */
+  shareRecording(recording: Recording, options: ShareOptions): Promise<ShareLink & { url: string }>;
+  /** The user's active links. */
+  shares(): Promise<ShareLink[]>;
+  /** Makes a link useless at once. */
+  revokeShare(id: string): Promise<void>;
   /** The video file of a recording in state `videoReady`. */
   download(recording: Recording): Promise<Blob>;
   /** Gives the camera the name the user sees (#273); returns the stored name. */
