@@ -124,6 +124,12 @@ TEST_CASE("setting validation")
     CHECK_FALSE(validate(Key::checkin_min, "-5").empty());
     CHECK_FALSE(validate(Key::checkin_min, "30m").empty());
 
+    CHECK(validate(Key::quiet, "23:00-06:00").empty());
+    CHECK(validate(Key::quiet, "off").empty());
+    CHECK_FALSE(validate(Key::quiet, "23:00").empty());
+    CHECK_FALSE(validate(Key::quiet, "23:00-23:00").empty());
+    CHECK(std::string(key_name(Key::quiet)) == "quiet");
+
     CHECK(validate(Key::transport, "wifi").empty());
     CHECK(validate(Key::transport, "modem").empty());
     CHECK_FALSE(validate(Key::transport, "lte").empty());

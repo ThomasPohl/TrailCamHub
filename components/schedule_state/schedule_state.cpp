@@ -283,6 +283,17 @@ Effective effective()
                                       kBuiltInCheckin, &out.checkin_origin),
                                  CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN);
     out.settings.checkin_min = out.checkin_min;
+    // Quiet hours by default only on battery power, where the hub sleeps.
+    const std::string kBuiltInQuiet = mode.power == hub_config::Power::battery
+                                          ? std::string(CONFIG_SCHEDULE_QUIET)
+                                          : std::string();
+    out.quiet = pick(nullptr, &local.quiet, kBuiltInQuiet, &out.quiet_origin);
+    if (!parse_quiet(out.quiet, out.settings.quiet, &error)) {
+        ESP_LOGW(TAG, "Quiet hours \"%s\" ignored: %s", out.quiet.c_str(),
+                 error.c_str());
+        out.settings.quiet = Quiet{};
+    }
+    out.quiet = format_quiet(out.settings.quiet);
     out.settings.uplink = uplink;
     out.sleeps = hub_config::sleeps(mode, hub_config::capabilities());
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;

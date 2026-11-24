@@ -10,6 +10,7 @@ behaviour:
 | -------------------------------------------- | ---------------------- | ---------------------- |
 | Camera read plan (`SCHEDULE_CAMERA_PLAN`)     | `*=120` (every 2 h)    | `*=120` with push to a configured destination, else empty (no reads) |
 | Check-in interval (`SCHEDULE_CHECKIN_...`)   | 30 min with push, 0 with pull | the same        |
+| Quiet hours (`SCHEDULE_QUIET`)                | `23:00-06:00`          | none                   |
 | Deep sleep between cycles (`POWER_DEEP_...`) | on (if built in)       | off                    |
 | Modem sleep on the home Wi-Fi                | on                     | off                    |
 
@@ -55,6 +56,28 @@ minutes, and `*` for the rest of the day:
   means no automatic reads at all.
 - Without a valid clock the windows are ignored and the `*` interval applies
   (if it is 0 or missing, the longest window interval).
+
+### Quiet hours
+
+Setting `quiet`, a window in local time (`CONFIG_TIME_ZONE`) that may span
+midnight, for example `23:00-06:00` (#436). `off` or an empty text means none.
+It is on by default on battery power (`CONFIG_SCHEDULE_QUIET`); on mains there
+are none unless `config set quiet …` is used.
+
+- Inside the window the hub neither reads the cameras nor checks in; it sleeps
+  until the end (deep sleep, at most `POWER_MAX_SLEEP_MIN`). It overrides both
+  schedules, the back-off and the stretches for a low battery.
+- What fell due during the window waits and runs at its end: one cycle with a
+  camera read (which syncs as well), so the night's media and waiting commands
+  are handled together. A read asked for by the app waits too; the app can
+  show when the hub is next awake.
+- A power-on, a reset and the BOOT button still start a cycle by hand.
+- Without a valid clock the window is ignored, as the read windows are.
+- `status` prints `quiet hours … (origin)`.
+
+Not yet there: ending the window early in summer, sun-relative read windows
+and the location, an energy factor from the battery history, and a GNSS
+location at start (all planned in #436).
 
 ### Where the settings come from
 

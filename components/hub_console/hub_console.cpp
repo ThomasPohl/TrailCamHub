@@ -367,6 +367,8 @@ void print_schedule()
     reply("INFO", "camera plan " + effective.camera_plan + " (" +
                       schedule::origin_name(effective.camera_plan_origin) +
                       ")");
+    reply("INFO", "quiet hours " + effective.quiet + " (" +
+                      schedule::origin_name(effective.quiet_origin) + ")");
     reply("INFO",
           "check-in every " + std::to_string(effective.checkin_min) + " min (" +
               schedule::origin_name(effective.checkin_origin) +
