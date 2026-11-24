@@ -15,6 +15,7 @@ import {
 import type {
   AppUser,
   AuditEntry,
+  ShareRecord,
   CameraRecord,
   CommandRecord,
   DataUsageDay,
@@ -39,6 +40,8 @@ import type { CameraTelemetry, HubTelemetry, Store } from './types';
  *   HUB#<hubId>  / USER#<id>              hub → user link (who gets notified)
  *   USER#<id>    / APP                    gallery app user (token hash, role, TOTP)
  *   AUDIT        / <at>#<random>          admin audit log entry (ttl)
+ *   SHARE#<hash> / META                   share link by token hash (ttl, #444)
+ *   USER#<id>    / SHARE#<created>#<id>   share link of its owner (ttl)
  *   CAM#<camId>  / META                   camera record (with hubId)
  *   CAM#<camId>  / MEDIA#<dir>#<num>      media (zero-padded, sorts by file)
  *   CAM#<camId>  / CMD#<id>               command
@@ -56,6 +59,15 @@ const cmdSk = (id: string) => `CMD#${id}`;
 const sampleSk = (at: number) => `BAT#${String(Math.max(0, Math.floor(at))).padStart(10, '0')}`;
 const ownerPk = (owner: SampleOwner) =>
   'hubId' in owner ? hubPk(owner.hubId) : camPk(owner.camId);
+
+const userShareSk = (share: Pick<ShareRecord, 'created' | 'shareId'>) =>
+  `SHARE#${String(share.created).padStart(10, '0')}#${share.shareId}`;
+
+function withoutTtl(item: ShareRecord & { ttl?: number }): ShareRecord {
+  const { ttl: _ttl, ...share } = item;
+  void _ttl;
+  return share;
+}
 
 function strip<T>(item: Record<string, unknown>): T {
   const { PK: _pk, SK: _sk, ...rest } = item;
@@ -283,6 +295,56 @@ export class DynamoStore implements Store {
 
   async getAppUser(userId: number): Promise<AppUser | undefined> {
     return this.getItem<AppUser>(userPk(userId), 'APP');
+  }
+
+  // ---- Share links (#444) --------------------------------------------------
+
+  async putShare(share: ShareRecord): Promise<void> {
+    // DynamoDB removes the items a day after the link expired.
+    const ttl = share.expiresAt + 24 * 60 * 60;
+    await this.db.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: { PK: `SHARE#${share.tokenHash}`, SK: 'META', ...share, ttl },
+      }),
+    );
+    await this.db.send(
+      new PutCommand({
+        TableName: this.table,
+        Item: { PK: userPk(share.createdBy), SK: userShareSk(share), ...share, ttl },
+      }),
+    );
+  }
+
+  async getShareByTokenHash(tokenHash: string): Promise<ShareRecord | undefined> {
+    const item = await this.getItem<ShareRecord & { ttl?: number }>(`SHARE#${tokenHash}`, 'META');
+    return item && withoutTtl(item);
+  }
+
+  async getUserShare(userId: number, shareId: string): Promise<ShareRecord | undefined> {
+    return (await this.listUserShares(userId)).find((s) => s.shareId === shareId);
+  }
+
+  async listUserShares(userId: number): Promise<ShareRecord[]> {
+    const items = await this.queryPrefix(userPk(userId), 'SHARE#');
+    return items
+      .map((item) => withoutTtl(strip<ShareRecord & { ttl?: number }>(item)))
+      .sort((a, b) => b.created - a.created);
+  }
+
+  async deleteShare(share: ShareRecord): Promise<void> {
+    await this.db.send(
+      new DeleteCommand({
+        TableName: this.table,
+        Key: { PK: `SHARE#${share.tokenHash}`, SK: 'META' },
+      }),
+    );
+    await this.db.send(
+      new DeleteCommand({
+        TableName: this.table,
+        Key: { PK: userPk(share.createdBy), SK: userShareSk(share) },
+      }),
+    );
   }
 
   async addAudit(entry: AuditEntry): Promise<void> {

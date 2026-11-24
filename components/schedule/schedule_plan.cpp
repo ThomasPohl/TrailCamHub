@@ -65,6 +65,88 @@ bool contains(const Window &window, int minute)
     return minute >= window.start || minute < window.end;
 }
 
+// A bound at the sun: "sunrise", "sunset", with an offset. Returns false if
+// `text` is no such bound.
+bool parse_sun_bound(const std::string &text, std::uint8_t &sun, int &offset)
+{
+    std::size_t name_len = 0;
+    if (text.compare(0, 7, "sunrise") == 0) {
+        sun = 1;
+        name_len = 7;
+    } else if (text.compare(0, 6, "sunset") == 0) {
+        sun = 2;
+        name_len = 6;
+    } else {
+        return false;
+    }
+    offset = 0;
+    if (text.size() == name_len) {
+        return true;
+    }
+    if ((text[name_len] != '+' && text[name_len] != '-') ||
+        text.size() == name_len + 1 || text.size() > name_len + 4) {
+        return false;
+    }
+    long value = 0;
+    for (std::size_t i = name_len + 1; i < text.size(); i++) {
+        if (text[i] < '0' || text[i] > '9') {
+            return false;
+        }
+        value = value * 10 + (text[i] - '0');
+    }
+    if (value > 720) {
+        return false;
+    }
+    offset = text[name_len] == '-' ? (int)-value : (int)value;
+    return true;
+}
+
+// A bound as text: "06:30", "sunrise-60", "sunset".
+std::string bound_text(std::uint8_t sun, int clock, int offset)
+{
+    if (sun == 0) {
+        char text[24];
+        std::snprintf(text, sizeof(text), "%02d:%02d", clock / 60, clock % 60);
+        return text;
+    }
+    std::string text = sun == 1 ? "sunrise" : "sunset";
+    if (offset != 0) {
+        text += (offset < 0 ? "-" : "+") +
+                std::to_string(offset < 0 ? -offset : offset);
+    }
+    return text;
+}
+
+// The minutes of a bound on a day; -1 if the sun time is unknown.
+int resolve_bound(std::uint8_t sun, int clock, int offset, const SunDay &day)
+{
+    if (sun == 0) {
+        return clock;
+    }
+    const int base = sun == 1 ? day.sunrise : day.sunset;
+    if (base < 0) {
+        return -1;
+    }
+    return ((base + offset) % 1440 + 1440) % 1440;
+}
+
+// The window as local minutes of the day; false if a sun time is unknown or
+// the window is empty on that day.
+bool resolve(const Window &window, const SunDay &day, Window &out)
+{
+    const int start =
+        resolve_bound(window.start_sun, window.start, window.start_offset, day);
+    const int end =
+        resolve_bound(window.end_sun, window.end, window.end_offset, day);
+    if (start < 0 || end < 0 || start == end) {
+        return false;
+    }
+    out = window;
+    out.start = static_cast<std::uint16_t>(start);
+    out.end = static_cast<std::uint16_t>(end);
+    return true;
+}
+
 std::string clock_text(int minutes)
 {
     char text[24];
@@ -125,6 +207,51 @@ bool parse_plan(const std::string &text, Plan &out, std::string *error)
             plan.default_min = static_cast<std::uint16_t>(minutes);
             continue;
         }
+        const std::size_t dots = range.find("..");
+        if (dots != std::string::npos) {
+            Window window;
+            const std::string first = range.substr(0, dots);
+            const std::string second = range.substr(dots + 2);
+            int start_clock = 0;
+            int end_clock = 0;
+            int offset = 0;
+            if (parse_sun_bound(first, window.start_sun, offset)) {
+                window.start_offset = static_cast<std::int16_t>(offset);
+            } else {
+                start_clock = parse_clock(first);
+                if (start_clock < 0 || start_clock == 1440) {
+                    return fail(error, "window '" + range +
+                                           "' needs HH:MM, sunrise or sunset "
+                                           "(with +-minutes) on both sides");
+                }
+            }
+            if (parse_sun_bound(second, window.end_sun, offset)) {
+                window.end_offset = static_cast<std::int16_t>(offset);
+            } else {
+                end_clock = parse_clock(second);
+                if (end_clock < 0) {
+                    return fail(error, "window '" + range +
+                                           "' needs HH:MM, sunrise or sunset "
+                                           "(with +-minutes) on both sides");
+                }
+            }
+            if (window.start_sun == 0 && window.end_sun == 0 &&
+                start_clock == end_clock) {
+                return fail(error, "window '" + range + "' is empty");
+            }
+            if (window.start_sun == window.end_sun && window.start_sun != 0 &&
+                window.start_offset == window.end_offset) {
+                return fail(error, "window '" + range + "' is empty");
+            }
+            if (plan.windows.size() >= kMaxWindows) {
+                return fail(error, "at most 8 windows");
+            }
+            window.start = static_cast<std::uint16_t>(start_clock);
+            window.end = static_cast<std::uint16_t>(end_clock);
+            window.interval_min = static_cast<std::uint16_t>(minutes);
+            plan.windows.push_back(window);
+            continue;
+        }
         const std::size_t dash = range.find('-');
         const int start =
             dash == std::string::npos ? -1 : parse_clock(range.substr(0, dash));
@@ -151,6 +278,45 @@ bool parse_plan(const std::string &text, Plan &out, std::string *error)
     return true;
 }
 
+bool parse_quiet(const std::string &text, Quiet &out, std::string *error)
+{
+    std::string trimmed;
+    for (char c : text) {
+        if (!is_separator(c)) {
+            trimmed += c;
+        }
+    }
+    if (trimmed.empty() || trimmed == "off") {
+        out = Quiet{};
+        return true;
+    }
+    const std::size_t dash = trimmed.find('-');
+    const int start =
+        dash == std::string::npos ? -1 : parse_clock(trimmed.substr(0, dash));
+    const int stop =
+        dash == std::string::npos ? -1 : parse_clock(trimmed.substr(dash + 1));
+    if (start < 0 || stop < 0 || start == 1440) {
+        return fail(error,
+                    "quiet hours '" + trimmed + "' must look like HH:MM-HH:MM");
+    }
+    if (start == stop) {
+        return fail(error, "quiet hours '" + trimmed + "' are empty");
+    }
+    Quiet quiet;
+    quiet.start = static_cast<std::uint16_t>(start);
+    quiet.end = static_cast<std::uint16_t>(stop);
+    out = quiet;
+    return true;
+}
+
+std::string format_quiet(const Quiet &quiet)
+{
+    if (!quiet.enabled()) {
+        return "off";
+    }
+    return clock_text(quiet.start) + "-" + clock_text(quiet.end);
+}
+
 std::string format_plan(const Plan &plan)
 {
     if (!plan.reads()) {
@@ -161,8 +327,16 @@ std::string format_plan(const Plan &plan)
         if (!text.empty()) {
             text += ",";
         }
-        text += clock_text(window.start) + "-" + clock_text(window.end) + "=" +
-                std::to_string(window.interval_min);
+        if (window.uses_sun()) {
+            text += bound_text(window.start_sun, window.start,
+                               window.start_offset) +
+                    ".." +
+                    bound_text(window.end_sun, window.end, window.end_offset) +
+                    "=" + std::to_string(window.interval_min);
+        } else {
+            text += clock_text(window.start) + "-" + clock_text(window.end) +
+                    "=" + std::to_string(window.interval_min);
+        }
     }
     if (!text.empty()) {
         text += ",";
@@ -171,14 +345,46 @@ std::string format_plan(const Plan &plan)
     return text;
 }
 
-std::uint32_t interval_at(const Plan &plan, int minute_of_day)
+namespace
+{
+
+// The window that applies at a minute (the first that contains it, with its
+// sun bounds resolved); nullptr if none does.
+const Window *window_at(const Plan &plan, int minute_of_day, const SunDay &sun,
+                        Window &storage)
 {
     for (const Window &window : plan.windows) {
-        if (contains(window, minute_of_day)) {
-            return window.interval_min;
+        if (!window.uses_sun()) {
+            if (contains(window, minute_of_day)) {
+                return &window;
+            }
+            continue;
+        }
+        Window resolved;
+        if (resolve(window, sun, resolved) &&
+            contains(resolved, minute_of_day)) {
+            storage = resolved;
+            return &storage;
         }
     }
-    return plan.default_min;
+    return nullptr;
+}
+
+}  // namespace
+
+std::uint32_t interval_at(const Plan &plan, int minute_of_day,
+                          const SunDay &sun)
+{
+    Window storage;
+    const Window *window = window_at(plan, minute_of_day, sun, storage);
+    return window != nullptr ? window->interval_min : plan.default_min;
+}
+
+bool in_sun_window(const Plan &plan, int minute_of_day, const SunDay &sun)
+{
+    Window storage;
+    const Window *window = window_at(plan, minute_of_day, sun, storage);
+    return window != nullptr && window->uses_sun() && window->interval_min > 0;
 }
 
 std::uint32_t clockless_interval(const Plan &plan)
@@ -212,7 +418,8 @@ std::uint32_t stretched(std::uint32_t interval_min, std::uint32_t factor)
 }
 
 std::int64_t next_due(const Plan &plan, std::int64_t last, std::int64_t now,
-                      std::uint32_t factor, const LocalMinute &local)
+                      std::uint32_t factor, const LocalMinute &local,
+                      const SunMinutes &sun)
 {
     if (!plan.reads()) {
         return kNever;
@@ -231,7 +438,8 @@ std::int64_t next_due(const Plan &plan, std::int64_t last, std::int64_t now,
     // and changes of the local time (summer time) are all found.
     std::int64_t t = now;
     while (t <= now + kHorizonS) {
-        const std::uint32_t interval = interval_at(plan, local(t));
+        const std::uint32_t interval =
+            interval_at(plan, local(t), sun ? sun(t) : SunDay());
         std::int64_t step = 60;
         if (interval > 0) {
             const std::int64_t need =
@@ -397,8 +605,44 @@ const char *stretch_name(Stretch stretch)
     return "";
 }
 
+bool in_quiet(const Quiet &quiet, std::int64_t from, const LocalMinute &local,
+              const Plan *plan, const SunMinutes &sun)
+{
+    if (!quiet.enabled() || !local) {
+        return false;
+    }
+    Window window;
+    window.start = quiet.start;
+    window.end = quiet.end;
+    const int minute = local(from);
+    if (!contains(window, minute)) {
+        return false;
+    }
+    // A read window at the sun wins over the quiet hours.
+    return !(plan != nullptr && sun && in_sun_window(*plan, minute, sun(from)));
+}
+
+std::int64_t quiet_end(const Quiet &quiet, std::int64_t from,
+                       const LocalMinute &local, const Plan *plan,
+                       const SunMinutes &sun)
+{
+    if (!in_quiet(quiet, from, local, plan, sun)) {
+        return from;
+    }
+    // Minute by minute, as in next_due(): finds the end also across a change
+    // of the local time (summer time). A window is shorter than a day.
+    std::int64_t t = from;
+    while (t <= from + 25 * 3600) {
+        if (!in_quiet(quiet, t, local, plan, sun)) {
+            return t;
+        }
+        t += 60;
+    }
+    return from;
+}
+
 Times next_times(const Settings &settings, const State &state, std::int64_t now,
-                 const LocalMinute &local)
+                 const LocalMinute &local, const SunMinutes &sun)
 {
     Times times;
     const bool critical = hub_level(state) == PowerLevel::critical;
@@ -408,7 +652,7 @@ Times next_times(const Settings &settings, const State &state, std::int64_t now,
         times.camera = now;
     } else {
         times.camera = next_due(settings.camera, state.last_camera, now,
-                                camera_factor(settings, state), local);
+                                camera_factor(settings, state), local, sun);
     }
     if (settings.uplink && settings.checkin_min > 0) {
         std::uint32_t interval_min;
@@ -425,7 +669,18 @@ Times next_times(const Settings &settings, const State &state, std::int64_t now,
                 settings.power.low_checkin_factor > 1) {
                 factor *= settings.power.low_checkin_factor;
             }
-            interval_min = stretched(settings.checkin_min, factor);
+            std::uint32_t base = settings.checkin_min;
+            if (settings.checkin_energy_permille < 1000 &&
+                !hub_stretch_low(settings, state)) {
+                const std::uint32_t reduced = static_cast<std::uint32_t>(
+                    (std::uint64_t)base * settings.checkin_energy_permille /
+                    1000);
+                const std::uint32_t floor_min = settings.min_interval_min < base
+                                                    ? settings.min_interval_min
+                                                    : base;
+                base = reduced > floor_min ? reduced : floor_min;
+            }
+            interval_min = stretched(base, factor);
             if (settings.checkin_max_min > 0 &&
                 interval_min > settings.checkin_max_min) {
                 interval_min = settings.checkin_max_min > settings.checkin_min
@@ -439,6 +694,18 @@ Times next_times(const Settings &settings, const State &state, std::int64_t now,
             const std::int64_t due =
                 state.last_checkin + (std::int64_t)interval_min * 60;
             times.checkin = due > now ? due : now;
+        }
+    }
+    // Quiet hours: what falls into them waits for their end, also a read the
+    // app asked for.
+    if (settings.quiet.enabled()) {
+        if (times.camera != kNever) {
+            times.camera = quiet_end(settings.quiet, times.camera, local,
+                                     &settings.camera, sun);
+        }
+        if (times.checkin != kNever) {
+            times.checkin = quiet_end(settings.quiet, times.checkin, local,
+                                      &settings.camera, sun);
         }
     }
     return times;
@@ -579,6 +846,8 @@ const char *origin_name(Origin origin)
         return "local";
     case Origin::remote:
         return "remote";
+    case Origin::gnss:
+        return "gnss";
     }
     return "built-in";
 }

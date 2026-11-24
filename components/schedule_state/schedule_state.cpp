@@ -7,7 +7,9 @@
 #include "schedule_state.hpp"
 
 #include <atomic>
+#include <cmath>
 #include <cstring>
+#include <memory>
 #include <sys/time.h>
 #include <time.h>
 
@@ -37,9 +39,11 @@ const char *TAG = "trailcamhub_schedule";
 const char *kNamespace = "schedule";
 const char *kRemotePlanKey = "plan";
 const char *kRemoteCheckinKey = "checkin_min";
-// Changed with the layout of RtcData: "TCH3" since the state holds the hub
-// battery.
-constexpr std::uint32_t kMagic = 0x54434833;
+// Changed with the layout of RtcData: "TCH4" since it holds the day's energy
+// readings.
+constexpr std::uint32_t kMagic = 0x54434834;
+const char *kEnergyKey = "energy";
+const char *kGnssKey = "gnss_loc";
 
 // Everything that has to survive deep sleep.
 struct RtcData {
@@ -50,9 +54,13 @@ struct RtcData {
     std::int64_t planned_sleep_us;
     State state;
     ReadRequests reads;
+    EnergyToday energy;
 };
 
 RTC_DATA_ATTR RtcData s_rtc;
+
+// The battery history of the last days (#436); stored once a day.
+EnergyHistory s_energy;
 
 SemaphoreHandle_t s_lock;
 bool s_woke;
@@ -156,6 +164,56 @@ int local_minute_at(std::int64_t t, std::int64_t now_mono,
     return local.tm_hour * 60 + local.tm_min;
 }
 
+}  // namespace
+
+namespace
+{
+
+// Days since 1970-01-01 of a civil date (proleptic Gregorian).
+std::int64_t days_from_civil(int year, int month, int day)
+{
+    year -= month <= 2 ? 1 : 0;
+    const std::int64_t era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(year - era * 400);
+    const unsigned doy =
+        (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + static_cast<std::int64_t>(doe) - 719468;
+}
+
+}  // namespace
+
+SunDay sun_day(const Location &position, std::int64_t unix_time)
+{
+    SunDay day;
+    if (!position.valid || unix_time <= 0) {
+        return day;
+    }
+    const time_t wall = static_cast<time_t>(unix_time);
+    struct tm local = {};
+    localtime_r(&wall, &local);
+    double sunrise = 0;
+    double sunset = 0;
+    if (!sun_utc_minutes(position.latitude, position.longitude,
+                         local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+                         sunrise, sunset)) {
+        return day;
+    }
+    // newlib's struct tm has no tm_gmtoff: the offset is the local fields read
+    // as UTC minus the real time.
+    const std::int64_t as_utc =
+        days_from_civil(local.tm_year + 1900, local.tm_mon + 1, local.tm_mday) *
+            86400 +
+        local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec;
+    const int offset_min = static_cast<int>((as_utc - unix_time) / 60);
+    day.sunrise = local_minutes(sunrise, offset_min);
+    day.sunset = local_minutes(sunset, offset_min);
+    return day;
+}
+
+namespace
+{
+
 Times times_for(const Effective &effective, const State &state)
 {
     const std::int64_t mono = now();
@@ -166,7 +224,23 @@ Times times_for(const Effective &effective, const State &state)
     const LocalMinute local = [mono, wall](std::int64_t t) {
         return local_minute_at(t, mono, wall);
     };
-    return next_times(effective.settings, state, mono, local);
+    // The sun times change once a day: keep the last day's.
+    struct Cache {
+        std::int64_t day = -1;
+        SunDay sun;
+    };
+    auto cache = std::make_shared<Cache>();
+    const Location position = effective.position;
+    const SunMinutes sun = [mono, wall, position, cache](std::int64_t t) {
+        const std::int64_t unix_time = wall + (t - mono);
+        const std::int64_t day = (unix_time + 12 * 3600) / 86400;
+        if (day != cache->day) {
+            cache->day = day;
+            cache->sun = sun_day(position, unix_time);
+        }
+        return cache->sun;
+    };
+    return next_times(effective.settings, state, mono, local, sun);
 }
 
 std::uint32_t minutes_of(const std::string &text, std::uint32_t fallback)
@@ -185,6 +259,9 @@ std::uint32_t minutes_of(const std::string &text, std::uint32_t fallback)
 }
 
 }  // namespace
+
+// Defined below, with the other energy helpers.
+void load_energy();
 
 void init()
 {
@@ -216,11 +293,39 @@ void init()
         s_mono_offset_us = 0;
     }
     load_remote();
+    load_energy();
     if (!s_remote_plan.empty() || !s_remote_checkin.empty()) {
         ESP_LOGI(TAG, "Schedule from the backend: plan \"%s\", check-in %s min",
                  s_remote_plan.c_str(),
                  s_remote_checkin.empty() ? "(default)"
                                           : s_remote_checkin.c_str());
+    }
+}
+
+// Defined below, with the energy helpers.
+std::string stored_gnss_location();
+
+bool gnss_wanted()
+{
+    hub_config::Settings local;
+    if (hub_config::load(local) != ESP_OK) {
+        local = hub_config::Settings{};
+    }
+    return local.location.empty() &&
+           std::strlen(CONFIG_SCHEDULE_LOCATION) == 0 &&
+           stored_gnss_location().empty();
+}
+
+void set_gnss_location(double latitude, double longitude)
+{
+    Location position;
+    position.latitude = std::round(latitude * 10.0) / 10.0;
+    position.longitude = std::round(longitude * 10.0) / 10.0;
+    position.valid = true;
+    const std::string text = format_location(position);
+    if (store_remote(kGnssKey, text)) {
+        ESP_LOGI(TAG, "Location from GNSS: %s", text.c_str());
+        changed();
     }
 }
 
@@ -240,6 +345,68 @@ std::int64_t to_unix(std::int64_t t)
         return 0;
     }
     return time(nullptr) + (t - now());
+}
+
+EnergySettings energy_settings()
+{
+    EnergySettings settings;
+#ifdef CONFIG_SCHEDULE_ENERGY_TARGET_PERCENT
+    settings.target_percent = CONFIG_SCHEDULE_ENERGY_TARGET_PERCENT;
+#endif
+    return settings;
+}
+
+void load_energy()
+{
+    nvs_handle_t handle;
+    if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) {
+        return;
+    }
+    EnergyHistory stored;
+    size_t length = sizeof(stored);
+    if (nvs_get_blob(handle, kEnergyKey, &stored, &length) == ESP_OK &&
+        length == sizeof(stored) && stored.version == 1 &&
+        stored.count <= kEnergyDays && stored.step <= kEnergyMaxStep) {
+        s_energy = stored;
+    }
+    nvs_close(handle);
+}
+
+void store_energy(const EnergyHistory &history)
+{
+    nvs_handle_t handle;
+    if (nvs_open(kNamespace, NVS_READWRITE, &handle) != ESP_OK) {
+        return;
+    }
+    if (nvs_set_blob(handle, kEnergyKey, &history, sizeof(history)) == ESP_OK) {
+        nvs_commit(handle);
+    }
+    nvs_close(handle);
+}
+
+// The position of the last GNSS fix as "LAT,LON"; empty if none.
+std::string stored_gnss_location()
+{
+    nvs_handle_t handle;
+    if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) {
+        return "";
+    }
+    const std::string value = read_nvs_string(handle, kGnssKey);
+    nvs_close(handle);
+    return value;
+}
+
+// The local date as yyyymmdd; 0 if the clock does not hold the time.
+int local_date()
+{
+    if (!time_sync_clock_valid()) {
+        return 0;
+    }
+    const time_t wall = time(nullptr);
+    struct tm local = {};
+    localtime_r(&wall, &local);
+    return (local.tm_year + 1900) * 10000 + (local.tm_mon + 1) * 100 +
+           local.tm_mday;
 }
 
 Effective effective()
@@ -283,8 +450,47 @@ Effective effective()
                                       kBuiltInCheckin, &out.checkin_origin),
                                  CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN);
     out.settings.checkin_min = out.checkin_min;
+    // Quiet hours by default only on battery power, where the hub sleeps.
+    const std::string kBuiltInQuiet = mode.power == hub_config::Power::battery
+                                          ? std::string(CONFIG_SCHEDULE_QUIET)
+                                          : std::string();
+    out.quiet = pick(nullptr, &local.quiet, kBuiltInQuiet, &out.quiet_origin);
+    if (!parse_quiet(out.quiet, out.settings.quiet, &error)) {
+        ESP_LOGW(TAG, "Quiet hours \"%s\" ignored: %s", out.quiet.c_str(),
+                 error.c_str());
+        out.settings.quiet = Quiet{};
+    }
+    out.quiet = format_quiet(out.settings.quiet);
+    out.location =
+        pick(nullptr, &local.location, std::string(CONFIG_SCHEDULE_LOCATION),
+             &out.location_origin);
+    if (!out.location.empty() &&
+        parse_location(out.location, out.position, &error)) {
+        out.location = format_location(out.position);
+    } else {
+        if (!out.location.empty()) {
+            ESP_LOGW(TAG, "Location \"%s\" ignored: %s", out.location.c_str(),
+                     error.c_str());
+        }
+        out.location.clear();
+        out.position.latitude = kFallbackLatitude;
+        out.position.longitude = kFallbackLongitude;
+        out.position.valid = true;
+        out.location_fallback = true;
+    }
     out.settings.uplink = uplink;
     out.sleeps = hub_config::sleeps(mode, hub_config::capabilities());
+#if CONFIG_SCHEDULE_ENERGY
+    {
+        Lock lock;
+        out.energy_permille = energy_permille(s_energy, s_rtc.state.hub_battery,
+                                              energy_settings());
+        out.energy_morning = s_energy.count > 0 ? s_energy.days[0].morning : -1;
+        out.energy_trend_known = energy_trend(s_energy, out.energy_trend);
+    }
+    out.settings.checkin_energy_permille = out.energy_permille;
+    out.settings.min_interval_min = CONFIG_SCHEDULE_MIN_INTERVAL_MIN;
+#endif
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;
     out.settings.low_battery_factor = CONFIG_SCHEDULE_LOW_BATTERY_FACTOR;
     out.settings.power = power_settings();
@@ -422,11 +628,26 @@ void set_hub_battery(int percent, int millivolts, bool charging)
 {
     bool level_changed;
     PowerLevel level;
+    [[maybe_unused]] bool store = false;
+    [[maybe_unused]] EnergyHistory history;
+    [[maybe_unused]] const int date = local_date();
     {
         Lock lock;
         level_changed = schedule::set_hub_battery(
             s_rtc.state, power_settings(), percent, millivolts, charging);
         level = hub_level(s_rtc.state);
+#if CONFIG_SCHEDULE_ENERGY
+        store = energy_reading(s_energy, s_rtc.energy, date, time(nullptr),
+                               percent, charging, energy_settings());
+        history = s_energy;
+#endif
+    }
+    if (store) {
+        // Once a day: the first reading of a new day.
+        store_energy(history);
+        ESP_LOGI(TAG, "Battery history: morning %d %%, energy factor %d/1000",
+                 percent,
+                 (int)energy_permille(history, percent, energy_settings()));
     }
     if (level_changed) {
         if (level == PowerLevel::normal) {

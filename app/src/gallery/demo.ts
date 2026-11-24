@@ -13,6 +13,8 @@ import type {
   HubUsage,
   Me,
   Recording,
+  ShareLink,
+  ShareOptions,
 } from './types';
 import { cameraFile, videoFileName } from './text';
 
@@ -132,6 +134,7 @@ export class DemoGalleryApi implements GalleryApi {
       lastContact: this.lastCheckin,
       nextContact: this.lastCheckin + this.checkinS,
       hubBatPercent: 84,
+      hub: { hubId: 'garten-hub', cameraPlan: '*=120', config: this.scheduleConfig },
       cameras: this.cameras.map((c, i) => ({
         ...c,
         // Garten is fine; Wiese needs a look (#304).
@@ -182,6 +185,37 @@ export class DemoGalleryApi implements GalleryApi {
       `Aufnahme ${recording.cameraFiles.join(' + ')} (${recording.fileName}).\n` +
       `Mit echtem Hub liegt hier das MP4.\n`;
     return new Blob([text], { type: 'text/plain' });
+  }
+
+  private readonly shareLinks: ShareLink[] = [];
+
+  async shareRecording(
+    recording: Recording,
+    options: ShareOptions,
+  ): Promise<ShareLink & { url: string }> {
+    const id = `demo${this.shareLinks.length + 1}`;
+    const now = this.now();
+    const link: ShareLink = {
+      id,
+      camId: recording.camId,
+      mediaId: recording.mediaId,
+      kind: options.kind,
+      showCamera: options.showCamera,
+      created: now,
+      expiresAt: now + options.days * 24 * 60 * 60,
+    };
+    this.shareLinks.push(link);
+    return { ...link, url: `https://demo.example/v1/s/${id}` };
+  }
+
+  async shares(): Promise<ShareLink[]> {
+    const now = this.now();
+    return this.shareLinks.filter((l) => l.expiresAt > now).map((l) => ({ ...l }));
+  }
+
+  async revokeShare(id: string): Promise<void> {
+    const index = this.shareLinks.findIndex((l) => l.id === id);
+    if (index >= 0) this.shareLinks.splice(index, 1);
   }
 
   async renameCamera(camId: string, name: string): Promise<string> {

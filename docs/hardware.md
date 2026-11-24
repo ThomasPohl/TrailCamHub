@@ -43,7 +43,9 @@ According to the [Waveshare documentation](https://docs.waveshare.com/ESP32-S3-A
   with it OFF the I2C probe times out (`i2c.master: probe device timeout`) and
   the battery level stays unknown, even with a cell inserted. Probably the
   pull-ups of SDA/SCL sit on the switched camera supply; not checked against
-  the schematic. Keep it ON also without a camera.
+  the schematic. Keep it ON also without a camera. While the gauge does not answer, the
+  firmware tries three times at once and then at growing intervals (2 s up to
+  5 min), resetting the I2C bus before each retry after a timeout.
 - DIP switches for camera, USB hub and modem power, GNSS antenna connector,
   24-pin camera connector.
 

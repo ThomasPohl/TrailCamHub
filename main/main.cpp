@@ -212,6 +212,14 @@ static void on_action_request(const char *type, long long media_id,
               out, size);
 }
 
+static void on_settings_request(const char *cam_id, const char *change,
+                                char *out, size_t size)
+{
+    copy_json(session_actions::to_json(session_actions::request_settings(
+                  session_actions::From::web_ui, cam_id, change)),
+              out, size);
+}
+
 static void on_actions_list(char *out, size_t size)
 {
     // The newest twelve fit the page's buffer.
@@ -315,6 +323,7 @@ extern "C" void app_main(void)
         .on_stop = on_stop_request,
         .on_action = on_action_request,
         .on_actions = on_actions_list,
+        .on_settings = on_settings_request,
     };
     {
         // A password set by the user replaces the generated one (#101).

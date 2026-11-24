@@ -11,7 +11,7 @@ how that works from every front end. The camera commands are described in
 | `video-stop` | stop it | 644 | console, web UI, backend |
 | `delete` | delete one recording by `mediaId` | 773 | console, web UI, backend |
 | `format` | erase the camera's SD card | 518 | console, web UI |
-| `settings` | change settings, e.g. `workMode=1;pirSens=2` | 513 | backend (gallery); console and web UI not yet (#197) |
+| `settings` | change settings, e.g. `workMode=1;pirSens=2` | 513 | web UI, backend (gallery); console not yet (#197) |
 
 Formatting is never remote (#196); it and deleting need a confirmation.
 Settings follow [`camera-settings.md`](camera-settings.md) (#368). Live video
@@ -128,6 +128,11 @@ code from the hub's answer and sends the confirmation.
   camera no longer lists the file (it is gone either way), else `failed`
   with the reason. Pure logic in `components/uplink/delete_request.cpp`.
   Formatting stays local only.
+- **Web UI (settings, #197):** the page shows the settings the camera reported
+  (`settings` and `capability` in `/api/status`) and sends the changed ones as
+  a JSON object to `POST /api/settings?cam=<devId>`; the hub reads them with
+  `camera::settings::parse_change()` (`session_actions::request_settings()`)
+  and queues one `settings` action, like the backend does.
 - **Backend (gallery settings, #368):** a `setSettings` command (`settings`
   object) is read with `camera::settings::parse_change()` and becomes a
   `settings` action for that camera, keyed `be:<command id>`, answered like a

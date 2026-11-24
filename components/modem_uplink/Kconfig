@@ -25,6 +25,22 @@ config MODEM_POWER_GPIO
         the 4G DIP switch is OFF; check the board revision, GPIO33-37 are
         taken by the octal PSRAM of the ESP32-S3R8.
 
+config MODEM_GNSS_FIX_TIMEOUT_S
+    int "Time allowed for a GNSS fix at start (seconds, 0 = off)"
+    depends on MODEM_UPLINK
+    range 0 600
+    default 180
+    help
+        After a power-on or reset, when no location is set (setting
+        "location" or CONFIG_SCHEDULE_LOCATION) and none was found before, the
+        hub switches the modem's GNSS receiver on (AT+CGNSSPWR=1) and waits
+        this long for a fix (AT+CGNSSINFO). A cold start outdoors takes about
+        30 to 90 seconds; indoors there is none. Needs the GNSS antenna on
+        the board's connector and a modem with GNSS (the A7670E has it on
+        some variants only). The fix is stored rounded to 0.1 degrees and
+        used for the sun times of the camera plan. Runs before the modem is
+        put into flight mode; a sync that starts meanwhile waits for it.
+
 config MODEM_ATTACH_TIMEOUT_S
     int "Time allowed to get online over the modem (seconds)"
     depends on MODEM_UPLINK

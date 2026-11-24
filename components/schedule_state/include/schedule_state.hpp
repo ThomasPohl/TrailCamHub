@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <string>
 
+#include "energy.hpp"
 #include "schedule_plan.hpp"
 
 namespace schedule
@@ -40,6 +41,22 @@ struct Effective {
     Origin camera_plan_origin = Origin::built_in;
     std::uint32_t checkin_min = 0;
     Origin checkin_origin = Origin::built_in;
+    // Quiet hours as text ("off" for none) and their origin (#436).
+    std::string quiet;
+    Origin quiet_origin = Origin::built_in;
+    // The position for the sun times (#436): as text ("" if none is set), its
+    // origin, the position in use and whether it is the fallback.
+    std::string location;
+    Origin location_origin = Origin::built_in;
+    Location position;
+    bool location_fallback = false;
+    // Energy factor for the check-in interval (1/1000) and what it is based
+    // on: the morning charge, the trend (% per day) and whether they are
+    // known (#436).
+    std::uint16_t energy_permille = 1000;
+    int energy_morning = -1;
+    int energy_trend = 0;
+    bool energy_trend_known = false;
     // Deep sleep between cycles (battery power, see hub_config::sleeps()).
     bool sleeps = false;
 };
@@ -65,6 +82,16 @@ bool apply_remote(const Remote &remote);
 State state();
 
 // Next camera read and check-in from now with the effective settings.
+// Sunrise and sunset of the local day of `unix_time` for a position, as local
+// minutes of the day; -1 where unknown.
+SunDay sun_day(const Location &position, std::int64_t unix_time);
+
+// GNSS location at start (#436). `gnss_wanted()`: no location is set (by the
+// hub, the build or an earlier fix), so the modem should look for one.
+// `set_gnss_location()` stores a fix (rounded to 0.1 degrees, NVS).
+bool gnss_wanted();
+void set_gnss_location(double latitude, double longitude);
+
 Times next_times();
 Times next_times(const Effective &effective);
 

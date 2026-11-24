@@ -1,6 +1,7 @@
 import type {
   AppUser,
   AuditEntry,
+  ShareRecord,
   CameraRecord,
   CommandRecord,
   HubRecord,
@@ -130,6 +131,14 @@ export interface Store {
   /** The faults the admin has been mailed about and that still hold (#265). */
   getNotifiedFaults(): Promise<string[]>;
   putNotifiedFaults(keys: string[], at: number): Promise<void>;
+
+  /** Share links (#444): looked up by token hash, listed and revoked per owner. */
+  putShare(share: ShareRecord): Promise<void>;
+  getShareByTokenHash(tokenHash: string): Promise<ShareRecord | undefined>;
+  getUserShare(userId: number, shareId: string): Promise<ShareRecord | undefined>;
+  /** The user's links, newest first (expired ones may still be listed until DynamoDB removes them). */
+  listUserShares(userId: number): Promise<ShareRecord[]>;
+  deleteShare(share: ShareRecord): Promise<void>;
 
   putCommand(camId: string, command: CommandRecord): Promise<void>;
   getCommand(camId: string, id: string): Promise<CommandRecord | undefined>;

@@ -553,3 +553,292 @@ TEST_CASE("checkin_max_min bounds the back-off of check-ins")
     CHECK(set_hub_battery(state, settings.power, 8, 3600, false));
     CHECK(next_times(settings, state, at(0, 1), kLocal).checkin == at(24));
 }
+
+namespace
+{
+
+Quiet quiet_of(const std::string &text)
+{
+    Quiet quiet;
+    std::string error;
+    REQUIRE_MESSAGE(parse_quiet(text, quiet, &error), error);
+    return quiet;
+}
+
+}  // namespace
+
+TEST_CASE("quiet hours are parsed and formatted")
+{
+    CHECK(format_quiet(quiet_of("23:00-06:00")) == "23:00-06:00");
+    CHECK(format_quiet(quiet_of(" 22:30 - 05:15 ")) == "22:30-05:15");
+    CHECK_FALSE(quiet_of("off").enabled());
+    CHECK_FALSE(quiet_of("").enabled());
+    CHECK(format_quiet(quiet_of("")) == "off");
+
+    Quiet quiet;
+    std::string error;
+    CHECK_FALSE(parse_quiet("23:00", quiet, &error));
+    CHECK_FALSE(parse_quiet("25:00-06:00", quiet, &error));
+    CHECK_FALSE(parse_quiet("06:00-06:00", quiet, &error));
+    CHECK_FALSE(parse_quiet("24:00-06:00", quiet, &error));
+    CHECK_FALSE(error.empty());
+}
+
+TEST_CASE("quiet_end finds the end of the window, also across midnight")
+{
+    const Quiet night = quiet_of("23:00-06:00");
+    CHECK_FALSE(in_quiet(night, at(12), kLocal));
+    CHECK(in_quiet(night, at(23), kLocal));
+    CHECK(in_quiet(night, at(3), kLocal));
+    CHECK_FALSE(in_quiet(night, at(6), kLocal));
+    CHECK(quiet_end(night, at(12), kLocal) == at(12));
+    CHECK(quiet_end(night, at(23, 30), kLocal) == at(6, 0, 1));
+    CHECK(quiet_end(night, at(2), kLocal) == at(6));
+    // Without a clock the quiet hours do not apply.
+    CHECK_FALSE(in_quiet(night, at(3), kNoClock));
+    CHECK(quiet_end(night, at(3), kNoClock) == at(3));
+    // A window inside one day.
+    const Quiet noon = quiet_of("12:00-14:00");
+    CHECK(quiet_end(noon, at(12, 30), kLocal) == at(14));
+}
+
+TEST_CASE("nothing is due in quiet hours; it runs at their end")
+{
+    Settings settings = settings_with("*=120", 30);
+    settings.quiet = quiet_of("23:00-06:00");
+    State state = initial_state();
+
+    // The last cycle was at 22:30: the check-in would be due at 23:00, the
+    // read at 00:30.
+    cycle_started(state, true, at(22, 30));
+    CycleEnd end;
+    end.camera_ok = true;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+
+    Times times = next_times(settings, state, at(22, 31), kLocal);
+    CHECK(times.camera == at(6, 0, 1));
+    CHECK(times.checkin == at(6, 0, 1));
+    CHECK(due(times, at(3)) == Task::none);
+    // At the end of the night one cycle with a read (it syncs as well).
+    CHECK(due(times, at(6, 0, 1)) == Task::camera);
+
+    // During the day nothing changes.
+    cycle_started(state, true, at(6));
+    cycle_finished(state, end);
+    times = next_times(settings, state, at(6, 1), kLocal);
+    CHECK(times.checkin == at(6, 30));
+    CHECK(times.camera == at(8));
+}
+
+TEST_CASE("a requested read waits for the end of the quiet hours")
+{
+    Settings settings = settings_with("*=120", 30);
+    settings.quiet = quiet_of("23:00-06:00");
+    State state = initial_state();
+    cycle_started(state, true, at(22));
+    CycleEnd end;
+    end.camera_ok = true;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    state.camera_requested = true;
+
+    CHECK(next_times(settings, state, at(2), kLocal).camera == at(6));
+    CHECK(next_times(settings, state, at(21), kLocal).camera == at(21));
+}
+
+TEST_CASE("without a clock or with the window off nothing is held back")
+{
+    Settings settings = settings_with("*=120", 30);
+    settings.quiet = quiet_of("23:00-06:00");
+    State state = initial_state();
+    CHECK(next_times(settings, state, at(2), kNoClock).camera == at(2));
+    settings.quiet = quiet_of("off");
+    CHECK(next_times(settings, state, at(2), kLocal).camera == at(2));
+}
+
+namespace
+{
+
+// Sunrise 04:45, sunset 21:30 (a June day) or 08:15 / 15:55 (December).
+const SunMinutes kSummerSun = [](std::int64_t) {
+    SunDay day;
+    day.sunrise = 4 * 60 + 45;
+    day.sunset = 21 * 60 + 30;
+    return day;
+};
+const SunMinutes kWinterSun = [](std::int64_t) {
+    SunDay day;
+    day.sunrise = 8 * 60 + 15;
+    day.sunset = 15 * 60 + 55;
+    return day;
+};
+
+}  // namespace
+
+TEST_CASE("plans with sun windows are parsed and formatted")
+{
+    const std::string text =
+        "sunrise-60..sunrise+90=30,sunset-90..sunset+60=30,*=120";
+    Plan plan = plan_of(text);
+    REQUIRE(plan.windows.size() == 2);
+    CHECK(plan.windows[0].start_sun == 1);
+    CHECK(plan.windows[0].start_offset == -60);
+    CHECK(plan.windows[0].end_sun == 1);
+    CHECK(plan.windows[0].end_offset == 90);
+    CHECK(plan.windows[1].start_sun == 2);
+    CHECK(format_plan(plan) == text);
+    // Mixed with clock bounds and the older form.
+    plan = plan_of("05:00..sunrise+30=15,sunset..23:00=20,17:00-18:00=5");
+    CHECK(format_plan(plan) ==
+          "05:00..sunrise+30=15,sunset..23:00=20,17:00-18:00=5,*=0");
+    // No sign is no offset.
+    CHECK(format_plan(plan_of("sunrise..sunset=60")) ==
+          "sunrise..sunset=60,*=0");
+
+    Plan bad;
+    std::string error;
+    CHECK_FALSE(parse_plan("sunrise-60..noon=30", bad, &error));
+    CHECK_FALSE(parse_plan("sunrise*5..sunset=30", bad, &error));
+    CHECK_FALSE(parse_plan("sunrise-9999..sunset=30", bad, &error));
+    CHECK_FALSE(parse_plan("sunrise..sunrise=30", bad, &error));
+    CHECK_FALSE(parse_plan("sunrise-60..", bad, &error));
+    CHECK_FALSE(parse_plan("24:00..sunrise=30", bad, &error));
+}
+
+TEST_CASE("sun windows follow the sun through the year")
+{
+    const Plan plan = plan_of("sunrise-60..sunrise+90=30,*=120");
+    SunDay summer;
+    summer.sunrise = 4 * 60 + 45;
+    summer.sunset = 21 * 60 + 30;
+    SunDay winter;
+    winter.sunrise = 8 * 60 + 15;
+    winter.sunset = 15 * 60 + 55;
+    // Summer: 03:45-06:15.
+    CHECK(interval_at(plan, 3 * 60 + 44, summer) == 120);
+    CHECK(interval_at(plan, 3 * 60 + 45, summer) == 30);
+    CHECK(interval_at(plan, 6 * 60 + 14, summer) == 30);
+    CHECK(interval_at(plan, 6 * 60 + 15, summer) == 120);
+    // Winter: 07:15-09:45.
+    CHECK(interval_at(plan, 5 * 60, winter) == 120);
+    CHECK(interval_at(plan, 7 * 60 + 15, winter) == 30);
+    // Unknown sun times: the window is skipped.
+    CHECK(interval_at(plan, 5 * 60, SunDay()) == 120);
+    CHECK(interval_at(plan, 5 * 60) == 120);
+}
+
+TEST_CASE("a sun window that spans midnight is followed")
+{
+    // Sunset - 30 to 01:00.
+    const Plan plan = plan_of("sunset-30..01:00=10,*=60");
+    SunDay day;
+    day.sunrise = 5 * 60;
+    day.sunset = 22 * 60;
+    CHECK(interval_at(plan, 21 * 60 + 29, day) == 60);
+    CHECK(interval_at(plan, 21 * 60 + 30, day) == 10);
+    CHECK(interval_at(plan, 30, day) == 10);
+    CHECK(interval_at(plan, 60, day) == 60);
+}
+
+TEST_CASE("reads follow the sun windows")
+{
+    Settings settings = settings_with("sunrise-60..sunrise+90=30,*=0", 0);
+    settings.uplink = false;
+    State state = initial_state();
+    cycle_started(state, true, at(0));
+    CycleEnd end;
+    end.camera_ok = true;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    // Summer: the first read of the day at 03:45, the window's start.
+    CHECK(next_times(settings, state, at(1), kLocal, kSummerSun).camera ==
+          at(3, 45));
+    // Winter: at 07:15.
+    CHECK(next_times(settings, state, at(1), kLocal, kWinterSun).camera ==
+          at(7, 15));
+}
+
+TEST_CASE("the quiet hours end with the morning sun window in summer")
+{
+    Settings settings = settings_with(
+        "sunrise-60..sunrise+90=30,sunset-90..sunset+60=30,*=120", 30);
+    settings.quiet = quiet_of("23:00-06:00");
+    State state = initial_state();
+    // The last cycle was in the evening at 22:40: the check-in falls due at
+    // 23:10, inside the quiet hours.
+    cycle_started(state, true, at(22, 40));
+    CycleEnd end;
+    end.camera_ok = true;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+
+    // Summer: sunrise 04:45, the window opens at 03:45, in the quiet hours.
+    Times times = next_times(settings, state, at(22, 41), kLocal, kSummerSun);
+    CHECK(times.camera == at(3, 45, 1));
+    CHECK(times.checkin == at(3, 45, 1));
+    // Winter: sunrise 08:15, so the quiet hours end at 06:00 as set.
+    times = next_times(settings, state, at(22, 41), kLocal, kWinterSun);
+    CHECK(times.camera == at(6, 0, 1));
+    // Without sun times the fixed end holds.
+    times = next_times(settings, state, at(22, 41), kLocal);
+    CHECK(times.camera == at(6, 0, 1));
+}
+
+TEST_CASE("an evening sun window keeps the hub awake past the quiet start")
+{
+    Plan plan = plan_of("sunset-90..sunset+90=30,*=120");
+    const Quiet night = quiet_of("23:00-06:00");
+    SunDay day;
+    day.sunrise = 4 * 60;
+    day.sunset = 22 * 60;  // window until 23:30
+    const SunMinutes sun = [day](std::int64_t) { return day; };
+    CHECK_FALSE(in_quiet(night, at(23, 10), kLocal, &plan, sun));
+    CHECK(in_quiet(night, at(23, 40), kLocal, &plan, sun));
+    // The same without a plan and sun: quiet from 23:00.
+    CHECK(in_quiet(night, at(23, 10), kLocal));
+}
+
+TEST_CASE("the energy factor shortens the check-in interval")
+{
+    Settings settings = settings_with("*=0", 30);
+    settings.checkin_energy_permille = 500;
+    State state = initial_state();
+    cycle_started(state, false, at(8));
+    CycleEnd end;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(8, 15));
+    settings.checkin_energy_permille = 750;
+    // 22.5 minutes, rounded down to 22.
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(8, 22));
+    // Not below the floor.
+    settings.checkin_min = 15;
+    settings.checkin_energy_permille = 500;
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(8, 10));
+    // An interval shorter than the floor is not raised.
+    settings.checkin_min = 5;
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(8, 5));
+}
+
+TEST_CASE("the energy factor does not apply at a low hub battery")
+{
+    Settings settings = settings_with("*=0", 30);
+    settings.power = power_settings_for_tests();
+    settings.power.low_checkin_factor = 2;
+    settings.checkin_energy_permille = 500;
+    State state = initial_state();
+    CHECK(set_hub_battery(state, settings.power, 25, 3700, false));
+    cycle_started(state, false, at(8));
+    CycleEnd end;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    // Low level: the stretched 60 minutes, not shortened.
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(9));
+}

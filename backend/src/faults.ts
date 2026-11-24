@@ -198,3 +198,25 @@ export function hubFaults(
   }
   return faults;
 }
+
+/**
+ * The faults a user of the hub can do something about (#431): the hub not
+ * reporting, batteries, SD cards, a camera not read. The rest (failed
+ * requests, firmware, memory, power mode) is for the admin.
+ */
+const USER_KINDS: ReadonlySet<Fault['kind']> = new Set<Fault['kind']>([
+  'hubNeverSeen',
+  'hubSilent',
+  'hubBatteryCritical',
+  'hubBatteryLow',
+  'cameraBatteryCritical',
+  'cameraBatteryLow',
+  'sdMissing',
+  'sdFull',
+  'sdNearlyFull',
+  'cameraNotRead',
+]);
+
+export function userFaults(faults: Fault[]): Fault[] {
+  return faults.filter((f) => USER_KINDS.has(f.kind));
+}

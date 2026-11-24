@@ -76,5 +76,5 @@ The hub counts the bytes of every request and response body of its uplink (check
 
 - Data volume: requested videos go over the modem up to `CONFIG_UPLINK_VIDEO_MAX_MB_MODEM` (15 MB, about 20 s of 1080p and 5 min of transmitting at the measured ~50 KB/s; see `docs/video-download.md`). The volume is measured, not limited: see [Data volume](#data-volume).
 - Firmware updates (`docs/ota.md`) go over the modem too: the manifest at most once a day, an update only with enough battery and a signal of at least `CONFIG_OTA_MODEM_MIN_SIGNAL_DBM` (−105 dBm, measured during the attach). The hub restarts into a new firmware only after the modem is down.
-- Modem status in the app (#144); GNSS and SMS (#146).
+- Modem status in the app (#144); SMS (#146). GNSS is used once at start for the location, see [`power-and-schedule.md`](power-and-schedule.md#location).
 - A USB connection lost during a data call can leave the driver waiting; the next deep sleep resets the hub.

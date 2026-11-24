@@ -49,6 +49,20 @@ bool plausible_cell_millivolts(int millivolts);
 // only work with the CAM DIP switch ON (#412).
 const char *gauge_failure_hint(bool bus_timeout);
 
+// Retry rate while the gauge does not answer (#412). The first
+// `kGaugeFreeAttempts` failures in a row are retried at once (boot detection
+// tries three times), then the wait doubles from `kGaugeBackoffStartMs` up to
+// `kGaugeBackoffMaxMs`. 0 means: try now.
+constexpr int kGaugeFreeAttempts = 3;
+constexpr int kGaugeBackoffStartMs = 2000;
+constexpr int kGaugeBackoffMaxMs = 5 * 60 * 1000;
+int gauge_retry_delay_ms(int failures);
+
+// Whether to reset the I2C bus (`i2c_master_bus_reset()`) before the next
+// attempt: the probe timed out and the free attempts are used up. A reset on
+// every attempt is fine, the back-off rate-limits them.
+bool gauge_should_reset_bus(int failures, bool bus_timeout);
+
 // A battery is detected (the gauge answers with a plausible cell voltage) but
 // the hub runs in mains mode: no deep sleep and no Wi-Fi modem sleep, so the
 // cell drains within hours (#416). `gauge_millivolts` is -1 when the gauge

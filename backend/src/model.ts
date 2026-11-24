@@ -233,6 +233,10 @@ export interface AppUser {
   role: 'user' | 'admin';
   tokenHash: string;
   created: number;
+  /** Mail address for hub notices (#445), set by the admin. Absent: no mail. */
+  email?: string;
+  /** Which notices are mailed to `email` (#445); everything off when absent. */
+  notify?: UserNotify;
   /** Admin only (#259): base32 TOTP secret, the second factor for the admin session. */
   totpSecret?: string;
   /** Last accepted TOTP time step; a code works only once. */
@@ -243,14 +247,51 @@ export interface AppUser {
   totpLockedUntil?: number;
 }
 
+/** Notices mailed to an end user (#445). */
+export interface UserNotify {
+  /** The hub has not checked in (and when it is back). */
+  hubSilent: boolean;
+  /** A camera was not read for a day although the hub checks in. */
+  cameraNotRead: boolean;
+  /** A battery is critical (hub or camera). */
+  battery: boolean;
+}
+
 /** One line of the admin audit log (#259), kept for AUDIT_KEEP_S. */
 export interface AuditEntry {
   at: number;
   /** User id of the admin (or the user who tried to become one). */
   actor: number;
-  action: 'elevate' | 'elevateFailed' | 'elevateLocked' | 'rotateUser' | 'revokeUser';
+  action:
+    | 'elevate'
+    | 'elevateFailed'
+    | 'elevateLocked'
+    | 'rotateUser'
+    | 'revokeUser'
+    | 'shareCreated'
+    | 'shareRevoked';
   /** User the action was about, if any. */
   target?: number;
+}
+
+/**
+ * A link to one recording that works without an app token (#444). Only the
+ * hash of the token is stored. The record lives until `expiresAt` (plus a
+ * day, then DynamoDB removes it) or until the user revokes it.
+ */
+export interface ShareRecord {
+  /** Short random id the owner uses to list and revoke; not secret. */
+  shareId: string;
+  /** SHA-256 of the token in the link. */
+  tokenHash: string;
+  camId: string;
+  mediaId: number;
+  kind: 'thumb' | 'video';
+  /** Show the camera name on the page; default off (it can give away the place). */
+  showCamera: boolean;
+  createdBy: number;
+  created: number;
+  expiresAt: number;
 }
 
 export const AUDIT_KEEP_S = 90 * 24 * 60 * 60;
@@ -281,6 +322,7 @@ export interface FirmwareChange {
   /** Check-in that reported the new version, Unix seconds. */
   at: number;
   from: string;
+  /** Empty for a `skipped` event of a hub that was stopped before it read the manifest (#363). */
   to: string;
   /**
    * The hub's own record of an update (#149); absent for a change the

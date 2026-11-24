@@ -22,6 +22,55 @@ config SCHEDULE_CAMERA_PLAN
         Overridden by "config set camera_plan" (serial console, web
         installer) and by the backend.
 
+config SCHEDULE_QUIET
+    string "Quiet hours (local time)"
+    default "23:00-06:00"
+    help
+        Applies on battery power; on mains there are no quiet hours unless
+        "quiet" is set. A time window "HH:MM-HH:MM" in local time
+        (TIME_ZONE), which may span midnight. Inside it the hub neither
+        reads the cameras nor checks in and sleeps until the end; what was
+        due waits and runs at the end (a read, which also syncs). A read
+        asked for by the app waits as well. The BOOT button and a power-on
+        still start a cycle. "off" or an empty text: no quiet hours. Needs
+        a valid clock, otherwise it is ignored.
+        Overridden by "config set quiet".
+
+config SCHEDULE_LOCATION
+    string "Location of the hub (LAT,LON in decimal degrees)"
+    default ""
+    help
+        For the sun times of read windows such as
+        "sunrise-60..sunrise+90=30" in the camera plan, for example
+        "52.5,13.4" (rounded to 0.1 degrees, about 10 km). Empty: the
+        hub uses the middle of Germany (51.0,10.0), which is off by up to
+        about 25 minutes at the borders, and tells it in "status".
+        Overridden by "config set location".
+
+config SCHEDULE_ENERGY
+    bool "Check in more often when the battery history allows it"
+    default y
+    help
+        The hub keeps the charge of its cell in the morning and how long the
+        cell sat full while charging for the last seven days (needs the
+        battery gauge). A cell that is well charged in the morning with a
+        steady trend shortens the check-in interval in steps (x0.75, x0.5);
+        a low morning or a falling trend take it back. A full cell halves it
+        at once for the rest of the day. Camera reads are not affected.
+        Not at a low or critical hub battery. See docs/power-and-schedule.md.
+
+config SCHEDULE_ENERGY_TARGET_PERCENT
+    int "Charge the cell should have in the morning (%)"
+    depends on SCHEDULE_ENERGY
+    range 20 90
+    default 60
+
+config SCHEDULE_MIN_INTERVAL_MIN
+    int "Shortest check-in interval with the energy factor (minutes)"
+    depends on SCHEDULE_ENERGY
+    range 5 120
+    default 10
+
 config SCHEDULE_CHECKIN_INTERVAL_MIN
     int "Backend check-in interval (minutes, 0 = off)"
     range 0 1440

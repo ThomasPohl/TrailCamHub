@@ -57,7 +57,7 @@ import type {
   ScheduleStretch,
   SdCardState,
 } from './model';
-import { hubFaults } from './faults';
+import { hubFaults, userFaults } from './faults';
 import { loadHubInputs } from './hub-inputs';
 import {
   approvedAddresses,
@@ -84,6 +84,7 @@ import {
 } from './schedule';
 import type { MediaStorage } from './storage';
 import type { CameraTelemetry, Store } from './store/types';
+import { createShare, listShares, revokeShare, showShare } from './share';
 
 export interface Deps {
   store: Store;
@@ -124,6 +125,16 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'GET', pattern: '/v1/cameras/:camId/media', handler: listMedia },
   { method: 'POST', pattern: '/v1/cameras/:camId/commands', handler: createCommand },
   { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/withdraw', handler: withdrawMedia },
+  { method: 'POST', pattern: '/v1/cameras/:camId/media/:mediaId/share', handler: shareMedia },
+  { method: 'GET', pattern: '/v1/shares', handler: listOwnShares },
+  // POST, not DELETE: the Function URL's CORS allows only GET and POST.
+  { method: 'POST', pattern: '/v1/shares/:shareId/revoke', handler: revokeOwnShare },
+  // Public: opens without a token (#444); the token in the path is the secret.
+  {
+    method: 'GET',
+    pattern: '/v1/s/:token',
+    handler: async (_r, p, d) => showShare(p.token ?? '', d),
+  },
   { method: 'POST', pattern: '/v1/cameras/:camId/name', handler: renameCameraByUser },
   { method: 'POST', pattern: '/v1/cameras/:camId/hidden', handler: hideCamera },
   {
@@ -141,6 +152,11 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
     pattern: '/v1/hubs/:hubId/found-cameras/:address',
     handler: decideFoundCamera,
   },
+  // What the user of a hub may see of its history and data volume, and the
+  // hints in plain words (#431); the technical faults stay with the admin.
+  { method: 'GET', pattern: '/v1/hubs/:hubId/history', handler: hubHistory },
+  { method: 'GET', pattern: '/v1/hubs/:hubId/usage', handler: hubUsage },
+  { method: 'GET', pattern: '/v1/hubs/:hubId/hints', handler: hubHints },
   { method: 'GET', pattern: '/v1/admin/hubs', handler: adminHubs },
   { method: 'GET', pattern: '/v1/admin/hubs/:hubId/history', handler: adminHistory },
   { method: 'GET', pattern: '/v1/admin/hubs/:hubId/usage', handler: adminUsage },
@@ -483,13 +499,8 @@ async function listAudit(req: ApiRequest, _p: Record<string, string>, deps: Deps
 /** How far back the admin view shows the battery history (#76). */
 const HISTORY_VIEW_S = 30 * 24 * 60 * 60;
 
-/** Battery and SD samples of a hub and its cameras, for the admin (#76). */
-async function adminHistory(req: ApiRequest, params: Record<string, string>, deps: Deps) {
-  const user = await authUser(req, deps);
-  requireAdmin(user);
-  const hubId = params.hubId ?? '';
-  const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
-  if (!hub) throw new HttpError(404, 'Hub not found');
+/** Battery and SD samples of a hub and its cameras (#76). */
+async function historyOf(hubId: string, deps: Deps): Promise<HubHistory> {
   const since = deps.now() - HISTORY_VIEW_S;
   const history: HubHistory = {
     hub: await deps.store.listSamples({ hubId }, since),
@@ -504,7 +515,23 @@ async function adminHistory(req: ApiRequest, params: Record<string, string>, dep
       samples: await deps.store.listSamples({ camId }, since),
     });
   }
-  return json(200, history);
+  return history;
+}
+
+/** For the admin: any hub. */
+async function adminHistory(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const user = await authUser(req, deps);
+  requireAdmin(user);
+  const hubId = params.hubId ?? '';
+  const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
+  if (!hub) throw new HttpError(404, 'Hub not found');
+  return json(200, await historyOf(hubId, deps));
+}
+
+/** For every user linked to the hub (#431). */
+async function hubHistory(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const hub = await userHub(req, params.hubId ?? '', deps);
+  return json(200, await historyOf(hub.hubId, deps));
 }
 
 /** UTC day of a Unix time, `YYYY-MM-DD`. */
@@ -516,18 +543,39 @@ function utcDay(seconds: number): string {
  * The day sums of the previous and the current month, with a day of slack on
  * both sides so that the app can assign days to the month of its own time zone.
  */
+async function usageOf(hub: HubRecord, deps: Deps): Promise<HubUsage> {
+  const now = new Date(deps.now() * 1000);
+  const previousMonth = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1) / 1000;
+  return {
+    budgetMB: hub.dataBudgetMB,
+    days: await deps.store.listDataUsage(hub.hubId, utcDay(previousMonth - 24 * 3600)),
+  };
+}
+
 async function adminUsage(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   requireAdmin(await authUser(req, deps));
   const hubId = params.hubId ?? '';
   const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
   if (!hub) throw new HttpError(404, 'Hub not found');
-  const now = new Date(deps.now() * 1000);
-  const previousMonth = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1) / 1000;
-  const usage: HubUsage = {
-    budgetMB: hub.dataBudgetMB,
-    days: await deps.store.listDataUsage(hubId, utcDay(previousMonth - 24 * 3600)),
-  };
-  return json(200, usage);
+  return json(200, await usageOf(hub, deps));
+}
+
+/** For every user linked to the hub, read only; the plan is the admin's (#431). */
+async function hubUsage(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const hub = await userHub(req, params.hubId ?? '', deps);
+  return json(200, await usageOf(hub, deps));
+}
+
+/**
+ * What needs a look at a hub, as far as the user can do something about it:
+ * the hub not reporting, batteries, full SD cards, a camera not read. The
+ * technical faults (failed requests, firmware, memory) are the admin's (#431).
+ */
+async function hubHints(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const hub = await userHub(req, params.hubId ?? '', deps);
+  const { records, firmwareChanges, excluded } = await loadHubInputs(deps.store, hub);
+  const faults = userFaults(hubFaults(hub, records, deps.now(), firmwareChanges, excluded));
+  return json(200, faults);
 }
 
 /** Sets or removes the monthly data plan of a hub (#415). */
@@ -781,10 +829,15 @@ async function setSchedule(req: ApiRequest, params: Record<string, string>, deps
     config.checkinIntervalS = value as number;
   }
   if (body.powerSetting !== undefined && body.powerSetting !== null) {
+    // The power supply is hardware: only the admin changes it (#431).
+    if (!user.admin) throw new HttpError(403, 'Only the admin can set the power supply');
     if (!POWER_SETTINGS.includes(body.powerSetting as PowerSetting)) {
       throw new HttpError(400, 'powerSetting must be auto, mains or battery');
     }
     config.powerSetting = body.powerSetting as PowerSetting;
+  } else if (!user.admin && hub.scheduleConfig?.powerSetting) {
+    // The schedule is replaced as a whole: a user's change keeps the admin's choice.
+    config.powerSetting = hub.scheduleConfig.powerSetting;
   }
   await deps.store.setHubScheduleConfig(hubId, config);
   return json(200, config);
@@ -794,6 +847,22 @@ async function setSchedule(req: ApiRequest, params: Record<string, string>, deps
  * Withdraws the open requests (video, delete) for a recording that the hub
  * has not picked up yet. Once delivered, the hub may already be at work.
  */
+async function shareMedia(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const user = await authUser(req, deps);
+  const camera = await authUserForCamera(req, params.camId ?? '', deps);
+  const mediaId = Number(params.mediaId);
+  if (!isMediaId(mediaId)) throw new HttpError(400, 'mediaId must be a valid media id');
+  return createShare(req, camera, mediaId, user.userId, deps);
+}
+
+async function listOwnShares(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
+  return listShares((await authUser(req, deps)).userId, deps);
+}
+
+async function revokeOwnShare(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  return revokeShare((await authUser(req, deps)).userId, params.shareId ?? '', deps);
+}
+
 async function withdrawMedia(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const camera = await authUserForCamera(req, params.camId ?? '', deps);
   const mediaId = Number(params.mediaId);
@@ -1090,9 +1159,11 @@ export function parseFirmwareUpdate(raw: unknown, now: number): FirmwareChange |
   if (typeof raw !== 'object' || raw === null) return undefined;
   const r = raw as Record<string, unknown>;
   const from = optionalString(r.from)?.slice(0, 40);
-  const to = optionalString(r.to)?.slice(0, 40);
   const result = UPDATE_RESULTS.find((x) => x === r.result);
-  if (!from || !to || !result) return undefined;
+  // A `skipped` record may come without `to`: the hub was stopped before it
+  // read the manifest and names no release (#363). It is stored with `to: ''`.
+  const to = optionalString(r.to)?.slice(0, 40) ?? (result === 'skipped' ? '' : undefined);
+  if (!from || to === undefined || !result) return undefined;
   const reason = optionalString(r.reason)?.slice(0, 200);
   const at = optionalNumber(r.at);
   const change: FirmwareChange = {

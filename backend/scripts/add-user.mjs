@@ -8,6 +8,9 @@
 //   npm run add-user -- --user <userId> [--hub ...]   # new token, more hubs
 //   npm run add-user -- --user <userId> --revoke      # lock out (lost laptop)
 //   npm run add-user -- --user <adminId> --rotate-totp # new TOTP secret (lost phone)
+//   npm run add-user -- --user <userId> --email opa@example.org   # mail notices (#445)
+//   npm run add-user -- --user <userId> --notify hubSilent,battery # only these (default: all)
+//   npm run add-user -- --user <userId> --no-email                 # no more mail
 //
 // An admin has a second factor (TOTP): a new admin gets a secret, shown once
 // as an otpauth:// URI (add it to an authenticator app, e.g. by QR code). The
@@ -37,6 +40,9 @@ const { values } = parseArgs({
     admin: { type: 'boolean', default: false },
     revoke: { type: 'boolean', default: false },
     'rotate-totp': { type: 'boolean', default: false },
+    email: { type: 'string' },
+    'no-email': { type: 'boolean', default: false },
+    notify: { type: 'string' },
     'app-url': {
       type: 'string',
       default: 'https://thomaspohl.github.io/TrailCamHub/app/gallery.html',
@@ -56,6 +62,16 @@ if (!values.user && !values.name) fail('--name is required for a new user');
 if (values.user && !/^\d{16}$/.test(values.user)) fail('--user must be a gallery user id');
 if (values.revoke && !values.user) fail('--revoke needs --user <userId>');
 if (values['rotate-totp'] && !values.user) fail('--rotate-totp needs --user <adminId>');
+if (values.email && values['no-email']) fail('--email and --no-email exclude each other');
+const NOTIFY_KINDS = ['hubSilent', 'cameraNotRead', 'battery'];
+let notify;
+if (values.notify !== undefined) {
+  const chosen = values.notify.split(',').map((k) => k.trim());
+  if (!chosen.every((k) => NOTIFY_KINDS.includes(k))) {
+    fail(`--notify takes ${NOTIFY_KINDS.join(', ')} (comma separated)`);
+  }
+  notify = Object.fromEntries(NOTIFY_KINDS.map((k) => [k, chosen.includes(k)]));
+}
 for (const hub of values.hub) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(hub)) fail(`--hub must be a hub id (got ${hub})`);
 }
@@ -135,6 +151,8 @@ const result = invoke({
   hubIds: values.hub,
   role: values.admin ? 'admin' : undefined,
   rotateTotp: values['rotate-totp'] || undefined,
+  email: values['no-email'] ? null : values.email,
+  notify,
 });
 if (!result.ok) fail(result.error);
 

@@ -379,6 +379,20 @@ TEST_CASE("uplink: firmware update in the check-in (#149)")
           std::string::npos);
 }
 
+TEST_CASE("uplink: a skipped update without a release leaves out `to` (#363)")
+{
+    CheckinRequest request;
+    request.firmware_update.present = true;
+    request.firmware_update.from = "v1.2.0";
+    request.firmware_update.result = "skipped";
+    request.firmware_update.reason = "battery low";
+    const std::string json = build_checkin_json(request);
+    CHECK(json.find("\"firmwareUpdate\":{\"from\":\"v1.2.0\","
+                    "\"result\":\"skipped\",\"reason\":\"battery low\"}") !=
+          std::string::npos);
+    CHECK(json.find("\"to\"") == std::string::npos);
+}
+
 TEST_CASE("uplink: charging state and cell voltage in the check-in (#421)")
 {
     CheckinRequest request;

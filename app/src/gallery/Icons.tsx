@@ -32,6 +32,14 @@ export function SaveIcon() {
   );
 }
 
+export function ShareIcon() {
+  return (
+    <svg {...base}>
+      <path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6" />
+    </svg>
+  );
+}
+
 export function UndoIcon() {
   return (
     <svg {...base}>
@@ -61,6 +69,49 @@ export function PencilIcon() {
   return (
     <svg {...base} width={16} height={16}>
       <path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" />
+    </svg>
+  );
+}
+
+export function CameraIcon() {
+  return (
+    <svg {...base}>
+      <path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <circle cx="12" cy="12.5" r="3.5" />
+    </svg>
+  );
+}
+
+export function ClockIcon() {
+  return (
+    <svg {...base} width={14} height={14}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+export function CheckIcon() {
+  return (
+    <svg {...base} width={14} height={14}>
+      <path d="m5 12 5 5 9-10" />
+    </svg>
+  );
+}
+
+export function AlertIcon() {
+  return (
+    <svg {...base} width={14} height={14}>
+      <path d="M12 3 2 20h20zM12 10v4m0 3h.01" />
+    </svg>
+  );
+}
+
+export function GearIcon() {
+  return (
+    <svg {...base}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" />
     </svg>
   );
 }

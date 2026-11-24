@@ -71,6 +71,7 @@
 #include "sd_log.h"
 #include "schedule_state.hpp"
 #include "time_sync.h"
+#include "camera_settings.hpp"
 #include "device_info.hpp"
 #include "web_paths.hpp"
 #include "web_ui.h"
@@ -443,6 +444,9 @@ struct CameraEntry {
     std::string model;
     std::string firmware;
     std::string state;  // device_state_summary(): battery, charging, °C
+    // The settings and the capability as the check-in has them ("settings":{…},
+    // "capability":{…}); empty if the camera has not reported any (#197).
+    std::string settings;
 };
 std::vector<CameraEntry> s_cameras;
 int64_t s_cameras_us;
@@ -487,6 +491,7 @@ void refresh_cameras(int64_t now_us)
             camera.model = info.model_name;
             camera.firmware = info.fw_version;
             camera.state = camera::artemis::device_state_summary(info);
+            camera.settings = camera::settings::report_fields(info.settings);
         } else {
             web::json_string(json, "devId", camera.id);
         }
@@ -596,9 +601,13 @@ esp_err_t handle_status(httpd_req_t *req)
         json += ",\"state\":";
         web::append_json_string(json, s_cameras[i].state);
         char times[72];
-        snprintf(times, sizeof(times), ",\"last_sync\":%lld,\"read_at\":%lld}",
+        snprintf(times, sizeof(times), ",\"last_sync\":%lld,\"read_at\":%lld",
                  s_cameras[i].last_sync, s_cameras[i].read_at);
         json += times;
+        if (!s_cameras[i].settings.empty()) {
+            json += "," + s_cameras[i].settings;
+        }
+        json += "}";
     }
     json += "]}";
     return send_json(req, json);
@@ -673,6 +682,57 @@ esp_err_t handle_action(httpd_req_t *req)
     out[0] = '\0';
     s_callbacks.on_action(type.c_str(), query_int64(req, "id", 0),
                           query_word(req, "code").c_str(), out, sizeof(out));
+    return send_json(req, out[0] != '\0' ? out : "{\"ok\":false}");
+}
+
+// POST /api/settings?cam=<devId> with a JSON object of settings as the body
+// (#197). The camera's own checks (capability, ranges) run again in the
+// session; the answer is the same as for /api/action.
+esp_err_t handle_settings(httpd_req_t *req)
+{
+    if (s_callbacks.on_settings == NULL) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no settings");
+    }
+    constexpr size_t kMaxBody = 768;
+    if (req->content_len == 0 || req->content_len > kMaxBody) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad body");
+    }
+    std::string body(req->content_len, '\0');
+    size_t received = 0;
+    while (received < body.size()) {
+        const int length =
+            httpd_req_recv(req, &body[received], body.size() - received);
+        if (length <= 0) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no body");
+        }
+        received += static_cast<size_t>(length);
+    }
+    std::string cam;
+    const size_t query_length = httpd_req_get_url_query_len(req);
+    if (query_length > 0) {
+        std::string query(query_length + 1, '\0');
+        char value[24];
+        if (httpd_req_get_url_query_str(req, &query[0], query.size()) ==
+                ESP_OK &&
+            httpd_query_key_value(query.c_str(), "cam", value, sizeof(value)) ==
+                ESP_OK) {
+            // A devId: letters, digits and a few separators only.
+            for (const char *c = value; *c != '\0'; ++c) {
+                const bool plain = (*c >= 'a' && *c <= 'z') ||
+                                   (*c >= 'A' && *c <= 'Z') ||
+                                   (*c >= '0' && *c <= '9') || *c == '-' ||
+                                   *c == '_' || *c == ':';
+                if (!plain) {
+                    return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                               "bad camera");
+                }
+                cam += *c;
+            }
+        }
+    }
+    char out[256];
+    out[0] = '\0';
+    s_callbacks.on_settings(cam.c_str(), body.c_str(), out, sizeof(out));
     return send_json(req, out[0] != '\0' ? out : "{\"ok\":false}");
 }
 
@@ -1335,7 +1395,7 @@ esp_err_t start_server()
     config.lru_purge_enable = true;
     config.max_open_sockets = 5;
     config.stack_size = 6144;
-    config.max_uri_handlers = 17;
+    config.max_uri_handlers = 18;
     ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG, "HTTP server");
 
     static const Route kRoutes[] = {
@@ -1350,6 +1410,7 @@ esp_err_t start_server()
         {"/api/stop", HTTP_POST, handle_stop, NULL},
         {"/api/action", HTTP_POST, handle_action, NULL},
         {"/api/actions", HTTP_GET, handle_actions, NULL},
+        {"/api/settings", HTTP_POST, handle_settings, NULL},
         {"/api/time", HTTP_POST, handle_time, NULL},
         {"/api/files", HTTP_GET, handle_files, NULL},
         {"/api/log", HTTP_GET, handle_log, NULL},

@@ -100,6 +100,24 @@ const char *gauge_failure_hint(bool bus_timeout)
                        : "Battery gauge does not answer (no cell inserted?)";
 }
 
+int gauge_retry_delay_ms(int failures)
+{
+    if (failures < kGaugeFreeAttempts) {
+        return 0;
+    }
+    int delay = kGaugeBackoffStartMs;
+    for (int step = kGaugeFreeAttempts;
+         step < failures && delay < kGaugeBackoffMaxMs; ++step) {
+        delay *= 2;
+    }
+    return delay > kGaugeBackoffMaxMs ? kGaugeBackoffMaxMs : delay;
+}
+
+bool gauge_should_reset_bus(int failures, bool bus_timeout)
+{
+    return bus_timeout && failures >= kGaugeFreeAttempts;
+}
+
 bool cell_present(bool answered, bool was_present, int &misses)
 {
     if (answered) {

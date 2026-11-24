@@ -361,6 +361,27 @@ TEST_CASE("ota: update record (#149)")
         CHECK(record.to == "v1.4.0");
     }
 
+    SUBCASE("a hub stopped before the manifest names no release (#363)")
+    {
+        using ota::Decision;
+        UpdateRecord record;
+        CHECK(ota::update_record_skipped(record, "v1.2.0", "",
+                                         Decision::battery_low, 100));
+        CHECK(record.result == UpdateResult::skipped);
+        CHECK(record.to.empty());
+        CHECK(record.reason == ota::decision_text(Decision::battery_low));
+        CHECK(ota::update_record_reportable(record));
+        CHECK(ota::decode_update_record(ota::encode(record)) == record);
+        // At every check-in, but reported once per reason.
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "",
+                                               Decision::battery_low, 200));
+        record.reported = true;
+        CHECK_FALSE(ota::update_record_skipped(record, "v1.2.0", "",
+                                               Decision::battery_low, 300));
+        CHECK(ota::update_record_skipped(record, "v1.2.0", "",
+                                         Decision::weak_signal, 400));
+    }
+
     SUBCASE("a held-back release never hides another result")
     {
         using ota::Decision;

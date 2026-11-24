@@ -29,6 +29,25 @@ one, and a service worker in `public/`), and with Chrome or Edge it writes finis
 videos into a folder chosen once (File System Access API, `src/gallery/folder.ts`),
 one sub-folder per camera; other browsers download them.
 
+**Activity** (#443): the button "Aktivität" in the header opens
+`ActivityDialog`: a heatmap of weekday × hour of the camera clock (numbers in
+the cells, so colour is not the only cue), the events of the last 90 days and a
+sentence on the busiest and the quietest hours, for one camera or all. Built
+from the recordings the gallery loads anyway (`src/gallery/activity.ts`);
+nothing new is stored. Recordings less than a minute apart are one event, and
+recordings of a camera whose clock was never set (before 2020) are left out
+with a note. `mediaTime` is the camera's wall clock, so the hours are the
+hub's local time (`docs/clock.md`). From at least 50 events over 14 days the
+dialog suggests a **camera read plan**: up to three windows around the busy hours
+(hours with at least 1.5 times the average, a gap of one hour is bridged, also
+over midnight) every 30 minutes, 2 hours for the rest, e.g.
+`16:00-19:00=30,*=120`. "Plan übernehmen" sets it for the hub like the admin's
+schedule editor and keeps the other values. The suggestion uses fixed times
+because the backend's plan editor does not take sun-relative bounds
+(`sunrise-60..sunrise+90`) yet; it counts the events of all cameras, as the
+plan is per hub. A day-by-day export and recognising empty triggers (#442) are
+not built; `activityEvents` takes a filter for the latter.
+
 With `VITE_API_BASE_URL` it talks to the backend and signs in with the token
 from the setup link that `npm run add-user` in `backend/` prints
 (`gallery.html#token=…`, #259). Without it, or with `?demo`, it uses a **demo
@@ -61,6 +80,19 @@ stops working; the new link is shown once) or **lock** the user out. Admin
 accounts are changed only with `npm run add-user` in `backend/`. A log at the
 bottom lists the last logins and changes. `?demo=admin-code` shows the code
 prompt in the demo (code `123456`).
+
+### Empty triggers (#442)
+
+"Leere erkennen" marks recordings that probably show nothing (wind, sun,
+shadows). It runs only in the browser: the thumbnails are reduced to a small
+grey grid and compared with the nearest pictures of the same camera. A compact
+patch that differs from all neighbours means an animal; a brightness change of
+the whole picture or scattered pixels (grass) does not. The info bar at the
+bottom is ignored. Results are kept in IndexedDB on this device, nothing is
+sent to the backend. It is off by default; "Strenge" (careful / normal /
+strict) sets how sure the app must be, and "Leere ausblenden" hides the marked
+ones. In the viewer a verdict can be corrected, and the correction always wins.
+The thresholds in `emptiness.ts` are not tuned on real pictures yet (phase 1).
 
 ## Development
 
