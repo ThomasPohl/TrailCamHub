@@ -846,6 +846,8 @@ const char *origin_name(Origin origin)
         return "local";
     case Origin::remote:
         return "remote";
+    case Origin::gnss:
+        return "gnss";
     }
     return "built-in";
 }

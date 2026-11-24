@@ -18,4 +18,12 @@ constexpr std::size_t kOperatorNameMax = 32;
 // none or only a placeholder.
 std::string clean_operator_name(const std::string &raw);
 
+// The position in an AT+CGNSSINFO answer of the A76xx (SIMCom):
+// `+CGNSSINFO: <mode>,<GPS>,<GLONASS>,<BEIDOU>,<ddmm.mmmmmm>,<N|S>,
+// <dddmm.mmmmmm>,<E|W>,<date>,<time>,...`. True with the position in decimal
+// degrees if there is a fix; false for an answer without one (the fields
+// are empty until the receiver has a fix) or one that makes no sense.
+bool parse_gnss_info(const std::string &answer, double &latitude,
+                     double &longitude);
+
 }  // namespace modem_uplink

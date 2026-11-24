@@ -6,4 +6,4 @@ idf_component_register(SRCS "session_controller.cpp" "session_fsm.cpp"
                                      diagnostics esp_netif esp_timer
                                      ethernet_uplink
                                      hub_battery hub_config modem_uplink
-                                     uplink)
+                                     schedule_state uplink)

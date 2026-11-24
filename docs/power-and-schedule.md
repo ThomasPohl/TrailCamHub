@@ -86,6 +86,21 @@ minute). Set it with `config set location 52.5,13.4` or in the build
 so in `status` (`location … (fallback, no location set …)`); `status` also
 shows today's sunrise and sunset to check the value.
 
+**GNSS at start** (#436, boards with a GNSS-capable modem such as the Waveshare
+ESP32-S3-A7670E-4G with its antenna connected): after a power-on or reset, if
+no location is set (setting, build) and none was found before, the modem task
+switches the receiver on (`AT+CGNSSPWR=1`), polls `AT+CGNSSINFO` for up to
+`CONFIG_MODEM_GNSS_FIX_TIMEOUT_S` (180 s; 0 turns it off), switches it off
+again and stores the fix rounded to 0.1° (NVS `gnss_loc`, origin `gnss` in
+`status`). It runs before the modem goes into flight mode; a sync that starts
+meanwhile waits for it, and the first cycles may still use the fallback
+position. Without antenna, receiver or sky there is no fix: the hub logs
+`GNSS: no fix`, keeps the fallback and tries again at the next power-on or
+reset. Order of precedence: set on the hub > found by GNSS > build > fallback.
+A stored fix stays; a hub that moved gets its new position with
+`config set location …`. Not verified on hardware yet (the answer format is
+from the A76xx AT manual).
+
 ### Quiet hours
 
 Setting `quiet`, a window in local time (`CONFIG_TIME_ZONE`) that may span
@@ -110,7 +125,7 @@ are none unless `config set quiet …` is used.
 - Without a valid clock the window is ignored, as the read windows are.
 - `status` prints `quiet hours … (origin)`.
 
-Not yet there: a GNSS location at start, alignment of reads and check-ins, the
+Not yet there: alignment of reads and check-ins, the
 energy factor in the check-in report and the app, and the fields in the
 installer and the app (all planned in #436).
 

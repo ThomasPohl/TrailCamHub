@@ -86,6 +86,12 @@ State state();
 // minutes of the day; -1 where unknown.
 SunDay sun_day(const Location &position, std::int64_t unix_time);
 
+// GNSS location at start (#436). `gnss_wanted()`: no location is set (by the
+// hub, the build or an earlier fix), so the modem should look for one.
+// `set_gnss_location()` stores a fix (rounded to 0.1 degrees, NVS).
+bool gnss_wanted();
+void set_gnss_location(double latitude, double longitude);
+
 Times next_times();
 Times next_times(const Effective &effective);
 
