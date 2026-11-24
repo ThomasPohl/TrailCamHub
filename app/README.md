@@ -81,6 +81,19 @@ accounts are changed only with `npm run add-user` in `backend/`. A log at the
 bottom lists the last logins and changes. `?demo=admin-code` shows the code
 prompt in the demo (code `123456`).
 
+### Empty triggers (#442)
+
+"Leere erkennen" marks recordings that probably show nothing (wind, sun,
+shadows). It runs only in the browser: the thumbnails are reduced to a small
+grey grid and compared with the nearest pictures of the same camera. A compact
+patch that differs from all neighbours means an animal; a brightness change of
+the whole picture or scattered pixels (grass) does not. The info bar at the
+bottom is ignored. Results are kept in IndexedDB on this device, nothing is
+sent to the backend. It is off by default; "Strenge" (careful / normal /
+strict) sets how sure the app must be, and "Leere ausblenden" hides the marked
+ones. In the viewer a verdict can be corrected, and the correction always wins.
+The thresholds in `emptiness.ts` are not tuned on real pictures yet (phase 1).
+
 ## Development
 
 ```bash

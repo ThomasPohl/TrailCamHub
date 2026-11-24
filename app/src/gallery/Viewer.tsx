@@ -29,6 +29,9 @@ interface Props {
   onRequestVideo(): void;
   onSave(): void;
   onShare(): void;
+  /** With the empty-trigger detection on (#442): what it thinks, and the user's word on it. */
+  emptyVerdict?: 'empty' | 'animal' | 'unsure';
+  onCorrectEmpty?(value: 'empty' | 'animal'): void;
   onWithdraw(): void;
   onDelete(): void;
   onClose(): void;
@@ -56,6 +59,8 @@ export function Viewer({
   onRequestVideo,
   onSave,
   onShare,
+  emptyVerdict,
+  onCorrectEmpty,
   onWithdraw,
   onDelete,
   onClose,
@@ -210,6 +215,15 @@ export function Viewer({
             {recording.state !== 'deleted' && recording.state !== 'deleteRequested' && (
               <button type="button" className="g-btn g-btn--quiet" onClick={onShare}>
                 <ShareIcon /> Teilen
+              </button>
+            )}
+            {emptyVerdict && onCorrectEmpty && (
+              <button
+                type="button"
+                className="g-btn g-btn--quiet"
+                onClick={() => onCorrectEmpty(emptyVerdict === 'empty' ? 'animal' : 'empty')}
+              >
+                {emptyVerdict === 'empty' ? 'Doch nicht leer' : 'Als leer markieren'}
               </button>
             )}
             {(recording.state === 'videoRequested' || recording.state === 'deleteRequested') && (

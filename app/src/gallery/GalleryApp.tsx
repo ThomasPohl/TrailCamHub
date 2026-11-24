@@ -22,6 +22,10 @@ import {
 import { ActivityDialog } from './ActivityDialog';
 import { ShareDialog } from './ShareDialog';
 import { Viewer } from './Viewer';
+import { openEmptyStore } from './emptyDetector';
+import { loadFrame } from './emptyFrames';
+import { useEmptyTriggers, type EmptyDeps } from './useEmptyTriggers';
+import type { Sensitivity } from './emptiness';
 import * as realFolder from './folder';
 import type { FolderState } from './folder';
 import { batteryLevel } from '../format';
@@ -59,7 +63,19 @@ interface Props {
   now?: () => number;
   /** How often the page asks the backend for news, ms; 0 = never. */
   pollMs?: number;
+  /** Where the empty-trigger detection reads pictures and keeps its results (tests replace it). */
+  empty?: EmptyDeps;
 }
+
+let browserEmpty: EmptyDeps | undefined;
+const realEmpty = (): EmptyDeps =>
+  (browserEmpty ??= { loadFrame: (url) => loadFrame(url), store: openEmptyStore() });
+
+const SENSITIVITY_LABEL: Record<Sensitivity, string> = {
+  careful: 'Vorsichtig',
+  normal: 'Normal',
+  strict: 'Streng',
+};
 
 const unixNow = () => Math.floor(Date.now() / 1000);
 const SAVED_KEY = 'trailcamhub.gallery.saved';
@@ -120,7 +136,13 @@ const byCamera = (items: Recording[]): Map<string, Recording[]> => {
   return map;
 };
 
-export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 15_000 }: Props) {
+export function GalleryApp({
+  api,
+  folder = realFolder,
+  now = unixNow,
+  pollMs = 15_000,
+  empty,
+}: Props) {
   const [status, setStatus] = useState<GalleryStatus>();
   const [camId, setCamId] = useState<string>();
   const [items, setItems] = useState<Recording[]>();
@@ -156,6 +178,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   const [settingsFor, setSettingsFor] = useState<string>();
   const [sharing, setSharing] = useState<Recording>();
   const [activityOpen, setActivityOpen] = useState(false);
+  const [hideEmpty, setHideEmpty] = useState(false);
+  const detect = useEmptyTriggers(items, empty ?? realEmpty(), now);
   const saving = useRef(false);
   // The chosen camera, readable in a reload that started before a switch: a
   // slow reload must not undo the user's choice (#431).
@@ -498,7 +522,10 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
 
   const t = now();
   const counts = countByFilter(items ?? []);
-  const visible = applyFilter(items ?? [], stateFilter);
+  const isEmpty = (r: Recording) => detect.verdicts.get(recordingKey(r)) === 'empty';
+  const emptyCount = (items ?? []).filter(isEmpty).length;
+  const byState = applyFilter(items ?? [], stateFilter);
+  const visible = detect.enabled && hideEmpty ? byState.filter((r) => !isEmpty(r)) : byState;
   const days = groupByDay(visible, t);
   const viewIndex = viewing ? visible.findIndex((r) => recordingKey(r) === viewing.key) : -1;
   const viewed = viewIndex >= 0 ? visible[viewIndex] : undefined;
@@ -733,6 +760,65 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                     {f.id !== 'all' && <span className="g-sfilter__n"> {counts[f.id]}</span>}
                   </button>
                 ))}
+              </div>
+              <div className="g-empty" role="group" aria-label="Leere Auslösungen">
+                <button
+                  type="button"
+                  className="g-btn g-btn--quiet g-btn--small"
+                  aria-pressed={detect.enabled}
+                  onClick={() => detect.setEnabled(!detect.enabled)}
+                >
+                  Leere erkennen
+                </button>
+                {detect.enabled && (
+                  <>
+                    <label className="g-empty__level">
+                      Strenge{' '}
+                      <select
+                        value={detect.sensitivity}
+                        onChange={(e) => detect.setSensitivity(e.target.value as Sensitivity)}
+                      >
+                        {(Object.keys(SENSITIVITY_LABEL) as Sensitivity[]).map((level) => (
+                          <option key={level} value={level}>
+                            {SENSITIVITY_LABEL[level]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {emptyCount > 0 && (
+                      <button
+                        type="button"
+                        className="g-btn g-btn--quiet g-btn--small"
+                        aria-pressed={hideEmpty}
+                        onClick={() => setHideEmpty((on) => !on)}
+                      >
+                        Leere ausblenden ({emptyCount})
+                      </button>
+                    )}
+                    {selecting && emptyCount > 0 && (
+                      <button
+                        type="button"
+                        className="g-btn g-btn--quiet g-btn--small"
+                        onClick={() =>
+                          setSelected((current) => {
+                            const next = new Set(current);
+                            (items ?? [])
+                              .filter((r) => isEmpty(r) && selectable(r))
+                              .forEach((r) => next.add(recordingKey(r)));
+                            return next;
+                          })
+                        }
+                      >
+                        Leere auswählen
+                      </button>
+                    )}
+                    {detect.progress && (
+                      <span className="g-hint" role="status">
+                        Prüfe Bilder … {detect.progress.done}/{detect.progress.total}
+                      </span>
+                    )}
+                  </>
+                )}
               </div>
               <button
                 type="button"
@@ -1040,7 +1126,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                         key={key}
                         className={`g-tile g-tile--${r.state}${picked ? ' g-tile--chosen' : ''}${
                           selecting || selected.size > 0 ? ' g-tile--selecting' : ''
-                        }`}
+                        }${isEmpty(r) ? ' g-tile--empty' : ''}`}
                       >
                         <button
                           type="button"
@@ -1070,6 +1156,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
                             <span className="g-visually-hidden"> – {r.failReason}</span>
                           )}
                         </span>
+                        {isEmpty(r) && <span className="g-tile__empty">wahrscheinlich leer</span>}
                         {r.state === 'videoReady' && (
                           <button
                             type="button"
@@ -1158,6 +1245,8 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               }
               onSave={() => void saveOne(viewed)}
               onShare={() => setSharing(viewed)}
+              emptyVerdict={detect.enabled ? detect.verdicts.get(recordingKey(viewed)) : undefined}
+              onCorrectEmpty={(value) => detect.correct(recordingKey(viewed), value)}
               onWithdraw={() => void act(() => api.withdraw(viewed.camId, viewed))}
               onDelete={() => setConfirm({ question: '1 Aufnahme löschen?', items: [viewed] })}
               onClose={() => setViewing(undefined)}
