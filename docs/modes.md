@@ -47,7 +47,7 @@ remote change can lock the hub out or leak a secret:
 | Setting | From the gallery | Why |
 | ------- | ---------------- | --- |
 | `camera_plan`, `checkin_min` | yes (kept apart from the hub's own, origin "remote") | the schedule, [`power-and-schedule.md`](power-and-schedule.md) |
-| `quiet` | no (hub only, #436) | the schedule, [`power-and-schedule.md`](power-and-schedule.md) |
+| `quiet`, `location` | no (hub only, #436) | the schedule, [`power-and-schedule.md`](power-and-schedule.md) |
 | `power` | yes, `powerSetting` | the hub stores it as its own setting if the board can use it (`power auto` needs a gauge, `battery` needs deep sleep; a refused value is only logged) and uses it **from the next start**. A battery hub restarts every cycle; a mains hub keeps its mode until someone restarts it. `battery` on a mains hub puts it to sleep between cycles, so the web UI is then reachable only around the contact times. No value: the hub keeps what it has |
 | `direction`, `transport`, `destination`, `wifi_ssid`, `api_url`, `device_key` | no | a wrong value cuts the hub off from the gallery, and nothing can undo it remotely |
 | `wifi_password`, `sim_pin`, `apn`, `webdav_*`, `web_password`, `camera_user`, `camera_password` | no | secrets or credentials; they must not pass through the backend |
@@ -163,6 +163,7 @@ the one further left in "Wins" applies.
 | Camera read plan | `CONFIG_SCHEDULE_CAMERA_PLAN` | – | `camera_plan` | `config` in the check-in response | backend, hub, build ([power-and-schedule.md](power-and-schedule.md)) |
 | Check-in interval | `CONFIG_SCHEDULE_CHECKIN_INTERVAL_MIN` | – | `checkin_min` | `config` in the check-in response | backend, hub, build |
 | Quiet hours | `CONFIG_SCHEDULE_QUIET` | – | `quiet` | – | hub, build |
+| Location (sun times) | `CONFIG_SCHEDULE_LOCATION` | – | `location` | – | hub, build |
 | Home Wi-Fi, APN, SIM PIN, destination URLs and credentials, `health_url`, camera login | – | – | yes | – | hub |
 | Web UI password | – | – | `web_password`; empty: generated at the first start | – | hub |
 | Time zone | `CONFIG_TIME_ZONE` | – | – | – | build |

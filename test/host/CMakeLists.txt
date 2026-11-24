@@ -89,6 +89,7 @@ add_executable(host_tests
     test_deferred_command.cpp
     test_playback_policy.cpp
     test_schedule_plan.cpp
+    test_sun.cpp
     test_sd_log_files.cpp
     test_session_fsm.cpp
     test_status_screen.cpp
@@ -159,6 +160,7 @@ add_executable(host_tests
     ${time_dir}/time_policy.cpp
     ${wifi_dir}/disconnect_policy.cpp
     ${schedule_dir}/schedule_plan.cpp
+    ${schedule_dir}/sun.cpp
     ${sd_log_dir}/log_files.cpp
     ${ota_dir}/ota_policy.cpp
     ${modem_dir}/modem_operator.cpp

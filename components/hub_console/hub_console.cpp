@@ -369,6 +369,27 @@ void print_schedule()
                       ")");
     reply("INFO", "quiet hours " + effective.quiet + " (" +
                       schedule::origin_name(effective.quiet_origin) + ")");
+    {
+        std::string text =
+            "location " + schedule::format_location(effective.position) +
+            (effective.location_fallback
+                 ? " (fallback, no location set: "
+                   "config set location LAT,LON)"
+                 : std::string(" (") +
+                       schedule::origin_name(effective.location_origin) + ")");
+        const std::int64_t unix_time = schedule::to_unix(schedule::now());
+        const schedule::SunDay sun =
+            schedule::sun_day(effective.position, unix_time);
+        if (sun.sunrise >= 0 && sun.sunset >= 0) {
+            char times[48];
+            std::snprintf(times, sizeof(times),
+                          ", sunrise %02d:%02d, sunset %02d:%02d",
+                          sun.sunrise / 60, sun.sunrise % 60, sun.sunset / 60,
+                          sun.sunset % 60);
+            text += times;
+        }
+        reply("INFO", text);
+    }
     reply("INFO",
           "check-in every " + std::to_string(effective.checkin_min) + " min (" +
               schedule::origin_name(effective.checkin_origin) +

@@ -66,6 +66,10 @@ enum class Key {
     // "off"; empty: the default of the build. No camera reads and check-ins
     // inside, the hub sleeps until the end.
     quiet,
+    // Position of the hub as "LAT,LON" in decimal degrees (rounded to 0.1),
+    // for the sun times of the read windows (#436); empty: the build's
+    // `SCHEDULE_LOCATION`, else the middle of Germany with a hint.
+    location,
 };
 
 constexpr Key kAllKeys[] = {
@@ -75,11 +79,12 @@ constexpr Key kAllKeys[] = {
     Key::power,           Key::direction,     Key::destination,
     Key::webdav_url,      Key::webdav_user,   Key::webdav_password,
     Key::health_url,      Key::web_password,  Key::camera_user,
-    Key::camera_password, Key::webdav_videos, Key::quiet};
+    Key::camera_password, Key::webdav_videos, Key::quiet,
+    Key::location};
 // Every key must be in kAllKeys (loading, "config set" and "config show" go
 // through it); the last enumerator is the last key.
 static_assert(sizeof(kAllKeys) / sizeof(kAllKeys[0]) ==
-                  static_cast<std::size_t>(Key::quiet) + 1,
+                  static_cast<std::size_t>(Key::location) + 1,
               "kAllKeys must list every Key");
 
 struct Settings {
@@ -104,6 +109,7 @@ struct Settings {
     std::string camera_password;
     std::string webdav_videos;
     std::string quiet;
+    std::string location;
 };
 
 enum class Transport {

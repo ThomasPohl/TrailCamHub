@@ -22,12 +22,24 @@
 // window comes at its start if the last one is older than the window's
 // interval. Without a valid clock the windows are ignored and the "*"
 // interval applies (if it is 0 or missing, the longest window interval).
+//
+// A window may also start or end at the sun (#436):
+//
+//   "sunrise-60..sunrise+90=30,sunset-90..sunset+60=30,*=120"
+//
+// A bound is HH:MM, "sunrise" or "sunset", the last two with an offset in
+// minutes (+N or -N, at most 12 hours). ".." separates the bounds; the older
+// form HH:MM-HH:MM stays valid. Sun times come from a SunMinutes function, so
+// that this logic needs neither a position nor a clock; a window whose sun
+// time is unknown (no function, polar day) is skipped.
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
+
+#include "sun.hpp"
 
 namespace schedule
 {
@@ -49,6 +61,17 @@ struct Window {
     std::uint16_t end = 0;
     // Interval in minutes; 0: no reads in this window.
     std::uint16_t interval_min = 0;
+    // A bound at the sun: 0 = clock (`start` / `end`), 1 = sunrise, 2 =
+    // sunset, plus `start_offset` / `end_offset` minutes.
+    std::uint8_t start_sun = 0;
+    std::uint8_t end_sun = 0;
+    std::int16_t start_offset = 0;
+    std::int16_t end_offset = 0;
+
+    bool uses_sun() const
+    {
+        return start_sun != 0 || end_sun != 0;
+    }
 };
 
 // Quiet hours (#436): one window in local time in which the hub neither reads
@@ -89,8 +112,13 @@ std::string format_quiet(const Quiet &quiet);
 // The plan in the form parse_plan() reads ("off" for no reads).
 std::string format_plan(const Plan &plan);
 
-// Interval in minutes at a local minute of the day (0: no reads).
-std::uint32_t interval_at(const Plan &plan, int minute_of_day);
+// Interval in minutes at a local minute of the day (0: no reads). `sun`: the
+// sun times of that day, for windows with sun bounds.
+std::uint32_t interval_at(const Plan &plan, int minute_of_day,
+                          const SunDay &sun = SunDay());
+
+// True if the window that applies at that minute has a sun bound and reads.
+bool in_sun_window(const Plan &plan, int minute_of_day, const SunDay &sun);
 
 // Interval in minutes when the clock does not hold the time.
 std::uint32_t clockless_interval(const Plan &plan);
@@ -110,7 +138,8 @@ std::uint32_t stretched(std::uint32_t interval_min, std::uint32_t factor);
 // `factor`) that applies at t. `last` is kNever if there was no read yet: then
 // any time with an interval counts. kNever if there is none within kHorizonS.
 std::int64_t next_due(const Plan &plan, std::int64_t last, std::int64_t now,
-                      std::uint32_t factor, const LocalMinute &local);
+                      std::uint32_t factor, const LocalMinute &local,
+                      const SunMinutes &sun = SunMinutes());
 
 // --- The hub's own battery ---
 
@@ -227,17 +256,23 @@ Stretch stretch(const Settings &settings, const State &state);
 const char *stretch_name(Stretch stretch);
 
 // The first time t >= `from` that lies outside the quiet hours; `from` itself
-// if it does. `from` if the clock does not hold the time.
+// if it does. `from` if the clock does not hold the time. With a `plan` and
+// sun times, a read window at the sun ends the quiet hours early (in summer
+// the morning window starts before 06:00) and delays their start in the
+// evening.
 std::int64_t quiet_end(const Quiet &quiet, std::int64_t from,
-                       const LocalMinute &local);
+                       const LocalMinute &local, const Plan *plan = nullptr,
+                       const SunMinutes &sun = SunMinutes());
 
 // True if `from` lies inside the quiet hours (false without a clock).
-bool in_quiet(const Quiet &quiet, std::int64_t from, const LocalMinute &local);
+bool in_quiet(const Quiet &quiet, std::int64_t from, const LocalMinute &local,
+              const Plan *plan = nullptr, const SunMinutes &sun = SunMinutes());
 
 // In the critical level of the hub battery there is no camera read, also no
 // requested one (it waits until the level is left).
 Times next_times(const Settings &settings, const State &state, std::int64_t now,
-                 const LocalMinute &local);
+                 const LocalMinute &local,
+                 const SunMinutes &sun = SunMinutes());
 
 enum class Task {
     none,
