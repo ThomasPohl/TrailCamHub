@@ -208,6 +208,11 @@ export class HttpGalleryApi implements GalleryApi {
       lastContact: latest?.hubLastSeen ?? 0,
       nextContact: latest?.hubSchedule?.nextCheckinAt,
       hubBatPercent: latest?.hubBatPercent,
+      hub: latest && {
+        hubId: latest.hubId,
+        cameraPlan: latest.hubSchedule?.cameraPlan,
+        config: latest.hubScheduleConfig,
+      },
       cameras: cameras.map((c) => ({
         camId: c.camId,
         name: c.name,

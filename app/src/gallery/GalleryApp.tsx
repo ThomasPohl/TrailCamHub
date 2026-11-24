@@ -19,6 +19,7 @@ import {
   TrashIcon,
   UndoIcon,
 } from './Icons';
+import { ActivityDialog } from './ActivityDialog';
 import { ShareDialog } from './ShareDialog';
 import { Viewer } from './Viewer';
 import * as realFolder from './folder';
@@ -154,6 +155,7 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
   // The camera whose settings dialog is open (#368).
   const [settingsFor, setSettingsFor] = useState<string>();
   const [sharing, setSharing] = useState<Recording>();
+  const [activityOpen, setActivityOpen] = useState(false);
   const saving = useRef(false);
   // The chosen camera, readable in a reload that started before a switch: a
   // slow reload must not undo the user's choice (#431).
@@ -533,6 +535,15 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
           <h1>Wildkamera</h1>
         </div>
         {status && <HubChip status={status} now={t} />}
+        {status && !adminView && status.cameras.length > 0 && (
+          <button
+            type="button"
+            className="g-btn g-btn--quiet g-header__switch"
+            onClick={() => setActivityOpen(true)}
+          >
+            Aktivität
+          </button>
+        )}
         {isAdmin && (
           <button
             type="button"
@@ -1150,6 +1161,15 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
               onWithdraw={() => void act(() => api.withdraw(viewed.camId, viewed))}
               onDelete={() => setConfirm({ question: '1 Aufnahme löschen?', items: [viewed] })}
               onClose={() => setViewing(undefined)}
+            />
+          )}
+
+          {activityOpen && status && (
+            <ActivityDialog
+              api={api}
+              status={status}
+              now={t}
+              onClose={() => setActivityOpen(false)}
             />
           )}
 

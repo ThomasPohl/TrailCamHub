@@ -87,6 +87,8 @@ export interface GalleryStatus {
   nextContact?: number;
   /** Hub battery in percent; absent if unknown. */
   hubBatPercent?: number;
+  /** The hub the schedule belongs to (the one heard from most recently); absent if unknown. */
+  hub?: { hubId: string; cameraPlan?: string; config: ScheduleConfig };
   cameras: GalleryCamera[];
 }
 

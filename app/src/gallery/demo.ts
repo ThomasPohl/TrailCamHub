@@ -134,6 +134,7 @@ export class DemoGalleryApi implements GalleryApi {
       lastContact: this.lastCheckin,
       nextContact: this.lastCheckin + this.checkinS,
       hubBatPercent: 84,
+      hub: { hubId: 'garten-hub', cameraPlan: '*=120', config: this.scheduleConfig },
       cameras: this.cameras.map((c, i) => ({
         ...c,
         // Garten is fine; Wiese needs a look (#304).

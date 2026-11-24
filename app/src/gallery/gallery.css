@@ -1117,6 +1117,64 @@ body {
   margin-top: 18px;
 }
 
+/* Activity (#443). */
+.g-activity {
+  width: min(100%, 860px);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.g-activity__scroll {
+  overflow-x: auto;
+}
+
+.g-activity__heat {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-size: 0.75rem;
+}
+
+.g-activity__heat th {
+  font-weight: 500;
+  color: var(--g-hint);
+}
+
+.g-activity__cell {
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  background: var(--g-surface-2);
+  text-align: center;
+}
+
+.g-activity__cell--on {
+  background: color-mix(in srgb, var(--g-accent) calc(15% + var(--g-heat) * 70%), var(--g-surface));
+}
+
+.g-activity__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 64px;
+}
+
+.g-activity__bars span {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 1px;
+  background: var(--g-accent);
+}
+
+/* Text for screen readers only. */
+.g-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 /* Share link (#444). */
 .g-share {
   max-height: calc(100vh - 32px);
