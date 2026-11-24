@@ -31,6 +31,7 @@
 #include "camera_wifi.h"
 #include "ethernet_uplink.h"
 #include "hub_config.hpp"
+#include "schedule_state.hpp"
 #include "hub_battery.hpp"
 #include "media_store.hpp"
 #include "modem_uplink.hpp"
@@ -975,6 +976,8 @@ esp_err_t session_controller_init(void)
     static const modem_uplink::Callbacks modem_callbacks = {
         .connected = on_modem_connected,
         .failed = on_modem_failed,
+        .wants_location = schedule::gnss_wanted,
+        .location = schedule::set_gnss_location,
     };
     ESP_RETURN_ON_ERROR(modem_uplink::init(modem_callbacks), TAG,
                         "Could not initialize the modem uplink");

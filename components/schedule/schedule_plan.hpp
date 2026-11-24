@@ -358,6 +358,7 @@ enum class Origin {
     built_in,  // Kconfig default of the profile
     local,     // stored on the hub (console, web installer)
     remote,    // set from the backend
+    gnss,      // measured by the modem's GNSS receiver at start (location)
 };
 
 const char *origin_name(Origin origin);

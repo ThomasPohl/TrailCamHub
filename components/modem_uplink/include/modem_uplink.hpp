@@ -29,6 +29,12 @@ struct Settings {
 struct Callbacks {
     void (*connected)();
     void (*failed)(const char *reason);
+    // Optional (#436): after a power-on or reset the task asks whether the
+    // hub wants its position; if so it tries the GNSS receiver for up to
+    // CONFIG_MODEM_GNSS_FIX_TIMEOUT_S and hands the fix to `location`
+    // (latitude and longitude in decimal degrees).
+    bool (*wants_location)();
+    void (*location)(double latitude, double longitude);
 };
 
 // True if this build drives a modem (CONFIG_MODEM_UPLINK).

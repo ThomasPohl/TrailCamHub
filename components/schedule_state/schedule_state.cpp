@@ -7,6 +7,7 @@
 #include "schedule_state.hpp"
 
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <sys/time.h>
@@ -42,6 +43,7 @@ const char *kRemoteCheckinKey = "checkin_min";
 // readings.
 constexpr std::uint32_t kMagic = 0x54434834;
 const char *kEnergyKey = "energy";
+const char *kGnssKey = "gnss_loc";
 
 // Everything that has to survive deep sleep.
 struct RtcData {
@@ -300,6 +302,33 @@ void init()
     }
 }
 
+// Defined below, with the energy helpers.
+std::string stored_gnss_location();
+
+bool gnss_wanted()
+{
+    hub_config::Settings local;
+    if (hub_config::load(local) != ESP_OK) {
+        local = hub_config::Settings{};
+    }
+    return local.location.empty() &&
+           std::strlen(CONFIG_SCHEDULE_LOCATION) == 0 &&
+           stored_gnss_location().empty();
+}
+
+void set_gnss_location(double latitude, double longitude)
+{
+    Location position;
+    position.latitude = std::round(latitude * 10.0) / 10.0;
+    position.longitude = std::round(longitude * 10.0) / 10.0;
+    position.valid = true;
+    const std::string text = format_location(position);
+    if (store_remote(kGnssKey, text)) {
+        ESP_LOGI(TAG, "Location from GNSS: %s", text.c_str());
+        changed();
+    }
+}
+
 bool woke_from_sleep()
 {
     return s_woke;
@@ -353,6 +382,18 @@ void store_energy(const EnergyHistory &history)
         nvs_commit(handle);
     }
     nvs_close(handle);
+}
+
+// The position of the last GNSS fix as "LAT,LON"; empty if none.
+std::string stored_gnss_location()
+{
+    nvs_handle_t handle;
+    if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) {
+        return "";
+    }
+    const std::string value = read_nvs_string(handle, kGnssKey);
+    nvs_close(handle);
+    return value;
 }
 
 // The local date as yyyymmdd; 0 if the clock does not hold the time.

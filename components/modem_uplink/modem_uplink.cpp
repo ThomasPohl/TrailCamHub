@@ -509,6 +509,37 @@ void take_down()
     set_power(false);
 }
 
+#if CONFIG_MODEM_GNSS_FIX_TIMEOUT_S > 0
+// Tries the GNSS receiver for the position (#436). Returns true with the fix.
+bool try_gnss_fix(at_handle_t at, double &latitude, double &longitude)
+{
+    std::string answer;
+    if (at_query(at, "AT+CGNSSPWR=1", answer) != ESP_OK) {
+        ESP_LOGI(TAG, "GNSS: the modem has no receiver (or it is off)");
+        return false;
+    }
+    ESP_LOGI(TAG, "GNSS: looking for a fix for up to %d s",
+             CONFIG_MODEM_GNSS_FIX_TIMEOUT_S);
+    bool fix = false;
+    const std::int64_t started_us = esp_timer_get_time();
+    while (!fix && (esp_timer_get_time() - started_us) / 1000000 <
+                       CONFIG_MODEM_GNSS_FIX_TIMEOUT_S) {
+        pause_ms(2000);
+        if (at_query(at, "AT+CGNSSINFO", answer) == ESP_OK) {
+            fix = parse_gnss_info(answer, latitude, longitude);
+        }
+    }
+    at_send_command_response_ok(at, "AT+CGNSSPWR=0");
+    if (fix) {
+        ESP_LOGI(TAG, "GNSS: fix after %lld s",
+                 (long long)((esp_timer_get_time() - started_us) / 1000000));
+    } else {
+        ESP_LOGI(TAG, "GNSS: no fix");
+    }
+    return fix;
+}
+#endif
+
 // How long the start-up switch-off waits for the modem on USB. Without
 // power (4G DIP switch OFF) it never appears, and nothing needs switching
 // off.
@@ -531,6 +562,17 @@ void radio_off_at_start()
     if (problem != nullptr) {
         ESP_LOGI(TAG, "Modem radio left as it is at start-up: %s", problem);
     }
+#if CONFIG_MODEM_GNSS_FIX_TIMEOUT_S > 0
+    if (problem == nullptr && at != nullptr &&
+        s_callbacks.wants_location != nullptr &&
+        s_callbacks.location != nullptr && s_callbacks.wants_location()) {
+        double latitude = 0;
+        double longitude = 0;
+        if (try_gnss_fix(at, latitude, longitude)) {
+            s_callbacks.location(latitude, longitude);
+        }
+    }
+#endif
     // Flight mode (AT+CFUN=4) if the modem answers, drivers removed.
     take_down();
 #endif
