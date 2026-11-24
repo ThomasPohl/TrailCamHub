@@ -159,6 +159,23 @@ int local_minute_at(std::int64_t t, std::int64_t now_mono,
 
 }  // namespace
 
+namespace
+{
+
+// Days since 1970-01-01 of a civil date (proleptic Gregorian).
+std::int64_t days_from_civil(int year, int month, int day)
+{
+    year -= month <= 2 ? 1 : 0;
+    const std::int64_t era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(year - era * 400);
+    const unsigned doy =
+        (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + static_cast<std::int64_t>(doe) - 719468;
+}
+
+}  // namespace
+
 SunDay sun_day(const Location &position, std::int64_t unix_time)
 {
     SunDay day;
@@ -175,7 +192,13 @@ SunDay sun_day(const Location &position, std::int64_t unix_time)
                          sunrise, sunset)) {
         return day;
     }
-    const int offset_min = static_cast<int>(local.tm_gmtoff / 60);
+    // newlib's struct tm has no tm_gmtoff: the offset is the local fields read
+    // as UTC minus the real time.
+    const std::int64_t as_utc =
+        days_from_civil(local.tm_year + 1900, local.tm_mon + 1, local.tm_mday) *
+            86400 +
+        local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec;
+    const int offset_min = static_cast<int>((as_utc - unix_time) / 60);
     day.sunrise = local_minutes(sunrise, offset_min);
     day.sunset = local_minutes(sunset, offset_min);
     return day;
