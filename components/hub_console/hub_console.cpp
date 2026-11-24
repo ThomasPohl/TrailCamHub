@@ -390,6 +390,19 @@ void print_schedule()
         }
         reply("INFO", text);
     }
+    if (effective.energy_morning >= 0) {
+        char text[96];
+        std::snprintf(
+            text, sizeof(text), "energy factor %.2f (morning %d %%%s)",
+            effective.energy_permille / 1000.0, effective.energy_morning,
+            effective.energy_trend_known
+                ? (std::string(", trend ") +
+                   (effective.energy_trend > 0 ? "+" : "") +
+                   std::to_string(effective.energy_trend) + " %/day")
+                      .c_str()
+                : "");
+        reply("INFO", text);
+    }
     reply("INFO",
           "check-in every " + std::to_string(effective.checkin_min) + " min (" +
               schedule::origin_name(effective.checkin_origin) +

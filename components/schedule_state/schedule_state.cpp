@@ -38,9 +38,10 @@ const char *TAG = "trailcamhub_schedule";
 const char *kNamespace = "schedule";
 const char *kRemotePlanKey = "plan";
 const char *kRemoteCheckinKey = "checkin_min";
-// Changed with the layout of RtcData: "TCH3" since the state holds the hub
-// battery.
-constexpr std::uint32_t kMagic = 0x54434833;
+// Changed with the layout of RtcData: "TCH4" since it holds the day's energy
+// readings.
+constexpr std::uint32_t kMagic = 0x54434834;
+const char *kEnergyKey = "energy";
 
 // Everything that has to survive deep sleep.
 struct RtcData {
@@ -51,9 +52,13 @@ struct RtcData {
     std::int64_t planned_sleep_us;
     State state;
     ReadRequests reads;
+    EnergyToday energy;
 };
 
 RTC_DATA_ATTR RtcData s_rtc;
+
+// The battery history of the last days (#436); stored once a day.
+EnergyHistory s_energy;
 
 SemaphoreHandle_t s_lock;
 bool s_woke;
@@ -283,6 +288,7 @@ void init()
         s_mono_offset_us = 0;
     }
     load_remote();
+    load_energy();
     if (!s_remote_plan.empty() || !s_remote_checkin.empty()) {
         ESP_LOGI(TAG, "Schedule from the backend: plan \"%s\", check-in %s min",
                  s_remote_plan.c_str(),
@@ -307,6 +313,56 @@ std::int64_t to_unix(std::int64_t t)
         return 0;
     }
     return time(nullptr) + (t - now());
+}
+
+EnergySettings energy_settings()
+{
+    EnergySettings settings;
+#ifdef CONFIG_SCHEDULE_ENERGY_TARGET_PERCENT
+    settings.target_percent = CONFIG_SCHEDULE_ENERGY_TARGET_PERCENT;
+#endif
+    return settings;
+}
+
+void load_energy()
+{
+    nvs_handle_t handle;
+    if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) {
+        return;
+    }
+    EnergyHistory stored;
+    size_t length = sizeof(stored);
+    if (nvs_get_blob(handle, kEnergyKey, &stored, &length) == ESP_OK &&
+        length == sizeof(stored) && stored.version == 1 &&
+        stored.count <= kEnergyDays && stored.step <= kEnergyMaxStep) {
+        s_energy = stored;
+    }
+    nvs_close(handle);
+}
+
+void store_energy(const EnergyHistory &history)
+{
+    nvs_handle_t handle;
+    if (nvs_open(kNamespace, NVS_READWRITE, &handle) != ESP_OK) {
+        return;
+    }
+    if (nvs_set_blob(handle, kEnergyKey, &history, sizeof(history)) == ESP_OK) {
+        nvs_commit(handle);
+    }
+    nvs_close(handle);
+}
+
+// The local date as yyyymmdd; 0 if the clock does not hold the time.
+int local_date()
+{
+    if (!time_sync_clock_valid()) {
+        return 0;
+    }
+    const time_t wall = time(nullptr);
+    struct tm local = {};
+    localtime_r(&wall, &local);
+    return (local.tm_year + 1900) * 10000 + (local.tm_mon + 1) * 100 +
+           local.tm_mday;
 }
 
 Effective effective()
@@ -380,6 +436,17 @@ Effective effective()
     }
     out.settings.uplink = uplink;
     out.sleeps = hub_config::sleeps(mode, hub_config::capabilities());
+#if CONFIG_SCHEDULE_ENERGY
+    {
+        Lock lock;
+        out.energy_permille = energy_permille(s_energy, s_rtc.state.hub_battery,
+                                              energy_settings());
+        out.energy_morning = s_energy.count > 0 ? s_energy.days[0].morning : -1;
+        out.energy_trend_known = energy_trend(s_energy, out.energy_trend);
+    }
+    out.settings.checkin_energy_permille = out.energy_permille;
+    out.settings.min_interval_min = CONFIG_SCHEDULE_MIN_INTERVAL_MIN;
+#endif
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;
     out.settings.low_battery_factor = CONFIG_SCHEDULE_LOW_BATTERY_FACTOR;
     out.settings.power = power_settings();
@@ -517,11 +584,26 @@ void set_hub_battery(int percent, int millivolts, bool charging)
 {
     bool level_changed;
     PowerLevel level;
+    [[maybe_unused]] bool store = false;
+    [[maybe_unused]] EnergyHistory history;
+    [[maybe_unused]] const int date = local_date();
     {
         Lock lock;
         level_changed = schedule::set_hub_battery(
             s_rtc.state, power_settings(), percent, millivolts, charging);
         level = hub_level(s_rtc.state);
+#if CONFIG_SCHEDULE_ENERGY
+        store = energy_reading(s_energy, s_rtc.energy, date, time(nullptr),
+                               percent, charging, energy_settings());
+        history = s_energy;
+#endif
+    }
+    if (store) {
+        // Once a day: the first reading of a new day.
+        store_energy(history);
+        ESP_LOGI(TAG, "Battery history: morning %d %%, energy factor %d/1000",
+                 percent,
+                 (int)energy_permille(history, percent, energy_settings()));
     }
     if (level_changed) {
         if (level == PowerLevel::normal) {

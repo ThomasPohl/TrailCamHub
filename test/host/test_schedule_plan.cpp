@@ -802,3 +802,43 @@ TEST_CASE("an evening sun window keeps the hub awake past the quiet start")
     // The same without a plan and sun: quiet from 23:00.
     CHECK(in_quiet(night, at(23, 10), kLocal));
 }
+
+TEST_CASE("the energy factor shortens the check-in interval")
+{
+    Settings settings = settings_with("*=0", 30);
+    settings.checkin_energy_permille = 500;
+    State state = initial_state();
+    cycle_started(state, false, at(8));
+    CycleEnd end;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(8, 15));
+    settings.checkin_energy_permille = 750;
+    // 22.5 minutes, rounded down to 22.
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(8, 22));
+    // Not below the floor.
+    settings.checkin_min = 15;
+    settings.checkin_energy_permille = 500;
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(8, 10));
+    // An interval shorter than the floor is not raised.
+    settings.checkin_min = 5;
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(8, 5));
+}
+
+TEST_CASE("the energy factor does not apply at a low hub battery")
+{
+    Settings settings = settings_with("*=0", 30);
+    settings.power = power_settings_for_tests();
+    settings.power.low_checkin_factor = 2;
+    settings.checkin_energy_permille = 500;
+    State state = initial_state();
+    CHECK(set_hub_battery(state, settings.power, 25, 3700, false));
+    cycle_started(state, false, at(8));
+    CycleEnd end;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    // Low level: the stretched 60 minutes, not shortened.
+    CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(9));
+}

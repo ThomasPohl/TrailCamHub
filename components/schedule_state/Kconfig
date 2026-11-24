@@ -47,6 +47,30 @@ config SCHEDULE_LOCATION
         about 25 minutes at the borders, and tells it in "status".
         Overridden by "config set location".
 
+config SCHEDULE_ENERGY
+    bool "Check in more often when the battery history allows it"
+    default y
+    help
+        The hub keeps the charge of its cell in the morning and how long the
+        cell sat full while charging for the last seven days (needs the
+        battery gauge). A cell that is well charged in the morning with a
+        steady trend shortens the check-in interval in steps (x0.75, x0.5);
+        a low morning or a falling trend take it back. A full cell halves it
+        at once for the rest of the day. Camera reads are not affected.
+        Not at a low or critical hub battery. See docs/power-and-schedule.md.
+
+config SCHEDULE_ENERGY_TARGET_PERCENT
+    int "Charge the cell should have in the morning (%)"
+    depends on SCHEDULE_ENERGY
+    range 20 90
+    default 60
+
+config SCHEDULE_MIN_INTERVAL_MIN
+    int "Shortest check-in interval with the energy factor (minutes)"
+    depends on SCHEDULE_ENERGY
+    range 5 120
+    default 10
+
 config SCHEDULE_CHECKIN_INTERVAL_MIN
     int "Backend check-in interval (minutes, 0 = off)"
     range 0 1440

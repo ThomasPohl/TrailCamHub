@@ -189,6 +189,12 @@ struct Settings {
     // battery have stretched it; 0: only kMaxStretchedMin. A critical hub
     // battery is not bounded by it.
     std::uint32_t checkin_max_min = 0;
+    // Factor for the check-in interval from the battery history (1/1000, 1000:
+    // none; see energy.hpp). Applies at the normal hub battery level only;
+    // the interval does not fall below `min_interval_min` (but is never
+    // raised above `checkin_min`).
+    std::uint16_t checkin_energy_permille = 1000;
+    std::uint32_t min_interval_min = 10;
     // The hub has complete uplink settings.
     bool uplink = false;
     // Camera battery below this percentage stretches the read interval by
