@@ -151,6 +151,45 @@ bool parse_plan(const std::string &text, Plan &out, std::string *error)
     return true;
 }
 
+bool parse_quiet(const std::string &text, Quiet &out, std::string *error)
+{
+    std::string trimmed;
+    for (char c : text) {
+        if (!is_separator(c)) {
+            trimmed += c;
+        }
+    }
+    if (trimmed.empty() || trimmed == "off") {
+        out = Quiet{};
+        return true;
+    }
+    const std::size_t dash = trimmed.find('-');
+    const int start =
+        dash == std::string::npos ? -1 : parse_clock(trimmed.substr(0, dash));
+    const int stop =
+        dash == std::string::npos ? -1 : parse_clock(trimmed.substr(dash + 1));
+    if (start < 0 || stop < 0 || start == 1440) {
+        return fail(error,
+                    "quiet hours '" + trimmed + "' must look like HH:MM-HH:MM");
+    }
+    if (start == stop) {
+        return fail(error, "quiet hours '" + trimmed + "' are empty");
+    }
+    Quiet quiet;
+    quiet.start = static_cast<std::uint16_t>(start);
+    quiet.end = static_cast<std::uint16_t>(stop);
+    out = quiet;
+    return true;
+}
+
+std::string format_quiet(const Quiet &quiet)
+{
+    if (!quiet.enabled()) {
+        return "off";
+    }
+    return clock_text(quiet.start) + "-" + clock_text(quiet.end);
+}
+
 std::string format_plan(const Plan &plan)
 {
     if (!plan.reads()) {
@@ -397,6 +436,35 @@ const char *stretch_name(Stretch stretch)
     return "";
 }
 
+bool in_quiet(const Quiet &quiet, std::int64_t from, const LocalMinute &local)
+{
+    if (!quiet.enabled() || !local) {
+        return false;
+    }
+    Window window;
+    window.start = quiet.start;
+    window.end = quiet.end;
+    return contains(window, local(from));
+}
+
+std::int64_t quiet_end(const Quiet &quiet, std::int64_t from,
+                       const LocalMinute &local)
+{
+    if (!in_quiet(quiet, from, local)) {
+        return from;
+    }
+    // Minute by minute, as in next_due(): finds the end also across a change
+    // of the local time (summer time). A window is shorter than a day.
+    std::int64_t t = from;
+    while (t <= from + 25 * 3600) {
+        if (!in_quiet(quiet, t, local)) {
+            return t;
+        }
+        t += 60;
+    }
+    return from;
+}
+
 Times next_times(const Settings &settings, const State &state, std::int64_t now,
                  const LocalMinute &local)
 {
@@ -439,6 +507,16 @@ Times next_times(const Settings &settings, const State &state, std::int64_t now,
             const std::int64_t due =
                 state.last_checkin + (std::int64_t)interval_min * 60;
             times.checkin = due > now ? due : now;
+        }
+    }
+    // Quiet hours: what falls into them waits for their end, also a read the
+    // app asked for.
+    if (settings.quiet.enabled()) {
+        if (times.camera != kNever) {
+            times.camera = quiet_end(settings.quiet, times.camera, local);
+        }
+        if (times.checkin != kNever) {
+            times.checkin = quiet_end(settings.quiet, times.checkin, local);
         }
     }
     return times;

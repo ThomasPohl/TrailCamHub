@@ -40,6 +40,9 @@ struct Effective {
     Origin camera_plan_origin = Origin::built_in;
     std::uint32_t checkin_min = 0;
     Origin checkin_origin = Origin::built_in;
+    // Quiet hours as text ("off" for none) and their origin (#436).
+    std::string quiet;
+    Origin quiet_origin = Origin::built_in;
     // Deep sleep between cycles (battery power, see hub_config::sleeps()).
     bool sleeps = false;
 };

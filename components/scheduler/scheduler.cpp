@@ -254,11 +254,11 @@ void scheduler_task(void *arg)
         describe(times.camera, boot, camera, sizeof(camera));
         describe(times.checkin, boot, checkin, sizeof(checkin));
         ESP_LOGI(TAG,
-                 "Camera plan %s (%s), check-in every %u min (%s)%s; next "
-                 "read %s, next check-in %s",
+                 "Camera plan %s (%s), quiet hours %s, check-in every %u min "
+                 "(%s)%s; next read %s, next check-in %s",
                  effective.camera_plan.c_str(),
                  schedule::origin_name(effective.camera_plan_origin),
-                 (unsigned)effective.checkin_min,
+                 effective.quiet.c_str(), (unsigned)effective.checkin_min,
                  schedule::origin_name(effective.checkin_origin),
                  effective.settings.uplink ? "" : " (no uplink settings)",
                  camera, checkin);

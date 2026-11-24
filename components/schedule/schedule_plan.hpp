@@ -51,6 +51,19 @@ struct Window {
     std::uint16_t interval_min = 0;
 };
 
+// Quiet hours (#436): one window in local time in which the hub neither reads
+// the cameras nor checks in and can sleep until its end. `quiet.interval_min`
+// is unused. An empty window (start == end) means no quiet hours.
+struct Quiet {
+    std::uint16_t start = 0;
+    std::uint16_t end = 0;
+
+    bool enabled() const
+    {
+        return start != end;
+    }
+};
+
 struct Plan {
     // The first window that contains a time applies.
     std::vector<Window> windows;
@@ -65,6 +78,13 @@ struct Plan {
 // or spaces. "off" or an empty text is a plan without reads. Returns false
 // with a short English reason in `error`.
 bool parse_plan(const std::string &text, Plan &out, std::string *error);
+
+// Parses quiet hours "HH:MM-HH:MM" (may span midnight); "off" or an empty
+// text means none. Returns false with a short English reason in `error`.
+bool parse_quiet(const std::string &text, Quiet &out, std::string *error);
+
+// The quiet hours in the form parse_quiet() reads ("off" for none).
+std::string format_quiet(const Quiet &quiet);
 
 // The plan in the form parse_plan() reads ("off" for no reads).
 std::string format_plan(const Plan &plan);
@@ -131,6 +151,9 @@ const char *power_level_name(PowerLevel level);
 
 struct Settings {
     Plan camera;
+    // No camera reads and no check-ins inside; they wait for its end. Needs
+    // the clock: without it the quiet hours are ignored.
+    Quiet quiet;
     // Interval of the backend check-ins in minutes; 0: none on schedule.
     std::uint32_t checkin_min = 0;
     // Upper bound for the check-in interval after back-off and a low hub
@@ -202,6 +225,14 @@ Stretch stretch(const Settings &settings, const State &state);
 
 // "hubBatteryCritical", "hubBatteryLow", "cameraBatteryLow"; "" for none.
 const char *stretch_name(Stretch stretch);
+
+// The first time t >= `from` that lies outside the quiet hours; `from` itself
+// if it does. `from` if the clock does not hold the time.
+std::int64_t quiet_end(const Quiet &quiet, std::int64_t from,
+                       const LocalMinute &local);
+
+// True if `from` lies inside the quiet hours (false without a clock).
+bool in_quiet(const Quiet &quiet, std::int64_t from, const LocalMinute &local);
 
 // In the critical level of the hub battery there is no camera read, also no
 // requested one (it waits until the level is left).

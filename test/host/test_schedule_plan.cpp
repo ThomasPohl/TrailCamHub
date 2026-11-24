@@ -553,3 +553,108 @@ TEST_CASE("checkin_max_min bounds the back-off of check-ins")
     CHECK(set_hub_battery(state, settings.power, 8, 3600, false));
     CHECK(next_times(settings, state, at(0, 1), kLocal).checkin == at(24));
 }
+
+namespace
+{
+
+Quiet quiet_of(const std::string &text)
+{
+    Quiet quiet;
+    std::string error;
+    REQUIRE_MESSAGE(parse_quiet(text, quiet, &error), error);
+    return quiet;
+}
+
+}  // namespace
+
+TEST_CASE("quiet hours are parsed and formatted")
+{
+    CHECK(format_quiet(quiet_of("23:00-06:00")) == "23:00-06:00");
+    CHECK(format_quiet(quiet_of(" 22:30 - 05:15 ")) == "22:30-05:15");
+    CHECK_FALSE(quiet_of("off").enabled());
+    CHECK_FALSE(quiet_of("").enabled());
+    CHECK(format_quiet(quiet_of("")) == "off");
+
+    Quiet quiet;
+    std::string error;
+    CHECK_FALSE(parse_quiet("23:00", quiet, &error));
+    CHECK_FALSE(parse_quiet("25:00-06:00", quiet, &error));
+    CHECK_FALSE(parse_quiet("06:00-06:00", quiet, &error));
+    CHECK_FALSE(parse_quiet("24:00-06:00", quiet, &error));
+    CHECK_FALSE(error.empty());
+}
+
+TEST_CASE("quiet_end finds the end of the window, also across midnight")
+{
+    const Quiet night = quiet_of("23:00-06:00");
+    CHECK_FALSE(in_quiet(night, at(12), kLocal));
+    CHECK(in_quiet(night, at(23), kLocal));
+    CHECK(in_quiet(night, at(3), kLocal));
+    CHECK_FALSE(in_quiet(night, at(6), kLocal));
+    CHECK(quiet_end(night, at(12), kLocal) == at(12));
+    CHECK(quiet_end(night, at(23, 30), kLocal) == at(6, 0, 1));
+    CHECK(quiet_end(night, at(2), kLocal) == at(6));
+    // Without a clock the quiet hours do not apply.
+    CHECK_FALSE(in_quiet(night, at(3), kNoClock));
+    CHECK(quiet_end(night, at(3), kNoClock) == at(3));
+    // A window inside one day.
+    const Quiet noon = quiet_of("12:00-14:00");
+    CHECK(quiet_end(noon, at(12, 30), kLocal) == at(14));
+}
+
+TEST_CASE("nothing is due in quiet hours; it runs at their end")
+{
+    Settings settings = settings_with("*=120", 30);
+    settings.quiet = quiet_of("23:00-06:00");
+    State state = initial_state();
+
+    // The last cycle was at 22:30: the check-in would be due at 23:00, the
+    // read at 00:30.
+    cycle_started(state, true, at(22, 30));
+    CycleEnd end;
+    end.camera_ok = true;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+
+    Times times = next_times(settings, state, at(22, 31), kLocal);
+    CHECK(times.camera == at(6, 0, 1));
+    CHECK(times.checkin == at(6, 0, 1));
+    CHECK(due(times, at(3)) == Task::none);
+    // At the end of the night one cycle with a read (it syncs as well).
+    CHECK(due(times, at(6, 0, 1)) == Task::camera);
+
+    // During the day nothing changes.
+    cycle_started(state, true, at(6));
+    cycle_finished(state, end);
+    times = next_times(settings, state, at(6, 1), kLocal);
+    CHECK(times.checkin == at(6, 30));
+    CHECK(times.camera == at(8));
+}
+
+TEST_CASE("a requested read waits for the end of the quiet hours")
+{
+    Settings settings = settings_with("*=120", 30);
+    settings.quiet = quiet_of("23:00-06:00");
+    State state = initial_state();
+    cycle_started(state, true, at(22));
+    CycleEnd end;
+    end.camera_ok = true;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    state.camera_requested = true;
+
+    CHECK(next_times(settings, state, at(2), kLocal).camera == at(6));
+    CHECK(next_times(settings, state, at(21), kLocal).camera == at(21));
+}
+
+TEST_CASE("without a clock or with the window off nothing is held back")
+{
+    Settings settings = settings_with("*=120", 30);
+    settings.quiet = quiet_of("23:00-06:00");
+    State state = initial_state();
+    CHECK(next_times(settings, state, at(2), kNoClock).camera == at(2));
+    settings.quiet = quiet_of("off");
+    CHECK(next_times(settings, state, at(2), kLocal).camera == at(2));
+}

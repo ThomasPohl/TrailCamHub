@@ -22,6 +22,20 @@ config SCHEDULE_CAMERA_PLAN
         Overridden by "config set camera_plan" (serial console, web
         installer) and by the backend.
 
+config SCHEDULE_QUIET
+    string "Quiet hours (local time)"
+    default "23:00-06:00"
+    help
+        Applies on battery power; on mains there are no quiet hours unless
+        "quiet" is set. A time window "HH:MM-HH:MM" in local time
+        (TIME_ZONE), which may span midnight. Inside it the hub neither
+        reads the cameras nor checks in and sleeps until the end; what was
+        due waits and runs at the end (a read, which also syncs). A read
+        asked for by the app waits as well. The BOOT button and a power-on
+        still start a cycle. "off" or an empty text: no quiet hours. Needs
+        a valid clock, otherwise it is ignored.
+        Overridden by "config set quiet".
+
 config SCHEDULE_CHECKIN_INTERVAL_MIN
     int "Backend check-in interval (minutes, 0 = off)"
     range 0 1440
