@@ -61,15 +61,11 @@ export interface RenameCameraEvent {
 }
 
 export type AdminEvent =
-  | RegisterHubEvent
-  | CreateAppUserEvent
-  | RevokeAppUserEvent
-  | RenameCameraEvent;
+  RegisterHubEvent | CreateAppUserEvent | RevokeAppUserEvent | RenameCameraEvent;
 
 type Failure = { ok: false; error: string };
 export type RegisterHubResult =
-  | { ok: true; created: boolean; key?: string; linkedUsers: number[] }
-  | Failure;
+  { ok: true; created: boolean; key?: string; linkedUsers: number[] } | Failure;
 export type AppUserResult =
   | {
       ok: true;
