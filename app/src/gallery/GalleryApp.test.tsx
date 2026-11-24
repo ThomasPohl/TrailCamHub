@@ -271,7 +271,9 @@ describe('GalleryApp', () => {
     let now = 1_000_000;
     const api = new DemoGalleryApi(() => now, 20);
     const change = vi.spyOn(api, 'changeSettings');
-    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    render(
+      <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
+    );
     await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
@@ -307,7 +309,9 @@ describe('GalleryApp', () => {
       languageCode: 'de',
     });
     expect(
-      await screen.findByText(/beim nächsten Kontakt mit dem Hub an die Kamera/),
+      await screen.findByText(
+        /beim nächsten Kontakt mit dem Hub an die Kamera, voraussichtlich gegen \d\d:\d\d Uhr\./,
+      ),
     ).toBeInTheDocument();
     expect(within(garten).getByText(/Einstellungen werden geändert/)).toBeInTheDocument();
 
