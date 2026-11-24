@@ -79,7 +79,7 @@ export interface DayCount {
   count: number;
 }
 
-/** Events per day for the `days` days up to and including the day of `until`, oldest first. */
+/** Events per day for the last `days` days up to the day of `until`, oldest first. */
 export function eventsPerDay(events: readonly number[], until: number, days = 90): DayCount[] {
   const lastDay = Math.floor(until / DAY_S);
   const counts = new Array<number>(days).fill(0);
@@ -114,7 +114,11 @@ interface Run {
 function runs(byHour: readonly number[], keep: (hour: number) => boolean): Run[] {
   const on = byHour.map((_, h) => keep(h));
   if (on.every(Boolean) || !on.some(Boolean)) return [];
-  const filled = on.map((v, h) => v || (on[(h + 23) % 24] === true && on[(h + 1) % 24] === true));
+  const filled = on.map((v, h) => {
+    const before = on[(h + 23) % 24] === true;
+    const after = on[(h + 1) % 24] === true;
+    return v || (before && after);
+  });
   // Start at an hour that is off, so no run is cut at the array's edge.
   const origin = filled.findIndex((v) => !v);
   const result: Run[] = [];
@@ -138,12 +142,10 @@ function runs(byHour: readonly number[], keep: (hour: number) => boolean): Run[]
   }));
 }
 
-export interface TimeSummary {
-  /** "Meiste Aktivität 16–19 Uhr (42 %), ruhig 10–14 Uhr", or empty without data. */
-  text: string;
-}
-
-/** A sentence on the busiest and the quietest part of the day. */
+/**
+ * A sentence on the busiest and the quietest part of the day, such as
+ * "Meiste Aktivität 16–19 Uhr (42 %), ruhig 10–14 Uhr"; empty without data.
+ */
 export function summaryText(byHour: readonly number[]): string {
   const total = byHour.reduce((a, b) => a + b, 0);
   if (total === 0) return '';
@@ -153,12 +155,13 @@ export function summaryText(byHour: readonly number[]): string {
   const calm = [...quiet].sort((a, b) => b.end - b.start - (a.end - a.start))[0];
   const parts: string[] = [];
   if (top) {
-    parts.push(
-      `Meiste Aktivität ${hoursText(top.start, top.end % 24)} (${Math.round((top.events / total) * 100)} %)`,
-    );
+    const share = Math.round((top.events / total) * 100);
+    const hours = hoursText(top.start, top.end % 24);
+    parts.push(`Meiste Aktivität ${hours} (${share} %)`);
   }
-  if (calm && calm.end - calm.start >= 3)
+  if (calm && calm.end - calm.start >= 3) {
     parts.push(`ruhig ${hoursText(calm.start, calm.end % 24)}`);
+  }
   return parts.join(', ');
 }
 
@@ -180,16 +183,17 @@ export function suggestPlan(events: readonly number[]): PlanSuggestion {
   const first = events[0];
   const last = events[events.length - 1];
   if (events.length < MIN_EVENTS || first === undefined || last === undefined) {
-    return { ok: false, reason: `Noch zu wenig Aufnahmen (mindestens ${MIN_EVENTS} nötig).` };
+    const reason = `Noch zu wenig Aufnahmen (mindestens ${MIN_EVENTS} nötig).`;
+    return { ok: false, reason };
   }
   if (last - first < MIN_SPAN_DAYS * DAY_S) {
-    return { ok: false, reason: `Die Aufnahmen decken noch keine ${MIN_SPAN_DAYS} Tage ab.` };
+    const reason = `Die Aufnahmen decken noch keine ${MIN_SPAN_DAYS} Tage ab.`;
+    return { ok: false, reason };
   }
   const { byHour, total } = heatmap(events);
-  const found = runs(byHour, (h) => (byHour[h] ?? 0) >= (total / 24) * 1.5)
-    .sort((a, b) => b.events - a.events)
-    .slice(0, MAX_WINDOWS)
-    .sort((a, b) => a.start - b.start);
+  const busy = runs(byHour, (h) => (byHour[h] ?? 0) >= (total / 24) * 1.5);
+  const biggest = busy.sort((a, b) => b.events - a.events).slice(0, MAX_WINDOWS);
+  const found = biggest.sort((a, b) => a.start - b.start);
   if (found.length === 0) {
     return {
       ok: false,
@@ -199,10 +203,7 @@ export function suggestPlan(events: readonly number[]): PlanSuggestion {
   const clock = (h: number) => `${pad(h % 24 === 0 && h > 0 ? 24 : h % 24)}:00`;
   const windows = found.map((r) => `${clock(r.start)}-${clock(r.end)}`);
   const covered = found.reduce((sum, r) => sum + r.events, 0);
-  return {
-    ok: true,
-    plan: `${windows.map((w) => `${w}=${WINDOW_MIN}`).join(',')},*=${REST_MIN}`,
-    windows,
-    coverage: covered / total,
-  };
+  const entries = windows.map((w) => `${w}=${WINDOW_MIN}`);
+  entries.push(`*=${REST_MIN}`);
+  return { ok: true, plan: entries.join(','), windows, coverage: covered / total };
 }
