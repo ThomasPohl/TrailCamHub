@@ -258,6 +258,9 @@ std::uint32_t minutes_of(const std::string &text, std::uint32_t fallback)
 
 }  // namespace
 
+// Defined below, with the other energy helpers.
+void load_energy();
+
 void init()
 {
     s_lock = xSemaphoreCreateMutex();
