@@ -2,6 +2,7 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from '
 import { handleAdmin, isAdminEvent, type AdminEvent, type AdminResult } from './admin';
 import { handleRequest, type Deps } from './api';
 import { runFaultMail, SesMailer, type FaultMailResult } from './fault-mail';
+import { runUserMail } from './user-mail';
 import type { ApiRequest } from './http';
 import { S3MediaStorage } from './storage';
 import { DynamoStore } from './store/dynamo';
@@ -62,7 +63,16 @@ export async function handler(
 export async function faultMailHandler(): Promise<FaultMailResult> {
   const from = requireEnv('FAULT_MAIL_FROM');
   const to = process.env.FAULT_MAIL_TO || from;
-  const result = await runFaultMail(getDeps().store, new SesMailer(), { from, to }, now());
+  const mailer = new SesMailer();
+  const result = await runFaultMail(getDeps().store, mailer, { from, to }, now());
   console.log(JSON.stringify({ faultMail: result }));
+  // Users with a mail address get their own notices (#445); a failure here
+  // must not hide the operator mail.
+  try {
+    const users = await runUserMail(getDeps().store, mailer, from, now());
+    console.log(JSON.stringify({ userMail: users }));
+  } catch (error) {
+    console.error(JSON.stringify({ userMailFailed: String(error) }));
+  }
   return result;
 }

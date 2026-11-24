@@ -3,7 +3,7 @@ import { generateAppToken, newAppUserId } from './auth/app';
 import { generateDeviceKey } from './auth/device';
 import { generateTotpSecret, totpUri } from './auth/totp';
 import { MAX_CAMERA_NAME, validCameraName } from './model';
-import type { AppUser } from './model';
+import type { AppUser, UserNotify } from './model';
 import type { Store } from './store/types';
 
 /**
@@ -38,6 +38,10 @@ export interface CreateAppUserEvent {
   userId?: number;
   /** Admin only: issue a new TOTP secret (lost phone); a new admin gets one anyway. */
   rotateTotp?: boolean;
+  /** Mail address for hub notices (#445); `null` removes it. */
+  email?: string | null;
+  /** Notices to mail; missing keys keep their value (default: all on once an address is set). */
+  notify?: Partial<UserNotify>;
 }
 
 /**
@@ -182,6 +186,8 @@ export async function createAppUser(
     finalRole === 'admin' && (event.rotateTotp || !existing?.totpSecret)
       ? generateTotpSecret()
       : undefined;
+  const mail = mailSettings(event, existing);
+  if (!mail.ok) return mail;
   const user: AppUser = {
     ...existing,
     userId,
@@ -190,6 +196,13 @@ export async function createAppUser(
     tokenHash,
     created: existing?.created ?? deps.now(),
   };
+  if (mail.email === undefined) {
+    delete user.email;
+    delete user.notify;
+  } else {
+    user.email = mail.email;
+    user.notify = mail.notify;
+  }
   if (newSecret !== undefined) {
     user.totpSecret = newSecret;
     delete user.totpLastStep;
@@ -207,6 +220,37 @@ export async function createAppUser(
       ? {}
       : { totpSecret: newSecret, totpUri: totpUri(newSecret, name) }),
   };
+}
+
+const EMAIL = /^[^\s@<>",;]{1,64}@[^\s@<>",;]{1,255}\.[^\s@<>",;]{2,}$/;
+
+/** The address and switches after an admin task (#445). */
+function mailSettings(
+  event: CreateAppUserEvent,
+  existing: AppUser | undefined,
+): { ok: true; email?: string; notify?: UserNotify } | Failure {
+  let email = existing?.email;
+  if (event.email === null) email = undefined;
+  else if (event.email !== undefined) {
+    const value = typeof event.email === 'string' ? event.email.trim() : '';
+    if (!EMAIL.test(value)) return { ok: false, error: 'email must be a mail address' };
+    email = value;
+  }
+  if (email === undefined) return { ok: true };
+  const notify: UserNotify = {
+    hubSilent: true,
+    cameraNotRead: true,
+    battery: true,
+    ...existing?.notify,
+  };
+  for (const key of Object.keys(event.notify ?? {}) as Array<keyof UserNotify>) {
+    const value = event.notify?.[key];
+    if (!(key in notify) || typeof value !== 'boolean') {
+      return { ok: false, error: 'notify must hold hubSilent, cameraNotRead, battery as booleans' };
+    }
+    notify[key] = value;
+  }
+  return { ok: true, email, notify };
 }
 
 export async function revokeAppUser(

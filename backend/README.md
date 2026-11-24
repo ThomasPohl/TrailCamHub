@@ -402,7 +402,8 @@ everything else happens through the execution role. Rotate it from time to time
 
 The admin view lists every fault of the hubs and cameras. In addition the
 operator gets a mail when a fault **appears**, so a silent hub does not go
-unnoticed. Only the operator is mailed, never an end user.
+unnoticed. End users are mailed only if the admin set an address for them
+(next section).
 
 - A function runs every 30 minutes (`FaultMailFunction`, `src/fault-mail.ts`),
   looks at every hub with the same rules as the admin view and sends **one mail
@@ -429,6 +430,34 @@ Set up once:
 
 The address is a CloudFormation parameter with `NoEcho` and an environment
 variable of the function; it is not in the repository.
+
+### Mail to end users (#445)
+
+A user with a mail address gets a short German mail about **their own hubs**,
+in the same 30-minute run (`src/user-mail.ts`, sender `FAULT_MAIL_FROM`):
+
+- hub has not checked in, and one mail when it is back (switch `hubSilent`),
+- a camera was not read for a day although the hub checks in (`cameraNotRead`),
+- hub or camera battery critical (`battery`).
+
+A silent hub is mailed to users only **2 hours** after the check-in it planned
+(the operator gets it after 30 minutes), so a slow modem attach is no mail.
+Once per fault and user; one mail per user and run; the "back again" mail comes
+once. If sending fails, the next run tries again. Quiet hours need nothing
+extra: the last check-in before the night reports the next one.
+
+The **admin** sets the address, the user cannot (no confirmation flow):
+
+```bash
+npm run add-user -- --user <userId> --email opa@example.org          # all notices on
+npm run add-user -- --user <userId> --notify hubSilent,battery       # only these
+npm run add-user -- --user <userId> --no-email                       # no more mail
+```
+
+In the SES sandbox every recipient must be verified. For users outside the team
+SES needs production access (request in the AWS console, once). Unsubscribe
+links and mail addresses set by the users themselves are not built; the admin
+removes the address with `--no-email`.
 
 ## Costs
 
