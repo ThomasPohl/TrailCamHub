@@ -411,7 +411,16 @@ export function GalleryApp({ api, folder = realFolder, now = unixNow, pollMs = 1
     setBusy(true);
     try {
       await api.changeSettings(id, changed);
-      setNotice('Die Einstellungen gehen beim nächsten Kontakt mit dem Hub an die Kamera.');
+      // The hub reads the camera in the wake cycle that picks up the change,
+      // so its next contact is when the change goes live. An overdue contact
+      // gives no useful time, so the notice leaves it out then.
+      const next = status?.nextContact;
+      const at = now();
+      setNotice(
+        `Die Einstellungen gehen beim nächsten Kontakt mit dem Hub an die Kamera${
+          next !== undefined && next > at ? `, voraussichtlich gegen ${clockTime(next, at)}` : ''
+        }.`,
+      );
       await reload();
       return true;
     } catch (error) {
