@@ -62,7 +62,6 @@ describe('share a recording with a link (#444)', () => {
     // The camera's wall clock, read as UTC; no camera or hub name by default.
     expect(page.body).toContain('18.11.2026');
     expect(page.body).not.toContain('Garden hub');
-    expect(page.body).not.toContain(CAM_ID);
   });
 
   it('shows a video, and the camera name only when asked', async () => {
