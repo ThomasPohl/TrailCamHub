@@ -1117,6 +1117,41 @@ body {
   margin-top: 18px;
 }
 
+/* Empty triggers (#442). */
+.g-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.g-empty__level select {
+  min-height: 32px;
+  padding: 2px 6px;
+  border: 1px solid var(--g-border);
+  border-radius: 8px;
+  background: var(--g-surface);
+  color: var(--g-text);
+  font: inherit;
+}
+
+.g-tile--empty img {
+  opacity: 0.55;
+}
+
+.g-tile__empty {
+  position: absolute;
+  top: 42px;
+  right: 10px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 /* Activity (#443). */
 .g-activity {
   width: min(100%, 860px);

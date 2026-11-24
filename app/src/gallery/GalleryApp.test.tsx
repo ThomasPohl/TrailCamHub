@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest';
 import { DemoGalleryApi } from './demo';
 import type { FolderState } from './folder';
+import { memoryEmptyStore } from './emptyDetector';
+import { frameFromRgba, GRID_H, GRID_W } from './emptiness';
 import { GalleryApp, type FolderOps } from './GalleryApp';
 
 function fakeFolder(state: FolderState): FolderOps & { saved: string[] } {
@@ -577,5 +579,21 @@ describe('GalleryApp', () => {
     render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Ordner wählen' }));
     expect(await screen.findByText(/im Ordner „Wildkamera“ gespeichert/)).toBeInTheDocument();
+  });
+  it('marks likely empty triggers on request and hides them', async () => {
+    localStorage.removeItem('trailcamhub.empty.on');
+    const flat = new Uint8ClampedArray(GRID_W * GRID_H * 4).fill(120);
+    const empty = { loadFrame: async () => frameFromRgba(flat), store: memoryEmptyStore() };
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} empty={empty} />);
+
+    await openCamera('Garten');
+    expect(screen.queryByText('wahrscheinlich leer')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Leere erkennen' }));
+    expect((await screen.findAllByText('wahrscheinlich leer')).length).toBeGreaterThan(0);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Leere ausblenden/ }));
+    await waitFor(() => expect(screen.queryAllByRole('listitem')).toHaveLength(0));
+    localStorage.removeItem('trailcamhub.empty.on');
   });
 });
