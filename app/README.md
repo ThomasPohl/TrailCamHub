@@ -94,7 +94,9 @@ minutes after the one before) are never compared with each other, however long
 the series lasts: an animal that stays in front of the camera would otherwise
 be its own background and every picture of it would look empty. A picture
 inside a long series is compared with pictures before and after it, even far
-away, or gets no verdict until there are some (#456). The info bar at the
+away, or gets no verdict until there are some (#456). At most two neighbours
+come from any other series, so an empty picture next to a long series of one
+animal does not get the animal into its background (#457). The info bar at the
 bottom is ignored.
 
 Results are kept in IndexedDB on this device, nothing is sent to the backend.
