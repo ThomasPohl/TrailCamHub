@@ -122,7 +122,7 @@ describe('share a recording with a link (#444)', () => {
   it('ends when the recording is gone from the backend', async () => {
     const w = await world();
     const { link } = await w.share(2037, { days: 7, kind: 'thumb' });
-    await w.store.removeMedia(CAM_ID, [2037]);
+    await w.store.markMediaDeleted(CAM_ID, 2037);
     expect((await w.open(pathOf(link?.url ?? ''))).statusCode).toBe(410);
   });
 

@@ -14,12 +14,29 @@ export type FileType = 0 | 2;
 export type VideoState = 'none' | 'requested' | 'downloading' | 'available' | 'failed';
 /**
  * requestVideo: fetch a video (mediaId); readCamera: read the camera now;
- * deleteMedia: delete a recording on the camera (mediaId); setSettings:
+ * deleteMedia: delete a recording (mediaId) where `targets` says (#461);
+ * setSettings:
  * change the camera's settings (`settings`, #368).
  */
 export type CommandType = 'requestVideo' | 'readCamera' | 'deleteMedia' | 'setSettings';
 /** `cancelled`: withdrawn in the app before the hub picked it up. */
 export type CommandState = 'queued' | 'delivered' | 'done' | 'failed' | 'cancelled';
+
+/**
+ * Where a delete applies (#461): `camera` is the file on the camera's SD
+ * card, `hub` the hub's copies on its card, `backend` the gallery entry and
+ * the stored thumbnail and video.
+ */
+export const DELETE_TARGETS = ['camera', 'hub', 'backend'] as const;
+export type DeleteTarget = (typeof DELETE_TARGETS)[number];
+/** What a hub does without its own choice: the camera keeps its files. */
+export const DEFAULT_DELETE_TARGETS: readonly DeleteTarget[] = ['hub', 'backend'];
+
+/**
+ * Check-in `features` a hub firmware reports (#461). A firmware without the
+ * list is an older one: it does what it did before.
+ */
+export const HUB_FEATURE_DELETE_TARGETS = 'deleteTargets';
 
 /** Where the hub got a schedule setting from. */
 export type ScheduleOrigin = 'built-in' | 'local' | 'remote';
@@ -85,6 +102,13 @@ export interface HubRecord {
   memory?: HubMemory;
   /** Monthly data plan in MB, set by the admin (#415); absent = none. */
   dataBudgetMB?: number;
+  /**
+   * Where a delete in the gallery applies (#461); the same for every user of
+   * the hub. Absent: DEFAULT_DELETE_TARGETS.
+   */
+  deleteTargets?: DeleteTarget[];
+  /** What the firmware reported at the last check-in it could (#461). */
+  features?: string[];
   /** Last check-in, Unix seconds; 0 = never. */
   lastSeen: number;
   /** As reported at the last check-in. */
@@ -208,6 +232,13 @@ export interface MediaRecord {
   mediaTime: number;
   thumbPresent: boolean;
   videoState: VideoState;
+  /**
+   * Deleted in the gallery (#461). The record stays as a tombstone, so a hub
+   * that reports the recording again does not bring it back.
+   */
+  deleted?: boolean;
+  /** `false`: no longer on the camera, but kept in the gallery (#461). */
+  onCamera?: boolean;
 }
 
 export interface CommandRecord {
@@ -217,6 +248,11 @@ export interface CommandRecord {
   mediaId: number;
   /** setSettings: the fields to change. */
   settings?: CameraSettings;
+  /**
+   * deleteMedia (#461): where the delete applies, as asked for. Absent on
+   * commands from before: the camera, as it was then.
+   */
+  targets?: DeleteTarget[];
   state: CommandState;
   created: number;
   updated: number;
@@ -459,6 +495,10 @@ export interface Camera {
   hubSchedule?: HubSchedule;
   /** Schedule set in the app for the hub. */
   hubScheduleConfig: ScheduleConfig;
+  /** Where a delete applies for this hub (#461). */
+  hubDeleteTargets: DeleteTarget[];
+  /** The hub's firmware can delete on the hub only, or on camera and hub (#461). */
+  hubDeletesByTarget: boolean;
   /** A camera read was asked for and has not been done yet. */
   readRequested: boolean;
   /** The camera's settings at the last read (#368); absent if not known. */
@@ -490,6 +530,8 @@ export interface MediaItem {
   /** A delete was asked for (`requested`, `delivered` to the hub) or failed. */
   deleteState?: 'requested' | 'delivered' | 'failed';
   deleteError?: string;
+  /** `false`: deleted on the camera, kept here (#461). */
+  onCamera?: false;
 }
 
 export interface CommandResult {
@@ -570,6 +612,8 @@ export interface CheckinRequest {
   modemOperator?: string;
   /** Raw; see HubMemory. */
   memory?: unknown;
+  /** What the firmware can do beyond the basics (#461); older firmware sends none. */
+  features?: unknown;
   /** Raw list of DataUsageReport (#415); older firmware does not send it. */
   dataUsage?: unknown;
   /**
@@ -639,7 +683,8 @@ export interface CameraCheckin {
    * mediaId and uploadUrl only for requestVideo. The hub PUTs the MP4
    * (Content-Type video/mp4) to `uploadUrl` and then acknowledges the command;
    * an open command comes again with every check-in, with a fresh URL.
-   * mediaId also for deleteMedia, settings for setSettings.
+   * mediaId also for deleteMedia, with `targets` (`camera`, `hub`; #461; absent:
+   * the camera only), settings for setSettings.
    */
   commands: Array<{
     id: string;
@@ -647,6 +692,7 @@ export interface CameraCheckin {
     mediaId?: number;
     uploadUrl?: string;
     settings?: CameraSettings;
+    targets?: DeleteTarget[];
   }>;
 }
 

@@ -1,6 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type { Deps } from './api';
-import type { CameraRecord, CameraSettings, CommandRecord } from './model';
+import {
+  DEFAULT_DELETE_TARGETS,
+  DELETE_TARGETS,
+  HUB_FEATURE_DELETE_TARGETS,
+  type CameraRecord,
+  type CameraSettings,
+  type CommandRecord,
+  type DeleteTarget,
+  type HubRecord,
+} from './model';
 import { checkSettingsChange } from './settings';
 
 export type VideoRequest =
@@ -18,8 +27,12 @@ export async function requestVideo(
   deps: Deps,
 ): Promise<VideoRequest> {
   const media = await deps.store.getMedia(camera.camId, mediaId);
-  if (!media) return { ok: false, status: 404, error: 'Recording not found' };
+  if (!media || media.deleted) return { ok: false, status: 404, error: 'Recording not found' };
   if (media.fileType !== 2) return { ok: false, status: 409, error: 'Recording is not a video' };
+  if (media.onCamera === false && media.videoState !== 'available') {
+    // Only a copy on the hub could still be sent; the hub does not keep to that.
+    return { ok: false, status: 409, error: 'The recording is no longer on the camera' };
+  }
 
   const pending = (await deps.store.listCommands(camera.camId)).find(
     (c) =>
@@ -44,28 +57,115 @@ export async function requestVideo(
 }
 
 export type DeleteRequest =
-  { ok: true; commands: CommandRecord[] } | { ok: false; status: 404; error: string };
+  | { ok: true; commands: CommandRecord[]; deletedHere: number[] }
+  | { ok: false; status: 404 | 409; error: string };
 
 /**
- * Queues one deleteMedia command per recording (#260). Recordings with an
+ * Where a delete applies when the command has no `targets`: commands from
+ * before #461 deleted on the camera, and the gallery entry went with it.
+ */
+export const LEGACY_DELETE_TARGETS: readonly DeleteTarget[] = ['camera', 'backend'];
+
+/** The targets of a deleteMedia command. */
+export function targetsOf(command: Pick<CommandRecord, 'targets'>): readonly DeleteTarget[] {
+  return command.targets ?? LEGACY_DELETE_TARGETS;
+}
+
+/**
+ * Where a delete applies for a hub (#461): what was set for it. Without a
+ * choice it is DEFAULT_DELETE_TARGETS, but a hub whose firmware does not know
+ * `targets` can only delete on the camera, so it keeps doing that.
+ */
+export function deleteTargetsOf(
+  hub: Pick<HubRecord, 'deleteTargets' | 'features'> | undefined,
+): DeleteTarget[] {
+  if (hub?.deleteTargets?.length) return [...hub.deleteTargets];
+  return [...(hubDeletesByTarget(hub) ? DEFAULT_DELETE_TARGETS : LEGACY_DELETE_TARGETS)];
+}
+
+/** The hub's firmware knows `targets` (#461). */
+export function hubDeletesByTarget(hub: Pick<HubRecord, 'features'> | undefined): boolean {
+  return hub?.features?.includes(HUB_FEATURE_DELETE_TARGETS) ?? false;
+}
+
+/**
+ * A list of targets from a request: at least one, every one valid, none
+ * twice. Returns them in the order of DELETE_TARGETS, or undefined.
+ */
+export function parseDeleteTargets(raw: unknown): DeleteTarget[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > DELETE_TARGETS.length) {
+    return undefined;
+  }
+  if (!raw.every((t) => DELETE_TARGETS.includes(t as DeleteTarget))) return undefined;
+  if (new Set(raw).size !== raw.length) return undefined;
+  return DELETE_TARGETS.filter((t) => raw.includes(t));
+}
+
+/**
+ * Deletes a recording in the gallery (#461): the record stays as a tombstone
+ * (a hub that reports it again must not bring it back), the thumbnail and
+ * the video are removed from the storage. A storage error is logged and the
+ * recording is gone for the user anyway; the bucket's lifecycle rules remove
+ * what is left.
+ */
+export async function deleteInBackend(camId: string, mediaId: number, deps: Deps): Promise<void> {
+  await deps.store.markMediaDeleted(camId, mediaId);
+  try {
+    await deps.storage.deleteMedia(camId, mediaId);
+  } catch (error) {
+    console.error(JSON.stringify({ deleteMediaFailed: { camId, mediaId, error: String(error) } }));
+  }
+}
+
+/**
+ * Deletes recordings where `targets` says (#260, #461). Recordings with an
  * open delete keep it (idempotent). Unknown ids fail the whole request, so
  * nothing is half done. The caller has checked that the user may see the
  * camera.
+ *
+ * - `backend` alone needs no hub: the recordings are gone from the gallery at
+ *   once (`deletedHere`).
+ * - With `camera` or `hub` the hub gets one command per recording; the part in
+ *   the backend follows when the hub reports it done.
+ * - A hub whose firmware does not know `targets` always deletes on the
+ *   camera: it gets only a delete for the camera, and nothing else (409).
  */
 export async function requestDelete(
   camera: CameraRecord,
   mediaIds: number[],
+  targets: readonly DeleteTarget[],
+  hub: HubRecord | undefined,
   deps: Deps,
 ): Promise<DeleteRequest> {
-  const known = new Set((await deps.store.listMedia(camera.camId)).map((m) => m.mediaId));
+  const known = new Set(
+    (await deps.store.listMedia(camera.camId)).filter((m) => !m.deleted).map((m) => m.mediaId),
+  );
   const unknown = mediaIds.find((id) => !known.has(id));
   if (unknown !== undefined) {
     return { ok: false, status: 404, error: `Recording ${unknown} not found` };
   }
+  const onHub = targets.filter((t) => t !== 'backend');
+  if (
+    onHub.length > 0 &&
+    !hubDeletesByTarget(hub) &&
+    !(onHub.length === 1 && onHub[0] === 'camera')
+  ) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'The hub needs a newer firmware to delete on the hub or to keep the camera',
+    };
+  }
+  const ids = [...new Set(mediaIds)];
+  if (onHub.length === 0) {
+    for (const mediaId of ids) await deleteInBackend(camera.camId, mediaId, deps);
+    return { ok: true, commands: [], deletedHere: ids };
+  }
+
   const existing = await deps.store.listCommands(camera.camId);
   const now = deps.now();
   const commands: CommandRecord[] = [];
-  for (const mediaId of new Set(mediaIds)) {
+  for (const mediaId of ids) {
     const pending = existing.find(
       (c) =>
         c.type === 'deleteMedia' &&
@@ -80,6 +180,7 @@ export async function requestDelete(
       id: (deps.newId ?? randomUUID)(),
       type: 'deleteMedia',
       mediaId,
+      targets: [...targets],
       state: 'queued',
       created: now,
       updated: now,
@@ -87,7 +188,7 @@ export async function requestDelete(
     await deps.store.putCommand(camera.camId, command);
     commands.push(command);
   }
-  return { ok: true, commands };
+  return { ok: true, commands, deletedHere: [] };
 }
 
 export type SettingsRequest =
@@ -147,7 +248,8 @@ export async function withdrawSettings(camera: CameraRecord, deps: Deps): Promis
 }
 
 export type Withdrawal =
-  { ok: true; withdrawn: number } | { ok: false; status: 409; error: string };
+  | { ok: true; withdrawn: number }
+  | { ok: false; status: 409; error: string };
 
 /**
  * Cancels the queued video and delete requests of a recording. A request the

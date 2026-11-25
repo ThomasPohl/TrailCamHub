@@ -12,6 +12,7 @@ import type {
   FoundCamera,
   Sample,
   SampleOwner,
+  DeleteTarget,
   ScheduleConfig,
   VideoState,
 } from '../model';
@@ -65,6 +66,12 @@ export class MemoryStore implements Store {
     const hub = this.hubs.get(hubId);
     if (!hub) throw new Error(`Unknown hub ${hubId}`);
     this.hubs.set(hubId, { ...hub, scheduleConfig: defined(config) });
+  }
+
+  async setHubDeleteTargets(hubId: string, targets: DeleteTarget[]): Promise<void> {
+    const hub = this.hubs.get(hubId);
+    if (!hub) throw new Error(`Unknown hub ${hubId}`);
+    this.hubs.set(hubId, { ...hub, deleteTargets: [...targets] });
   }
 
   async setHubDataBudget(hubId: string, budgetMB: number | undefined): Promise<void> {
@@ -219,9 +226,14 @@ export class MemoryStore implements Store {
     this.media.set(camId, map);
   }
 
-  async removeMedia(camId: string, mediaIds: number[]): Promise<void> {
-    const map = this.media.get(camId);
-    for (const mediaId of mediaIds) map?.delete(mediaId);
+  async markMediaDeleted(camId: string, mediaId: number): Promise<void> {
+    const item = this.media.get(camId)?.get(mediaId);
+    if (item) item.deleted = true;
+  }
+
+  async markMediaOffCamera(camId: string, mediaId: number): Promise<void> {
+    const item = this.media.get(camId)?.get(mediaId);
+    if (item) item.onCamera = false;
   }
 
   async markThumbPresent(camId: string, mediaId: number): Promise<void> {

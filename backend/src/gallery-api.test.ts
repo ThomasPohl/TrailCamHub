@@ -4,7 +4,7 @@ import { createAppUser, revokeAppUser } from './admin';
 import { createAdminSession } from './auth/admin-session';
 import { chargingSample, handleRequest } from './api';
 import type { ApiRequest, ApiResponse } from './http';
-import type { CheckinRequest, CheckinResponse, MediaItem } from './model';
+import type { Camera, CheckinRequest, CheckinResponse, MediaItem } from './model';
 import { CAM_ID, HUB_ID, hubRequest, NOW, setup } from './test-utils';
 
 const body = <T>(response: ApiResponse) => JSON.parse(response.body) as T;
@@ -267,6 +267,221 @@ describe('deleting recordings from the gallery (#260)', () => {
     expect((await call('POST', `/v1/cameras/${CAM_ID}/media/2037/withdraw`)).statusCode).toBe(409);
     media = body<MediaItem[]>(await call('GET', `/v1/cameras/${CAM_ID}/media`));
     expect(media.find((m) => m.mediaId === 2037)?.deleteState).toBe('delivered');
+  });
+});
+
+/** The gallery world with a hub whose firmware knows delete targets (#461). */
+async function targetsWorld() {
+  const world = await galleryWorld();
+  await handleRequest(
+    hubRequest('/v1/device/checkin', world.hubKey, { cameras: [], features: ['deleteTargets'] }),
+    world.deps,
+  );
+  const path = `/v1/cameras/${CAM_ID}/commands`;
+  const del = (mediaIds: number[], targets?: string[]) =>
+    world.call('POST', path, { type: 'deleteMedia', mediaIds, ...(targets ? { targets } : {}) });
+  const media = async () =>
+    body<MediaItem[]>(await world.call('GET', `/v1/cameras/${CAM_ID}/media`));
+  const checkin = async (extra: object = { cameras: [] }) =>
+    body<CheckinResponse>(
+      await handleRequest(hubRequest('/v1/device/checkin', world.hubKey, extra), world.deps),
+    );
+  const ack = async (id: string, state: 'done' | 'failed') =>
+    handleRequest(
+      hubRequest('/v1/device/ack', world.hubKey, {
+        cameras: [{ camId: CAM_ID, commands: [{ id, state }] }],
+      }),
+      world.deps,
+    );
+  return { ...world, del, media, checkin, ack };
+}
+
+describe('delete targets (#461)', () => {
+  it('shows the targets of the hub: the camera for an old firmware, hub and gallery for a new one', async () => {
+    const world = await galleryWorld();
+    const camera = async () =>
+      body<Camera[]>(await world.call('GET', '/v1/cameras')).find((c) => c.camId === CAM_ID);
+    // The firmware has not reported the feature: it deletes on the camera, as before.
+    expect(await camera()).toMatchObject({
+      hubDeleteTargets: ['camera', 'backend'],
+      hubDeletesByTarget: false,
+    });
+    await handleRequest(
+      hubRequest('/v1/device/checkin', world.hubKey, { cameras: [], features: ['deleteTargets'] }),
+      world.deps,
+    );
+    expect(await camera()).toMatchObject({
+      hubDeleteTargets: ['hub', 'backend'],
+      hubDeletesByTarget: true,
+    });
+    // A later firmware without the feature (a rollback) does not keep it.
+    await handleRequest(
+      hubRequest('/v1/device/checkin', world.hubKey, { cameras: [] }),
+      world.deps,
+    );
+    expect(await camera()).toMatchObject({ hubDeletesByTarget: false });
+  });
+
+  it('lets any user of the hub set the targets, the same for everybody', async () => {
+    const world = await targetsWorld();
+    const set = (targets: unknown, hub = HUB_ID) =>
+      world.call('POST', `/v1/hubs/${hub}/delete-targets`, { targets });
+    expect((await set(['hub', 'camera', 'backend'])).statusCode).toBe(200);
+    const cameras = body<Camera[]>(await world.call('GET', '/v1/cameras'));
+    // In the order of the list of targets, whatever the order sent.
+    expect(cameras[0]?.hubDeleteTargets).toEqual(['camera', 'hub', 'backend']);
+    expect((await world.store.getHub(HUB_ID))?.deleteTargets).toEqual(['camera', 'hub', 'backend']);
+    for (const bad of [[], ['floppy'], ['hub', 'hub'], 'hub', undefined]) {
+      expect((await set(bad)).statusCode).toBe(400);
+    }
+    expect((await set(['hub'], 'other-hub')).statusCode).toBe(404);
+  });
+
+  it('uses the hub setting when the request has no targets', async () => {
+    const world = await targetsWorld();
+    await world.call('POST', `/v1/hubs/${HUB_ID}/delete-targets`, { targets: ['camera'] });
+    await world.del([2035]);
+    const commands = (await world.checkin()).cameras[0]?.commands ?? [];
+    expect(commands).toMatchObject([{ type: 'deleteMedia', mediaId: 2035, targets: ['camera'] }]);
+  });
+
+  it('refuses bad targets in a request', async () => {
+    const world = await targetsWorld();
+    for (const bad of [[], ['floppy'], ['hub', 'hub'], 'hub']) {
+      expect((await world.del([2035], bad as string[])).statusCode).toBe(400);
+    }
+  });
+
+  it('deletes in the gallery alone at once, without a command for the hub', async () => {
+    const world = await targetsWorld();
+    world.storage.uploaded.add(`${CAM_ID}/2035`);
+    const res = await world.del([2035], ['backend']);
+    expect(res.statusCode).toBe(200);
+    expect(body(res)).toEqual([]);
+    expect((await world.media()).map((m) => m.mediaId)).toEqual([2037]);
+    expect(world.storage.deleted).toEqual([`${CAM_ID}/2035`]);
+    expect((await world.checkin()).cameras).toEqual([]);
+
+    // The hub still has it and reports it again: it does not come back, and
+    // no thumbnail is asked for.
+    const again = await world.checkin(checkinBody);
+    expect((await world.media()).map((m) => m.mediaId)).toEqual([2037]);
+    expect(again.cameras.flatMap((c) => c.thumbUploads.map((t) => t.mediaId))).not.toContain(2035);
+    // It cannot be asked for again.
+    expect((await world.del([2035], ['backend'])).statusCode).toBe(404);
+  });
+
+  it('hands camera and hub to the hub and deletes in the gallery when it is done', async () => {
+    const world = await targetsWorld();
+    await world.del([2035], ['camera', 'hub', 'backend']);
+    const commands = (await world.checkin()).cameras[0]?.commands ?? [];
+    // The gallery's part is not the hub's business.
+    expect(commands).toMatchObject([{ mediaId: 2035, targets: ['camera', 'hub'] }]);
+    expect((await world.media()).map((m) => [m.mediaId, m.deleteState])).toEqual([
+      [2037, undefined],
+      [2035, 'delivered'],
+    ]);
+    expect(world.storage.deleted).toEqual([]);
+
+    await world.ack(commands[0]!.id, 'done');
+    expect((await world.media()).map((m) => m.mediaId)).toEqual([2037]);
+    expect(world.storage.deleted).toEqual([`${CAM_ID}/2035`]);
+  });
+
+  it('keeps everything where it is when the hub fails', async () => {
+    const world = await targetsWorld();
+    await world.del([2035], ['camera', 'hub', 'backend']);
+    const commands = (await world.checkin()).cameras[0]?.commands ?? [];
+    await world.ack(commands[0]!.id, 'failed');
+    const item = (await world.media()).find((m) => m.mediaId === 2035);
+    expect(item).toMatchObject({ deleteState: 'failed' });
+    expect(world.storage.deleted).toEqual([]);
+  });
+
+  it('keeps the recording in the gallery after a delete on the camera alone', async () => {
+    const world = await targetsWorld();
+    await world.del([2035], ['camera']);
+    const commands = (await world.checkin()).cameras[0]?.commands ?? [];
+    expect(commands).toMatchObject([{ mediaId: 2035, targets: ['camera'] }]);
+    // The hub reports the file gone from the card, in the same check-in as the
+    // answer or before it.
+    await world.checkin({
+      cameras: [{ camId: CAM_ID, media: [], removedMedia: [2035] }],
+    });
+    await world.ack(commands[0]!.id, 'done');
+    await world.checkin({
+      cameras: [{ camId: CAM_ID, media: [], removedMedia: [2035] }],
+    });
+    const item = (await world.media()).find((m) => m.mediaId === 2035);
+    expect(item).toMatchObject({ mediaId: 2035, onCamera: false });
+    expect(item?.deleteState).toBeUndefined();
+    expect(world.storage.deleted).toEqual([]);
+    // A video cannot be fetched from a camera that no longer has it.
+    expect(
+      (
+        await world.call('POST', `/v1/cameras/${CAM_ID}/commands`, {
+          type: 'requestVideo',
+          mediaId: 2035,
+        })
+      ).statusCode,
+    ).toBe(409);
+  });
+
+  it('leaves the gallery alone when only the hub deletes its files', async () => {
+    const world = await targetsWorld();
+    await world.del([2035], ['hub']);
+    const commands = (await world.checkin()).cameras[0]?.commands ?? [];
+    expect(commands).toMatchObject([{ mediaId: 2035, targets: ['hub'] }]);
+    await world.ack(commands[0]!.id, 'done');
+    const item = (await world.media()).find((m) => m.mediaId === 2035);
+    expect(item).toBeDefined();
+    expect(item?.deleteState).toBeUndefined();
+    expect(item?.onCamera).toBeUndefined();
+    expect(world.storage.deleted).toEqual([]);
+  });
+
+  it('deletes what the camera lost by itself everywhere, whatever the setting', async () => {
+    const world = await targetsWorld();
+    await world.call('POST', `/v1/hubs/${HUB_ID}/delete-targets`, { targets: ['camera'] });
+    await world.checkin({ cameras: [{ camId: CAM_ID, media: [], removedMedia: [2035] }] });
+    expect((await world.media()).map((m) => m.mediaId)).toEqual([2037]);
+    expect(world.storage.deleted).toEqual([`${CAM_ID}/2035`]);
+    // Reported twice, deleted once.
+    await world.checkin({ cameras: [{ camId: CAM_ID, media: [], removedMedia: [2035] }] });
+    expect(world.storage.deleted).toEqual([`${CAM_ID}/2035`]);
+  });
+
+  it('takes a failed delete in the storage as done: the recording is gone for the user', async () => {
+    const world = await targetsWorld();
+    world.storage.deleteMedia = async () => {
+      throw new Error('S3 is down');
+    };
+    const logged = console.error;
+    console.error = () => {};
+    try {
+      expect((await world.del([2035], ['backend'])).statusCode).toBe(200);
+    } finally {
+      console.error = logged;
+    }
+    expect((await world.media()).map((m) => m.mediaId)).toEqual([2037]);
+  });
+
+  it('gives a firmware without targets only what it can do: delete on the camera', async () => {
+    const world = await galleryWorld();
+    const path = `/v1/cameras/${CAM_ID}/commands`;
+    const del = (targets: string[]) =>
+      world.call('POST', path, { type: 'deleteMedia', mediaIds: [2035], targets });
+    for (const targets of [['hub'], ['hub', 'backend'], ['camera', 'hub']]) {
+      expect((await del(targets)).statusCode).toBe(409);
+    }
+    expect(
+      (await world.store.listCommands(CAM_ID)).filter((c) => c.type === 'deleteMedia'),
+    ).toEqual([]);
+    expect((await del(['camera', 'backend'])).statusCode).toBe(201);
+    // The same without targets: the setting of such a hub is the camera and the gallery.
+    expect(
+      (await world.call('POST', path, { type: 'deleteMedia', mediaIds: [2037] })).statusCode,
+    ).toBe(201);
   });
 });
 
