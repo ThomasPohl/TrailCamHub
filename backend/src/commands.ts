@@ -93,9 +93,8 @@ export function hubDeletesByTarget(hub: Pick<HubRecord, 'features'> | undefined)
  * twice. Returns them in the order of DELETE_TARGETS, or undefined.
  */
 export function parseDeleteTargets(raw: unknown): DeleteTarget[] | undefined {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > DELETE_TARGETS.length) {
-    return undefined;
-  }
+  const max = DELETE_TARGETS.length;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > max) return undefined;
   if (!raw.every((t) => DELETE_TARGETS.includes(t as DeleteTarget))) return undefined;
   if (new Set(raw).size !== raw.length) return undefined;
   return DELETE_TARGETS.filter((t) => raw.includes(t));
@@ -137,19 +136,15 @@ export async function requestDelete(
   hub: HubRecord | undefined,
   deps: Deps,
 ): Promise<DeleteRequest> {
-  const known = new Set(
-    (await deps.store.listMedia(camera.camId)).filter((m) => !m.deleted).map((m) => m.mediaId),
-  );
+  const listed = await deps.store.listMedia(camera.camId);
+  const known = new Set(listed.filter((m) => !m.deleted).map((m) => m.mediaId));
   const unknown = mediaIds.find((id) => !known.has(id));
   if (unknown !== undefined) {
     return { ok: false, status: 404, error: `Recording ${unknown} not found` };
   }
   const onHub = targets.filter((t) => t !== 'backend');
-  if (
-    onHub.length > 0 &&
-    !hubDeletesByTarget(hub) &&
-    !(onHub.length === 1 && onHub[0] === 'camera')
-  ) {
+  const cameraOnly = onHub.length === 1 && onHub[0] === 'camera';
+  if (onHub.length > 0 && !hubDeletesByTarget(hub) && !cameraOnly) {
     return {
       ok: false,
       status: 409,
