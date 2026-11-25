@@ -24,8 +24,9 @@ backend with a gallery web app. Protocol and design notes live in `docs/`.
   board (including `wroom32d`). Other options are in each component's `Kconfig`.
 - `tools/`: `camera_mock/` (camera mock for an ESP32-WROOM), `dongle_console.py`,
   `capture/` (decode captures of the camera app).
-- `web/` installer, `app/` Mini App, `backend/` AWS SAM (optional, not being
-  extended), `test/host/` host tests.
+- `web/` installer, `app/` Mini App and gallery, `backend/` AWS SAM (optional
+  for hubs without the gallery; extended as the gallery needs it),
+  `test/host/` host tests.
 
 ## Docs index (`docs/`)
 

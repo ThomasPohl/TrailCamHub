@@ -75,8 +75,8 @@ switching the destination later does not send those items again.
 ### Own backend (`backend`)
 
 `api_url` and `device_key`; the check-in and the gallery web app
-of the backend (`backend/README.md`). Optional; it is not extended further
-(#150).
+of the backend (`backend/README.md`). Optional; it is extended as the
+gallery needs it (#461).
 
 ### WebDAV (`webdav`)
 
