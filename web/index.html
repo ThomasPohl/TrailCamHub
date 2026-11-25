@@ -610,9 +610,9 @@
         <div class="adv-panel mock-panel">
           <section aria-labelledby="mock-install-heading">
             <h2 id="mock-install-heading">Install the camera mock</h2>
-            <p>The mock stands in for the camera on the bench: it advertises over BLE like a TC100, opens its access point and answers the hub's requests (media list, thumbnails, photos, videos) with recorded data. It runs on a classic <strong>ESP32-WROOM-32D</strong> board without an SD card. See <a href="https://github.com/ThomasPohl/TrailCamHub/blob/main/tools/camera_mock/README.md">tools/camera_mock</a>.</p>
+            <p>The mock stands in for the camera on the bench: it advertises over BLE like a TC100, opens its access point and answers the hub's requests (media list, thumbnails, photos, videos) with recorded data. It runs on a classic <strong>ESP32-WROOM-32D</strong> or an <strong>ESP32-S3-WROOM-1</strong> board without an SD card; the installer picks the image for the connected chip. See <a href="https://github.com/ThomasPohl/TrailCamHub/blob/main/tools/camera_mock/README.md">tools/camera_mock</a>.</p>
             <ol>
-              <li>Connect the board with a USB data cable. Do not use the board that runs the hub firmware, or the hub is overwritten.</li>
+              <li>Connect the board with a USB data cable. On an ESP32-S3 board use the native <strong>USB</strong> port: the mock's console runs there. Do not use the board that runs the hub firmware, or the hub is overwritten.</li>
               <li>Press <strong>Install camera mock</strong> and choose the serial port. If the flashing does not start, hold BOOT while the dialog connects.</li>
               <li>Press <strong>Connect</strong> at the left, after the installation.</li>
             </ol>
@@ -626,7 +626,8 @@
               <span slot="unsupported">Use a desktop Chromium-based browser that supports Web Serial, such as Chrome or Edge.</span>
               <span slot="not-allowed">Open this page over HTTPS and allow serial-port access in your browser.</span>
             </esp-web-install-button>
-            <p class="note">Manual download: <a id="mock-dl" href="#">camera-mock.bin</a> (<a id="mock-dl-sha" href="#">SHA-256</a>), write it at offset 0: <code>esptool --chip esp32 write-flash 0x0 camera-mock.bin</code>. Only builds of <code>main</code> and later carry a mock.</p>
+            <p id="mock-no-s3" class="note" hidden>This build has a mock for the ESP32 only. For an ESP32-S3 board choose a newer build.</p>
+            <p class="note">Manual download: <span id="mock-dl"></span> (<a id="mock-dl-sha" href="#">SHA-256</a>), write it at offset 0, for example <code>esptool --chip esp32s3 write-flash 0x0 camera-mock-esp32s3.bin</code>. Only builds of <code>main</code> and later carry a mock.</p>
           </section>
 
           <section aria-labelledby="mock-id-heading">

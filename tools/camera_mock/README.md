@@ -29,6 +29,9 @@ esptool.py --chip esp32 write_flash 0 camera-mock.bin
 esptool.py --chip esp32s3 write_flash 0 camera-mock.bin
 ```
 
+The web installer publishes them as `camera-mock-esp32.bin` and
+`camera-mock-esp32s3.bin`.
+
 ### ESP32-S3-WROOM-1
 
 The same mock builds for an ESP32-S3 (for example a DevKitC-1):
@@ -39,13 +42,19 @@ idf.py -C tools/camera_mock -B build-camera-mock-s3 build flash monitor
 ```
 
 Chip-specific settings are in `sdkconfig.defaults.esp32` and
-`sdkconfig.defaults.esp32s3`. The console is on UART0: use the port marked
-"UART" on the DevKitC-1, not the native "USB" port. Flash size 4 MB and no
-PSRAM, so every WROOM-1 variant (N4, N8, N16, R2, R8) runs it. Only compiled
-in CI so far; not run on hardware (#222).
+`sdkconfig.defaults.esp32s3`. The console runs on the native USB port
+(USB-Serial-JTAG, #447): connect the port marked "USB" on a DevKitC-1, so a
+board with only that port works too. The ROM bootloader and the second-stage
+bootloader still print on UART0. For the console on UART0 instead (the "UART"
+port, a USB-UART bridge), set `CONFIG_ESP_CONSOLE_UART_DEFAULT=y` in
+`sdkconfig.defaults.esp32s3` or in `menuconfig` (Component config → ESP System
+Settings → Channel for console output). Flash size 4 MB and no PSRAM, so every
+WROOM-1 variant (N4, N8, N16, R2, R8) runs it. Only compiled in CI so far; not
+run on hardware (#222).
 
 Without a toolchain, the web installer's **Camera mock** view
-(<https://thomaspohl.github.io/TrailCamHub/#mock>) flashes the same image and
+(<https://thomaspohl.github.io/TrailCamHub/#mock>) flashes the image that fits
+the connected chip (ESP32 or ESP32-S3) and
 drives the console from the browser: identity, size of the media list, fault
 injection, session control ([`docs/installer.md`](../../docs/installer.md)).
 

@@ -86,15 +86,24 @@ and only on a board you may modify.
 
 The **Camera mock** view installs and drives the bench stand-in for the camera
 ([`tools/camera_mock`](../tools/camera_mock/README.md), #122) on an
-**ESP32-WROOM-32D** board without SD card. The mock is not a hub: flash it onto
-a second board, never onto the hub.
+**ESP32-WROOM-32D** or **ESP32-S3-WROOM-1** board without SD card. The mock is
+not a hub: flash it onto a second board, never onto the hub.
 
 - **Install**: pick a build and press *Install camera mock* (ESP Web Tools,
-  one merged image at offset 0, chip family ESP32). Only builds that carry a
-  mock are listed; the *Firmware Package* workflow builds it in the job
-  *Build camera mock (ESP32)* and `deploy-installer` publishes it next to the
-  boards (`builds/<id>/camera-mock/`, `mock` in `versions.json`). The image is
-  also a download with a SHA-256 file.
+  one merged image per chip at offset 0). The manifest has one build per chip
+  family (ESP32, ESP32-S3); ESP Web Tools reads the chip after connecting and
+  flashes the image that fits, or reports that the chip is not supported (#447).
+  Only builds that carry a mock are listed; the *Firmware Package* workflow
+  builds them in the jobs *Build camera mock (esp32)* and *Build camera mock
+  (esp32s3)*, and `deploy-installer` publishes them next to the boards
+  (`builds/<id>/camera-mock/camera-mock-<chip>.bin`). In `versions.json`,
+  `mock.bins` maps each chip to its image; `mock.bin` is the ESP32 image, as
+  before #447, and the page reads it for older builds (which have only the
+  ESP32 image; the page says so). The images are also downloads with a
+  SHA-256 file.
+- **ESP32-S3**: the mock's console runs on the native USB port
+  (USB-Serial-JTAG). Connect that port for installing and for the console;
+  Web Serial reaches it like a UART bridge.
 - **Connect** at the left. The dock shows the camera ID and BLE name, the
   access point, the session counters and the active faults, read with the
   mock's `status`, `id` and `media`. *Close session*, *AP on/off* and *Reset
