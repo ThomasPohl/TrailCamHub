@@ -70,7 +70,11 @@ describe('hub check-in with several cameras', () => {
       deps,
     );
     expect(res.statusCode).toBe(200);
-    expect((await store.listMedia(CAM_ID)).map((m) => m.mediaId)).toEqual([2036]);
+    // Lost by the camera itself: deleted in the gallery too (#461), and
+    // the unknown id leaves no record.
+    const kept = (await store.listMedia(CAM_ID)).filter((m) => !m.deleted);
+    expect(kept.map((m) => m.mediaId)).toEqual([2036]);
+    expect(await store.getMedia(CAM_ID, 9999)).toBeUndefined();
     // Removed ids are not taken back by a later report of other media.
     expect((await store.listMedia(CAM_2)).map((m) => m.mediaId)).toEqual([3007]);
   });

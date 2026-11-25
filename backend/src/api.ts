@@ -10,9 +10,14 @@ import { parseDeviceKey, verifySecret } from './auth/device';
 import { verifyTotp } from './auth/totp';
 import { createAppUser, revokeAppUser } from './admin';
 import {
+  deleteInBackend,
+  deleteTargetsOf,
+  hubDeletesByTarget,
+  parseDeleteTargets,
   requestDelete,
   requestSettings,
   requestVideo,
+  targetsOf,
   withdraw,
   withdrawSettings,
 } from './commands';
@@ -145,6 +150,7 @@ const routes: Array<{ method: string; pattern: string; handler: Handler }> = [
   { method: 'PUT', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
   // The same as POST: the Function URL's CORS allows no PUT (#286).
   { method: 'POST', pattern: '/v1/hubs/:hubId/schedule', handler: setSchedule },
+  { method: 'POST', pattern: '/v1/hubs/:hubId/delete-targets', handler: setDeleteTargets },
   { method: 'GET', pattern: '/v1/hubs/:hubId/found-cameras', handler: listFoundCameras },
   { method: 'POST', pattern: '/v1/hubs/:hubId/scan', handler: requestScan },
   {
@@ -313,6 +319,8 @@ function toCamera(
     hubLastSeen: hub?.lastSeen ?? 0,
     hubSchedule: hub?.schedule,
     hubScheduleConfig: hub?.scheduleConfig ?? {},
+    hubDeleteTargets: deleteTargetsOf(hub),
+    hubDeletesByTarget: hubDeletesByTarget(hub),
     readRequested: commands.some((c) => c.type === 'readCamera' && isOpen(c)),
     settings: record.settings,
     capability: record.capability,
@@ -630,9 +638,8 @@ async function listMedia(req: ApiRequest, params: Record<string, string>, deps: 
     if (c.type !== 'readCamera' && c.state !== 'cancelled') latest.set(`${c.type}:${c.mediaId}`, c);
   }
   const media = (await deps.store.listMedia(camera.camId))
-    .filter((m) => m.thumbPresent)
-    // Deleted on the camera: gone for the user too.
-    .filter((m) => latest.get(`deleteMedia:${m.mediaId}`)?.state !== 'done')
+    // Deleted in the gallery stays as a tombstone (#461).
+    .filter((m) => m.thumbPresent && !m.deleted)
     .sort((a, b) => b.mediaTime - a.mediaTime || b.num - a.num);
   const items: MediaItem[] = await Promise.all(
     media.map(async (m) => ({
@@ -650,6 +657,7 @@ async function listMedia(req: ApiRequest, params: Record<string, string>, deps: 
         ? { videoError: latest.get(`requestVideo:${m.mediaId}`)?.error }
         : {}),
       ...deleteInfo(latest.get(`deleteMedia:${m.mediaId}`)),
+      ...(m.onCamera === false ? { onCamera: false as const } : {}),
     })),
   );
   return json(200, items);
@@ -668,7 +676,12 @@ const MAX_DELETE_PER_REQUEST = 200;
 
 async function createCommand(req: ApiRequest, params: Record<string, string>, deps: Deps) {
   const camera = await authUserForCamera(req, params.camId ?? '', deps);
-  const body = parseJsonBody<{ type?: unknown; mediaId?: unknown; mediaIds?: unknown }>(req);
+  const body = parseJsonBody<{
+    type?: unknown;
+    mediaId?: unknown;
+    mediaIds?: unknown;
+    targets?: unknown;
+  }>(req);
   if (body.type === 'readCamera') return createReadCommand(camera, deps);
   if (body.type === 'setSettings') {
     const result = await requestSettings(camera, (body as { settings?: unknown }).settings, deps);
@@ -685,9 +698,16 @@ async function createCommand(req: ApiRequest, params: Record<string, string>, de
     ) {
       throw new HttpError(400, `mediaIds must be 1-${MAX_DELETE_PER_REQUEST} valid media ids`);
     }
-    const result = await requestDelete(camera, ids as number[], deps);
+    const hub = await deps.store.getHub(camera.hubId);
+    // Without `targets` the hub's setting applies (#461).
+    const targets =
+      body.targets === undefined ? deleteTargetsOf(hub) : parseDeleteTargets(body.targets);
+    if (!targets) {
+      throw new HttpError(400, 'targets must be a list of camera, hub or backend, at least one');
+    }
+    const result = await requestDelete(camera, ids as number[], targets, hub, deps);
     if (!result.ok) throw new HttpError(result.status, result.error);
-    return json(201, result.commands.map(commandResult));
+    return json(result.commands.length > 0 ? 201 : 200, result.commands.map(commandResult));
   }
   if (body.type !== 'requestVideo') throw new HttpError(400, 'Unsupported command type');
   if (!isMediaId(body.mediaId)) throw new HttpError(400, 'mediaId must be a valid media id');
@@ -724,6 +744,21 @@ async function userHub(req: ApiRequest, hubId: string, deps: Deps) {
   const hub = ID_PATTERN.test(hubId) ? await deps.store.getHub(hubId) : undefined;
   if (!hub || !(await mayUseHub(user, hubId, deps))) throw new HttpError(404, 'Hub not found');
   return hub;
+}
+
+/**
+ * Where a delete in the gallery applies for the hub (#461). Any user of the
+ * hub may set it; it is the same for all of them.
+ */
+async function setDeleteTargets(req: ApiRequest, params: Record<string, string>, deps: Deps) {
+  const hub = await userHub(req, params.hubId ?? '', deps);
+  const body = parseJsonBody<{ targets?: unknown }>(req);
+  const targets = parseDeleteTargets(body.targets);
+  if (!targets) {
+    throw new HttpError(400, 'targets must be a list of camera, hub or backend, at least one');
+  }
+  await deps.store.setHubDeleteTargets(hub.hubId, targets);
+  return json(200, { targets });
 }
 
 /** Cameras the hub found, for the gallery (#297, #298). */
@@ -1207,6 +1242,7 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       schedule: sanitizeSchedule(body.schedule, now),
       ...uplinkOf(body),
       memory: parseMemory(body.memory),
+      features: parseFeatures(body.features),
     },
     now,
     // A hub without a battery reading omits the field: drop the old value, so
@@ -1215,6 +1251,8 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       ...(optionalNumber(body.hubBatPercent) === undefined ? (['batPercent'] as const) : []),
       // Older firmware sends no mode: do not keep an old one as current.
       ...(powerModeOf(body) === undefined ? (['powerMode'] as const) : []),
+      // An older firmware reports none: it cannot do what the last one could.
+      ...(parseFeatures(body.features) === undefined ? (['features'] as const) : []),
     ],
   );
   // The data volume since the last check-in, added to the sum of today (#415).
@@ -1292,8 +1330,8 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     );
     // Only new recordings are written; existing ones keep their flags.
     await deps.store.addMedia(camera.camId, report.records);
-    // Deleted on the camera: gone from the gallery too.
-    if (report.removed.length > 0) await deps.store.removeMedia(camera.camId, report.removed);
+    // No longer on the camera's card (#461).
+    if (report.removed.length > 0) await recordRemoved(camera.camId, report.removed, deps);
     // A new camera may have been reported with a partial (delta) list.
     results.set(camera.camId, emptyResult(camera.camId, true, created));
   }
@@ -1313,7 +1351,7 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
     const result = results.get(camId) ?? emptyResult(camId, true, false);
 
     for (const m of await deps.store.listMedia(camId)) {
-      if (!m.thumbPresent) {
+      if (!m.thumbPresent && !m.deleted) {
         work.push({ camId, mediaId: m.mediaId, num: m.num, mediaTime: m.mediaTime });
       }
     }
@@ -1351,7 +1389,13 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
               uploadUrl: await deps.storage.videoUploadUrl(camId, c.mediaId),
             }
           : c.type === 'deleteMedia'
-            ? { id: c.id, type: c.type, mediaId: c.mediaId }
+            ? {
+                id: c.id,
+                type: c.type,
+                mediaId: c.mediaId,
+                // The backend's part is its own; a command from before has none.
+                ...(c.targets ? { targets: c.targets.filter((t) => t !== 'backend') } : {}),
+              }
             : c.type === 'setSettings'
               ? { id: c.id, type: c.type, settings: c.settings ?? {} }
               : { id: c.id, type: c.type },
@@ -1409,6 +1453,50 @@ function thumbUploadLimit(requested: unknown, backendLimit: number): number {
   return Math.min(wanted, backendLimit);
 }
 
+/** The check-in's `features`: short names only, at most 16. */
+export function parseFeatures(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const names = raw.filter(
+    (f): f is string => typeof f === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(f),
+  );
+  return [...new Set(names)].slice(0, 16);
+}
+
+/** From this many recordings at once the loss is logged, so it can be traced. */
+const MANY_REMOVED = 20;
+
+/**
+ * Recordings the hub reports as no longer on the camera's card (#461). One
+ * the gallery asked to delete on the camera, without the gallery, stays here
+ * (`onCamera: false`); every other one was lost by the camera itself (deleted
+ * there, card formatted) and goes from the gallery and the storage as well.
+ * Repeating an id is harmless.
+ */
+async function recordRemoved(camId: string, mediaIds: number[], deps: Deps): Promise<void> {
+  if (mediaIds.length >= MANY_REMOVED) {
+    console.warn(JSON.stringify({ manyRemoved: { camId, count: mediaIds.length } }));
+  }
+  const commands = await deps.store.listCommands(camId);
+  for (const mediaId of new Set(mediaIds)) {
+    const media = await deps.store.getMedia(camId, mediaId);
+    if (!media || media.deleted) continue;
+    const asked = commands
+      .filter(
+        (c) =>
+          c.type === 'deleteMedia' &&
+          c.mediaId === mediaId &&
+          (c.state === 'delivered' || c.state === 'done'),
+      )
+      .sort((a, b) => b.created - a.created)[0];
+    const keep = asked !== undefined && !targetsOf(asked).includes('backend');
+    if (keep) {
+      if (media.onCamera !== false) await deps.store.markMediaOffCamera(camId, mediaId);
+    } else {
+      await deleteInBackend(camId, mediaId, deps);
+    }
+  }
+}
+
 function emptyResult(camId: string, accepted: boolean, resync: boolean): CameraCheckin {
   return { camId, accepted, resync, thumbUploads: [], commands: [] };
 }
@@ -1463,6 +1551,15 @@ async function ack(req: ApiRequest, _p: Record<string, string>, deps: Deps) {
           command.mediaId,
           state === 'done' ? 'available' : 'failed',
         );
+      }
+      // The hub did its part: the gallery's follows (#461). A failed delete
+      // leaves everything as it was.
+      if (
+        command.type === 'deleteMedia' &&
+        state === 'done' &&
+        targetsOf(command).includes('backend')
+      ) {
+        await deleteInBackend(camera.camId, command.mediaId, deps);
       }
       commandsUpdated++;
     }

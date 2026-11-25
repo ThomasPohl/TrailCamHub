@@ -4,6 +4,7 @@ import type {
   ShareRecord,
   CameraRecord,
   CommandRecord,
+  DeleteTarget,
   HubRecord,
   MediaRecord,
   FirmwareChange,
@@ -27,6 +28,7 @@ export type HubTelemetry = Partial<
     | 'modemSignalDbm'
     | 'modemOperator'
     | 'memory'
+    | 'features'
   >
 >;
 export type CameraTelemetry = Partial<
@@ -70,6 +72,8 @@ export interface Store {
   ): Promise<void>;
   /** Replaces the schedule set in the app (an empty object removes it). */
   setHubScheduleConfig(hubId: string, config: ScheduleConfig): Promise<void>;
+  /** Sets where a delete applies for the hub (#461); the same for every user. */
+  setHubDeleteTargets(hubId: string, targets: DeleteTarget[]): Promise<void>;
   /** Sets the monthly data plan in MB (#415); undefined removes it. */
   setHubDataBudget(hubId: string, budgetMB: number | undefined): Promise<void>;
   /** Adds bytes to the sum of a hub's UTC day (`YYYY-MM-DD`) and transport (#415). */
@@ -109,7 +113,10 @@ export interface Store {
   /** Inserts new media; never overwrites existing records (their flags survive). */
   addMedia(camId: string, items: MediaRecord[]): Promise<void>;
   /** Drops recordings that are no longer on the camera; unknown ids are ignored. */
-  removeMedia(camId: string, mediaIds: number[]): Promise<void>;
+  /** Marks a recording as deleted in the gallery (#461); the record stays as a tombstone. */
+  markMediaDeleted(camId: string, mediaId: number): Promise<void>;
+  /** Marks a recording as no longer on the camera but kept (#461). */
+  markMediaOffCamera(camId: string, mediaId: number): Promise<void>;
   markThumbPresent(camId: string, mediaId: number): Promise<void>;
   setVideoState(camId: string, mediaId: number, state: VideoState): Promise<void>;
 

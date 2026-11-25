@@ -1,4 +1,5 @@
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -18,6 +19,8 @@ export interface MediaStorage {
   /** Short-lived URL the hub PUTs a requested video (MP4) to. */
   videoUploadUrl(camId: string, mediaId: number): Promise<string>;
   videoExists(camId: string, mediaId: number): Promise<boolean>;
+  /** Removes the thumbnail and the video of a recording (#461); no error if one is missing. */
+  deleteMedia(camId: string, mediaId: number): Promise<void>;
 }
 
 export const thumbKey = (camId: string, mediaId: number) => `thumb/${camId}/${mediaId}.jpg`;
@@ -82,6 +85,23 @@ export class S3MediaStorage implements MediaStorage {
 
   videoExists(camId: string, mediaId: number): Promise<boolean> {
     return this.exists(videoKey(camId, mediaId));
+  }
+
+  async deleteMedia(camId: string, mediaId: number): Promise<void> {
+    // S3 does not complain about a key that is not there.
+    const result = await this.s3.send(
+      new DeleteObjectsCommand({
+        Bucket: this.bucket,
+        Delete: {
+          Objects: [{ Key: thumbKey(camId, mediaId) }, { Key: videoKey(camId, mediaId) }],
+          Quiet: true,
+        },
+      }),
+    );
+    // Per-key failures come in the answer, not as an exception.
+    if (result.Errors && result.Errors.length > 0) {
+      throw new Error(`S3 did not delete ${result.Errors.map((e) => e.Key).join(', ')}`);
+    }
   }
 
   private async exists(key: string): Promise<boolean> {
