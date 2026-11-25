@@ -31,4 +31,22 @@ describe('DemoGalleryApi', () => {
     await api.withdraw(camId, first!);
     expect((await api.recordings(camId))[0]?.state).toBe('new');
   });
+
+  it('keeps what a delete without the gallery leaves, and saves the targets (#461)', async () => {
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    const camId = (await api.status()).cameras[0]!.camId;
+    const [first, second] = await api.recordings(camId);
+
+    expect((await api.status()).hub?.deleteTargets).toEqual(['hub', 'backend']);
+    await api.requestDelete(camId, [first!.mediaId], ['camera']);
+    const kept = (await api.recordings(camId)).find((r) => r.mediaId === first!.mediaId);
+    expect(kept?.state).toBe('new');
+    expect(kept?.goneFromCamera).toBe(true);
+
+    await api.setDeleteTargets('garten-hub', ['camera', 'backend']);
+    expect((await api.status()).hub?.deleteTargets).toEqual(['camera', 'backend']);
+    await api.requestDelete(camId, [second!.mediaId]);
+    const gone = (await api.recordings(camId)).find((r) => r.mediaId === second!.mediaId);
+    expect(gone?.state).toBe('deleteRequested');
+  });
 });

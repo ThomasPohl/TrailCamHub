@@ -1,5 +1,5 @@
 import { ApiError } from '../api/http';
-import type { Camera, CameraSettings, MediaItem } from '../api/types';
+import type { Camera, CameraSettings, DeleteTarget, MediaItem } from '../api/types';
 import { compareThumbnails, judge, MAX_MISMATCH, splitMismatchedPairs } from './stamp';
 import { fetchLatestRelease } from './release';
 import { cameraFile, videoFileName } from './text';
@@ -213,6 +213,9 @@ export class HttpGalleryApi implements GalleryApi {
             hubId: latest.hubId,
             cameraPlan: latest.hubSchedule?.cameraPlan,
             config: latest.hubScheduleConfig ?? {},
+            // A backend without the setting deletes on the camera and in the gallery.
+            deleteTargets: latest.hubDeleteTargets ?? ['camera', 'backend'],
+            deletesByTarget: latest.hubDeletesByTarget ?? false,
           }
         : undefined,
       cameras: cameras.map((c) => ({
@@ -275,6 +278,7 @@ export class HttpGalleryApi implements GalleryApi {
         videoUrl: video?.videoUrl,
         fileName: videoFileName(name, main.mediaTime, main.num),
         ...toState(deleting ?? main),
+        ...(files.every((m) => m.onCamera === false) ? { goneFromCamera: true } : {}),
       };
     });
   }
@@ -300,14 +304,22 @@ export class HttpGalleryApi implements GalleryApi {
     }
   }
 
-  async requestDelete(camId: string, mediaIds: number[]): Promise<void> {
+  async requestDelete(camId: string, mediaIds: number[], targets?: DeleteTarget[]): Promise<void> {
     // The backend takes at most DELETE_BATCH ids per request.
     for (let i = 0; i < mediaIds.length; i += DELETE_BATCH) {
       await this.request('POST', `${this.camera(camId)}/commands`, {
         type: 'deleteMedia',
         mediaIds: mediaIds.slice(i, i + DELETE_BATCH),
+        // Without targets the backend uses the hub's setting.
+        ...(targets ? { targets } : {}),
       });
     }
+  }
+
+  async setDeleteTargets(hubId: string, targets: DeleteTarget[]): Promise<void> {
+    await this.request('POST', `/v1/hubs/${encodeURIComponent(hubId)}/delete-targets`, {
+      targets,
+    });
   }
 
   async withdraw(camId: string, recording: Recording): Promise<void> {

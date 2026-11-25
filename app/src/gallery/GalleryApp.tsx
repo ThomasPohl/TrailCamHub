@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '../api/http';
-import type { CameraSettings } from '../api/types';
+import type { CameraSettings, DeleteTarget } from '../api/types';
 import { AdminView } from './AdminView';
 import { showFaultBadge } from './badge';
 import { FoundCameras } from './FoundCameras';
@@ -20,6 +20,7 @@ import {
   UndoIcon,
 } from './Icons';
 import { ActivityDialog } from './ActivityDialog';
+import { DeleteDialog, DeleteTargetsDialog, targetNames } from './DeleteTargets';
 import { ShareDialog } from './ShareDialog';
 import { Viewer } from './Viewer';
 import { openEmptyStore } from './emptyDetector';
@@ -107,7 +108,7 @@ const selectable = (r: Recording) =>
 
 /** Can still be asked for its video. */
 const videoWanted = (r: Recording) =>
-  r.fileType === 2 && (r.state === 'new' || r.state === 'failed');
+  r.fileType === 2 && !r.goneFromCamera && (r.state === 'new' || r.state === 'failed');
 
 /** Key of a found camera: a camera is known by its hub and BLE address. */
 const foundKey = (f: FoundCamera) => `${f.hubId}/${f.bleAddress}`;
@@ -179,6 +180,7 @@ export function GalleryApp({
   const [settingsFor, setSettingsFor] = useState<string>();
   const [sharing, setSharing] = useState<Recording>();
   const [activityOpen, setActivityOpen] = useState(false);
+  const [targetsOpen, setTargetsOpen] = useState(false);
   const [hideEmpty, setHideEmpty] = useState(false);
   const detect = useEmptyTriggers(items, empty ?? realEmpty(), now);
   const saving = useRef(false);
@@ -512,12 +514,21 @@ export function GalleryApp({
       );
     }
   };
-  const requestDeleteFor = async (list: Recording[]) => {
+  const requestDeleteFor = async (list: Recording[], targets?: DeleteTarget[]) => {
     for (const [id, rs] of byCamera(list)) {
       await api.requestDelete(
         id,
         rs.flatMap((r) => r.mediaIds),
+        targets,
       );
+    }
+  };
+  /** One recording from its tile: with a question when the camera's copy goes (#461). */
+  const deleteOne = (r: Recording) => {
+    if (status?.hub?.deleteTargets.includes('camera') ?? true) {
+      setConfirm({ question: '1 Aufnahme löschen?', items: [r] });
+    } else {
+      void act(() => requestDeleteFor([r]), 'Gelöscht.');
     }
   };
 
@@ -575,6 +586,16 @@ export function GalleryApp({
             onClick={() => setActivityOpen(true)}
           >
             Aktivität
+          </button>
+        )}
+        {status?.hub && !adminView && (
+          <button
+            type="button"
+            className="g-btn g-btn--quiet g-header__switch"
+            title={`Löschen wirkt auf: ${targetNames(status.hub.deleteTargets)}`}
+            onClick={() => setTargetsOpen(true)}
+          >
+            Löschen auf …
           </button>
         )}
         {isAdmin && (
@@ -1166,6 +1187,14 @@ export function GalleryApp({
                           )}
                         </span>
                         {isEmpty(r) && <span className="g-tile__empty">wahrscheinlich leer</span>}
+                        {r.goneFromCamera && (
+                          <span
+                            className="g-tile__empty g-tile__empty--second"
+                            title="Auf der Kamera gelöscht, in der Galerie behalten"
+                          >
+                            nicht mehr auf der Kamera
+                          </span>
+                        )}
                         {r.state === 'videoReady' && (
                           <button
                             type="button"
@@ -1221,7 +1250,7 @@ export function GalleryApp({
                               label="Löschen"
                               danger
                               disabled={busy}
-                              onClick={() => void act(() => api.requestDelete(r.camId, r.mediaIds))}
+                              onClick={() => deleteOne(r)}
                             >
                               <TrashIcon />
                             </IconButton>
@@ -1258,7 +1287,7 @@ export function GalleryApp({
               emptyCorrected={detect.corrected.has(recordingKey(viewed))}
               onCorrectEmpty={(value) => detect.correct(recordingKey(viewed), value)}
               onWithdraw={() => void act(() => api.withdraw(viewed.camId, viewed))}
-              onDelete={() => setConfirm({ question: '1 Aufnahme löschen?', items: [viewed] })}
+              onDelete={() => deleteOne(viewed)}
               onClose={() => setViewing(undefined)}
             />
           )}
@@ -1269,6 +1298,18 @@ export function GalleryApp({
               status={status}
               now={t}
               onClose={() => setActivityOpen(false)}
+            />
+          )}
+
+          {targetsOpen && status?.hub && (
+            <DeleteTargetsDialog
+              api={api}
+              hub={status.hub}
+              onSaved={() => {
+                setNotice('Gespeichert. „Löschen“ wirkt jetzt so.');
+                void reload();
+              }}
+              onClose={() => setTargetsOpen(false)}
             />
           )}
 
@@ -1363,37 +1404,22 @@ export function GalleryApp({
           )}
 
           {confirm && (
-            <div className="g-dialog" role="dialog" aria-modal="true" aria-labelledby="g-confirm">
-              <div className="g-dialog__box">
-                <p id="g-confirm">{confirm.question}</p>
-                <p className="g-hint">
-                  Bis zum nächsten Kontakt mit dem Hub lässt sich das noch zurücknehmen.
-                </p>
-                <div className="g-dialog__actions">
-                  <button
-                    type="button"
-                    className="g-btn g-btn--quiet"
-                    onClick={() => setConfirm(undefined)}
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    className="g-btn g-btn--danger"
-                    onClick={() => {
-                      setConfirm(undefined);
-                      clearSelection();
-                      void act(
-                        () => requestDeleteFor(confirm.items),
-                        'Die Aufnahmen werden beim nächsten Kontakt gelöscht.',
-                      );
-                    }}
-                  >
-                    Ja, löschen
-                  </button>
-                </div>
-              </div>
-            </div>
+            <DeleteDialog
+              question={confirm.question}
+              items={confirm.items}
+              hub={status?.hub}
+              onCancel={() => setConfirm(undefined)}
+              onConfirm={(targets) => {
+                setConfirm(undefined);
+                clearSelection();
+                void act(
+                  () => requestDeleteFor(confirm.items, targets),
+                  targets.length === 1 && targets[0] === 'backend'
+                    ? 'Die Aufnahmen sind aus der Galerie gelöscht.'
+                    : 'Die Aufnahmen werden beim nächsten Kontakt gelöscht.',
+                );
+              }}
+            />
           )}
         </main>
       )}

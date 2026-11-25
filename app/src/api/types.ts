@@ -53,6 +53,13 @@ export interface Camera {
   hubSchedule?: HubSchedule;
   /** Schedule set in the app for the hub; empty fields: the hub's own. */
   hubScheduleConfig: ScheduleConfig;
+  /** Where a delete applies for this hub (#461); the same for every user. */
+  hubDeleteTargets: DeleteTarget[];
+  /**
+   * The hub's firmware can delete on the hub, or on camera and hub (#461).
+   * Without it only "camera" and "backend" (or both) are possible.
+   */
+  hubDeletesByTarget: boolean;
   /** A camera read was asked for and has not been done yet. */
   readRequested: boolean;
   /** The camera's settings at the hub's last read (#368); absent if unknown. */
@@ -120,6 +127,12 @@ export type FileType = 0 | 2;
 
 export type VideoState = 'none' | 'requested' | 'downloading' | 'available' | 'failed';
 
+/**
+ * Where a delete applies (#461): `camera` the files on the camera's card,
+ * `hub` the hub's copies, `backend` the gallery.
+ */
+export type DeleteTarget = 'camera' | 'hub' | 'backend';
+
 export interface MediaItem {
   /** Identifies the recording within its camera (docs/media-identity.md). */
   mediaId: number;
@@ -142,4 +155,6 @@ export interface MediaItem {
   /** A delete was asked for, handed to the hub, or failed (#260). */
   deleteState?: 'requested' | 'delivered' | 'failed';
   deleteError?: string;
+  /** Deleted on the camera, kept here (#461). */
+  onCamera?: false;
 }
