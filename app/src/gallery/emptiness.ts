@@ -196,30 +196,40 @@ export function candidatesOf(count: number, index: number, timeline?: Timeline):
 }
 
 /**
- * The neighbours of `frames[index]` (sorted by time; a picture that could not
- * be read is `undefined`): the candidates (`candidateSetsOf`) whose brightness
- * is close, so a day picture is not compared with a night one. At most
- * `MAX_NEIGHBOURS`, the nearest first; spare ones only up to `MIN_NEIGHBOURS`.
+ * The positions of the neighbours of `frames[index]` (sorted by time; a
+ * picture that could not be read is `undefined`): the candidates
+ * (`candidateSetsOf`) whose brightness is close, so a day picture is not
+ * compared with a night one. At most `MAX_NEIGHBOURS`, the nearest first;
+ * spare ones only up to `MIN_NEIGHBOURS`.
  */
-export function neighboursOf(
+export function neighbourPositionsOf(
   frames: readonly (Frame | undefined)[],
   index: number,
   timeline?: Timeline,
-): Frame[] {
+): number[] {
   const own = frames[index];
   if (!own) return [];
   const { preferred, spare } = candidateSetsOf(frames.length, index, timeline);
-  const result: Frame[] = [];
+  const result: number[] = [];
   const add = (positions: number[], limit: number) => {
     for (const i of positions) {
       if (result.length >= limit) return;
       const other = frames[i];
-      if (other && Math.abs(other.mean - own.mean) <= MAX_BRIGHTNESS_GAP) result.push(other);
+      if (other && Math.abs(other.mean - own.mean) <= MAX_BRIGHTNESS_GAP) result.push(i);
     }
   };
   add(preferred, MAX_NEIGHBOURS);
   add(spare, MIN_NEIGHBOURS);
   return result;
+}
+
+/** The neighbours of `frames[index]` themselves (see `neighbourPositionsOf`). */
+export function neighboursOf(
+  frames: readonly (Frame | undefined)[],
+  index: number,
+  timeline?: Timeline,
+): Frame[] {
+  return neighbourPositionsOf(frames, index, timeline).map((i) => frames[i] as Frame);
 }
 
 export interface Measure {

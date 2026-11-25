@@ -163,6 +163,7 @@ export function useEmptyTriggers(
         unsure: before?.unsure ?? true,
         ...(before?.reason && { reason: before.reason }),
         ...(before?.pool !== undefined && { pool: before.pool }),
+        ...(before?.early && { early: true as const }),
         method: before?.method ?? METHOD,
         at: before?.at ?? now(),
         ...(value && { corrected: value }),

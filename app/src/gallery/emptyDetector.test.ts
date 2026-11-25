@@ -77,9 +77,17 @@ describe('analyseCamera', () => {
     });
     const loadFrame = loader();
     const second = await analyseCamera(all, { loadFrame, known: first.results, now: 2 });
-    expect([...second.results.keys()].sort()).toEqual(['CAM/12', 'CAM/13']);
-    // The two new ones and the eight before them, as neighbours.
-    expect(loadFrame).toHaveBeenCalledTimes(10);
+    // The two new ones, and the three newest before them, which had fewer
+    // than three neighbours after them (#458).
+    expect([...second.results.keys()].sort()).toEqual([
+      'CAM/10',
+      'CAM/11',
+      'CAM/12',
+      'CAM/13',
+      'CAM/9',
+    ]);
+    // Those five and the eight before the first of them, as neighbours.
+    expect(loadFrame).toHaveBeenCalledTimes(13);
     expect(loadFrame).not.toHaveBeenCalledWith('thumb-CAM-0');
   });
 
@@ -159,6 +167,51 @@ describe('analyseCamera', () => {
     for (const n of [3, 10]) expect(verdictOf(results.get(`CAM/${n}`), 'careful')).toBe('empty');
   });
 
+  it('judges the newest recordings again once later ones exist (#458)', async () => {
+    const all = recordings(20);
+    const first = await analyseCamera(all.slice(0, 12), {
+      loadFrame: loader(),
+      known: new Map(),
+      now: 1,
+    });
+    // Fewer than three neighbours after them, and later pictures may come.
+    for (const n of [9, 10, 11]) {
+      expect(first.results.get(`CAM/${n}`)).toMatchObject({ early: true, pool: 12 });
+    }
+    for (const n of [0, 5, 8]) expect(first.results.get(`CAM/${n}`)?.early).toBeUndefined();
+    // Nothing new: nothing to do.
+    const same = await analyseCamera(all.slice(0, 12), {
+      loadFrame: loader(),
+      known: first.results,
+      now: 2,
+    });
+    expect(same.results.size).toBe(0);
+
+    const known = new Map(first.results);
+    known.set('CAM/10', { ...(known.get('CAM/10') as Detected), corrected: 'animal' });
+    const later = await analyseCamera(all, { loadFrame: loader(), known, now: 3 });
+    expect(later.results.get('CAM/9')).toMatchObject({ unsure: false, at: 3 });
+    expect(later.results.get('CAM/9')?.early).toBeUndefined();
+    // The user's word stays.
+    expect(later.results.has('CAM/10')).toBe(false);
+    expect(later.results.get('CAM/11')?.early).toBeUndefined();
+    expect(later.results.get('CAM/19')?.early).toBe(true);
+  });
+
+  it('is not early when the pictures after it cannot be neighbours', async () => {
+    // Day pictures, then more than eight night pictures: the day picture's
+    // candidates after it are full, none of them fits its brightness.
+    const list = recordings(20);
+    const loadFrame = vi.fn(async (url: string) => {
+      const n = Number(url.split('-')[2]);
+      const day = grey(n);
+      return n < 10 ? day : { ...day, gray: day.gray.map((v) => v - 80), mean: day.mean - 80 };
+    });
+    const { results } = await analyseCamera(list, { loadFrame, known: new Map(), now: 1 });
+    expect(results.get('CAM/9')?.early).toBeUndefined();
+    expect(results.get('CAM/19')?.early).toBe(true);
+  });
+
   it('does not read a picture again that it read in a cancelled run', async () => {
     const frames = new Map<string, Frame>();
     let cancel = false;
@@ -219,6 +272,13 @@ describe('needsAnalysis', () => {
     expect(needsAnalysis(base, 5, 2_000)).toBe(false);
     expect(needsAnalysis({ ...base, method: 'diff-v1' }, 5, 2_000)).toBe(true);
     expect(needsAnalysis({ ...base, method: 'diff-v1', corrected: 'empty' }, 5, 2_000)).toBe(false);
+  });
+
+  it('judges an early result again only when more pictures have come (#458)', () => {
+    const early: Detected = { ...base, early: true, pool: 5 };
+    expect(needsAnalysis(early, 5, 2_000)).toBe(false);
+    expect(needsAnalysis(early, 6, 2_000)).toBe(true);
+    expect(needsAnalysis({ ...early, corrected: 'empty' }, 6, 2_000)).toBe(false);
   });
 
   it('tries again only where that can change something', () => {

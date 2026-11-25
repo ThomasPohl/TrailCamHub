@@ -1,8 +1,11 @@
 import {
+  candidateSetsOf,
   candidatesOf,
   METHOD,
+  MIN_NEIGHBOURS,
   measure,
-  neighboursOf,
+  NEIGHBOUR_REACH,
+  neighbourPositionsOf,
   seriesOf,
   verdictFor,
   type Frame,
@@ -31,8 +34,14 @@ export interface Detected {
    * picture could not be read (`unreadable`, tried again after a while).
    */
   reason?: 'few' | 'scene' | 'unreadable';
-  /** With `few`: how many pictures the camera had then. */
+  /** With `few` or `early`: how many pictures the camera had then. */
   pool?: number;
+  /**
+   * Judged with fewer than `MIN_NEIGHBOURS` neighbours after it, while later
+   * pictures could still come (the newest ones): judged again when the camera
+   * has more pictures (#458).
+   */
+  early?: true;
   method: string;
   /** Unix seconds. */
   at: number;
@@ -111,11 +120,18 @@ export function verdictOf(entry: Detected | undefined, sensitivity: Sensitivity)
 /** A picture that could not be read is tried again after this many seconds. */
 export const RETRY_UNREADABLE_S = 60 * 60;
 
-/** Whether a recording needs (another) analysis. */
+/**
+ * Whether a recording needs (another) analysis: a new one, one from an older
+ * method, one judged early (`early`) or without a verdict (`few`) when more
+ * pictures have come, and an unreadable one after a while. Never one the user
+ * corrected.
+ */
 export function needsAnalysis(entry: Detected | undefined, pool: number, now: number): boolean {
   if (!entry) return true;
   if (entry.corrected) return false;
   if (entry.method !== METHOD) return true;
+  // Later pictures give a better background than older ones alone (#458).
+  if (entry.early && (entry.pool === undefined || pool > entry.pool)) return true;
   if (!entry.unsure) return false;
   switch (entry.reason) {
     case 'scene':
@@ -209,12 +225,24 @@ export async function analyseCamera(
       });
       continue;
     }
-    const result = measure(frame, neighboursOf(frames, i, timeline));
+    const positions = neighbourPositionsOf(frames, i, timeline);
+    const result = measure(
+      frame,
+      positions.map((n) => frames[n] as Frame),
+    );
+    // Too few neighbours after it, and the list of candidates after it is not
+    // full yet: a later picture may still become one.
+    const after = positions.filter((n) => n > i).length;
+    const open =
+      candidateSetsOf(sorted.length, i, timeline).preferred.filter((n) => n > i).length <
+      NEIGHBOUR_REACH;
+    const early = after < MIN_NEIGHBOURS && open;
     results.set(key, {
       score: result.score,
       unsure: result.unsure,
       ...(result.reason && { reason: result.reason }),
-      ...(result.reason === 'few' && { pool: sorted.length }),
+      ...((result.reason === 'few' || early) && { pool: sorted.length }),
+      ...(early && { early: true as const }),
       method: METHOD,
       at: options.now,
     });
