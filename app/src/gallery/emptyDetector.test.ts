@@ -4,6 +4,8 @@ import {
   memoryEmptyStore,
   needsAnalysis,
   RETRY_UNREADABLE_S,
+  staleKeys,
+  THUMB_RETENTION_S,
   verdictOf,
   type Detected,
 } from './emptyDetector';
@@ -314,5 +316,50 @@ describe('verdictOf and the store', () => {
     await store.put('CAM/1', entry);
     entry.at = 99;
     expect((await store.all()).get('CAM/1')?.at).toBe(1);
+  });
+
+  it('removes entries from memory', async () => {
+    const store = memoryEmptyStore();
+    await store.put('CAM/1', entry);
+    await store.put('CAM/2', entry);
+    await store.remove(['CAM/1', 'CAM/9']);
+    expect([...(await store.all()).keys()]).toEqual(['CAM/2']);
+  });
+});
+
+describe('staleKeys (#459)', () => {
+  const now = 1_900_000_000;
+  const at = (age: number, corrected?: 'empty' | 'animal'): Detected => ({
+    score: 0,
+    unsure: false,
+    method: METHOD,
+    at: now - age,
+    ...(corrected && { corrected }),
+  });
+
+  it('removes what is no longer in the list of a camera that was loaded', () => {
+    const entries = new Map<string, Detected>([
+      ['CAM/1', at(60)],
+      ['CAM/2', at(60, 'animal')],
+      ['CAM/3', at(60, 'empty')],
+    ]);
+    expect(staleKeys(entries, [recording(1), recording(3)], now)).toEqual(['CAM/2']);
+  });
+
+  it('keeps recent entries of cameras that are not shown now', () => {
+    const entries = new Map<string, Detected>([
+      ['OTHER/1', at(30 * 86_400, 'empty')],
+      ['OTHER/2', at(THUMB_RETENTION_S + 1)],
+      ['GONE/7', at(THUMB_RETENTION_S + 1, 'animal')],
+      ['CAM/1', at(THUMB_RETENTION_S + 1)],
+    ]);
+    // CAM/1 is still listed: it stays, however old its result is.
+    expect(staleKeys(entries, [recording(1)], now)).toEqual(['OTHER/2', 'GONE/7']);
+  });
+
+  it('handles camera ids with a slash and an empty list', () => {
+    const entries = new Map<string, Detected>([['a/b/5', at(60)]]);
+    expect(staleKeys(entries, [recording(4, 'a/b')], now)).toEqual(['a/b/5']);
+    expect(staleKeys(entries, [], now)).toEqual([]);
   });
 });
