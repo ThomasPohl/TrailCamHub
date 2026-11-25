@@ -89,10 +89,13 @@ grey grid and compared with the nearest pictures of the same camera. A compact
 patch that differs from all neighbours means an animal; a brightness change of
 the whole picture or scattered pixels (grass) does not. A pixel must differ by
 more than the neighbours vary at that spot, so restless grass needs a larger
-change than a still path. Pictures of the same series (less than 10 minutes
-apart, within 30 minutes) are never compared with each other: an animal that
-stays in front of the camera would otherwise be its own background and every
-picture of it would look empty. The info bar at the bottom is ignored.
+change than a still path. Pictures of the same series (each less than 10
+minutes after the one before) are never compared with each other, however long
+the series lasts: an animal that stays in front of the camera would otherwise
+be its own background and every picture of it would look empty. A picture
+inside a long series is compared with pictures before and after it, even far
+away, or gets no verdict until there are some (#456). The info bar at the
+bottom is ignored.
 
 Results are kept in IndexedDB on this device, nothing is sent to the backend.
 It is off by default; "Leer markieren" (Selten / Normal / Oft) sets how readily
