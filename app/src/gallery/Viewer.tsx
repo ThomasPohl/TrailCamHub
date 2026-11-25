@@ -31,7 +31,10 @@ interface Props {
   onShare(): void;
   /** With the empty-trigger detection on (#442): what it thinks, and the user's word on it. */
   emptyVerdict?: 'empty' | 'animal' | 'unsure';
-  onCorrectEmpty?(value: 'empty' | 'animal'): void;
+  /** The verdict is the user's own correction. */
+  emptyCorrected?: boolean;
+  /** `undefined` takes the correction back. */
+  onCorrectEmpty?(value: 'empty' | 'animal' | undefined): void;
   onWithdraw(): void;
   onDelete(): void;
   onClose(): void;
@@ -60,6 +63,7 @@ export function Viewer({
   onSave,
   onShare,
   emptyVerdict,
+  emptyCorrected = false,
   onCorrectEmpty,
   onWithdraw,
   onDelete,
@@ -224,6 +228,15 @@ export function Viewer({
                 onClick={() => onCorrectEmpty(emptyVerdict === 'empty' ? 'animal' : 'empty')}
               >
                 {emptyVerdict === 'empty' ? 'Doch nicht leer' : 'Als leer markieren'}
+              </button>
+            )}
+            {emptyVerdict && emptyCorrected && onCorrectEmpty && (
+              <button
+                type="button"
+                className="g-btn g-btn--quiet"
+                onClick={() => onCorrectEmpty(undefined)}
+              >
+                Korrektur zurücknehmen
               </button>
             )}
             {(recording.state === 'videoRequested' || recording.state === 'deleteRequested') && (

@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { analyseCamera, memoryEmptyStore, verdictOf, type Detected } from './emptyDetector';
+import {
+  analyseCamera,
+  memoryEmptyStore,
+  needsAnalysis,
+  RETRY_UNREADABLE_S,
+  verdictOf,
+  type Detected,
+} from './emptyDetector';
 import { CROP_H, frameFromRgba, GRID_H, GRID_W, METHOD, type Frame } from './emptiness';
 import type { Recording } from './types';
 
@@ -95,7 +102,8 @@ describe('analyseCamera', () => {
       known: new Map(),
       now: 1,
     });
-    expect([...few.results.values()].every((d) => d.unsure)).toBe(true);
+    expect([...few.results.values()].every((d) => d.unsure && d.reason === 'few')).toBe(true);
+    expect(few.results.get('CAM/0')?.pool).toBe(3);
     const more = await analyseCamera(recordings(9), {
       loadFrame: loader(),
       known: few.results,
@@ -124,8 +132,59 @@ describe('analyseCamera', () => {
       known: new Map(),
       now: 1,
     });
-    expect(results.has('CAM/3')).toBe(false);
-    expect(results.size).toBe(9);
+    // Kept as unreadable, so it is not read again at every new recording.
+    expect(results.get('CAM/3')).toMatchObject({ unsure: true, reason: 'unreadable' });
+    expect(verdictOf(results.get('CAM/3'), 'strict')).toBe('unsure');
+    expect(results.size).toBe(10);
+  });
+
+  it('marks a deer that triggers the camera again and again as an animal', async () => {
+    // Empty pictures hours apart, and a deer in 6 pictures a minute apart.
+    const list = Array.from({ length: 14 }, (_, i) => ({
+      ...recording(i),
+      mediaTime:
+        i >= 4 && i < 10
+          ? 1_800_100_000 + (i - 4) * 60
+          : (i < 4 ? 1_800_000_000 : 1_800_200_000) + i * 7_200,
+    }));
+    const loadFrame = vi.fn(async (url: string) => {
+      const n = Number(url.split('-')[2]);
+      return grey(n, n >= 4 && n < 10 ? [30, 12, 14, 10] : undefined);
+    });
+    const { results } = await analyseCamera(list, { loadFrame, known: new Map(), now: 1 });
+    for (let n = 4; n < 10; n++)
+      expect(verdictOf(results.get(`CAM/${n}`), 'strict')).toBe('animal');
+    // The empty ones around it have the deer in most of their neighbours: they
+    // are rather taken for animals, which is the safe side.
+    expect(verdictOf(results.get('CAM/1'), 'careful')).not.toBe('unsure');
+  });
+
+  it('does not read a picture again that it read in a cancelled run', async () => {
+    const frames = new Map<string, Frame>();
+    let cancel = false;
+    const first = vi.fn(async (url: string) => {
+      if (url === 'thumb-CAM-5') cancel = true;
+      return grey(Number(url.split('-')[2]));
+    });
+    const cancelled = await analyseCamera(recordings(12), {
+      loadFrame: first,
+      known: new Map(),
+      now: 1,
+      frames,
+      concurrency: 1,
+      isCancelled: () => cancel,
+    });
+    expect(cancelled.results.size).toBe(0);
+    expect(frames.size).toBe(6);
+    const second = loader();
+    const { results } = await analyseCamera(recordings(12), {
+      loadFrame: second,
+      known: new Map(),
+      now: 2,
+      frames,
+    });
+    expect(results.size).toBe(12);
+    expect(second).toHaveBeenCalledTimes(6);
   });
 
   it('stops when cancelled', async () => {
@@ -149,6 +208,28 @@ describe('analyseCamera', () => {
     });
     expect(seen[0]).toBe('1/12');
     expect(seen[seen.length - 1]).toBe('12/12');
+  });
+});
+
+describe('needsAnalysis', () => {
+  const base: Detected = { score: 0, unsure: false, method: METHOD, at: 1_000 };
+
+  it('makes new and outdated results', () => {
+    expect(needsAnalysis(undefined, 5, 2_000)).toBe(true);
+    expect(needsAnalysis(base, 5, 2_000)).toBe(false);
+    expect(needsAnalysis({ ...base, method: 'diff-v1' }, 5, 2_000)).toBe(true);
+    expect(needsAnalysis({ ...base, method: 'diff-v1', corrected: 'empty' }, 5, 2_000)).toBe(false);
+  });
+
+  it('tries again only where that can change something', () => {
+    const few: Detected = { ...base, unsure: true, reason: 'few', pool: 5 };
+    expect(needsAnalysis(few, 5, 2_000)).toBe(false);
+    expect(needsAnalysis(few, 6, 2_000)).toBe(true);
+    expect(needsAnalysis({ ...base, unsure: true }, 5, 2_000)).toBe(true);
+    expect(needsAnalysis({ ...base, unsure: true, reason: 'scene' }, 50, 9_999_999)).toBe(false);
+    const unreadable: Detected = { ...base, unsure: true, reason: 'unreadable' };
+    expect(needsAnalysis(unreadable, 5, 1_000 + RETRY_UNREADABLE_S - 1)).toBe(false);
+    expect(needsAnalysis(unreadable, 5, 1_000 + RETRY_UNREADABLE_S)).toBe(true);
   });
 });
 
