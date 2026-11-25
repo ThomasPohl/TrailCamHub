@@ -102,6 +102,10 @@ pictures come, until three of their neighbours are later ones (#458). The info
 bar at the bottom is ignored.
 
 Results are kept in IndexedDB on this device, nothing is sent to the backend.
+When the detection runs, the results of recordings that left a camera's list
+(deleted, or past the thumbnail retention) are removed, corrections included;
+those of cameras not shown at the moment are removed once they are older than
+the retention (365 days, #459).
 It is off by default; "Leer markieren" (Selten / Normal / Oft) sets how readily
 a recording counts as empty, and "Leere ausblenden" hides the marked ones.
 Hidden recordings are never part of a selection that is deleted. In the viewer

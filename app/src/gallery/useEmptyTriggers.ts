@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { analyseCamera, verdictOf, type Detected, type EmptyStore } from './emptyDetector';
+import {
+  analyseCamera,
+  staleKeys,
+  verdictOf,
+  type Detected,
+  type EmptyStore,
+} from './emptyDetector';
 import { METHOD, type Frame, type Sensitivity, type Verdict } from './emptiness';
 import { recordingKey } from './grouping';
 import type { Recording } from './types';
@@ -92,6 +98,16 @@ export function useEmptyTriggers(
     if (!enabled || !loaded || !items || items.length === 0) return;
     let current = true;
     void (async () => {
+      // Results of recordings that are gone do not pile up on the device (#459).
+      const stale = staleKeys(entriesRef.current, items, now());
+      if (stale.length > 0) {
+        update((next) => {
+          for (const key of stale) next.delete(key);
+        });
+        for (const key of stale) frames.current.delete(key);
+        await deps.store.remove(stale);
+        if (!current) return;
+      }
       const byCamera = new Map<string, Recording[]>();
       for (const r of items) byCamera.set(r.camId, [...(byCamera.get(r.camId) ?? []), r]);
       const cameras = [...byCamera.values()];
