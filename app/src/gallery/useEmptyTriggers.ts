@@ -9,6 +9,14 @@ export interface EmptyDeps {
   store: EmptyStore;
 }
 
+export interface EmptyProgress {
+  done: number;
+  total: number;
+  /** Which camera is being checked (1-based), and of how many. */
+  camera: number;
+  cameras: number;
+}
+
 const ON_KEY = 'trailcamhub.empty.on';
 const SENSITIVITY_KEY = 'trailcamhub.empty.sensitivity';
 
@@ -41,11 +49,21 @@ export function useEmptyTriggers(
   });
   const [entries, setEntries] = useState<ReadonlyMap<string, Detected>>(new Map());
   const [loaded, setLoaded] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number }>();
-  const entriesRef = useRef(entries);
-  useEffect(() => {
-    entriesRef.current = entries;
-  }, [entries]);
+  const [progress, setProgress] = useState<EmptyProgress>();
+  // The current entries, also between a change and the next render: the
+  // analysis and a correction both write here first, then to the state.
+  const entriesRef = useRef<ReadonlyMap<string, Detected>>(entries);
+  // Frames read so far, by recording key: a run that is cancelled because a
+  // new recording came in does not read them again (the URLs change at every
+  // poll, the recordings do not).
+  const frames = useRef(new Map<string, Frame>());
+
+  const update = useCallback((change: (next: Map<string, Detected>) => void) => {
+    const next = new Map(entriesRef.current);
+    change(next);
+    entriesRef.current = next;
+    setEntries(next);
+  }, []);
 
   // The saved results, once the detection is on.
   useEffect(() => {
@@ -53,54 +71,60 @@ export function useEmptyTriggers(
     let current = true;
     void deps.store.all().then((all) => {
       if (!current) return;
-      setEntries(all);
+      // Corrections made before the saved ones arrived stay.
+      update((next) => {
+        for (const [key, entry] of all) if (!next.has(key)) next.set(key, entry);
+      });
       setLoaded(true);
     });
     return () => {
       current = false;
     };
-  }, [enabled, loaded, deps.store]);
+  }, [enabled, loaded, deps.store, update]);
 
   // The pictures that have no result yet; again when the list of recordings changes.
-  const signature = items ? `${items.length}:${items[0] ? recordingKey(items[0]) : ''}` : '';
+  const signature = items
+    ? `${items.length}:${items[0] ? recordingKey(items[0]) : ''}:${
+        items.length > 0 ? recordingKey(items[items.length - 1] as Recording) : ''
+      }`
+    : '';
   useEffect(() => {
     if (!enabled || !loaded || !items || items.length === 0) return;
     let current = true;
     void (async () => {
       const byCamera = new Map<string, Recording[]>();
       for (const r of items) byCamera.set(r.camId, [...(byCamera.get(r.camId) ?? []), r]);
-      for (const recordings of byCamera.values()) {
+      const cameras = [...byCamera.values()];
+      for (const [index, recordings] of cameras.entries()) {
         const { results } = await analyseCamera(recordings, {
           loadFrame: deps.loadFrame,
           known: entriesRef.current,
           now: now(),
+          frames: frames.current,
           onProgress: (done, total) => {
-            if (current) setProgress({ done, total });
+            if (current) setProgress({ done, total, camera: index + 1, cameras: cameras.length });
           },
           isCancelled: () => !current,
         });
         if (!current) return;
-        if (results.size > 0) {
-          setEntries((before) => {
-            const next = new Map(before);
-            for (const [key, entry] of results) {
-              // A correction made meanwhile stays.
-              next.set(key, { ...entry, corrected: before.get(key)?.corrected });
-            }
-            return next;
-          });
+        if (results.size === 0) continue;
+        const merged: [string, Detected][] = [];
+        update((next) => {
           for (const [key, entry] of results) {
-            await deps.store.put(key, {
-              ...entry,
-              corrected: entriesRef.current.get(key)?.corrected,
-            });
+            // A correction made meanwhile stays.
+            const corrected = next.get(key)?.corrected;
+            const value = corrected ? { ...entry, corrected } : entry;
+            next.set(key, value);
+            merged.push([key, value]);
           }
-        }
+        });
+        await Promise.all(merged.map(([key, value]) => deps.store.put(key, value)));
       }
       if (current) setProgress(undefined);
     })();
     return () => {
       current = false;
+      setProgress(undefined);
     };
     // `items` is represented by its signature: the lists are rebuilt at every poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -112,6 +136,13 @@ export function useEmptyTriggers(
     for (const [key, entry] of entries) map.set(key, verdictOf(entry, sensitivity));
     return map;
   }, [enabled, entries, sensitivity]);
+
+  /** The recordings the user has given a verdict to. */
+  const corrected = useMemo(() => {
+    const keys = new Set<string>();
+    for (const [key, entry] of entries) if (entry.corrected) keys.add(key);
+    return keys;
+  }, [entries]);
 
   const setEnabled = useCallback((on: boolean) => {
     write(ON_KEY, on ? 'on' : 'off');
@@ -130,15 +161,26 @@ export function useEmptyTriggers(
       const entry: Detected = {
         score: before?.score ?? 0,
         unsure: before?.unsure ?? true,
+        ...(before?.reason && { reason: before.reason }),
+        ...(before?.pool !== undefined && { pool: before.pool }),
         method: before?.method ?? METHOD,
         at: before?.at ?? now(),
-        corrected: value,
+        ...(value && { corrected: value }),
       };
-      setEntries((all) => new Map(all).set(key, entry));
+      update((next) => next.set(key, entry));
       void deps.store.put(key, entry);
     },
-    [deps.store, now],
+    [deps.store, now, update],
   );
 
-  return { enabled, setEnabled, sensitivity, setSensitivity, verdicts, progress, correct };
+  return {
+    enabled,
+    setEnabled,
+    sensitivity,
+    setSensitivity,
+    verdicts,
+    corrected,
+    progress,
+    correct,
+  };
 }

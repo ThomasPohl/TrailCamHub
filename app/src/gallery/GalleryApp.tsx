@@ -71,10 +71,11 @@ let browserEmpty: EmptyDeps | undefined;
 const realEmpty = (): EmptyDeps =>
   (browserEmpty ??= { loadFrame: (url) => loadFrame(url), store: openEmptyStore() });
 
+/** How often a recording is marked as empty: careful marks the fewest. */
 const SENSITIVITY_LABEL: Record<Sensitivity, string> = {
-  careful: 'Vorsichtig',
+  careful: 'Selten',
   normal: 'Normal',
-  strict: 'Streng',
+  strict: 'Oft',
 };
 
 const unixNow = () => Math.floor(Date.now() / 1000);
@@ -523,13 +524,18 @@ export function GalleryApp({
   const t = now();
   const counts = countByFilter(items ?? []);
   const isEmpty = (r: Recording) => detect.verdicts.get(recordingKey(r)) === 'empty';
-  const emptyCount = (items ?? []).filter(isEmpty).length;
   const byState = applyFilter(items ?? [], stateFilter);
-  const visible = detect.enabled && hideEmpty ? byState.filter((r) => !isEmpty(r)) : byState;
+  const emptyCount = byState.filter(isEmpty).length;
+  const hidingEmpty = detect.enabled && hideEmpty;
+  const visible = hidingEmpty ? byState.filter((r) => !isEmpty(r)) : byState;
   const days = groupByDay(visible, t);
   const viewIndex = viewing ? visible.findIndex((r) => recordingKey(r) === viewing.key) : -1;
   const viewed = viewIndex >= 0 ? visible[viewIndex] : undefined;
-  const chosen = items?.filter((r) => selected.has(recordingKey(r)) && selectable(r)) ?? [];
+  // Never what "Leere ausblenden" hides: nothing is deleted that cannot be seen.
+  const chosen =
+    items?.filter(
+      (r) => selected.has(recordingKey(r)) && selectable(r) && !(hidingEmpty && isEmpty(r)),
+    ) ?? [];
   const chosenVideos = chosen.filter(videoWanted);
 
   const newFound = found.filter((f) => f.state === 'new').length;
@@ -773,7 +779,7 @@ export function GalleryApp({
                 {detect.enabled && (
                   <>
                     <label className="g-empty__level">
-                      Strenge{' '}
+                      Leer markieren{' '}
                       <select
                         value={detect.sensitivity}
                         onChange={(e) => detect.setSensitivity(e.target.value as Sensitivity)}
@@ -785,7 +791,7 @@ export function GalleryApp({
                         ))}
                       </select>
                     </label>
-                    {emptyCount > 0 && (
+                    {(emptyCount > 0 || hideEmpty) && (
                       <button
                         type="button"
                         className="g-btn g-btn--quiet g-btn--small"
@@ -795,14 +801,15 @@ export function GalleryApp({
                         Leere ausblenden ({emptyCount})
                       </button>
                     )}
-                    {selecting && emptyCount > 0 && (
+                    {selecting && !hidingEmpty && emptyCount > 0 && (
                       <button
                         type="button"
                         className="g-btn g-btn--quiet g-btn--small"
                         onClick={() =>
                           setSelected((current) => {
                             const next = new Set(current);
-                            (items ?? [])
+                            // Only the ones shown (state filter), never hidden ones.
+                            visible
                               .filter((r) => isEmpty(r) && selectable(r))
                               .forEach((r) => next.add(recordingKey(r)));
                             return next;
@@ -815,6 +822,8 @@ export function GalleryApp({
                     {detect.progress && (
                       <span className="g-hint" role="status">
                         Prüfe Bilder … {detect.progress.done}/{detect.progress.total}
+                        {detect.progress.cameras > 1 &&
+                          ` (Kamera ${detect.progress.camera} von ${detect.progress.cameras})`}
                       </span>
                     )}
                   </>
@@ -1246,6 +1255,7 @@ export function GalleryApp({
               onSave={() => void saveOne(viewed)}
               onShare={() => setSharing(viewed)}
               emptyVerdict={detect.enabled ? detect.verdicts.get(recordingKey(viewed)) : undefined}
+              emptyCorrected={detect.corrected.has(recordingKey(viewed))}
               onCorrectEmpty={(value) => detect.correct(recordingKey(viewed), value)}
               onWithdraw={() => void act(() => api.withdraw(viewed.camId, viewed))}
               onDelete={() => setConfirm({ question: '1 Aufnahme löschen?', items: [viewed] })}

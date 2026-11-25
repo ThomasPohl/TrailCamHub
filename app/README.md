@@ -87,12 +87,20 @@ prompt in the demo (code `123456`).
 shadows). It runs only in the browser: the thumbnails are reduced to a small
 grey grid and compared with the nearest pictures of the same camera. A compact
 patch that differs from all neighbours means an animal; a brightness change of
-the whole picture or scattered pixels (grass) does not. The info bar at the
-bottom is ignored. Results are kept in IndexedDB on this device, nothing is
-sent to the backend. It is off by default; "Strenge" (careful / normal /
-strict) sets how sure the app must be, and "Leere ausblenden" hides the marked
-ones. In the viewer a verdict can be corrected, and the correction always wins.
-The thresholds in `emptiness.ts` are not tuned on real pictures yet (phase 1).
+the whole picture or scattered pixels (grass) does not. A pixel must differ by
+more than the neighbours vary at that spot, so restless grass needs a larger
+change than a still path. Pictures of the same series (less than 10 minutes
+apart, within 30 minutes) are never compared with each other: an animal that
+stays in front of the camera would otherwise be its own background and every
+picture of it would look empty. The info bar at the bottom is ignored.
+
+Results are kept in IndexedDB on this device, nothing is sent to the backend.
+It is off by default; "Leer markieren" (Selten / Normal / Oft) sets how readily
+a recording counts as empty, and "Leere ausblenden" hides the marked ones.
+Hidden recordings are never part of a selection that is deleted. In the viewer
+a verdict can be corrected (and the correction taken back); the correction
+always wins. The thresholds in `emptiness.ts` are not tuned on real pictures
+yet (phase 1).
 
 ## Development
 

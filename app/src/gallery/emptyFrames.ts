@@ -12,7 +12,10 @@ export async function loadFrame(
 ): Promise<Frame | undefined> {
   try {
     if (typeof createImageBitmap !== 'function') return undefined;
-    const response = await fetchFn(url);
+    // Not from the cache: the <img> of the tile loads the same URL without
+    // CORS, and a browser may hand that cached answer (without the CORS
+    // header) to this request, which then fails.
+    const response = await fetchFn(url, { cache: 'no-store' });
     if (!response.ok) return undefined;
     const bitmap = await createImageBitmap(await response.blob());
     try {
@@ -21,6 +24,9 @@ export async function loadFrame(
       canvas.height = GRID_H;
       const context = canvas.getContext('2d', { willReadFrequently: true });
       if (!context) return undefined;
+      // Shrinking about four times: smooth, so single pixels do not alias into noise.
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
       context.drawImage(bitmap, 0, 0, GRID_W, GRID_H);
       return frameFromRgba(context.getImageData(0, 0, GRID_W, GRID_H).data);
     } finally {

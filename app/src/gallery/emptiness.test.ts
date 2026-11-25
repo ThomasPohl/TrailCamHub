@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  candidatesOf,
   CROP_H,
   frameFromRgba,
   GRID_H,
@@ -8,6 +9,9 @@ import {
   MIN_NEIGHBOURS,
   neighboursOf,
   PATCH_SHARE,
+  SERIES_GAP_S,
+  SERIES_SPAN_S,
+  seriesOf,
   verdictFor,
   type Frame,
 } from './emptiness';
@@ -108,7 +112,7 @@ describe('measure', () => {
   it('gives no verdict without enough neighbours', () => {
     const subject = frame({ seed: 55 });
     const few = meadow(MIN_NEIGHBOURS - 1);
-    expect(measure(subject, few)).toEqual({ score: 0, unsure: true });
+    expect(measure(subject, few)).toEqual({ score: 0, unsure: true, reason: 'few' });
     expect(verdictFor({ score: 0, unsure: true }, 'normal')).toBe('unsure');
   });
 
@@ -118,8 +122,109 @@ describe('measure', () => {
     // The patch covers everything: shift compensation removes it, so use a half-picture change.
     const half = frame({ seed: 57, patch: [0, 0, GRID_W / 2 + 10, CROP_H, 90] });
     const result = measure(half, frames);
-    expect(result.unsure).toBe(true);
+    expect(result).toMatchObject({ unsure: true, reason: 'scene' });
     expect(measure(moved, frames).unsure).toBe(false);
+  });
+
+  it('finds an animal with little contrast (night, brown on brown)', () => {
+    const frames = meadow();
+    const subject = frame({ seed: 58, patch: [30, 15, 12, 10, 24] });
+    const result = measure(subject, neighboursOf([...frames, subject], frames.length));
+    expect(verdictFor(result, 'careful')).toBe('animal');
+  });
+
+  it('finds a small animal far away when careful', () => {
+    const frames = meadow();
+    const subject = frame({ seed: 59, patch: [40, 20, 3, 3, 80] });
+    const result = measure(subject, neighboursOf([...frames, subject], frames.length));
+    expect(verdictFor(result, 'careful')).toBe('animal');
+  });
+});
+
+/** `n` pictures, `gap` seconds apart, starting at `start`. */
+const timesOf = (n: number, gap: number, start = 1_800_000_000) =>
+  Array.from({ length: n }, (_, i) => start + i * gap);
+
+describe('seriesOf', () => {
+  it('puts pictures taken shortly one after the other into one series', () => {
+    const times = [0, 60, 120, 120 + SERIES_GAP_S, 120 + SERIES_GAP_S + 30, 5 * SERIES_GAP_S];
+    expect(seriesOf(times)).toEqual([0, 0, 0, 3, 3, 5]);
+    expect(seriesOf([])).toEqual([]);
+  });
+});
+
+describe('a series of one animal (#442 review)', () => {
+  /** Hours apart, empty; with a deer standing in pictures 4 to 9, a minute apart. */
+  function scene(moves: boolean) {
+    const times: number[] = [];
+    const frames: Frame[] = [];
+    for (let i = 0; i < 14; i++) {
+      const deer = i >= 4 && i < 10;
+      const empty = (i < 4 ? 1_800_000_000 : 1_800_200_000) + i * 7_200;
+      times.push(deer ? 1_800_100_000 + (i - 4) * 60 : empty);
+      const x = moves ? 24 + (i - 4) * 2 : 30;
+      frames.push(frame({ seed: i + 1, ...(deer && { patch: [x, 15, 12, 10, 70] }) }));
+    }
+    const order = times.map((t, i) => [t, i] as const).sort((a, b) => a[0] - b[0]);
+    const sortedTimes = order.map(([t]) => t);
+    return {
+      frames: order.map(([, i]) => frames[i] as Frame),
+      timeline: { times: sortedTimes, series: seriesOf(sortedTimes) },
+      deer: order.flatMap(([, i], at) => (i >= 4 && i < 10 ? [at] : [])),
+    };
+  }
+
+  it('does not call a deer that stays in front of the camera empty', () => {
+    const { frames, timeline, deer } = scene(false);
+    expect(deer).toHaveLength(6);
+    for (const at of deer) {
+      const result = measure(frames[at] as Frame, neighboursOf(frames, at, timeline));
+      expect(verdictFor(result, 'strict')).toBe('animal');
+    }
+  });
+
+  it('would call it empty if the series were its own background', () => {
+    // The reason for the series rule: without it the deer is in the median.
+    const { frames, deer } = scene(false);
+    const at = deer[2] as number;
+    expect(verdictFor(measure(frames[at] as Frame, neighboursOf(frames, at)), 'careful')).toBe(
+      'empty',
+    );
+  });
+
+  it('finds a deer that moves a little, too', () => {
+    const { frames, timeline, deer } = scene(true);
+    for (const at of deer) {
+      const result = measure(frames[at] as Frame, neighboursOf(frames, at, timeline));
+      expect(verdictFor(result, 'careful')).toBe('animal');
+    }
+  });
+});
+
+describe('candidatesOf', () => {
+  it('skips the own series and takes the nearest on both sides', () => {
+    const times = [
+      ...timesOf(5, 3_600),
+      ...timesOf(4, 60, 1_800_100_000),
+      ...timesOf(5, 3_600, 1_800_200_000),
+    ];
+    const timeline = { times, series: seriesOf(times) };
+    const picks = candidatesOf(times.length, 6, timeline);
+    expect(picks.some((i) => i >= 5 && i <= 8)).toBe(false);
+    expect(picks.slice(0, 2)).toEqual([4, 9]);
+  });
+
+  it('uses the far end of a long chain of triggers', () => {
+    // Wind all afternoon: a trigger every five minutes for four hours.
+    const times = timesOf(48, 300);
+    const timeline = { times, series: seriesOf(times) };
+    const picks = candidatesOf(times.length, 24, timeline);
+    expect(picks.length).toBeGreaterThanOrEqual(MIN_NEIGHBOURS);
+    for (const i of picks) {
+      expect(Math.abs((times[i] as number) - (times[24] as number))).toBeGreaterThanOrEqual(
+        SERIES_SPAN_S,
+      );
+    }
   });
 });
 
@@ -140,5 +245,15 @@ describe('neighboursOf', () => {
 
   it('is empty for an index that does not exist', () => {
     expect(neighboursOf(meadow(3), 9)).toEqual([]);
+  });
+
+  it('skips pictures that could not be read', () => {
+    const frames: (Frame | undefined)[] = meadow(10);
+    frames[4] = undefined;
+    frames[6] = undefined;
+    const picked = neighboursOf(frames, 5);
+    // Nine candidates (five before, four after), two of them unreadable.
+    expect(picked).toHaveLength(7);
+    expect(picked.every((f) => f !== undefined)).toBe(true);
   });
 });

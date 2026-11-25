@@ -9,6 +9,11 @@
  * picture the largest patch covers); whether that counts as empty depends on
  * the user's chosen sensitivity, so changing it needs no new analysis.
  *
+ * An animal that stays in front of the camera triggers it again and again. If
+ * those pictures were the background, the animal would be part of it and every
+ * one of them would look empty. So the pictures of the same series (taken
+ * shortly one after the other) are never neighbours of each other.
+ *
  * Pure functions on small grey grids; the browser part that makes the grids
  * from the pictures is `emptyFrames.ts`.
  */
@@ -22,16 +27,33 @@ export const GRID_H = 45;
  * picture and is cut off.
  */
 export const CROP_H = 40;
-export const METHOD = 'diff-v1';
+/** Changes whenever the analysis changes: older results are made again. */
+export const METHOD = 'diff-v2';
 
-/** A pixel counts as changed when it differs from the background by more than this. */
-const CHANGE = 30;
+/**
+ * A pixel counts as changed when it differs from the background by more than
+ * its own noise (`NOISE_K` × the spread of the neighbours at that pixel), but
+ * at least `MIN_CHANGE` and at most `MAX_CHANGE`. Grass that moves in every
+ * picture thus needs a larger change than a still path; the cap keeps a very
+ * restless spot from hiding an animal (it is then rather taken for one).
+ */
+export const MIN_CHANGE = 18;
+const MAX_CHANGE = 40;
+const NOISE_K = 4.5;
 /** Neighbours used for the background, and the fewest that make a judgement possible. */
 const MAX_NEIGHBOURS = 9;
 export const MIN_NEIGHBOURS = 3;
-/** How far (in pictures) the neighbours may be, and how different their brightness may be. */
+/** How far (in pictures, outside the own series) the neighbours may be, and how different their brightness may be. */
 export const NEIGHBOUR_REACH = 8;
 const MAX_BRIGHTNESS_GAP = 50;
+/** Pictures less than this far apart (seconds) belong to one series. */
+export const SERIES_GAP_S = 10 * 60;
+/**
+ * Inside a long chain of triggers (wind all afternoon) only the pictures this
+ * close (seconds) to the one judged are left out, so the others can still be
+ * its background. An animal that stays longer than this is not recognised.
+ */
+export const SERIES_SPAN_S = 30 * 60;
 /** Above this share of changed pixels the whole scene changed (light, a moved camera). */
 const SCENE_CHANGE = 0.5;
 /** A patch must fill this much of its bounding box; thin and scattered changes do not. */
@@ -81,21 +103,75 @@ export function frameFromRgba(rgba: ArrayLike<number>): Frame {
 }
 
 /**
- * The neighbours of `frames[index]` (sorted by time): the pictures within
- * `NEIGHBOUR_REACH` places whose brightness is close, so a day picture is not
- * compared with a night one. At most `MAX_NEIGHBOURS`, the nearest first.
+ * The times of a camera's pictures (sorted, seconds) as series: each picture
+ * gets the index of the first picture of its series. A series is a run of
+ * pictures each less than `SERIES_GAP_S` after the one before.
  */
-export function neighboursOf(frames: readonly Frame[], index: number): Frame[] {
+export function seriesOf(times: readonly number[]): number[] {
+  const series: number[] = [];
+  times.forEach((time, i) => {
+    const before = times[i - 1];
+    series.push(
+      i > 0 && before !== undefined && time - before < SERIES_GAP_S ? (series[i - 1] as number) : i,
+    );
+  });
+  return series;
+}
+
+/** When the pictures were taken; without it every picture is its own series. */
+export interface Timeline {
+  times: readonly number[];
+  /** From `seriesOf(times)`. */
+  series: readonly number[];
+}
+
+/**
+ * The positions that may be neighbours of picture `index` out of `count`
+ * (sorted by time), the nearest first, alternately before and after: up to
+ * `NEIGHBOUR_REACH` on each side, beyond the pictures of its own series.
+ */
+export function candidatesOf(count: number, index: number, timeline?: Timeline): number[] {
+  const sameSeries = (i: number) =>
+    timeline !== undefined &&
+    timeline.series[i] === timeline.series[index] &&
+    Math.abs((timeline.times[i] as number) - (timeline.times[index] as number)) < SERIES_SPAN_S;
+  const side = (dir: number) => {
+    const out: number[] = [];
+    let i = index + dir;
+    while (i >= 0 && i < count && sameSeries(i)) i += dir;
+    for (; out.length < NEIGHBOUR_REACH && i >= 0 && i < count; i += dir) out.push(i);
+    return out;
+  };
+  const before = side(-1);
+  const after = side(1);
+  const result: number[] = [];
+  for (let k = 0; k < NEIGHBOUR_REACH; k++) {
+    if (before[k] !== undefined) result.push(before[k] as number);
+    if (after[k] !== undefined) result.push(after[k] as number);
+  }
+  return result;
+}
+
+/**
+ * The neighbours of `frames[index]` (sorted by time; a picture that could not
+ * be read is `undefined`): the candidates (`candidatesOf`) whose brightness is
+ * close, so a day picture is not compared with a night one. At most
+ * `MAX_NEIGHBOURS`, the nearest first.
+ */
+export function neighboursOf(
+  frames: readonly (Frame | undefined)[],
+  index: number,
+  timeline?: Timeline,
+): Frame[] {
   const own = frames[index];
   if (!own) return [];
   const result: Frame[] = [];
-  for (let step = 1; step <= NEIGHBOUR_REACH && result.length < MAX_NEIGHBOURS; step++) {
-    for (const i of [index - step, index + step]) {
-      const other = frames[i];
-      if (other && Math.abs(other.mean - own.mean) <= MAX_BRIGHTNESS_GAP) result.push(other);
-    }
+  for (const i of candidatesOf(frames.length, index, timeline)) {
+    const other = frames[i];
+    if (other && Math.abs(other.mean - own.mean) <= MAX_BRIGHTNESS_GAP) result.push(other);
+    if (result.length >= MAX_NEIGHBOURS) break;
   }
-  return result.slice(0, MAX_NEIGHBOURS);
+  return result;
 }
 
 export interface Measure {
@@ -103,6 +179,8 @@ export interface Measure {
   score: number;
   /** No judgement: too few neighbours, or the whole scene changed. */
   unsure: boolean;
+  /** Why it is unsure: `few` may change when more pictures come, `scene` does not. */
+  reason?: 'few' | 'scene';
 }
 
 function median(values: number[]): number {
@@ -156,28 +234,31 @@ function largestPatch(mask: Uint8Array): number {
 
 /** Compares a frame with its neighbours (see `neighboursOf`). */
 export function measure(frame: Frame, neighbours: readonly Frame[]): Measure {
-  if (neighbours.length < MIN_NEIGHBOURS) return { score: 0, unsure: true };
+  if (neighbours.length < MIN_NEIGHBOURS) return { score: 0, unsure: true, reason: 'few' };
   const size = frame.gray.length;
-  const background = new Float32Array(size);
-  const meanBackground = neighbours.reduce((sum, n) => sum + n.mean, 0) / neighbours.length;
   const column: number[] = new Array<number>(neighbours.length);
-  for (let i = 0; i < size; i++) {
-    for (let k = 0; k < neighbours.length; k++)
-      column[k] = (neighbours[k] as Frame).gray[i] as number;
-    background[i] = median(column);
-  }
-  // A cloud or the camera's exposure moves every pixel alike: take that out.
-  const shift = frame.mean - meanBackground;
+  const spread: number[] = new Array<number>(neighbours.length);
   const mask = new Uint8Array(size);
   let changed = 0;
   for (let i = 0; i < size; i++) {
-    const diff = (frame.gray[i] as number) - (background[i] as number) - shift;
-    if (Math.abs(diff) > CHANGE) {
+    // A cloud or the camera's exposure moves every pixel alike: each picture
+    // is taken relative to its own mean brightness.
+    for (let k = 0; k < neighbours.length; k++) {
+      const n = neighbours[k] as Frame;
+      column[k] = (n.gray[i] as number) - n.mean;
+    }
+    const background = median(column);
+    for (let k = 0; k < neighbours.length; k++) {
+      spread[k] = Math.abs((column[k] as number) - background);
+    }
+    const threshold = Math.min(MAX_CHANGE, Math.max(MIN_CHANGE, NOISE_K * median(spread)));
+    const diff = (frame.gray[i] as number) - frame.mean - background;
+    if (Math.abs(diff) > threshold) {
       mask[i] = 1;
       changed += 1;
     }
   }
-  if (changed / size > SCENE_CHANGE) return { score: 0, unsure: true };
+  if (changed / size > SCENE_CHANGE) return { score: 0, unsure: true, reason: 'scene' };
   return { score: largestPatch(mask) / size, unsure: false };
 }
 
@@ -185,11 +266,12 @@ export type Sensitivity = 'careful' | 'normal' | 'strict';
 
 /**
  * From this share of the picture a moving patch counts as an animal. Careful
- * marks fewer pictures as empty (it takes small patches seriously), strict
- * more. These values are a first guess; they are not tuned on garden pictures.
+ * marks fewer pictures as empty (it takes small patches seriously, about 8
+ * grid pixels), strict more. These values are a first guess; they are not
+ * tuned on garden pictures.
  */
 export const PATCH_SHARE: Record<Sensitivity, number> = {
-  careful: 0.004,
+  careful: 0.0025,
   normal: 0.012,
   strict: 0.03,
 };

@@ -596,4 +596,30 @@ describe('GalleryApp', () => {
     await waitFor(() => expect(screen.queryAllByRole('listitem')).toHaveLength(0));
     localStorage.removeItem('trailcamhub.empty.on');
   });
+
+  it('never deletes recordings that "Leere ausblenden" hides', async () => {
+    localStorage.removeItem('trailcamhub.empty.on');
+    localStorage.removeItem('trailcamhub.empty.sensitivity');
+    const flat = new Uint8ClampedArray(GRID_W * GRID_H * 4).fill(120);
+    const empty = { loadFrame: async () => frameFromRgba(flat), store: memoryEmptyStore() };
+    const api = new DemoGalleryApi(() => 1_000_000, 20);
+    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} empty={empty} />);
+
+    await openCamera('Garten');
+    fireEvent.click(await screen.findByRole('button', { name: 'Leere erkennen' }));
+    expect(screen.getByRole('combobox', { name: /Leer markieren/ })).toHaveDisplayValue('Selten');
+    await screen.findAllByText('wahrscheinlich leer');
+    for (const button of screen.getAllByRole('button', { name: /^Alle auswählen:/ })) {
+      fireEvent.click(button);
+    }
+    expect(screen.getByRole('button', { name: /^Löschen \(\d+\)$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Leere auswählen' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Leere ausblenden/ }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^Löschen \(\d+\)$/ })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'Leere auswählen' })).not.toBeInTheDocument();
+    localStorage.removeItem('trailcamhub.empty.on');
+  });
 });
