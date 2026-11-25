@@ -1287,7 +1287,7 @@ export function GalleryApp({
               emptyCorrected={detect.corrected.has(recordingKey(viewed))}
               onCorrectEmpty={(value) => detect.correct(recordingKey(viewed), value)}
               onWithdraw={() => void act(() => api.withdraw(viewed.camId, viewed))}
-              onDelete={() => deleteOne(viewed)}
+              onDelete={() => setConfirm({ question: '1 Aufnahme löschen?', items: [viewed] })}
               onClose={() => setViewing(undefined)}
             />
           )}
