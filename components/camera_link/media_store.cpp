@@ -411,7 +411,9 @@ HubFilesRemoved delete_hub_files(const std::string &camera_id,
         for (const std::string &name : list_files(dir)) {
             if (!is_file_of_media(name, media_id))
                 continue;
-            const std::string path = dir + "/" + name;
+            std::string path = dir;
+            path += '/';
+            path += name;
             if (remove(path.c_str()) == 0) {
                 ++result.removed;
             } else {
