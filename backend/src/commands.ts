@@ -243,8 +243,7 @@ export async function withdrawSettings(camera: CameraRecord, deps: Deps): Promis
 }
 
 export type Withdrawal =
-  | { ok: true; withdrawn: number }
-  | { ok: false; status: 409; error: string };
+  { ok: true; withdrawn: number } | { ok: false; status: 409; error: string };
 
 /**
  * Cancels the queued video and delete requests of a recording. A request the
