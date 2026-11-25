@@ -30,7 +30,7 @@ export const GRID_H = 45;
  */
 export const CROP_H = 40;
 /** Changes whenever the analysis changes: older results are made again. */
-export const METHOD = 'diff-v3';
+export const METHOD = 'diff-v4';
 
 /**
  * A pixel counts as changed when it differs from the background by more than
@@ -50,6 +50,11 @@ export const NEIGHBOUR_REACH = 8;
 const MAX_BRIGHTNESS_GAP = 50;
 /** Pictures less than this far apart (seconds) belong to one series. */
 export const SERIES_GAP_S = 10 * 60;
+/**
+ * At most this many neighbours come from one other series (on each side), so
+ * a long series of one animal next to a picture cannot fill its background.
+ */
+export const MAX_PER_SERIES = 2;
 /** Above this share of changed pixels the whole scene changed (light, a moved camera). */
 const SCENE_CHANGE = 0.5;
 /** A patch must fill this much of its bounding box; thin and scattered changes do not. */
@@ -121,43 +126,80 @@ export interface Timeline {
   series: readonly number[];
 }
 
+/** The positions that may be neighbours of a picture (see `candidateSetsOf`). */
+export interface Candidates {
+  /** The nearest first, alternately before and after. */
+  preferred: number[];
+  /** Only used when the preferred ones are too few. */
+  spare: number[];
+}
+
 /**
  * The positions that may be neighbours of picture `index` out of `count`
- * (sorted by time), the nearest first, alternately before and after: up to
- * `NEIGHBOUR_REACH` on each side, beyond the whole series of the picture.
+ * (sorted by time), beyond the whole series of the picture: up to
+ * `NEIGHBOUR_REACH` on each side, at most `MAX_PER_SERIES` of each other
+ * series.
  *
  * A long chain of triggers (wind all afternoon) is one series as well. Its
  * far end could be a better background (the light is closer), but an animal
  * that stays as long (grazing deer, cattle) would then be its own background
  * and look empty (#456). Missing an animal is the costly error: without
  * pictures outside the series there is no verdict (`few`) until more come.
+ *
+ * An empty picture next to a long series of one animal would get mostly
+ * pictures of the animal as neighbours; their median contains it, and the
+ * empty picture would count as an animal (#457). So the further pictures of a
+ * series are only spare, used when there are too few others.
  */
-export function candidatesOf(count: number, index: number, timeline?: Timeline): number[] {
-  const seriesAt = (i: number) => (timeline ? timeline.series[i] : i);
+export function candidateSetsOf(count: number, index: number, timeline?: Timeline): Candidates {
+  const seriesAt = (i: number) => (timeline ? (timeline.series[i] as number) : i);
   const own = seriesAt(index);
   const side = (dir: number) => {
-    const out: number[] = [];
+    const preferred: number[] = [];
+    const spare: number[] = [];
+    const taken = new Map<number, number>();
     let i = index + dir;
     // A series is a run in time order: skipping it is skipping the run.
     while (i >= 0 && i < count && seriesAt(i) === own) i += dir;
-    for (; out.length < NEIGHBOUR_REACH && i >= 0 && i < count; i += dir) out.push(i);
-    return out;
+    for (; preferred.length < NEIGHBOUR_REACH && i >= 0 && i < count; i += dir) {
+      const series = seriesAt(i);
+      const n = taken.get(series) ?? 0;
+      if (n < MAX_PER_SERIES) {
+        preferred.push(i);
+        taken.set(series, n + 1);
+      } else if (spare.length < MIN_NEIGHBOURS) {
+        spare.push(i);
+      }
+    }
+    return { preferred, spare };
   };
   const before = side(-1);
   const after = side(1);
-  const result: number[] = [];
-  for (let k = 0; k < NEIGHBOUR_REACH; k++) {
-    if (before[k] !== undefined) result.push(before[k] as number);
-    if (after[k] !== undefined) result.push(after[k] as number);
-  }
-  return result;
+  const interleave = (a: number[], b: number[]) => {
+    const out: number[] = [];
+    for (let k = 0; k < Math.max(a.length, b.length); k++) {
+      if (a[k] !== undefined) out.push(a[k] as number);
+      if (b[k] !== undefined) out.push(b[k] as number);
+    }
+    return out;
+  };
+  return {
+    preferred: interleave(before.preferred, after.preferred),
+    spare: interleave(before.spare, after.spare),
+  };
+}
+
+/** Every position `candidateSetsOf` may use: the pictures to read for a judgement. */
+export function candidatesOf(count: number, index: number, timeline?: Timeline): number[] {
+  const { preferred, spare } = candidateSetsOf(count, index, timeline);
+  return [...preferred, ...spare];
 }
 
 /**
  * The neighbours of `frames[index]` (sorted by time; a picture that could not
- * be read is `undefined`): the candidates (`candidatesOf`) whose brightness is
- * close, so a day picture is not compared with a night one. At most
- * `MAX_NEIGHBOURS`, the nearest first.
+ * be read is `undefined`): the candidates (`candidateSetsOf`) whose brightness
+ * is close, so a day picture is not compared with a night one. At most
+ * `MAX_NEIGHBOURS`, the nearest first; spare ones only up to `MIN_NEIGHBOURS`.
  */
 export function neighboursOf(
   frames: readonly (Frame | undefined)[],
@@ -166,12 +208,17 @@ export function neighboursOf(
 ): Frame[] {
   const own = frames[index];
   if (!own) return [];
+  const { preferred, spare } = candidateSetsOf(frames.length, index, timeline);
   const result: Frame[] = [];
-  for (const i of candidatesOf(frames.length, index, timeline)) {
-    const other = frames[i];
-    if (other && Math.abs(other.mean - own.mean) <= MAX_BRIGHTNESS_GAP) result.push(other);
-    if (result.length >= MAX_NEIGHBOURS) break;
-  }
+  const add = (positions: number[], limit: number) => {
+    for (const i of positions) {
+      if (result.length >= limit) return;
+      const other = frames[i];
+      if (other && Math.abs(other.mean - own.mean) <= MAX_BRIGHTNESS_GAP) result.push(other);
+    }
+  };
+  add(preferred, MAX_NEIGHBOURS);
+  add(spare, MIN_NEIGHBOURS);
   return result;
 }
 

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  candidateSetsOf,
   candidatesOf,
   CROP_H,
   frameFromRgba,
   GRID_H,
   GRID_W,
+  MAX_PER_SERIES,
   measure,
   MIN_NEIGHBOURS,
   neighboursOf,
@@ -230,6 +232,63 @@ describe('a series of one animal (#442 review)', () => {
       const result = measure(frames[at] as Frame, neighboursOf(frames, at, timeline));
       expect(verdictFor(result, 'careful')).toBe('animal');
     }
+  });
+});
+
+describe('next to a long series of one animal (#457)', () => {
+  /** Four empty pictures hours apart, a deer in 20 pictures a minute apart, four empty ones. */
+  function scene() {
+    const times: number[] = [];
+    const frames: Frame[] = [];
+    for (let i = 0; i < 4; i++) {
+      times.push(1_800_000_000 + i * 7_200);
+      frames.push(frame({ seed: i + 1 }));
+    }
+    for (let i = 0; i < 20; i++) {
+      times.push(1_800_100_000 + i * 60);
+      frames.push(frame({ seed: 10 + i, patch: [30, 15, 12, 10, 70] }));
+    }
+    for (let i = 0; i < 4; i++) {
+      times.push(1_800_200_000 + i * 7_200);
+      frames.push(frame({ seed: 40 + i }));
+    }
+    return { frames, timeline: { times, series: seriesOf(times) } };
+  }
+
+  it('takes the empty picture right before the deer for empty', () => {
+    const { frames, timeline } = scene();
+    for (const at of [3, 24]) {
+      const result = measure(frames[at] as Frame, neighboursOf(frames, at, timeline));
+      expect(verdictFor(result, 'careful')).toBe('empty');
+    }
+  });
+
+  it('still finds the deer', () => {
+    const { frames, timeline } = scene();
+    for (const at of [4, 13, 23]) {
+      const result = measure(frames[at] as Frame, neighboursOf(frames, at, timeline));
+      expect(verdictFor(result, 'strict')).toBe('animal');
+    }
+  });
+
+  it('takes at most two pictures of the other series, the rest only as spare', () => {
+    const { frames, timeline } = scene();
+    const { preferred, spare } = candidateSetsOf(frames.length, 3, timeline);
+    expect(preferred.filter((i) => i >= 4 && i < 24)).toHaveLength(MAX_PER_SERIES);
+    expect([...preferred].sort((a, b) => a - b)).toEqual([0, 1, 2, 4, 5, 24, 25, 26, 27]);
+    expect(spare).toEqual([6, 7, 8]);
+  });
+
+  it('uses spare pictures when there are too few others', () => {
+    // Only the deer series after the picture: two preferred, one spare.
+    const times = [1_800_000_000, ...Array.from({ length: 6 }, (_, i) => 1_800_100_000 + i * 60)];
+    const frames = times.map((_, i) => frame({ seed: i + 1 }));
+    const timeline = { times, series: seriesOf(times) };
+    expect(candidateSetsOf(times.length, 0, timeline)).toEqual({
+      preferred: [1, 2],
+      spare: [3, 4, 5],
+    });
+    expect(neighboursOf(frames, 0, timeline)).toHaveLength(MIN_NEIGHBOURS);
   });
 });
 

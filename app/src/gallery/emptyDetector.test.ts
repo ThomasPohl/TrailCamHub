@@ -154,9 +154,9 @@ describe('analyseCamera', () => {
     const { results } = await analyseCamera(list, { loadFrame, known: new Map(), now: 1 });
     for (let n = 4; n < 10; n++)
       expect(verdictOf(results.get(`CAM/${n}`), 'strict')).toBe('animal');
-    // The empty ones around it have the deer in most of their neighbours: they
-    // are rather taken for animals, which is the safe side.
-    expect(verdictOf(results.get('CAM/1'), 'careful')).not.toBe('unsure');
+    // The empty ones around it get at most two pictures of the deer as
+    // neighbours (#457), so the deer is not in their background.
+    for (const n of [3, 10]) expect(verdictOf(results.get(`CAM/${n}`), 'careful')).toBe('empty');
   });
 
   it('does not read a picture again that it read in a cancelled run', async () => {
