@@ -74,6 +74,32 @@ describe('GalleryApp', () => {
     expect(await screen.findByText(/Keine Aufnahmen/)).toBeInTheDocument();
   });
 
+  it('keeps recordings in the gallery when a delete only reaches the camera (#461)', async () => {
+    const now = 1_000_000;
+    const api = new DemoGalleryApi(() => now, 20);
+    render(
+      <GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} now={() => now} pollMs={0} />,
+    );
+    // The setting of the hub: camera only.
+    fireEvent.click(await screen.findByRole('button', { name: 'Löschen auf …' }));
+    let dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Kamera/ }));
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Hub/ }));
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Galerie/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    expect(await screen.findByText(/Gespeichert/)).toBeInTheDocument();
+
+    await openCamera('Garten');
+    const cards = await screen.findAllByRole('listitem');
+    fireEvent.click(within(cards[0]!).getByRole('button', { name: 'Löschen' }));
+    dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Wird gelöscht auf: Kamera');
+    expect(dialog).toHaveTextContent('noch nicht in der Galerie');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Trotzdem löschen' }));
+    expect(await screen.findAllByText('nicht mehr auf der Kamera')).toHaveLength(1);
+    expect(screen.getAllByRole('listitem')).toHaveLength(16);
+  });
+
   it('fetches and deletes the chosen recordings together', async () => {
     const now = 1_000_000;
     const api = new DemoGalleryApi(() => now, 20);

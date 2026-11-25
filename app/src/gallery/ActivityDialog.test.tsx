@@ -21,7 +21,13 @@ function recordings(): Recording[] {
 
 const status: GalleryStatus = {
   lastContact: NOW,
-  hub: { hubId: 'hub-1', cameraPlan: '*=120', config: { checkinIntervalS: 1800 } },
+  hub: {
+    hubId: 'hub-1',
+    cameraPlan: '*=120',
+    config: { checkinIntervalS: 1800 },
+    deleteTargets: ['hub', 'backend'],
+    deletesByTarget: true,
+  },
   cameras: [{ camId: 'A', name: 'Garten' }],
 };
 

@@ -2,6 +2,7 @@ import type {
   Camera,
   CameraCapability,
   CameraSettings,
+  DeleteTarget,
   HubSchedule,
   ScheduleConfig,
 } from '../api/types';
@@ -53,6 +54,8 @@ export interface Recording {
   fileName: string;
   /** With `failed`: a reason the user can understand (German). */
   failReason?: string;
+  /** Deleted on the camera and kept here (#461). */
+  goneFromCamera?: boolean;
 }
 
 export interface GalleryCamera {
@@ -88,7 +91,15 @@ export interface GalleryStatus {
   /** Hub battery in percent; absent if unknown. */
   hubBatPercent?: number;
   /** The hub the schedule belongs to (the one heard from most recently); absent if unknown. */
-  hub?: { hubId: string; cameraPlan?: string; config: ScheduleConfig };
+  hub?: {
+    hubId: string;
+    cameraPlan?: string;
+    config: ScheduleConfig;
+    /** Where a delete applies (#461). */
+    deleteTargets: DeleteTarget[];
+    /** The hub's firmware can delete by target; else only camera and gallery (#461). */
+    deletesByTarget: boolean;
+  };
   cameras: GalleryCamera[];
 }
 
@@ -262,8 +273,11 @@ export interface GalleryApi {
   recordings(camId: string): Promise<Recording[]>;
   /** `mediaIds`: the videos' mediaIds. */
   requestVideos(camId: string, mediaIds: number[]): Promise<void>;
-  /** `mediaIds`: every file of the recordings to delete. */
-  requestDelete(camId: string, mediaIds: number[]): Promise<void>;
+  /**
+   * `mediaIds`: every file of the recordings to delete. `targets`: where
+   * (#461); absent: the hub's setting.
+   */
+  requestDelete(camId: string, mediaIds: number[], targets?: DeleteTarget[]): Promise<void>;
   /** Withdraws the requests for a recording the hub has not picked up yet. */
   withdraw(camId: string, recording: Recording): Promise<void>;
   /** Makes a link to the picture or video of a recording (#444); `url` is shown only now. */
@@ -322,6 +336,8 @@ export interface GalleryApi {
   adminAudit(): Promise<AuditEntry[]>;
   /** Replaces the schedule set in the app; an empty object leaves it to the hub. */
   setSchedule(hubId: string, config: ScheduleConfig): Promise<void>;
+  /** Where a delete applies for the hub, at least one target (#461). */
+  setDeleteTargets(hubId: string, targets: DeleteTarget[]): Promise<void>;
   /** Asks the hub to read the camera at its next check-in. */
   readCamera(camId: string): Promise<void>;
   /** Tag of the newest firmware release, undefined if unknown (#149). */
