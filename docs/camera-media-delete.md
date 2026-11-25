@@ -16,6 +16,9 @@ Three things decide how to use them:
 - **`dirNum` + `mediaNum` do not identify a file over time.** A number can come back with a new file (see [Number allocation](#number-allocation)), so only `mediaId` identifies a recording, and 773 cannot be addressed by `mediaId`.
 - **Nothing can be undone.** The commands need only the session token.
 
+Where a delete from the gallery applies (camera, hub, gallery) is decided
+above this command; see [camera-actions.md](camera-actions.md#where-a-deletion-applies-461).
+
 ## Delete one file (773)
 
 ```json

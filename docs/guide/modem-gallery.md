@@ -79,7 +79,15 @@ dusk, see [power and schedule](../power-and-schedule.md)) and sleeps in between.
   hub fetches it at its next read and uploads it over 4G (limit and data cost:
   [modem uplink](../modem.md)). Videos above the modem limit are refused with
   a message.
-- **Deleting** a recording in the gallery removes it from the camera too.
+- **Deleting** a recording applies where you choose: on the camera, on the hub's
+  card, in the gallery, or in several. The setting is under "Löschen auf …" in
+  the gallery, is the same for everyone who uses the hub, and can be changed
+  for a single delete. It starts as hub and gallery, so the camera keeps its
+  files. If the camera is a target, the gallery warns about videos that are
+  not in it yet, because they are lost then. A recording the camera loses on
+  its own (card wiped or changed) disappears from the hub and the gallery too.
+  Deleting on the hub needs the new firmware; until then only camera and
+  gallery are possible.
 - Battery, signal and faults are in the administrator's view of the gallery.
 
 If something does not work, see [troubleshooting](troubleshooting.md).

@@ -29,6 +29,17 @@ hand, instead of carrying the old name on or accepting both names. The
 packages and installer images were named `trailcamhub-<board>-…` already.
 (#219)
 
+## 2026-11-25 — A delete has targets: camera, hub, gallery
+
+The gallery's delete applies to the camera's card, the hub's copies, the
+gallery (backend), or any of them. The setting belongs to the hub, not to
+the user, defaults to hub and gallery (the camera keeps its files) and can
+be changed per delete; the gallery warns about videos that are not in it
+before the camera's copy goes. A recording the camera loses on its own is
+removed from hub and gallery. A hub without the new firmware keeps deleting
+on camera and gallery. The backend keeps a tombstone for deleted
+recordings so the hub does not bring them back. (#461, [camera-actions.md](camera-actions.md))
+
 ## 2026-11-12 — Camera actions go through one queue, and a lost action is not repeated
 
 Photo, video, delete and format are described once (`camera_action`) and run
