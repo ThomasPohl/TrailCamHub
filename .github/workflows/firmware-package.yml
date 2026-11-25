@@ -464,13 +464,14 @@ jobs:
           merge-multiple: true
           path: artifact
 
-      # The bench stand-in for the camera (docs/installer.md, "Camera mock").
-      # Optional: without it the installer simply has no mock to offer.
-      - name: Download camera mock image
+      # The bench stand-in for the camera (docs/installer.md, "Camera mock"),
+      # one image per chip (camera-mock-esp32, camera-mock-esp32s3, #447).
+      # Optional: without them the installer simply has no mock to offer.
+      - name: Download camera mock images
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: camera-mock-esp32
+          pattern: camera-mock-*
           path: artifact-mock
 
       - name: Accumulate build and assemble site
@@ -544,21 +545,32 @@ jobs:
             exit 1
           fi
 
-          # The camera mock (tools/camera_mock, ESP32 target): one merged
-          # image at offset 0 and its ESP Web Tools manifest, next to the
-          # boards. The installer's "Camera mock" view offers it.
+          # The camera mock (tools/camera_mock): one merged image per chip at
+          # offset 0 and one ESP Web Tools manifest with a build per chip, so
+          # the installer flashes the image that fits the connected chip
+          # (#447). `bin` stays the ESP32 image for installers before #447;
+          # `bins` names the image of each chip.
           mock='null'
-          if [[ -f artifact-mock/camera-mock.bin ]]; then
+          declare -A family=([esp32]=ESP32 [esp32s3]=ESP32-S3)
+          parts='[]'
+          bins='{}'
+          for chip in esp32 esp32s3; do
+            src="artifact-mock/camera-mock-$chip/camera-mock.bin"
+            [[ -f "$src" ]] || { echo "::warning::No camera mock image for $chip"; continue; }
             mkdir -p "$dir/camera-mock"
-            cp artifact-mock/camera-mock.bin "$dir/camera-mock/"
-            jq -n --arg version "$id" \
-              '{name: "TrailCamHub camera mock (ESP32-WROOM-32D)", version: $version,
-                builds: [{chipFamily: "ESP32",
-                          parts: [{path: "./camera-mock.bin", offset: 0}]}]}' \
+            cp "$src" "$dir/camera-mock/camera-mock-$chip.bin"
+            parts="$(jq --arg f "${family[$chip]}" --arg p "./camera-mock-$chip.bin" \
+              '. + [{chipFamily: $f, parts: [{path: $p, offset: 0}]}]' <<<"$parts")"
+            bins="$(jq --arg c "$chip" --arg p "builds/$id/camera-mock/camera-mock-$chip.bin" \
+              '. + {($c): $p}' <<<"$bins")"
+          done
+          if [[ "$(jq 'length' <<<"$parts")" -gt 0 ]]; then
+            jq -n --arg version "$id" --argjson builds "$parts" \
+              '{name: "TrailCamHub camera mock", version: $version, builds: $builds}' \
               > "$dir/camera-mock/manifest.json"
-            (cd "$dir/camera-mock" && sha256sum camera-mock.bin > SHA256SUMS)
-            mock='{"manifest": "builds/'"$id"'/camera-mock/manifest.json",
-                   "bin": "builds/'"$id"'/camera-mock/camera-mock.bin"}'
+            (cd "$dir/camera-mock" && sha256sum camera-mock-*.bin > SHA256SUMS)
+            mock="$(jq -n --arg m "builds/$id/camera-mock/manifest.json" --argjson bins "$bins" \
+              '{manifest: $m, bins: $bins} + (if $bins.esp32 then {bin: $bins.esp32} else {} end)')"
           else
             echo "::warning::No camera mock image; the installer leaves it out"
           fi

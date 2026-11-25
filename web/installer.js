@@ -157,6 +157,7 @@
     var mockInfo = document.getElementById("mock-build-info");
     var mockDownload = document.getElementById("mock-dl");
     var mockSha = document.getElementById("mock-dl-sha");
+    var mockNoS3 = document.getElementById("mock-no-s3");
     if (!mockSelect || !mockButton) {
       return;
     }
@@ -182,7 +183,22 @@
       var build = withMock[Number(mockSelect.value)];
       mockButton.setAttribute("manifest", "./" + build.mock.manifest);
       mockButton.hidden = false;
-      mockDownload.setAttribute("href", "./" + build.mock.bin);
+      // One image per chip since #447 (`bins`); older builds have only the
+      // ESP32 image in `bin`.
+      var bins = build.mock.bins || { esp32: build.mock.bin };
+      mockDownload.innerHTML = "";
+      Object.keys(bins).forEach(function (chip, index) {
+        if (index > 0) {
+          mockDownload.appendChild(document.createTextNode(", "));
+        }
+        var link = document.createElement("a");
+        link.setAttribute("href", "./" + bins[chip]);
+        link.textContent = bins[chip].slice(bins[chip].lastIndexOf("/") + 1);
+        mockDownload.appendChild(link);
+      });
+      if (mockNoS3) {
+        mockNoS3.hidden = Boolean(bins.esp32s3);
+      }
       mockSha.setAttribute("href", "./" + dirOf(build.mock.manifest) + "SHA256SUMS");
       mockInfo.textContent = [build.date, build.branch, build.commit, build.message]
         .filter(Boolean)

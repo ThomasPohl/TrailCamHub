@@ -1,4 +1,7 @@
 # Camera mock on an ESP32-S3-WROOM-1 (any flash size, PSRAM not used; the app
-# fits the 4 MB layout of the smallest module). The console runs on UART0
-# (the "UART" port of a DevKitC-1), not on the native USB port.
+# fits the 4 MB layout of the smallest module).
 CONFIG_IDF_TARGET="esp32s3"
+# The console runs on the native USB port (USB-Serial-JTAG, #447), so a board
+# with only that port works. For the UART0 port (a USB-UART bridge, the "UART"
+# port of a DevKitC-1) set CONFIG_ESP_CONSOLE_UART_DEFAULT=y instead.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
