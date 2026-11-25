@@ -16,6 +16,7 @@
 #include <doctest/doctest.h>
 
 #include <arpa/inet.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -454,6 +455,175 @@ TEST_CASE("session: a settings change goes to the camera and is stored")
     CHECK(stored.find("\"pirSens\":0") != std::string::npos);
     CHECK(stored.find("\"languageCode\":\"de\"") != std::string::npos);
     CHECK(stored.find("secureCode") == std::string::npos);
+}
+
+namespace
+{
+const char *const kCameraDir = "C6_1E_0D_E0_0C_FB";
+
+// Names of the files in thumb/ or media/ of the test camera, sorted.
+std::vector<std::string> files_in(const char *sub)
+{
+    std::vector<std::string> names;
+    std::error_code ec;
+    for (const auto &entry : fs::directory_iterator(
+             std::string(HOST_SD_ROOT) + "/" + kCameraDir + "/" + sub, ec)) {
+        names.push_back(entry.path().filename().string());
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+std::int64_t media_id_of(const std::string &file_name)
+{
+    return std::stoll(file_name.substr(0, file_name.find('.')));
+}
+
+// The hub has a thumbnail or a file of this recording.
+bool has_files_of(std::int64_t media_id)
+{
+    const std::string prefix = std::to_string(media_id) + ".";
+    for (const char *sub : {"thumb", "media"}) {
+        for (const std::string &name : files_in(sub)) {
+            if (name.compare(0, prefix.size(), prefix) == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+act::ActionQueue::AddResult submit_delete(std::int64_t media_id,
+                                          std::uint8_t scope, const char *key)
+{
+    return act::service::submit(
+        act::Action(act::Type::delete_media, media_id, kCameraDir, "", scope),
+        act::Source::backend, key);
+}
+}  // namespace
+
+TEST_CASE("session: a deletion applies to the camera, the hub or both (#461)")
+{
+    reset_world();
+    act::service::init();
+    {
+        host_session::MockServer mock(options_with(6));
+        REQUIRE(mock.ok());
+        REQUIRE(run_session().work_completed);
+    }
+    // The three photos have a thumbnail and a file on the hub.
+    const std::vector<std::string> photos = files_in("media");
+    REQUIRE(photos.size() == 3);
+    const std::int64_t both = media_id_of(photos[0]);
+    const std::int64_t camera_only = media_id_of(photos[1]);
+    const std::int64_t hub_only = media_id_of(photos[2]);
+    REQUIRE(has_files_of(both));
+    REQUIRE(has_files_of(camera_only));
+    REQUIRE(has_files_of(hub_only));
+
+    const auto a = submit_delete(both, act::kScopeBoth, "be:host-scope-1");
+    const auto b =
+        submit_delete(camera_only, act::kScopeCamera, "be:host-scope-2");
+    const auto c = submit_delete(hub_only, act::kScopeHub, "be:host-scope-3");
+    REQUIRE(a.kind == act::ActionQueue::AddResult::Kind::added);
+    REQUIRE(b.kind == act::ActionQueue::AddResult::Kind::added);
+    REQUIRE(c.kind == act::ActionQueue::AddResult::Kind::added);
+    {
+        host_session::MockServer mock(options_with(6));
+        REQUIRE(mock.ok());
+        camera_protocol_set_actions_only(true);
+        const Outcome o = run_session();
+        CHECK(o.error == ESP_OK);
+        CHECK(o.work_completed);
+        // The hub's own copies need no command to the camera.
+        CHECK(mock.stats().deletions == 2);
+        CHECK(mock.stats().requests.at(773) == 2);
+    }
+    act::Entry entry;
+    for (const std::uint32_t id : {a.id, b.id, c.id}) {
+        REQUIRE(act::service::find(id, entry));
+        CHECK(entry.state == act::State::done);
+    }
+    CHECK_FALSE(has_files_of(both));
+    CHECK(has_files_of(camera_only));
+    CHECK_FALSE(has_files_of(hub_only));
+
+    // The camera still lists the three (the mock replays its capture), but
+    // what the hub deleted is not fetched again; nothing else is new.
+    {
+        host_session::MockServer mock(options_with(6));
+        REQUIRE(mock.ok());
+        camera_protocol_set_actions_only(false);
+        const Outcome o = run_session();
+        CHECK(o.error == ESP_OK);
+        CHECK(o.work_completed);
+        CHECK(o.stored == 0);
+    }
+    CHECK_FALSE(has_files_of(both));
+    CHECK(has_files_of(camera_only));
+    CHECK_FALSE(has_files_of(hub_only));
+}
+
+TEST_CASE(
+    "session: a failed deletion on the camera leaves the hub's files (#461)")
+{
+    reset_world();
+    act::service::init();
+    {
+        host_session::MockServer mock(options_with(6));
+        REQUIRE(mock.ok());
+        REQUIRE(run_session().work_completed);
+    }
+    const std::int64_t id = media_id_of(files_in("media")[0]);
+    // A recording the camera does not list (any more): the camera part is
+    // gone anyway, so the hub's files go and the person is told "done".
+    const std::int64_t unknown = id + 1000000;
+    const auto added =
+        submit_delete(unknown, act::kScopeBoth, "be:host-scope-4");
+    REQUIRE(added.kind == act::ActionQueue::AddResult::Kind::added);
+    {
+        host_session::MockServer mock(options_with(6));
+        REQUIRE(mock.ok());
+        camera_protocol_set_actions_only(true);
+        REQUIRE(run_session().work_completed);
+        CHECK(mock.stats().deletions == 0);
+    }
+    act::Entry entry;
+    REQUIRE(act::service::find(added.id, entry));
+    CHECK(entry.state == act::State::failed);
+    CHECK(entry.reason.find("does not list this file") != std::string::npos);
+    // Nothing else was touched.
+    CHECK(has_files_of(id));
+    camera_protocol_set_actions_only(false);
+}
+
+TEST_CASE("session: what the camera lost itself is deleted on the hub (#461)")
+{
+    reset_world();
+    {
+        host_session::MockServer mock(options_with(6));
+        REQUIRE(mock.ok());
+        REQUIRE(run_session().work_completed);
+    }
+    REQUIRE(files_in("thumb").size() == 6);
+    // The camera's card lost the last three recordings (deleted there, or
+    // formatted and filled again).
+    {
+        host_session::MockServer mock(options_with(3));
+        REQUIRE(mock.ok());
+        const Outcome o = run_session();
+        CHECK(o.error == ESP_OK);
+        CHECK(o.work_completed);
+    }
+    const std::vector<std::string> thumbs = files_in("thumb");
+    CHECK(thumbs.size() == 3);
+    // What is left belongs to the recordings the camera still lists.
+    for (const std::string &name : files_in("media")) {
+        CHECK(has_files_of(media_id_of(name)));
+        CHECK(std::find(thumbs.begin(), thumbs.end(),
+                        std::to_string(media_id_of(name)) + ".jpg") !=
+              thumbs.end());
+    }
 }
 
 TEST_CASE("session: the camera closing the session ends it")

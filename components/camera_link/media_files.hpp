@@ -24,6 +24,11 @@ namespace camera::store
 // Base name (without extension) of a recording's files.
 std::string media_base_name(std::int64_t media_id);
 
+// A file name in thumb/ or media/ that belongs to this recording: its base
+// name, a dot and anything after it ("<mediaId>.jpg", "<mediaId>.mp4.part").
+// "12.jpg" is not a file of 123, and a name without the dot is none either.
+bool is_file_of_media(const std::string &name, std::int64_t media_id);
+
 // Splits an old file name "<dir>_<num>.<rest>" (rest is everything after the
 // first '.', e.g. "jpg" or "h264.part"). False for any other name.
 bool parse_legacy_name(const std::string &name, std::int64_t &dir,

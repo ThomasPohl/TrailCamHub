@@ -436,3 +436,40 @@ TEST_CASE("uplink: transport and modem signal in the check-in (#149)")
     json = build_checkin_json(request);
     CHECK(json.find("\"modemOperator\":\"Telekom.de\"") != std::string::npos);
 }
+
+TEST_CASE("the check-in names the features of this firmware (#461)")
+{
+    CheckinRequest request;
+    request.hub_firmware = "dev";
+    request.features = {kFeatureDeleteTargets};
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"features\":[\"deleteTargets\"],"
+          "\"cameras\":[]}");
+    request.features = {"a", "b"};
+    CHECK(build_checkin_json(request).find("\"features\":[\"a\",\"b\"],") !=
+          std::string::npos);
+}
+
+TEST_CASE("a delete command carries its targets (#461)")
+{
+    CheckinResponse response;
+    REQUIRE(parse_checkin_response(
+        "{\"serverTime\":1766506000,\"cameras\":[{\"camId\":\"A\","
+        "\"accepted\":true,\"resync\":false,\"thumbUploads\":[],"
+        "\"commands\":["
+        "{\"id\":\"c1\",\"type\":\"deleteMedia\",\"mediaId\":5,"
+        "\"targets\":[\"camera\",\"hub\"]},"
+        "{\"id\":\"c2\",\"type\":\"deleteMedia\",\"mediaId\":6,"
+        "\"targets\":[]},"
+        "{\"id\":\"c3\",\"type\":\"deleteMedia\",\"mediaId\":7}]}]}",
+        response));
+    REQUIRE(response.cameras.size() == 1);
+    const auto &commands = response.cameras[0].commands;
+    REQUIRE(commands.size() == 3);
+    CHECK(commands[0].has_targets);
+    CHECK(commands[0].targets == std::vector<std::string>{"camera", "hub"});
+    // Given but empty is not the same as absent (an older backend).
+    CHECK(commands[1].has_targets);
+    CHECK(commands[1].targets.empty());
+    CHECK_FALSE(commands[2].has_targets);
+}

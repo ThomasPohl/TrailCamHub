@@ -227,3 +227,19 @@ TEST_CASE("codes always have four digits")
         CHECK(code.size() == 4);
     }
 }
+
+TEST_CASE("a deletion applies to the camera, the hub or both (#461)")
+{
+    CHECK(std::string(scope_name(kScopeCamera)) == "camera");
+    CHECK(std::string(scope_name(kScopeHub)) == "hub");
+    CHECK(std::string(scope_name(kScopeBoth)) == "camera+hub");
+    CHECK(Action{Type::delete_media, 5}.scope == kScopeCamera);
+    for (const std::uint8_t scope : {kScopeCamera, kScopeHub, kScopeBoth}) {
+        CHECK(validate(Action{Type::delete_media, 5, "", "", scope}).empty());
+    }
+    CHECK_FALSE(validate(Action{Type::delete_media, 5, "", "", 0}).empty());
+    CHECK_FALSE(validate(Action{Type::delete_media, 5, "", "", 4}).empty());
+    // Other actions act on the camera only.
+    CHECK_FALSE(validate(Action{Type::photo, 0, "", "", kScopeHub}).empty());
+    CHECK(validate(Action{Type::photo}).empty());
+}

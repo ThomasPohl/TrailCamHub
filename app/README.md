@@ -89,12 +89,23 @@ grey grid and compared with the nearest pictures of the same camera. A compact
 patch that differs from all neighbours means an animal; a brightness change of
 the whole picture or scattered pixels (grass) does not. A pixel must differ by
 more than the neighbours vary at that spot, so restless grass needs a larger
-change than a still path. Pictures of the same series (less than 10 minutes
-apart, within 30 minutes) are never compared with each other: an animal that
-stays in front of the camera would otherwise be its own background and every
-picture of it would look empty. The info bar at the bottom is ignored.
+change than a still path. Pictures of the same series (each less than 10
+minutes after the one before) are never compared with each other, however long
+the series lasts: an animal that stays in front of the camera would otherwise
+be its own background and every picture of it would look empty. A picture
+inside a long series is compared with pictures before and after it, even far
+away, or gets no verdict until there are some (#456). At most two neighbours
+come from any other series, so an empty picture next to a long series of one
+animal does not get the animal into its background (#457). The newest
+recordings have neighbours before them only; they are judged again when later
+pictures come, until three of their neighbours are later ones (#458). The info
+bar at the bottom is ignored.
 
 Results are kept in IndexedDB on this device, nothing is sent to the backend.
+When the detection runs, the results of recordings that left a camera's list
+(deleted, or past the thumbnail retention) are removed, corrections included;
+those of cameras not shown at the moment are removed once they are older than
+the retention (365 days, #459).
 It is off by default; "Leer markieren" (Selten / Normal / Oft) sets how readily
 a recording counts as empty, and "Leere ausblenden" hides the marked ones.
 Hidden recordings are never part of a selection that is deleted. In the viewer

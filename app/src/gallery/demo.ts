@@ -1,7 +1,13 @@
 import { placeholderThumb } from '../api/demo';
 import { ApiError } from '../api/http';
 import { toCameraWallClock } from '../format';
-import type { Camera, CameraCapability, CameraSettings, ScheduleConfig } from '../api/types';
+import type {
+  Camera,
+  CameraCapability,
+  CameraSettings,
+  DeleteTarget,
+  ScheduleConfig,
+} from '../api/types';
 import type {
   AdminHub,
   AuditEntry,
@@ -101,6 +107,7 @@ export class DemoGalleryApi implements GalleryApi {
   private readonly cameras = CAMERAS.map((c) => ({ ...c }));
   private lastCheckin: number;
   private scheduleConfig: ScheduleConfig = {};
+  private deleteTargets: DeleteTarget[] = ['hub', 'backend'];
   private dataBudgetMB: number | undefined = 3000;
   private readonly readRequested = new Set<string>();
   // The demo hub hears its two cameras and one more in range (#298).
@@ -134,7 +141,13 @@ export class DemoGalleryApi implements GalleryApi {
       lastContact: this.lastCheckin,
       nextContact: this.lastCheckin + this.checkinS,
       hubBatPercent: 84,
-      hub: { hubId: 'garten-hub', cameraPlan: '*=120', config: this.scheduleConfig },
+      hub: {
+        hubId: 'garten-hub',
+        cameraPlan: '*=120',
+        config: this.scheduleConfig,
+        deleteTargets: [...this.deleteTargets],
+        deletesByTarget: true,
+      },
       cameras: this.cameras.map((c, i) => ({
         ...c,
         // Garten is fine; Wiese needs a look (#304).
@@ -164,11 +177,19 @@ export class DemoGalleryApi implements GalleryApi {
     }
   }
 
-  async requestDelete(camId: string, mediaIds: number[]): Promise<void> {
+  async requestDelete(camId: string, mediaIds: number[], targets?: DeleteTarget[]): Promise<void> {
     this.catchUp();
+    const where = targets ?? this.deleteTargets;
     for (const r of this.pick(camId, mediaIds)) {
-      if (r.state !== 'deleted') r.state = 'deleteRequested';
+      if (r.state === 'deleted') continue;
+      if (where.includes('backend')) r.state = 'deleteRequested';
+      // Kept in the gallery: only the camera's copy goes (#461).
+      else if (where.includes('camera')) r.goneFromCamera = true;
     }
+  }
+
+  async setDeleteTargets(_hubId: string, targets: DeleteTarget[]): Promise<void> {
+    this.deleteTargets = [...targets];
   }
 
   async withdraw(camId: string, recording: Recording): Promise<void> {
@@ -356,6 +377,8 @@ export class DemoGalleryApi implements GalleryApi {
       lastSeen: this.lastCheckin - 300,
       hubLastSeen: this.lastCheckin,
       hubScheduleConfig: this.scheduleConfig,
+      hubDeleteTargets: [...this.deleteTargets],
+      hubDeletesByTarget: true,
       readRequested: this.readRequested.has(c.camId),
     }));
     return [

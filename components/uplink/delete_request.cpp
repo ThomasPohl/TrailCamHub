@@ -28,6 +28,23 @@ DeleteDecision wait(bool read_needed)
 
 }  // namespace
 
+std::uint8_t delete_scope(bool has_targets,
+                          const std::vector<std::string> &targets)
+{
+    if (!has_targets) {
+        return camera::action::kScopeCamera;
+    }
+    std::uint8_t scope = 0;
+    for (const std::string &target : targets) {
+        if (target == "camera") {
+            scope |= camera::action::kScopeCamera;
+        } else if (target == "hub") {
+            scope |= camera::action::kScopeHub;
+        }
+    }
+    return scope;
+}
+
 std::string delete_key(const std::string &command_id)
 {
     return "be:" + command_id;

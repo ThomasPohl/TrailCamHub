@@ -133,6 +133,53 @@ describe('HttpGalleryApi', () => {
     });
   });
 
+  it('sends the targets of a delete only when the user chose them (#461)', async () => {
+    const { fn, calls } = fakeFetch({ 'POST https://api/v1/cameras/CAM1/commands': [] });
+    const api = new HttpGalleryApi('https://api', 't', fn);
+    await api.requestDelete('CAM1', [1], ['camera', 'backend']);
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      type: 'deleteMedia',
+      mediaIds: [1],
+      targets: ['camera', 'backend'],
+    });
+  });
+
+  it("saves the hub's delete targets and reads them from the cameras (#461)", async () => {
+    const { fn, calls } = fakeFetch({
+      'POST https://api/v1/hubs/h1/delete-targets': { targets: ['hub'] },
+      'GET https://api/v1/cameras': [
+        { ...camera, hubId: 'h1', hubDeleteTargets: ['hub', 'backend'], hubDeletesByTarget: true },
+      ],
+    });
+    const api = new HttpGalleryApi('https://api', 't', fn);
+    await api.setDeleteTargets('h1', ['hub']);
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ targets: ['hub'] });
+    const hub = (await api.status()).hub;
+    expect(hub?.deleteTargets).toEqual(['hub', 'backend']);
+    expect(hub?.deletesByTarget).toBe(true);
+  });
+
+  it('treats a backend without the setting as camera and gallery (#461)', async () => {
+    const { fn } = fakeFetch({ 'GET https://api/v1/cameras': [{ ...camera, hubId: 'h1' }] });
+    const hub = (await new HttpGalleryApi('https://api', 't', fn).status()).hub;
+    expect(hub?.deleteTargets).toEqual(['camera', 'backend']);
+    expect(hub?.deletesByTarget).toBe(false);
+  });
+
+  it('marks a recording that is gone from the camera only (#461)', async () => {
+    const { fn } = fakeFetch({
+      'GET https://api/v1/cameras': [camera],
+      'GET https://api/v1/cameras/CAM1/media': [
+        item({ mediaId: 1, num: 1, onCamera: false, videoState: 'available', videoUrl: 'u' }),
+        item({ mediaId: 5, num: 5, dir: 101 }),
+      ],
+    });
+    const api = new HttpGalleryApi('https://api', 't', fn);
+    await api.status();
+    const list = await api.recordings('CAM1');
+    expect(list.map((r) => r.goneFromCamera ?? false)).toEqual([true, false]);
+  });
+
   it('splits a delete of more than 200 files', async () => {
     const { fn, calls } = fakeFetch({ 'POST https://api/v1/cameras/CAM1/commands': [] });
     const ids = Array.from({ length: 450 }, (_, i) => i + 1);

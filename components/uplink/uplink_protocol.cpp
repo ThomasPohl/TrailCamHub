@@ -211,6 +211,14 @@ std::string build_checkin_json(const CheckinRequest &request)
 {
     std::string out =
         "{\"hubFirmware\":\"" + json_escape(request.hub_firmware) + "\"";
+    if (!request.features.empty()) {
+        out += ",\"features\":[";
+        for (std::size_t i = 0; i < request.features.size(); ++i) {
+            out += (i > 0 ? ",\"" : "\"") + json_escape(request.features[i]) +
+                   "\"";
+        }
+        out += "]";
+    }
     if (!request.hub_board.empty()) {
         out += ",\"hubBoard\":\"" + json_escape(request.hub_board) + "\"";
     }
@@ -522,6 +530,8 @@ bool parse_checkin_response(const std::string &json, CheckinResponse &out)
                 json_find_string(obj, "type", command.type)) {
                 json_find_int(obj, "mediaId", command.media_id);
                 command.settings = object_of(obj, "settings");
+                command.has_targets =
+                    array_strings(obj, "targets", command.targets);
                 if (!json_find_string(obj, "uploadUrl", command.upload_url) ||
                     command.upload_url.rfind("https://", 0) != 0) {
                     command.upload_url.clear();

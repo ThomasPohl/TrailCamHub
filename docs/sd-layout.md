@@ -58,6 +58,7 @@ Text, one line per recording, written by `MediaCatalog::serialize()`:
 | 6–7 | attempts | failed downloads of a requested video (given up at 3) |
 | 8 | `kGone` | not on the camera's card any more (missing from a complete media list, or deleted by the hub) |
 | 9 | `kGoneReported` | the backend was told the recording is gone |
+| 10 | `kHubDeleted` | the hub deleted its own copies on request (#461); not fetched again while the camera lists it |
 
 Versions: v1 was keyed by `dir`/`num`, v2 by `mediaId` with files still named
 by `dir`/`num`; both have the same columns and are converted to v3 when
@@ -123,14 +124,18 @@ update): every camera is read.
 ## `actions.csv`
 
 The queue of [camera actions](camera-actions.md), replaced through
-`actions.csv.tmp` like the catalog. Line 1 is `v1,<next id>`; then one line
+`actions.csv.tmp` like the catalog. Line 1 is `v4,<next id>`; then one line
 per action, newest last:
 
 ```
-id,type,mediaId,source,state,created,finished,notified,key,reason
-7,delete,2653775860,console,done,1794500000,1794500123,1,,
-8,photo,0,backend,failed,1794500100,1794500140,0,bk:4711,the camera answered snapRet -2
+id,type,mediaId,source,state,created,finished,notified,key,cam,params,scope,reason
+7,delete,2653775860,console,done,1794500000,1794500123,1,,,,1,
+8,photo,0,backend,failed,1794500100,1794500140,0,bk:4711,F4_C1_56_06_ED_3B,,1,the camera answered snapRet -2
+9,delete,2653775861,backend,pending,1794500200,0,0,be:3f2c,F4_C1_56_06_ED_3B,,3,
 ```
+
+v3 had no `scope` (every deletion was for the camera), v2 no `params`, v1 no
+`cam`; older files are read, and written back as v4.
 
 | Column | Meaning |
 |---|---|
@@ -141,6 +146,9 @@ id,type,mediaId,source,state,created,finished,notified,key,reason
 | `created`, `finished` | Unix seconds, 0 = clock not set |
 | `notified` | 1 once the front end that asked was told the result |
 | `key` | from the front end, recognises a command that arrives twice; `[A-Za-z0-9:_-]` |
+| `cam` | the camera (its directory name) the action is for; empty = whichever camera the next session reads |
+| `params` | `settings` only: the change, `workMode=1;pirSens=2` |
+| `scope` | `delete` only (#461): 1 = the camera, 2 = the hub's own files, 3 = both; 1 for every other type |
 | `reason` | why it failed; no commas |
 
 At most 32 lines; the oldest finished one goes first. A `running` line found

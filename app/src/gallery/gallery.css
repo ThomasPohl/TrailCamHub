@@ -1265,6 +1265,22 @@ body {
   font-weight: 650;
 }
 
+.g-tile__empty--second {
+  top: 68px;
+}
+
+.g-targets {
+  margin: 8px 0;
+  padding: 0;
+  border: 0;
+}
+
+.g-targets__row {
+  display: grid;
+  gap: 2px;
+  padding: 6px 0;
+}
+
 .g-settings__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

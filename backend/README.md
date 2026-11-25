@@ -50,6 +50,7 @@ Everything is defined in [`template.yaml`](template.yaml) (AWS SAM).
 | POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"readCamera"}`                                              |
 | PUT    | `/v1/hubs/{hubId}/schedule`                    | app user               | Wake-up schedule of a hub (see below)                                |
 | POST   | `/v1/cameras/{camId}/commands`                 | app user               | `{"type":"deleteMedia","mediaIds":[…]}`                              |
+| POST   | `/v1/hubs/{hubId}/delete-targets`              | app user               | `{"targets":["hub","backend"]}`: where a delete applies (#461)       |
 | POST   | `/v1/cameras/{camId}/media/{mediaId}/withdraw` | app user               | Withdraw queued video/delete requests                                |
 | POST   | `/v1/cameras/{camId}/media/{mediaId}/share`    | app user               | Link to the picture or video for people without the app (#444)       |
 | GET    | `/v1/shares`                                   | app user               | The user's active share links                                        |
@@ -133,9 +134,37 @@ The gallery shows the name and uses it for the folder and file names on the
 laptop; the camId stays the key. It is a POST because the Function URL's
 CORS allows only GET and POST.
 
-**Deleting** (#260): `deleteMedia` queues one command per recording; the hub
-gets it as `{"id", "type":"deleteMedia", "mediaId"}` and acknowledges it like
-the others. Recordings with a done delete disappear from the media list; the
+**Deleting** (#260, #461): `deleteMedia` says where the delete applies with
+`targets`, a list of `camera` (the file on the camera's card), `hub` (the hub's
+copies of the thumbnail and the file on its card) and `backend` (the gallery
+entry, the thumbnail and the video in the bucket). Without `targets` the hub's
+setting applies: `POST /v1/hubs/{hubId}/delete-targets` with `{"targets":[…]}`
+(any user of the hub; the same for all of them). It defaults to `hub` and
+`backend`; `GET /v1/cameras` shows it as `hubDeleteTargets`.
+
+- `backend` alone needs no hub: the recording is gone from the gallery at once
+  and no command is queued (status 200 with an empty list). The record stays
+  as a tombstone (`deleted`), so a hub that reports the recording again does not
+  bring it back, and a share link ends.
+- With `camera` or `hub` the backend queues one command per recording; the hub
+  gets it as `{"id", "type":"deleteMedia", "mediaId", "targets":["camera","hub"]}`
+  (the targets for the hub, never `backend`) and acknowledges it like the
+  others. When the hub reports it `done` and `backend` was asked for, the
+  gallery's part follows. A `failed` delete changes nothing.
+- A delete on the camera without `backend` keeps the recording in the gallery;
+  the media list shows `onCamera: false` once the hub reports it gone, and a
+  video that is not in the cloud cannot be requested any more.
+- A recording the camera lost by itself (`removedMedia` without a delete asked
+  for; deleted there, card formatted) is deleted in the gallery and the bucket,
+  whatever the setting. 20 or more at once are logged (`manyRemoved`).
+- A hub firmware that does not report `deleteTargets` in `features` always
+  deletes on the camera. For such a hub the setting defaults to `camera` and
+  `backend`, and a request for `hub`, or for `camera` and `hub`, is refused
+  with 409. `GET /v1/cameras` shows `hubDeletesByTarget`.
+- A failure to delete in the bucket is logged (`deleteMediaFailed`), not
+  returned; the lifecycle rules remove what is left.
+
+Recordings with a done delete on the gallery disappear from the media list; the
 list shows `deleteState` (`requested`, `delivered`, `failed` with
 `deleteError`) and, for failed videos, `videoError`. A queued request can be
 withdrawn; once the hub has received it, `withdraw` answers 409. Hub firmware
@@ -200,8 +229,12 @@ request (and TLS handshake) however many cameras there are — important over LT
      backend only adds entries, so repeating one is harmless. Recordings that are
      no longer on the camera's card are never in `media`.
    - `removedMedia` (optional): mediaIds no longer on the camera's card (deleted
-     on the camera or by a `deleteMedia` command). The backend drops these
-     recordings, so the gallery no longer shows them; repeating an id is harmless.
+     on the camera or by a `deleteMedia` command). The backend deletes these
+     recordings in the gallery, too, unless the gallery asked for a delete on the
+     camera without `backend` (see _Deleting_); repeating an id is harmless.
+   - `features` (optional, top level): what the firmware can do, `deleteTargets`
+     for the `targets` of a delete (#461). Older firmware sends none, and the
+     backend forgets what it stored.
    - `readAt` (hub clock) becomes the camera's "last seen"; implausible values are
      replaced by the server time.
    - `sdCard`: the camera's SD card at the hub's last media list, `ok` or

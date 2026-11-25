@@ -117,6 +117,7 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
 
     CheckinRequest request;
     request.hub_firmware = esp_app_get_description()->version;
+    request.features.push_back(kFeatureDeleteTargets);
     request.hub_board = ota::board();
     request.hub_variant = ota::variant();
     // -1 (left out of the check-in) on boards without a measurement.

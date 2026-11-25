@@ -26,6 +26,7 @@ import type {
   FoundCamera,
   Sample,
   SampleOwner,
+  DeleteTarget,
   ScheduleConfig,
   VideoState,
 } from '../model';
@@ -139,6 +140,10 @@ export class DynamoStore implements Store {
 
   async setHubScheduleConfig(hubId: string, config: ScheduleConfig): Promise<void> {
     await this.updateFields(hubPk(hubId), 'META', { scheduleConfig: config });
+  }
+
+  async setHubDeleteTargets(hubId: string, targets: DeleteTarget[]): Promise<void> {
+    await this.updateFields(hubPk(hubId), 'META', { deleteTargets: targets });
   }
 
   async setHubDataBudget(hubId: string, budgetMB: number | undefined): Promise<void> {
@@ -405,15 +410,12 @@ export class DynamoStore implements Store {
     }
   }
 
-  async removeMedia(camId: string, mediaIds: number[]): Promise<void> {
-    for (const mediaId of mediaIds) {
-      await this.db.send(
-        new DeleteCommand({
-          TableName: this.table,
-          Key: { PK: camPk(camId), SK: mediaSk(mediaId) },
-        }),
-      );
-    }
+  async markMediaDeleted(camId: string, mediaId: number): Promise<void> {
+    await this.updateIfExists(camPk(camId), mediaSk(mediaId), 'deleted', true);
+  }
+
+  async markMediaOffCamera(camId: string, mediaId: number): Promise<void> {
+    await this.updateIfExists(camPk(camId), mediaSk(mediaId), 'onCamera', false);
   }
 
   async markThumbPresent(camId: string, mediaId: number): Promise<void> {

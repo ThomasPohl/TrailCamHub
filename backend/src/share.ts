@@ -60,7 +60,7 @@ export async function createShare(
   const showCamera = body?.showCamera === true;
 
   const media = await deps.store.getMedia(camera.camId, mediaId);
-  if (!media) throw new HttpError(404, 'Recording not found');
+  if (!media || media.deleted) throw new HttpError(404, 'Recording not found');
   if (kind === 'thumb' && !media.thumbPresent) throw new HttpError(409, 'No picture yet');
   if (kind === 'video' && media.videoState !== 'available') {
     throw new HttpError(409, 'The video is not in the cloud yet');
@@ -164,7 +164,7 @@ export async function showShare(token: string, deps: Deps): Promise<ApiResponse>
   const media = await deps.store.getMedia(share.camId, share.mediaId);
   const ready =
     media && (share.kind === 'thumb' ? media.thumbPresent : media.videoState === 'available');
-  if (!media || !ready) return gone();
+  if (!media || media.deleted || !ready) return gone();
 
   const url =
     share.kind === 'thumb'

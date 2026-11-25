@@ -39,6 +39,13 @@ export class FakeStorage implements MediaStorage {
   async videoExists(camId: string, mediaId: number) {
     return this.uploadedVideos.has(`${camId}/${mediaId}`);
   }
+  /** `camId/mediaId` of every recording whose objects were deleted (#461). */
+  readonly deleted: string[] = [];
+  async deleteMedia(camId: string, mediaId: number) {
+    this.deleted.push(`${camId}/${mediaId}`);
+    this.uploaded.delete(`${camId}/${mediaId}`);
+    this.uploadedVideos.delete(`${camId}/${mediaId}`);
+  }
 }
 
 /** A store with one hub linked to USER_ID, no cameras yet. */

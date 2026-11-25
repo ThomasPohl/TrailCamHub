@@ -13,7 +13,8 @@ namespace camera::action
 namespace
 {
 
-constexpr const char *kHeader = "v3";
+constexpr const char *kHeader = "v4";
+constexpr const char *kHeaderV3 = "v3";
 constexpr const char *kHeaderV2 = "v2";
 constexpr const char *kHeaderV1 = "v1";
 
@@ -96,6 +97,10 @@ std::string describe(const Entry &entry)
     }
     if (!entry.action.params.empty()) {
         text += " " + entry.action.params;
+    }
+    if (entry.action.type == Type::delete_media &&
+        entry.action.scope != kScopeCamera) {
+        text += std::string(" (") + scope_name(entry.action.scope) + ")";
     }
     text += std::string(": ") + state_name(entry.state);
     if (!entry.reason.empty()) {
@@ -212,6 +217,7 @@ ActionQueue::AddResult ActionQueue::add(const Action &action, Source source,
             entry.state == State::pending && entry.action.type == action.type &&
             entry.action.media_id == action.media_id &&
             entry.action.cam_id == camera_key(action.cam_id) &&
+            entry.action.scope == action.scope &&
             (action.type == Type::delete_media ||
              action.type == Type::format_sd);
         if (same_key || same_pending) {
@@ -342,8 +348,8 @@ bool ActionQueue::mark_notified(std::uint32_t id)
     return true;
 }
 
-// v3: id,type,mediaId,source,state,created,finished,notified,key,cam,params,
-// reason (v2 had no params, v1 no cam either)
+// v4: id,type,mediaId,source,state,created,finished,notified,key,cam,params,
+// scope,reason (v3 had no scope, v2 no params, v1 no cam either)
 std::string ActionQueue::serialize() const
 {
     std::ostringstream out;
@@ -353,8 +359,8 @@ std::string ActionQueue::serialize() const
             << e.action.media_id << ',' << source_name(e.source) << ','
             << state_name(e.state) << ',' << e.created_s << ',' << e.finished_s
             << ',' << (e.notified ? 1 : 0) << ',' << e.key << ','
-            << e.action.cam_id << ',' << e.action.params << ',' << e.reason
-            << '\n';
+            << e.action.cam_id << ',' << e.action.params << ','
+            << static_cast<int>(e.action.scope) << ',' << e.reason << '\n';
     }
     return out.str();
 }
@@ -374,9 +380,11 @@ bool ActionQueue::parse(const std::string &text)
         comma == std::string::npos ? "" : line.substr(0, comma);
     const bool v1 = version == kHeaderV1;
     const bool v2 = version == kHeaderV2;
+    const bool v3 = version == kHeaderV3;
     // Fields before the reason (which has no commas).
-    const std::size_t field_count = v1 ? 9 : v2 ? 10 : 11;
-    if (comma == std::string::npos || (version != kHeader && !v1 && !v2) ||
+    const std::size_t field_count = v1 ? 9 : v2 ? 10 : v3 ? 11 : 12;
+    if (comma == std::string::npos ||
+        (version != kHeader && !v1 && !v2 && !v3) ||
         !to_int(line.substr(comma + 1), next) || next < 1 ||
         next > 0x7fffffff) {
         return false;
@@ -405,18 +413,23 @@ bool ActionQueue::parse(const std::string &text)
         std::int64_t created = 0;
         std::int64_t finished = 0;
         std::int64_t notified = 0;
+        std::int64_t scope = kScopeCamera;
         const auto type = parse_type(fields[1]);
         const auto source = parse_source(fields[3]);
         const auto state = parse_state(fields[4]);
         if (!to_int(fields[0], id) || id < 1 || id > 0x7fffffff || !type ||
             !to_int(fields[2], media) || !source || !state ||
             !to_int(fields[5], created) || !to_int(fields[6], finished) ||
-            !to_int(fields[7], notified)) {
+            !to_int(fields[7], notified) ||
+            (field_count == 12 &&
+             (!to_int(fields[11], scope) || scope < kScopeCamera ||
+              scope > kScopeBoth))) {
             continue;
         }
         entry.id = static_cast<std::uint32_t>(id);
         entry.action = Action{*type, media, v1 ? "" : camera_key(fields[9]),
-                              v1 || v2 ? "" : fields[10]};
+                              v1 || v2 ? "" : fields[10],
+                              static_cast<std::uint8_t>(scope)};
         entry.source = *source;
         entry.state = *state;
         entry.created_s = created;

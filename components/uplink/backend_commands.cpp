@@ -61,7 +61,16 @@ bool handle_delete_command(const std::string &cam_id, const Command &command,
                            CommandResult &out, bool &read_needed)
 {
     namespace act = camera::action;
-    act::Action action{act::Type::delete_media, command.media_id, cam_id};
+    const std::uint8_t scope =
+        delete_scope(command.has_targets, command.targets);
+    if (scope == 0) {
+        out.error = "the command names no target the hub knows";
+        ESP_LOGW(TAG, "Deletion of %lld on %s: %s", (long long)command.media_id,
+                 cam_id.c_str(), out.error.c_str());
+        return true;
+    }
+    act::Action action{act::Type::delete_media, command.media_id, cam_id, "",
+                       scope};
     const act::ActionQueue::AddResult added = act::service::submit(
         action, act::Source::backend, delete_key(command.id));
     act::Entry entry;
@@ -72,9 +81,9 @@ bool handle_delete_command(const std::string &cam_id, const Command &command,
         decide_delete(added, known ? &entry : nullptr);
     read_needed |= decision.read_needed;
     if (added.kind == act::ActionQueue::AddResult::Kind::added) {
-        ESP_LOGI(TAG, "Deletion of %lld on %s queued (action %u)",
+        ESP_LOGI(TAG, "Deletion of %lld on %s queued (action %u, %s)",
                  (long long)command.media_id, cam_id.c_str(),
-                 (unsigned)added.id);
+                 (unsigned)added.id, act::scope_name(scope));
     }
     if (!decision.answer) {
         return false;
@@ -156,6 +165,9 @@ bool handle_video_command(SyncCamera *camera, const std::string &cam_id,
                      cam_id.c_str(), out.error.c_str());
             return true;
         }
+        // Asked for now: a video the hub deleted its copy of is fetched again.
+        camera->changed |= camera->catalog.clear_flag(
+            command.media_id, MediaCatalog::kHubDeleted);
         camera->changed |= camera->catalog.set_flag(
             command.media_id, MediaCatalog::kVideoRequested);
         ESP_LOGI(TAG, "Video %lld of %s requested", (long long)command.media_id,

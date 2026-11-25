@@ -459,3 +459,91 @@ TEST_CASE("the video duration is kept, v3 rows are read without it (#160)")
     CHECK(old.find(555)->duration_ms == 0);
     CHECK(old.find(555)->flags == 3);
 }
+
+TEST_CASE("unlisted entries that are newly gone are named (#461)")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 0, 11), item(100, 2, 2, 22),
+                  item(100, 3, 0, 33)};
+    cat.merge(list);
+    REQUIRE(cat.mark_gone(33));
+
+    // 22 and 33 are not listed any more; 33 was marked by the hub's own delete.
+    list.files = {item(100, 1, 0, 11)};
+    cat.merge(list);
+    std::vector<std::int64_t> ids;
+    CHECK(cat.mark_unlisted_gone(&ids) == 1);
+    CHECK(ids == std::vector<std::int64_t>{22});
+    ids.clear();
+    CHECK(cat.mark_unlisted_gone(&ids) == 0);
+    CHECK(ids.empty());
+}
+
+TEST_CASE(
+    "a recording the hub deleted its copies of is not fetched again (#461)")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 0, 11), item(100, 2, 2, 22)};
+    cat.merge(list);
+    for (const std::int64_t id : {11, 22}) {
+        REQUIRE(cat.set_flag(id, MediaCatalog::kThumbPresent));
+        REQUIRE(cat.set_flag(id, MediaCatalog::kReported));
+    }
+    REQUIRE(cat.set_flag(22, MediaCatalog::kFileDownloaded));
+    REQUIRE(cat.set_flag(22, MediaCatalog::kVideoUploaded));
+
+    CHECK(cat.mark_hub_deleted(22));
+    CHECK_FALSE(cat.mark_hub_deleted(99));
+    CHECK(cat.has_flag(22, MediaCatalog::kHubDeleted));
+    CHECK_FALSE(cat.has_flag(22, MediaCatalog::kThumbPresent));
+    CHECK_FALSE(cat.has_flag(22, MediaCatalog::kFileDownloaded));
+    // What the backend was told stays.
+    CHECK(cat.has_flag(22, MediaCatalog::kReported));
+    CHECK(cat.has_flag(22, MediaCatalog::kVideoUploaded));
+
+    // The camera still lists it (in this session), but nothing is wanted.
+    list.files = {item(100, 1, 0, 11), item(100, 2, 2, 22)};
+    cat.merge(list);
+    // Only 11 (its thumbnail is stored, its photo is not) is still wanted.
+    CHECK(cat.missing_thumbnails().empty());
+    const auto downloads = cat.missing_downloads(true, true);
+    REQUIRE(downloads.size() == 1);
+    CHECK(downloads[0].media_id == 11);
+    const auto queue =
+        cat.download_queue(true, MediaCatalog::VideoDownload::missing, 0);
+    REQUIRE(queue.size() == 1);
+    CHECK(queue[0].media_id == 11);
+    CHECK(cat.has_flag(22, MediaCatalog::kHubDeleted));
+
+    // A video asked for later is fetched again once the flag is cleared.
+    REQUIRE(cat.set_flag(22, MediaCatalog::kVideoRequested));
+    CHECK(cat.pending_video_requests().empty());
+    REQUIRE(cat.clear_flag(22, MediaCatalog::kHubDeleted));
+    CHECK(cat.pending_video_requests().size() == 1);
+}
+
+TEST_CASE("a recording deleted on the hub before it was reported is not (#461)")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 0, 11), item(100, 2, 0, 22)};
+    cat.merge(list);
+    REQUIRE(cat.mark_hub_deleted(22));
+    const auto present = cat.unreported_present(10);
+    REQUIRE(present.size() == 1);
+    CHECK(present[0].media_id == 11);
+}
+
+TEST_CASE("the hub-deleted flag survives a save and load (#461)")
+{
+    MediaCatalog cat;
+    MediaList list;
+    list.files = {item(100, 1, 0, 11)};
+    cat.merge(list);
+    REQUIRE(cat.mark_hub_deleted(11));
+    MediaCatalog loaded;
+    REQUIRE(loaded.parse(cat.serialize()));
+    CHECK(loaded.has_flag(11, MediaCatalog::kHubDeleted));
+}

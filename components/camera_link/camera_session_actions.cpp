@@ -82,6 +82,16 @@ void CameraSession::after_list_actions()
     begin_thumbnails();
 }
 
+bool CameraSession::delete_hub_copies(std::int64_t media_id)
+{
+    const camera::store::HubFilesRemoved removed =
+        camera::store::delete_hub_files(camera_id_, media_id);
+    catalog_.mark_hub_deleted(media_id);
+    ESP_LOGI(TAG, "Deleted the hub's copies of %lld: %u file(s), %u failed",
+             (long long)media_id, removed.removed, removed.failed);
+    return removed.failed == 0;
+}
+
 // Sends the next waiting action the session can run now and waits for its
 // answer; actions the camera cannot do are failed on the way. False if there
 // is none to wait for.
@@ -94,15 +104,33 @@ bool CameraSession::send_next_action()
             return false;
         }
         const char *name = act::type_name(job.action.type);
+        if (job.action.type == act::Type::delete_media &&
+            (job.action.scope & act::kScopeCamera) == 0) {
+            // The hub's own copies only (#461): the camera is not asked.
+            const bool deleted = delete_hub_copies(job.action.media_id);
+            save_session_catalog();
+            act::service::finish(
+                job.id, deleted ? act::Outcome{true, 0, ""}
+                                : act::failure("the hub's files could not be "
+                                               "deleted"));
+            continue;
+        }
         std::string problem = act::check_camera(job.action, device_info_);
         std::optional<act::Target> target;
+        bool not_listed = false;
         if (problem.empty() && act::needs_media_list(job.action.type)) {
             target = act::find_target(catalog_, job.action.media_id);
             if (!target) {
                 problem = "the camera does not list this file any more";
+                not_listed = true;
             }
         }
         if (!problem.empty()) {
+            if (not_listed && (job.action.scope & act::kScopeHub) != 0) {
+                // Gone from the camera already: the hub's part still goes.
+                delete_hub_copies(job.action.media_id);
+                save_session_catalog();
+            }
             act::service::finish(job.id, act::failure(problem));
             continue;
         }
@@ -148,15 +176,23 @@ void CameraSession::advance_after_actions()
 void CameraSession::handle_action_response(const std::string &json)
 {
     namespace act = camera::action;
-    const act::Outcome outcome = act::interpret(action_.action.type, json);
+    act::Outcome outcome = act::interpret(action_.action.type, json);
     action_.active = false;
-    act::service::finish(action_.id, outcome);
-    if (outcome.done && action_.action.type == act::Type::delete_media) {
+    const bool deleted_on_camera =
+        outcome.done && action_.action.type == act::Type::delete_media;
+    if (deleted_on_camera) {
         // Gone from the card: no thumbnail or download is wanted for it, and
         // its dir/num may belong to a new recording soon.
         catalog_.mark_gone(action_.action.media_id);
+        if ((action_.action.scope & act::kScopeHub) != 0 &&
+            !delete_hub_copies(action_.action.media_id)) {
+            outcome = act::failure(
+                "deleted on the camera, but the hub's files could not be "
+                "deleted");
+        }
         save_session_catalog();
     }
+    act::service::finish(action_.id, outcome);
     if (outcome.done && action_.action.type == act::Type::settings &&
         !device_info_.dev_id.empty()) {
         // The camera took it: the stored copy (and with it the next check-in)

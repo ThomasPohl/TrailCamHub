@@ -356,7 +356,7 @@ TEST_CASE("an action keeps its camera, and the same file of two cameras is "
     REQUIRE(loaded.entries().size() == 2);
     CHECK(loaded.entries()[0].action.cam_id == "CAMA");
     CHECK(loaded.entries()[1].action.cam_id == "CAMB");
-    CHECK(queue.serialize().rfind("v3,", 0) == 0);
+    CHECK(queue.serialize().rfind("v4,", 0) == 0);
 }
 
 TEST_CASE("a v1 file (without camera) is still read")
@@ -402,4 +402,74 @@ TEST_CASE("the camera is kept as its SD directory name, the backend's camId")
     ActionQueue loaded;
     REQUIRE(loaded.parse(queue.serialize()));
     CHECK(loaded.entries()[0].action.cam_id == "AB_CD.1");
+}
+
+TEST_CASE("a deletion keeps its scope across a restart (#461)")
+{
+    ActionQueue queue;
+    CHECK(queue
+              .add(Action{Type::delete_media, 7, "CAMA", "", kScopeHub},
+                   Source::backend, "be:a", 1)
+              .kind == Kind::added);
+    CHECK(queue
+              .add(Action{Type::delete_media, 8, "CAMA", "", kScopeBoth},
+                   Source::backend, "be:b", 1)
+              .kind == Kind::added);
+    CHECK(queue
+              .add(Action{Type::delete_media, 9, "CAMA"}, Source::backend,
+                   "be:c", 1)
+              .kind == Kind::added);
+
+    ActionQueue loaded;
+    REQUIRE(loaded.parse(queue.serialize()));
+    REQUIRE(loaded.entries().size() == 3);
+    CHECK(loaded.entries()[0].action.scope == kScopeHub);
+    CHECK(loaded.entries()[1].action.scope == kScopeBoth);
+    CHECK(loaded.entries()[2].action.scope == kScopeCamera);
+    CHECK(describe(loaded.entries()[0]) == "delete 7 (hub): pending");
+    CHECK(describe(loaded.entries()[1]) == "delete 8 (camera+hub): pending");
+    // The camera is the usual case and says nothing.
+    CHECK(describe(loaded.entries()[2]) == "delete 9: pending");
+}
+
+TEST_CASE("the same file with another scope is another deletion (#461)")
+{
+    ActionQueue queue;
+    CHECK(queue
+              .add(Action{Type::delete_media, 7, "CAMA", "", kScopeHub},
+                   Source::backend, "be:a", 1)
+              .kind == Kind::added);
+    CHECK(queue
+              .add(Action{Type::delete_media, 7, "CAMA", "", kScopeHub},
+                   Source::web_ui, "", 2)
+              .kind == Kind::duplicate);
+    CHECK(queue
+              .add(Action{Type::delete_media, 7, "CAMA", "", kScopeCamera},
+                   Source::web_ui, "", 3)
+              .kind == Kind::added);
+}
+
+TEST_CASE("a v3 file (without scope) is read as a deletion on the camera")
+{
+    ActionQueue queue;
+    REQUIRE(queue.parse("v3,5\n"
+                        "1,delete,42,backend,pending,10,0,0,be:1,CAMA,,\n"
+                        "2,settings,0,backend,done,10,11,1,be:2,CAMA,"
+                        "workMode=1,\n"));
+    REQUIRE(queue.entries().size() == 2);
+    CHECK(queue.entries()[0].action.scope == kScopeCamera);
+    CHECK(queue.entries()[1].action.params == "workMode=1");
+    CHECK(queue.serialize().rfind("v4,", 0) == 0);
+}
+
+TEST_CASE("a line with an impossible scope is skipped (#461)")
+{
+    ActionQueue queue;
+    REQUIRE(queue.parse("v4,5\n"
+                        "1,delete,42,backend,pending,10,0,0,be:1,CAMA,,0,\n"
+                        "2,delete,43,backend,pending,10,0,0,be:2,CAMA,,4,\n"
+                        "3,delete,44,backend,pending,10,0,0,be:3,CAMA,,2,\n"));
+    REQUIRE(queue.entries().size() == 1);
+    CHECK(queue.entries()[0].action.media_id == 44);
+    CHECK(queue.entries()[0].action.scope == kScopeHub);
 }

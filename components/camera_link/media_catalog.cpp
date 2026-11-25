@@ -144,7 +144,7 @@ std::vector<CatalogEntry> MediaCatalog::missing_thumbnails() const
 {
     std::vector<CatalogEntry> out;
     for (const CatalogEntry &e : entries_) {
-        if (e.listed && (e.flags & kThumbPresent) == 0)
+        if (e.listed && (e.flags & (kThumbPresent | kHubDeleted)) == 0)
             out.push_back(e);
     }
     sort_newest_first(out);
@@ -156,7 +156,8 @@ std::vector<CatalogEntry> MediaCatalog::pending_video_requests() const
     std::vector<CatalogEntry> out;
     for (const CatalogEntry &e : entries_) {
         if (e.listed && (e.flags & kVideoRequested) != 0 &&
-            (e.flags & (kFileDownloaded | kVideoUnavailable)) == 0)
+            (e.flags & (kFileDownloaded | kVideoUnavailable | kHubDeleted)) ==
+                0)
             out.push_back(e);
     }
     sort_newest_first(out);
@@ -174,7 +175,7 @@ std::vector<CatalogEntry> MediaCatalog::missing_downloads(bool photos,
         for (const CatalogEntry &e : entries_) {
             const bool is_photo = e.file_type == 0;
             if (e.listed && is_photo == want_photos &&
-                (e.flags & kFileDownloaded) == 0)
+                (e.flags & (kFileDownloaded | kHubDeleted)) == 0)
                 kind.push_back(e);
         }
         sort_newest_first(kind);
@@ -218,16 +219,29 @@ std::size_t MediaCatalog::mark_unlisted_requests_unavailable()
     return marked;
 }
 
-std::size_t MediaCatalog::mark_unlisted_gone()
+std::size_t MediaCatalog::mark_unlisted_gone(std::vector<std::int64_t> *ids)
 {
     std::size_t marked = 0;
     for (CatalogEntry &e : entries_) {
         if (!e.listed && (e.flags & kGone) == 0) {
             e.flags |= kGone;
+            if (ids != nullptr)
+                ids->push_back(e.media_id);
             ++marked;
         }
     }
     return marked;
+}
+
+bool MediaCatalog::mark_hub_deleted(std::int64_t media_id)
+{
+    CatalogEntry *e = find(media_id);
+    if (e == nullptr)
+        return false;
+    e->flags &= ~static_cast<std::uint32_t>(kThumbPresent | kFileDownloaded |
+                                            kVideoRequested);
+    e->flags |= kHubDeleted;
+    return true;
 }
 
 bool MediaCatalog::mark_gone(std::int64_t media_id)
@@ -247,7 +261,7 @@ MediaCatalog::unreported_present(std::size_t limit) const
     for (const CatalogEntry &e : entries_) {
         if (out.size() >= limit)
             break;
-        if ((e.flags & (kReported | kGone)) == 0)
+        if ((e.flags & (kReported | kGone | kHubDeleted)) == 0)
             out.push_back(e);
     }
     return out;
