@@ -401,6 +401,29 @@ std::string MediaFileWriter::part_path() const
                               : base_ + "." + extension_ + ".part";
 }
 
+HubFilesRemoved delete_hub_files(const std::string &camera_id,
+                                 std::int64_t media_id)
+{
+    HubFilesRemoved result;
+    const std::string base = camera_dir(camera_id);
+    for (const char *sub : {"/thumb", "/media"}) {
+        const std::string dir = base + sub;
+        for (const std::string &name : list_files(dir)) {
+            if (!is_file_of_media(name, media_id))
+                continue;
+            const std::string path = dir + "/" + name;
+            if (remove(path.c_str()) == 0) {
+                ++result.removed;
+            } else {
+                ESP_LOGW(TAG, "remove %s failed: errno %d", path.c_str(),
+                         errno);
+                ++result.failed;
+            }
+        }
+    }
+    return result;
+}
+
 std::string camera_info_path(const std::string &camera_id)
 {
     return camera_dir(camera_id) + "/camera.json";

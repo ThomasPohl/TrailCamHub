@@ -64,6 +64,33 @@ that is not listed any more is not deleted ("the camera does not list this
 file any more"). Success is `delRet` 0; a deleted file is marked as gone in
 the catalog, so no thumbnail or download is requested for it.
 
+### Where a deletion applies (#461)
+
+A deletion has a **scope**: the file on the camera's card, the hub's own
+copies (`thumb/<mediaId>.jpg` and every file `media/<mediaId>.*`), or both.
+The gallery chooses it per hub (`targets` of the `deleteMedia` command,
+[backend README](../backend/README.md)); the console and the web UI delete on
+the camera, as before.
+
+| Scope | What happens |
+|---|---|
+| `camera` | 773 as described above; the hub keeps its files. |
+| `camera+hub` | 773 first; only if the camera answers `delRet` 0 the hub's files are deleted. A failed camera delete leaves them. If the hub's files cannot be deleted after the camera's was, the action is `failed` ("deleted on the camera, but …"). A file the camera does not list any more counts as gone: the hub's files are deleted, the answer stays "does not list this file" (done for the person). |
+| `hub` | Nothing goes to the camera. It runs in the camera's next session, after the media list (the hub reads the camera for it, as for every deletion), and the camera is not asked. |
+
+The catalog entry gets `kHubDeleted` and loses `kThumbPresent`,
+`kFileDownloaded` and `kVideoRequested`. While the camera still lists the
+recording, the hub does not fetch its thumbnail or file again. A video that
+is asked for later from the gallery clears the flag and is fetched again.
+What was reported to the backend (`kReported`, `kVideoUploaded`) stays.
+
+Recordings the **camera lost itself** (deleted there, card formatted) are
+found by a complete media list (`mark_unlisted_gone()`); the hub deletes its
+copies of them too, whatever the scope of any delete. Not after a list that
+failed or was cut off, and not when the camera reports no card. A recording
+the hub deleted on the camera only is already marked gone and keeps its
+files.
+
 ## When an action runs
 
 - **Short session** (`session_controller_request_actions()`, used by the
@@ -118,8 +145,9 @@ code from the hub's answer and sends the confirmation.
   request with `&code=` from the first answer). It lists the last actions
   with their results (`GET /api/actions`). The console and the page share
   `session_actions::request()`: checks, confirmation, queue, session.
-- **Backend (gallery, #260):** a `deleteMedia` command (`mediaId`) becomes a
-  `delete` for that camera (an action carries the camera's `devId`, so it
+- **Backend (gallery, #260, #461):** a `deleteMedia` command (`mediaId`, and
+  `targets`: `camera`, `hub`; none means the camera, as an older backend sends
+  it) becomes a `delete` with that scope for that camera (an action carries the camera's `devId`, so it
   runs only in that camera's session), keyed `be:<command id>`, so the
   command the backend sends again with every check-in is queued once. The
   user confirmed it in the gallery, so no code is asked for. Queuing it
@@ -154,6 +182,12 @@ Not tested on a camera yet (CI compiles only):
   camera does not list this file any more".
 - `format confirm`: the list is empty afterwards; a wrong or late code is
   refused.
+- Delete from the gallery with each target (#461): hub + gallery (the hub's
+  `thumb/` and `media/` files are gone, the camera's file stays and is not
+  fetched again at the next reads); camera + hub; camera only (the hub's files
+  stay). A video asked for after a hub-only delete is fetched again. Delete a
+  recording by hand on the camera or format its card: the hub's files go with
+  it at the next read, and nothing is deleted when the card is missing.
 - Web UI: each button; the confirmation for delete and format; the list
   under the buttons shows `done` or `failed: …` after the session.
 - Power off the hub right after sending (`running` in `actions.csv`): after

@@ -190,6 +190,10 @@ class CameraSession
     void after_list_actions();
     bool send_next_action();
     void advance_after_actions();
+    // Deletes the hub's own copies of a recording and marks it in the
+    // catalog (#461); nothing is sent to the camera. False if a file could
+    // not be deleted.
+    bool delete_hub_copies(std::int64_t media_id);
     void handle_action_response(const std::string &json);
     void check_action_timeout(int64_t now_us);
 

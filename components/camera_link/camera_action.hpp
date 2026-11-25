@@ -69,12 +69,22 @@ bool needs_confirmation(Type type);
 // mediaId right before the command; the other actions do not.
 bool needs_media_list(Type type);
 
+// Where a deletion applies (#461), a set of bits: the file on the camera's
+// card, the hub's own copies (its thumbnail and file), or both. Every other
+// action has kScopeCamera, as that is where it acts.
+constexpr std::uint8_t kScopeCamera = 1;
+constexpr std::uint8_t kScopeHub = 2;
+constexpr std::uint8_t kScopeBoth = kScopeCamera | kScopeHub;
+
+// "camera", "hub" or "camera+hub" (the queue's text and the logs).
+const char *scope_name(std::uint8_t scope);
+
 struct Action {
     Action() = default;
     Action(Type type_, std::int64_t media_id_ = 0, std::string cam_id_ = {},
-           std::string params_ = {})
+           std::string params_ = {}, std::uint8_t scope_ = kScopeCamera)
         : type(type_), media_id(media_id_), cam_id(std::move(cam_id_)),
-          params(std::move(params_))
+          params(std::move(params_)), scope(scope_)
     {
     }
 
@@ -88,6 +98,10 @@ struct Action {
     // settings only: the change, camera::settings::encode_change() form
     // ("workMode=1;pirSens=2"); no commas.
     std::string params;
+    // delete only: where it applies. With the hub in it, the hub's files go
+    // after the camera's file did (a failed camera delete leaves them); the
+    // hub alone needs no command to the camera.
+    std::uint8_t scope = kScopeCamera;
 };
 
 // Empty if the action is complete, else why not (e.g. a delete without a

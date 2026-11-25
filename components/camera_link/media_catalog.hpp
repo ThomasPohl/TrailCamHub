@@ -55,6 +55,9 @@ class MediaCatalog
         kGone = 1u << 8,
         // The backend was told that this item is gone (check-in accepted).
         kGoneReported = 1u << 9,
+        // The hub deleted its own copies on request (#461): the thumbnail and
+        // the file are not fetched again while the camera still lists it.
+        kHubDeleted = 1u << 10,
     };
     // Failed downloads of a requested video, kept in two bits of the flags
     // (so the CSV format does not change); at this count it is given up.
@@ -117,8 +120,13 @@ class MediaCatalog
     // many were newly marked.
     std::size_t mark_unlisted_requests_unavailable();
     // After a complete media list: every entry that is not listed is marked
-    // kGone. Returns how many were newly marked.
-    std::size_t mark_unlisted_gone();
+    // kGone. Returns how many were newly marked; `ids` (if given) gets their
+    // mediaIds, so the hub can remove its copies (#461).
+    std::size_t mark_unlisted_gone(std::vector<std::int64_t> *ids = nullptr);
+    // The hub deleted its copies of the item (#461): kHubDeleted is set, and
+    // the flags for a stored thumbnail, a stored file and a requested video
+    // are cleared. False if the item is not known.
+    bool mark_hub_deleted(std::int64_t media_id);
     // The item was deleted from the camera's card (by a hub action).
     bool mark_gone(std::int64_t media_id);
     // Up to `limit` items on the card the backend does not know yet: without

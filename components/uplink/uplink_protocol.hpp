@@ -114,8 +114,16 @@ struct DataUsageEntry {
     std::uint64_t rx_bytes = 0;
 };
 
+// What this firmware does beyond the basics (#461), for the check-in's
+// `features`: the backend sends only what a firmware can do.
+//   deleteTargets: knows the `targets` of a deleteMedia command (the hub's own
+//                  files, with or without the camera's).
+inline constexpr const char *kFeatureDeleteTargets = "deleteTargets";
+
 struct CheckinRequest {
     std::string hub_firmware;
+    // Left out when empty (see kFeatureDeleteTargets).
+    std::vector<std::string> features;
     // Board and build variant ("esp32s3", "release"): which firmware image
     // fits the hub. Left out when empty.
     std::string hub_board;
@@ -168,6 +176,10 @@ struct Command {
     std::string upload_url;
     // setSettings (#368): the "settings" object as it came; empty if none.
     std::string settings;
+    // deleteMedia (#461): where it applies ("camera", "hub"); `has_targets`
+    // is false if the command had none (an older backend: the camera).
+    bool has_targets = false;
+    std::vector<std::string> targets;
 };
 
 struct CameraCheckin {

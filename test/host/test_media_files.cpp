@@ -82,3 +82,19 @@ TEST_CASE("plan_legacy_files drops a dir/num shared after a card clear")
           std::make_pair<std::int64_t, std::int64_t>(100, 1));
     CHECK(plan.ambiguous_media_ids == std::vector<std::int64_t>{111, 999});
 }
+
+TEST_CASE("a file belongs to a recording by its whole base name (#461)")
+{
+    CHECK(is_file_of_media("2035.jpg", 2035));
+    CHECK(is_file_of_media("2035.mp4", 2035));
+    CHECK(is_file_of_media("2035.mp4.part", 2035));
+    CHECK(is_file_of_media("2035.part", 2035));
+    // Another recording whose number starts the same, or a name without the
+    // dot.
+    CHECK_FALSE(is_file_of_media("20350.jpg", 2035));
+    CHECK_FALSE(is_file_of_media("203.jpg", 2035));
+    CHECK_FALSE(is_file_of_media("2035", 2035));
+    CHECK_FALSE(is_file_of_media("2035.", 2035));
+    CHECK_FALSE(is_file_of_media("x2035.jpg", 2035));
+    CHECK_FALSE(is_file_of_media("100_2.jpg", 2035));
+}

@@ -333,7 +333,7 @@ TEST_CASE("the queue keeps a settings change across a restart (v3)")
               .kind == Kind::duplicate);
 
     const std::string text = queue.serialize();
-    CHECK(text.rfind("v3,", 0) == 0);
+    CHECK(text.rfind("v4,", 0) == 0);
     ActionQueue loaded;
     REQUIRE(loaded.parse(text));
     REQUIRE(loaded.entries().size() == 3);

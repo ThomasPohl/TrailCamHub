@@ -10,7 +10,9 @@
 // camera session, which the hub starts right away; the answer goes back with
 // the check-in after it, usually in the same wake cycle.
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "action_queue.hpp"
 
@@ -26,6 +28,13 @@ struct DeleteDecision {
     // A camera session is needed to run it.
     bool read_needed = false;
 };
+
+// Where a deleteMedia command applies (#461), as camera::action::kScope* bits:
+// its `targets` ("camera", "hub"; others, such as the backend's own part, are
+// ignored). A command without `targets` (an older backend) is for the camera.
+// 0 if `targets` is given and names neither.
+std::uint8_t delete_scope(bool has_targets,
+                          const std::vector<std::string> &targets);
 
 // The queue key of a backend command.
 std::string delete_key(const std::string &command_id);

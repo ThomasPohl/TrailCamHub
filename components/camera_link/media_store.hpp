@@ -153,6 +153,18 @@ std::string thumbnail_path(const std::string &camera_id, std::int64_t media_id);
 std::string media_path(const std::string &camera_id, std::int64_t media_id,
                        const char *extension);
 
+// What delete_hub_files() did.
+struct HubFilesRemoved {
+    unsigned removed = 0;  // files deleted
+    unsigned failed = 0;   // files that could not be deleted
+};
+
+// Deletes the hub's own copies of a recording (#461): its thumbnail and every
+// file of it in media/ (whatever the extension, also an unfinished download).
+// Nothing is deleted on the camera. Files that are not there count as done.
+HubFilesRemoved delete_hub_files(const std::string &camera_id,
+                                 std::int64_t media_id);
+
 // Path of the camera's camera.json; the file may not exist.
 std::string camera_info_path(const std::string &camera_id);
 
