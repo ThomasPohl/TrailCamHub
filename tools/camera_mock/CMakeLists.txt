@@ -1,7 +1,7 @@
-# Camera mock for bench tests (#122): an ESP32-WROOM that stands in for a
-# TC100 camera. A separate ESP-IDF project; see README.md.
+# Camera mock for bench tests (#122): an ESP32-WROOM (or ESP32-S3-WROOM) that
+# stands in for a TC100 camera. A separate ESP-IDF project; see README.md.
 #
-#   idf.py -C tools/camera_mock set-target esp32
+#   idf.py -C tools/camera_mock set-target esp32      (or esp32s3)
 #   idf.py -C tools/camera_mock build flash monitor
 cmake_minimum_required(VERSION 3.16)
 

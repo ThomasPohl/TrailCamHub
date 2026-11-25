@@ -1,0 +1,4 @@
+# Camera mock on an ESP32-S3-WROOM-1 (any flash size, PSRAM not used; the app
+# fits the 4 MB layout of the smallest module). The console runs on UART0
+# (the "UART" port of a DevKitC-1), not on the native USB port.
+CONFIG_IDF_TARGET="esp32s3"
