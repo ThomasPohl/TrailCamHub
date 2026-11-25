@@ -10,7 +10,6 @@ import {
   neighboursOf,
   PATCH_SHARE,
   SERIES_GAP_S,
-  SERIES_SPAN_S,
   seriesOf,
   verdictFor,
   type Frame,
@@ -192,6 +191,39 @@ describe('a series of one animal (#442 review)', () => {
     );
   });
 
+  it('does not call a deer empty that stays for an hour (#456)', () => {
+    // Empty pictures hours apart around a deer that triggers the camera every
+    // minute for an hour: the middle of its stay is more than 30 minutes from
+    // both ends, which used to make the ends its background.
+    const times: number[] = [];
+    const frames: Frame[] = [];
+    for (let i = 0; i < 4; i++) {
+      times.push(1_800_000_000 + i * 7_200);
+      frames.push(frame({ seed: i + 1 }));
+    }
+    for (let i = 0; i < 60; i++) {
+      times.push(1_800_100_000 + i * 60);
+      frames.push(frame({ seed: 10 + i, patch: [30, 15, 12, 10, 70] }));
+    }
+    for (let i = 0; i < 4; i++) {
+      times.push(1_800_200_000 + i * 7_200);
+      frames.push(frame({ seed: 80 + i }));
+    }
+    const timeline = { times, series: seriesOf(times) };
+    for (const at of [4, 20, 34, 50, 63]) {
+      const result = measure(frames[at] as Frame, neighboursOf(frames, at, timeline));
+      expect(verdictFor(result, 'strict')).toBe('animal');
+    }
+  });
+
+  it('gives no verdict inside a long series without pictures around it', () => {
+    const times = Array.from({ length: 60 }, (_, i) => 1_800_100_000 + i * 60);
+    const frames = times.map((_, i) => frame({ seed: i + 1, patch: [30, 15, 12, 10, 70] }));
+    const timeline = { times, series: seriesOf(times) };
+    const result = measure(frames[30] as Frame, neighboursOf(frames, 30, timeline));
+    expect(result).toMatchObject({ unsure: true, reason: 'few' });
+  });
+
   it('finds a deer that moves a little, too', () => {
     const { frames, timeline, deer } = scene(true);
     for (const at of deer) {
@@ -214,17 +246,23 @@ describe('candidatesOf', () => {
     expect(picks.slice(0, 2)).toEqual([4, 9]);
   });
 
-  it('uses the far end of a long chain of triggers', () => {
-    // Wind all afternoon: a trigger every five minutes for four hours.
+  it('never takes a picture of its own series, however long the series is (#456)', () => {
+    // Wind all afternoon: a trigger every five minutes for four hours, nothing else.
     const times = timesOf(48, 300);
     const timeline = { times, series: seriesOf(times) };
-    const picks = candidatesOf(times.length, 24, timeline);
-    expect(picks.length).toBeGreaterThanOrEqual(MIN_NEIGHBOURS);
-    for (const i of picks) {
-      expect(Math.abs((times[i] as number) - (times[24] as number))).toBeGreaterThanOrEqual(
-        SERIES_SPAN_S,
-      );
-    }
+    expect(candidatesOf(times.length, 24, timeline)).toEqual([]);
+  });
+
+  it('takes pictures before and after a long chain, even far away', () => {
+    const times = [
+      ...timesOf(5, 3_600, 1_700_000_000),
+      ...timesOf(48, 300, 1_800_000_000),
+      ...timesOf(3, 3_600, 1_900_000_000),
+    ];
+    const timeline = { times, series: seriesOf(times) };
+    const picks = candidatesOf(times.length, 30, timeline);
+    expect([...picks].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 53, 54, 55]);
+    expect(picks.slice(0, 2)).toEqual([4, 53]);
   });
 });
 

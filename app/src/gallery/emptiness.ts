@@ -12,7 +12,9 @@
  * An animal that stays in front of the camera triggers it again and again. If
  * those pictures were the background, the animal would be part of it and every
  * one of them would look empty. So the pictures of the same series (taken
- * shortly one after the other) are never neighbours of each other.
+ * shortly one after the other) are never neighbours of each other, however
+ * long the series lasts (#456): a picture inside it is compared with pictures
+ * before and after the whole series, even far away, or gets no verdict.
  *
  * Pure functions on small grey grids; the browser part that makes the grids
  * from the pictures is `emptyFrames.ts`.
@@ -28,7 +30,7 @@ export const GRID_H = 45;
  */
 export const CROP_H = 40;
 /** Changes whenever the analysis changes: older results are made again. */
-export const METHOD = 'diff-v2';
+export const METHOD = 'diff-v3';
 
 /**
  * A pixel counts as changed when it differs from the background by more than
@@ -48,12 +50,6 @@ export const NEIGHBOUR_REACH = 8;
 const MAX_BRIGHTNESS_GAP = 50;
 /** Pictures less than this far apart (seconds) belong to one series. */
 export const SERIES_GAP_S = 10 * 60;
-/**
- * Inside a long chain of triggers (wind all afternoon) only the pictures this
- * close (seconds) to the one judged are left out, so the others can still be
- * its background. An animal that stays longer than this is not recognised.
- */
-export const SERIES_SPAN_S = 30 * 60;
 /** Above this share of changed pixels the whole scene changed (light, a moved camera). */
 const SCENE_CHANGE = 0.5;
 /** A patch must fill this much of its bounding box; thin and scattered changes do not. */
@@ -128,17 +124,22 @@ export interface Timeline {
 /**
  * The positions that may be neighbours of picture `index` out of `count`
  * (sorted by time), the nearest first, alternately before and after: up to
- * `NEIGHBOUR_REACH` on each side, beyond the pictures of its own series.
+ * `NEIGHBOUR_REACH` on each side, beyond the whole series of the picture.
+ *
+ * A long chain of triggers (wind all afternoon) is one series as well. Its
+ * far end could be a better background (the light is closer), but an animal
+ * that stays as long (grazing deer, cattle) would then be its own background
+ * and look empty (#456). Missing an animal is the costly error: without
+ * pictures outside the series there is no verdict (`few`) until more come.
  */
 export function candidatesOf(count: number, index: number, timeline?: Timeline): number[] {
-  const sameSeries = (i: number) =>
-    timeline !== undefined &&
-    timeline.series[i] === timeline.series[index] &&
-    Math.abs((timeline.times[i] as number) - (timeline.times[index] as number)) < SERIES_SPAN_S;
+  const seriesAt = (i: number) => (timeline ? timeline.series[i] : i);
+  const own = seriesAt(index);
   const side = (dir: number) => {
     const out: number[] = [];
     let i = index + dir;
-    while (i >= 0 && i < count && sameSeries(i)) i += dir;
+    // A series is a run in time order: skipping it is skipping the run.
+    while (i >= 0 && i < count && seriesAt(i) === own) i += dir;
     for (; out.length < NEIGHBOUR_REACH && i >= 0 && i < count; i += dir) out.push(i);
     return out;
   };
