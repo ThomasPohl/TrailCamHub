@@ -116,8 +116,8 @@ class ActionQueue
     }
 
     // Text form for the SD card: a version line with the next id, then one
-    // line per entry (v3 adds the settings change, v2 the camera; v1 and v2
-    // files are still read). parse()
+    // line per entry (v4 adds the scope of a deletion, v3 the settings
+    // change, v2 the camera; older files are still read). parse()
     // replaces the contents; false (and an empty queue) if the version is not
     // recognised. Lines that cannot be read are skipped.
     std::string serialize() const;

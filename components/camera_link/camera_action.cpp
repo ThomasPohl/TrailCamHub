@@ -110,6 +110,20 @@ bool needs_media_list(Type type)
     return type == Type::delete_media;
 }
 
+const char *scope_name(std::uint8_t scope)
+{
+    switch (scope) {
+    case kScopeCamera:
+        return "camera";
+    case kScopeHub:
+        return "hub";
+    case kScopeBoth:
+        return "camera+hub";
+    default:
+        return "none";
+    }
+}
+
 std::string validate(const Action &action)
 {
     if (action.type == Type::delete_media && action.media_id <= 0) {
@@ -117,6 +131,13 @@ std::string validate(const Action &action)
     }
     if (action.type != Type::delete_media && action.media_id != 0) {
         return "only a deletion takes a mediaId";
+    }
+    if (action.type == Type::delete_media &&
+        (action.scope == 0 || action.scope > kScopeBoth)) {
+        return "a deletion applies to the camera, the hub or both";
+    }
+    if (action.type != Type::delete_media && action.scope != kScopeCamera) {
+        return "only a deletion takes a scope";
     }
     if (action.type != Type::settings) {
         return action.params.empty() ? ""

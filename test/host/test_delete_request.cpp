@@ -98,3 +98,19 @@ TEST_CASE("a full queue and a refused deletion")
     CHECK_FALSE(d.done);
     CHECK_FALSE(d.error.empty());
 }
+
+TEST_CASE("a delete command's targets become its scope (#461)")
+{
+    using uplink::delete_scope;
+    // An older backend sends none: the camera, as before.
+    CHECK(delete_scope(false, {}) == kScopeCamera);
+    CHECK(delete_scope(true, {"camera"}) == kScopeCamera);
+    CHECK(delete_scope(true, {"hub"}) == kScopeHub);
+    CHECK(delete_scope(true, {"camera", "hub"}) == kScopeBoth);
+    CHECK(delete_scope(true, {"hub", "camera"}) == kScopeBoth);
+    // Targets the hub does not know are not its business.
+    CHECK(delete_scope(true, {"hub", "backend", "moon"}) == kScopeHub);
+    // Given, but nothing for the hub: refused, not done on the camera.
+    CHECK(delete_scope(true, {}) == 0);
+    CHECK(delete_scope(true, {"backend"}) == 0);
+}

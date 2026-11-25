@@ -30,6 +30,12 @@ std::string media_base_name(std::int64_t media_id)
     return std::to_string(media_id);
 }
 
+bool is_file_of_media(const std::string &name, std::int64_t media_id)
+{
+    const std::string base = media_base_name(media_id) + ".";
+    return name.size() > base.size() && name.compare(0, base.size(), base) == 0;
+}
+
 bool parse_legacy_name(const std::string &name, std::int64_t &dir,
                        std::int64_t &num, std::string &rest)
 {

@@ -167,17 +167,26 @@ void CameraSession::finish_scan_list(bool complete)
     if (complete) {
         // Deleted on the camera (by hand or by the hub): the backend is told
         // at the next check-in, so the gallery drops them.
-        const size_t removed = catalog_.mark_unlisted_gone();
-        if (removed > 0) {
-            ESP_LOGI(TAG, "%u recording(s) are no longer on the camera's card",
-                     (unsigned)removed);
-        }
+        std::vector<int64_t> lost;
+        const size_t removed = catalog_.mark_unlisted_gone(&lost);
         const size_t gone = catalog_.mark_unlisted_requests_unavailable();
         if (gone > 0) {
             ESP_LOGW(TAG,
                      "%u requested video(s) are no longer on the camera's "
                      "card",
                      (unsigned)gone);
+        }
+        if (removed > 0) {
+            // The camera lost them itself (deleted there, card formatted): the
+            // hub's copies go as well (#461). Only after a complete list, and
+            // after the requests were judged (this clears a request).
+            ESP_LOGI(TAG,
+                     "%u recording(s) are no longer on the camera's card; "
+                     "deleting the hub's copies",
+                     (unsigned)removed);
+            for (const int64_t media_id : lost) {
+                delete_hub_copies(media_id);
+            }
         }
     }
     save_session_catalog();
