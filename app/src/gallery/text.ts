@@ -116,7 +116,11 @@ export function forecastText(f: BatteryForecast, nowSeconds: number): string {
       : left > 365 * 86400
         ? 'Leer: nicht absehbar (mehr als ein Jahr).'
         : `Leer voraussichtlich ${clockTime(f.emptyAt, nowSeconds)} (in ${durationText(left)}).${since}`;
-  return `Verbrauch: ${rate} %/h ${over}. ${when}`;
+  const night =
+    f.sleepPerHour !== undefined
+      ? ` In der Nachtruhe ${f.sleepPerHour.toFixed(1).replace('.', ',')} %/h.`
+      : '';
+  return `Verbrauch: ${rate} %/h ${over}.${night} ${when}`;
 }
 
 /** Battery state of a camera that reports steps (#472) in German. */
