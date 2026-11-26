@@ -23,6 +23,8 @@
     device_key: panel.querySelector("#ds-current-device_key"),
     camera_plan: panel.querySelector("#ds-current-camera_plan"),
     checkin_min: panel.querySelector("#ds-current-checkin_min"),
+    quiet: panel.querySelector("#ds-current-quiet"),
+    location: panel.querySelector("#ds-current-location"),
     transport: panel.querySelector("#ds-current-transport"),
     apn: panel.querySelector("#ds-current-apn"),
     sim_pin: panel.querySelector("#ds-current-sim_pin"),
@@ -83,7 +85,7 @@
 
   // Remembered form values, so the settings need not be typed again on every
   // visit. Opt-out via the checkbox, which also deletes what is stored.
-  const FIELDS = ["wifi_ssid", "wifi_password", "power", "direction", "destination", "webdav_url", "webdav_user", "webdav_password", "webdav_videos", "health_url", "web_password", "camera_user", "camera_password", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min"];
+  const FIELDS = ["wifi_ssid", "wifi_password", "power", "direction", "destination", "webdav_url", "webdav_user", "webdav_password", "webdav_videos", "health_url", "web_password", "camera_user", "camera_password", "transport", "apn", "sim_pin", "api_url", "device_key", "camera_plan", "checkin_min", "quiet", "location"];
   const STORAGE_KEY = "trailcamhub.deviceSetup";
   const PREFERENCE_KEY = "trailcamhub.deviceSetup.remember";
   const rememberBox = panel.querySelector("#ds-remember");
@@ -354,6 +356,28 @@
         break;
     }
   }
+
+  // The browser's position, only on a click and rounded to 0.1 degrees
+  // (about 10 km) before it is put into the field; never sent anywhere else.
+  const geolocateButton = panel.querySelector("#ds-geolocate");
+  if (!("geolocation" in navigator)) {
+    geolocateButton.hidden = true;
+  }
+  geolocateButton.addEventListener("click", () => {
+    formStatus.textContent = "Asking the browser for the location…";
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const round = (v) => (Math.round(v * 10) / 10 + 0).toFixed(1);
+        form.elements.location.value = `${round(position.coords.latitude)},${round(position.coords.longitude)}`;
+        writeRemembered();
+        formStatus.textContent = "Location filled in; save to store it on the hub.";
+      },
+      () => {
+        formStatus.textContent = "The browser did not give a location; type it in (e.g. 52.5,13.4).";
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 3600000 },
+    );
+  });
 
   form.addEventListener("submit", saveSettings);
   form.addEventListener("input", (event) => {

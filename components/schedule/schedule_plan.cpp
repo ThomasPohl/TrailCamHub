@@ -708,6 +708,13 @@ Times next_times(const Settings &settings, const State &state, std::int64_t now,
                                       &settings.camera, sun);
         }
     }
+    // A read due shortly after the check-in runs with it: the read syncs
+    // anyway, so the hub wakes once instead of twice (#436).
+    if (settings.align_min > 0 && times.camera != kNever &&
+        times.checkin != kNever && times.camera > times.checkin &&
+        times.camera - times.checkin <= (std::int64_t)settings.align_min * 60) {
+        times.camera = times.checkin;
+    }
     return times;
 }
 

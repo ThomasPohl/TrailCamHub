@@ -195,6 +195,9 @@ struct Settings {
     // raised above `checkin_min`).
     std::uint16_t checkin_energy_permille = 1000;
     std::uint32_t min_interval_min = 10;
+    // A camera read due at most this many minutes after a check-in runs with
+    // the check-in: one wake-up instead of two (#436). 0: off.
+    std::uint32_t align_min = 0;
     // The hub has complete uplink settings.
     bool uplink = false;
     // Camera battery below this percentage stretches the read interval by
