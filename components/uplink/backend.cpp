@@ -220,6 +220,10 @@ esp_err_t run_backend(const hub_config::Settings &settings, Report &report)
     remote.has_camera_plan = response.has_camera_plan;
     remote.camera_plan = response.camera_plan;
     remote.checkin_interval_s = response.checkin_interval_s;
+    remote.has_quiet = response.has_quiet;
+    remote.quiet = response.quiet;
+    remote.has_location = response.has_location;
+    remote.location = response.location;
     schedule::apply_remote(remote);
     apply_remote_power(response.power_setting);
     // The cameras approved in the gallery: the next scans read only these

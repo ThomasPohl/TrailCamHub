@@ -73,6 +73,12 @@ struct Remote {
     std::string camera_plan;
     // Seconds; -1: not given.
     std::int64_t checkin_interval_s = -1;
+    // Quiet hours ("23:00-06:00", "off") and location ("LAT,LON") set in the
+    // gallery (#436); not given or empty: the hub's own value applies.
+    bool has_quiet = false;
+    std::string quiet;
+    bool has_location = false;
+    std::string location;
 };
 
 // Stores the remote settings if they changed. Returns false if a value was
