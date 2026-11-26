@@ -24,6 +24,95 @@ export interface BatteryForecast {
    * or full, no usable rate.
    */
   atFull?: boolean;
+  /**
+   * Drain in % per hour assumed inside the quiet hours (#474), measured from
+   * gaps there or `DEFAULT_SLEEP_PER_HOUR`; absent without quiet hours.
+   */
+  sleepPerHour?: number;
+}
+
+/** Quiet hours of the hub (#436): local minutes of the day; `end` may be < `start`. */
+export interface QuietHours {
+  start: number;
+  end: number;
+  /** Offset of the hub's local time to UTC, minutes (CET: 60). */
+  utcOffsetMin: number;
+}
+
+/** Drain in deep sleep when none was measured yet: almost nothing (#474). */
+export const DEFAULT_SLEEP_PER_HOUR = 0.1;
+/** The forecast steps forward this far at a time (seconds). */
+const STEP_S = 600;
+/** It stops looking after this long (seconds); beyond that: "not foreseeable". */
+const MAX_AHEAD_S = 400 * 86400;
+
+/** Parses "23:00-06:00" with the hub's UTC offset; undefined for "off" or nothing. */
+export function quietHours(
+  quiet: string | undefined,
+  utcOffsetMin: number | undefined,
+): QuietHours | undefined {
+  const match = quiet === undefined ? null : /^(\d\d):(\d\d)-(\d\d):(\d\d)$/.exec(quiet);
+  if (!match || utcOffsetMin === undefined) return undefined;
+  const start = Number(match[1]) * 60 + Number(match[2]);
+  const end = Number(match[3]) * 60 + Number(match[4]);
+  if (start === end || start >= 1440 || end > 1440) return undefined;
+  return { start, end, utcOffsetMin };
+}
+
+/** True if the Unix time lies inside the quiet hours (local time of the hub). */
+export function inQuiet(at: number, quiet: QuietHours): boolean {
+  const minute = (((Math.floor(at / 60) + quiet.utcOffsetMin) % 1440) + 1440) % 1440;
+  return quiet.start < quiet.end
+    ? minute >= quiet.start && minute < quiet.end
+    : minute >= quiet.start || minute < quiet.end;
+}
+
+function quietLengthS(quiet: QuietHours): number {
+  return ((((quiet.end - quiet.start) % 1440) + 1440) % 1440) * 60;
+}
+
+/**
+ * Drain during the quiet hours from the gaps of the history: a gap whose middle
+ * lies inside the quiet hours and that is not much longer than them is a night
+ * in deep sleep. Undefined if there is none.
+ */
+function sleepDrain(samples: Sample[], quiet: QuietHours): number | undefined {
+  let lost = 0;
+  let seconds = 0;
+  samples.forEach((s, i) => {
+    const before = samples[i - 1];
+    if (!before || unreliable(s) || unreliable(before)) return;
+    const gap = s.at - before.at;
+    if (gap <= GAP_S || gap > quietLengthS(quiet) + GAP_S) return;
+    if (!inQuiet(before.at + gap / 2, quiet)) return;
+    lost += Math.max(0, (before.batPercent ?? 0) - (s.batPercent ?? 0));
+    seconds += gap;
+  });
+  return seconds > 0 ? (lost / seconds) * 3600 : undefined;
+}
+
+/**
+ * Steps from the latest value through time: the awake rate outside and the
+ * sleep rate inside the quiet hours, until 0 % (#474). The empty time then
+ * lands in an awake phase.
+ */
+function emptyTimeWithQuiet(
+  from: number,
+  level: number,
+  awakePerHour: number,
+  sleepPerHour: number,
+  quiet: QuietHours,
+): number | undefined {
+  let t = from;
+  let left = level;
+  while (t - from < MAX_AHEAD_S) {
+    const rate = inQuiet(t, quiet) ? sleepPerHour : awakePerHour;
+    const loss = (rate * STEP_S) / 3600;
+    if (loss >= left) return t + (rate > 0 ? (left / rate) * 3600 : 0);
+    left -= loss;
+    t += STEP_S;
+  }
+  return undefined;
 }
 
 /**
@@ -109,7 +198,10 @@ function unreliable(s: Sample): boolean {
  * - If the latest values rise, the hub is charging: the rate of that rise is
  *   shown, without an empty time.
  */
-export function batteryForecast(samples: Sample[]): BatteryForecast | undefined {
+export function batteryForecast(
+  samples: Sample[],
+  quiet?: QuietHours,
+): BatteryForecast | undefined {
   const raw = samples.filter((s) => s.batPercent !== undefined);
   const latest = raw[raw.length - 1];
   if (!latest) return undefined;
@@ -156,6 +248,18 @@ export function batteryForecast(samples: Sample[]): BatteryForecast | undefined 
   const drainPerHour = drainOf(run);
   if (drainPerHour < MIN_DRAIN_PER_HOUR) return { drainPerHour, windowS, lastAt: last.at };
   const level = last.batPercent ?? 0;
+  if (quiet) {
+    // The gaps cut out above include the nights; their drop gives the sleep rate.
+    const sleepPerHour = Math.min(drainPerHour, sleepDrain(raw, quiet) ?? DEFAULT_SLEEP_PER_HOUR);
+    const emptyAt = emptyTimeWithQuiet(last.at, level, drainPerHour, sleepPerHour, quiet);
+    return {
+      drainPerHour,
+      windowS,
+      lastAt: last.at,
+      sleepPerHour,
+      ...(emptyAt !== undefined ? { emptyAt } : {}),
+    };
+  }
   return {
     drainPerHour,
     windowS,

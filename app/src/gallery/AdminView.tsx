@@ -2,12 +2,19 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { ApiError } from '../api/http';
 import type {
   Camera,
+  HubSchedule,
   PowerSetting,
   ScheduleConfig,
   ScheduleOrigin,
   ScheduleStretch,
 } from '../api/types';
-import { batteryForecast, batteryLevel, reportsLevels } from './forecast';
+import {
+  batteryForecast,
+  batteryLevel,
+  quietHours,
+  reportsLevels,
+  type QuietHours,
+} from './forecast';
 import { monthlyUsage } from './usage';
 import { isNewer } from './release';
 import {
@@ -42,7 +49,26 @@ const ORIGIN: Record<ScheduleOrigin, string> = {
   'built-in': 'Standard',
   local: 'am Hub eingestellt',
   remote: 'aus der App',
+  gnss: 'per GNSS ermittelt',
 };
+
+/** Local minute of the day as "07:48". */
+function minuteText(minute: number): string {
+  return `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+}
+
+/** Location and today's sun times of a hub's schedule (#436). */
+export function locationText(schedule: HubSchedule): string {
+  const sun =
+    schedule.sunriseMin !== undefined && schedule.sunsetMin !== undefined
+      ? `, heute Sonne ${minuteText(schedule.sunriseMin)}–${minuteText(schedule.sunsetMin)} Uhr`
+      : '';
+  if (schedule.location === undefined) {
+    return `nicht gesetzt, Sonnenzeiten für die Mitte Deutschlands${sun}`;
+  }
+  const origin = schedule.locationOrigin ? ` (${ORIGIN[schedule.locationOrigin]})` : '';
+  return `${schedule.location.replace(',', ', ')}${origin}${sun}`;
+}
 
 const STRETCH: Record<ScheduleStretch, string> = {
   hubBatteryCritical: 'Hub-Akku kritisch',
@@ -412,6 +438,30 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
                     <dd>{STRETCH[hub.schedule.stretch]}</dd>
                   </>
                 )}
+                {hub.schedule.quiet !== undefined && (
+                  <>
+                    <dt>Nachtruhe</dt>
+                    <dd>
+                      {hub.schedule.quiet === 'off'
+                        ? 'aus'
+                        : `${hub.schedule.quiet.replace('-', '–')} Uhr`}
+                      {hub.schedule.quietOrigin && ` (${ORIGIN[hub.schedule.quietOrigin]})`}
+                    </dd>
+                  </>
+                )}
+                {(hub.schedule.location !== undefined || hub.schedule.locationMissing) && (
+                  <>
+                    <dt>Standort</dt>
+                    <dd>{locationText(hub.schedule)}</dd>
+                  </>
+                )}
+                {hub.schedule.energyPermille !== undefined &&
+                  hub.schedule.energyPermille < 1000 && (
+                    <>
+                      <dt>Mehr Kontakte</dt>
+                      <dd>{`Akku gut geladen (Faktor ${(hub.schedule.energyPermille / 1000).toFixed(2).replace('.', ',')}, morgens ${hub.schedule.energyMorning ?? '?'} %)`}</dd>
+                    </>
+                  )}
               </>
             )}
             <dt>Nutzer</dt>
@@ -517,7 +567,12 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
             </tbody>
           </table>
 
-          <HistoryPanel api={api} hubId={hub.hubId} now={t} />
+          <HistoryPanel
+            api={api}
+            hubId={hub.hubId}
+            now={t}
+            quiet={quietHours(hub.schedule?.quiet, hub.schedule?.utcOffsetMin)}
+          />
           <UsagePanel api={api} hubId={hub.hubId} now={t} />
 
           <ScheduleForm
@@ -610,7 +665,18 @@ function FirmwareHistory({
 }
 
 /** Battery history of the last 30 days, loaded on request (#76). */
-function HistoryPanel({ api, hubId, now }: { api: GalleryApi; hubId: string; now: number }) {
+function HistoryPanel({
+  api,
+  hubId,
+  now,
+  quiet,
+}: {
+  api: GalleryApi;
+  hubId: string;
+  now: number;
+  /** The hub's quiet hours (#474): the forecast lets it sleep there. */
+  quiet?: QuietHours;
+}) {
   const [history, setHistory] = useState<HubHistory>();
   const [error, setError] = useState<string>();
   const [open, setOpen] = useState(false);
@@ -642,7 +708,7 @@ function HistoryPanel({ api, hubId, now }: { api: GalleryApi; hubId: string; now
       {open && error && <p className="g-error">Verlauf nicht geladen: {error}</p>}
       {open && history && (
         <div className="g-history__charts">
-          <BatteryChart label="Hub" samples={history.hub} now={now} />
+          <BatteryChart label="Hub" samples={history.hub} now={now} quiet={quiet} />
           {history.cameras.map((c) => (
             <BatteryChart
               key={c.camId}
@@ -750,10 +816,13 @@ export function BatteryChart({
   samples,
   now,
   camera = false,
+  quiet,
 }: {
   label: string;
   samples: Sample[];
   now: number;
+  /** Quiet hours of the hub (#474); the forecast steps through them. */
+  quiet?: QuietHours;
   /** A camera: if it reports steps only (the TC100), the state is shown, not a rate (#472). */
   camera?: boolean;
 }) {
@@ -787,7 +856,7 @@ export function BatteryChart({
   const ticks = points.filter(charging).map((s) => x(s.at));
   const summary = `${label}: Akku ${first.batPercent} % → ${last.batPercent} %`;
   const level = camera && reportsLevels(samples) ? batteryLevel(samples) : undefined;
-  const forecast = level ? undefined : batteryForecast(samples);
+  const forecast = level ? undefined : batteryForecast(samples, quiet);
   return (
     <figure className="g-chart">
       <figcaption>{summary}</figcaption>
