@@ -73,7 +73,7 @@ describe('schedule editor (#431, #436)', () => {
   it('refuses a plan the hub would not take', () => {
     editor(fakeApi());
     fireEvent.change(screen.getByLabelText('Als Text (für Fortgeschrittene)'), {
-      target: { value: '05:00=30' },
+      target: { value: '05:00-09:00' },
     });
     expect(screen.getByRole('button', { name: 'Übernehmen' })).toBeDisabled();
     expect(screen.getByText(/es fehlt „=Minuten“/)).toBeInTheDocument();
