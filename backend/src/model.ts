@@ -39,7 +39,7 @@ export const DEFAULT_DELETE_TARGETS: readonly DeleteTarget[] = ['hub', 'backend'
 export const HUB_FEATURE_DELETE_TARGETS = 'deleteTargets';
 
 /** Where the hub got a schedule setting from. */
-export type ScheduleOrigin = 'built-in' | 'local' | 'remote';
+export type ScheduleOrigin = 'built-in' | 'local' | 'remote' | 'gnss';
 
 /**
  * Why the hub stretches its schedule: its own battery is critical (no camera
@@ -62,6 +62,28 @@ export interface HubSchedule {
   sleeps: boolean;
   /** Why the schedule is stretched; absent if it is not. */
   stretch?: ScheduleStretch;
+  /**
+   * Quiet hours in effect ("23:00-06:00" or "off") and their origin (#436,
+   * #474); absent from older firmware (no quiet hours assumed).
+   */
+  quiet?: string;
+  quietOrigin?: ScheduleOrigin;
+  /** Offset of the hub's local time to UTC at the check-in, minutes (CET: 60). */
+  utcOffsetMin?: number;
+  /** Location for the sun times ("52.5,13.4") and its origin. */
+  location?: string;
+  locationOrigin?: ScheduleOrigin;
+  /** No location is set: the sun times use a fallback in the middle of Germany. */
+  locationMissing?: boolean;
+  /** Today's sunrise and sunset as local minutes of the day. */
+  sunriseMin?: number;
+  sunsetMin?: number;
+  /**
+   * Energy factor for the check-in interval in 1/1000 (1000: unchanged, 500:
+   * twice as often) and the morning charge it is based on, percent.
+   */
+  energyPermille?: number;
+  energyMorning?: number;
 }
 
 /**
@@ -71,6 +93,10 @@ export interface HubSchedule {
 export interface ScheduleConfig {
   cameraPlan?: string;
   checkinIntervalS?: number;
+  /** Quiet hours ("23:00-06:00", "off" for none) set in the app (#436). */
+  quiet?: string;
+  /** Location for the sun times ("52.5,13.4"), set in the app (#436). */
+  location?: string;
   /**
    * The hub's `power` setting (docs/modes.md). The hub stores it as its own
    * setting when its board can use it and applies it from the next start.

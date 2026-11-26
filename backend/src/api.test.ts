@@ -678,6 +678,83 @@ describe('wake-up schedule (app → hub, hub → app)', () => {
     expect(body<CheckinResponse>(after).config).toEqual({ checkinIntervalS: 900 });
   });
 
+  it('keeps quiet hours, location, sun times and energy factor from the report (#474)', async () => {
+    const { deps, hubKey, store } = await setup();
+    const checkin = (extra: Record<string, unknown>) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', hubKey, {
+          cameras: [],
+          schedule: { ...report, ...extra },
+        }),
+        deps,
+      );
+    await checkin({
+      quiet: '23:00-06:00',
+      quietOrigin: 'built-in',
+      utcOffsetMin: 60,
+      location: '52.5,13.4',
+      locationOrigin: 'gnss',
+      sunriseMin: 488,
+      sunsetMin: 954,
+      energyPermille: 750,
+      energyMorning: 82,
+    });
+    expect((await store.getHub(HUB_ID))?.schedule).toEqual({
+      ...report,
+      stretch: undefined,
+      quiet: '23:00-06:00',
+      quietOrigin: 'built-in',
+      utcOffsetMin: 60,
+      location: '52.5,13.4',
+      locationOrigin: 'gnss',
+      sunriseMin: 488,
+      sunsetMin: 954,
+      energyPermille: 750,
+      energyMorning: 82,
+    });
+
+    await checkin({
+      quiet: '23:00',
+      utcOffsetMin: 2000,
+      locationMissing: true,
+      sunriseMin: 488,
+      energyPermille: 2000,
+      energyMorning: 50,
+    });
+    const schedule = (await store.getHub(HUB_ID))?.schedule;
+    expect(schedule?.quiet).toBeUndefined();
+    expect(schedule?.utcOffsetMin).toBeUndefined();
+    expect(schedule?.locationMissing).toBe(true);
+    expect(schedule?.sunriseMin).toBeUndefined();
+    expect(schedule?.energyPermille).toBeUndefined();
+  });
+
+  it('sends quiet hours and location set in the app to the hub (#436)', async () => {
+    const { deps, hubKey } = await setup();
+    const set = await handleRequest(
+      appRequest('PUT', schedulePath, {
+        cameraPlan: 'sunrise-60..sunrise+90=30, sunset-90..sunset+60=30,*=120',
+        quiet: '22:30-05:30',
+        location: '52.52, 13.405',
+      }),
+      deps,
+    );
+    expect(set.statusCode).toBe(200);
+    const config = {
+      cameraPlan: 'sunrise-60..sunrise+90=30,sunset-90..sunset+60=30,*=120',
+      quiet: '22:30-05:30',
+      location: '52.5,13.4',
+    };
+    expect(body(set)).toEqual(config);
+    const res = await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
+    expect(body<CheckinResponse>(res).config).toEqual(config);
+
+    // "off" is a setting of its own; null hands it back to the hub.
+    await handleRequest(appRequest('PUT', schedulePath, { quiet: 'off', location: null }), deps);
+    const after = await handleRequest(hubRequest('/v1/device/checkin', hubKey, checkinBody), deps);
+    expect(body<CheckinResponse>(after).config).toEqual({ quiet: 'off' });
+  });
+
   it('validates the schedule and the hub', async () => {
     const { deps } = await setup();
     const put = (path: string, b: unknown, token?: string) =>
@@ -691,6 +768,11 @@ describe('wake-up schedule (app → hub, hub → app)', () => {
     expect((await put('/v1/hubs/nope/schedule', {})).statusCode).toBe(404);
     expect((await put(schedulePath, {}, userToken(USER_ID + 1))).statusCode).toBe(404);
     expect((await put(schedulePath, { cameraPlan: 'off' })).statusCode).toBe(200);
+    expect((await put(schedulePath, { quiet: '23:00' })).statusCode).toBe(400);
+    expect((await put(schedulePath, { quiet: 2300 })).statusCode).toBe(400);
+    expect((await put(schedulePath, { location: '95,10' })).statusCode).toBe(400);
+    expect((await put(schedulePath, { location: 'Berlin' })).statusCode).toBe(400);
+    expect((await put(schedulePath, { cameraPlan: 'sunrise..sunrise=30' })).statusCode).toBe(400);
   });
 });
 
