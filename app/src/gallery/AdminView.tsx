@@ -7,13 +7,14 @@ import type {
   ScheduleOrigin,
   ScheduleStretch,
 } from '../api/types';
-import { batteryForecast } from './forecast';
+import { batteryForecast, batteryLevel, reportsLevels } from './forecast';
 import { monthlyUsage } from './usage';
 import { isNewer } from './release';
 import {
   clockTime,
   faultText,
   forecastText,
+  levelText,
   memoryText,
   skipReasonText,
   uplinkText,
@@ -648,6 +649,7 @@ function HistoryPanel({ api, hubId, now }: { api: GalleryApi; hubId: string; now
               label={`Kamera „${c.name}“`}
               samples={c.samples}
               now={now}
+              camera
             />
           ))}
         </div>
@@ -747,10 +749,13 @@ export function BatteryChart({
   label,
   samples,
   now,
+  camera = false,
 }: {
   label: string;
   samples: Sample[];
   now: number;
+  /** A camera: if it reports steps only (the TC100), the state is shown, not a rate (#472). */
+  camera?: boolean;
 }) {
   const points = samples.filter((s) => s.batPercent !== undefined);
   const first = points[0];
@@ -781,10 +786,12 @@ export function BatteryChart({
   if (current.length > 0) lines.push(current.join(' '));
   const ticks = points.filter(charging).map((s) => x(s.at));
   const summary = `${label}: Akku ${first.batPercent} % → ${last.batPercent} %`;
-  const forecast = batteryForecast(samples);
+  const level = camera && reportsLevels(samples) ? batteryLevel(samples) : undefined;
+  const forecast = level ? undefined : batteryForecast(samples);
   return (
     <figure className="g-chart">
       <figcaption>{summary}</figcaption>
+      {level && <p className="g-chart__forecast">{levelText(level, now)}</p>}
       {forecast && <p className="g-chart__forecast">{forecastText(forecast, now)}</p>}
       <svg
         viewBox={`-2 -2 ${CHART_W + 4} ${CHART_H + 4}`}

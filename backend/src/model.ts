@@ -202,6 +202,12 @@ export interface CameraRecord {
   sdError?: string;
   /** Temperature the camera measured at the read, °C. */
   temperature?: number;
+  /**
+   * Lowest battery value of the last 12 h up to the latest read, or the latest
+   * value if it is 100 % (charged). The TC100 toggles between 80 and 20 % near
+   * a step; this keeps `cameraBatteryLow` from flapping (#472).
+   */
+  batLow12h?: number;
   /** The camera's battery was charging at the read. */
   isCharging?: boolean;
   /** ...from a solar panel. */

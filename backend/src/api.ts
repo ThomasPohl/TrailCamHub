@@ -1086,6 +1086,31 @@ async function recordSample(deps: Deps, owner: SampleOwner, sample: Sample): Pro
   await deps.store.addSample(owner, sample);
 }
 
+/** How far back the lowest camera battery value counts (#472). */
+const LOW_WINDOW_S = 12 * 60 * 60;
+
+/**
+ * The lowest battery value of a camera in the last 12 h including the one just
+ * read; a full 100 % counts as charged and stands alone (#472).
+ */
+export async function lowestRecently(
+  deps: Deps,
+  camId: string,
+  at: number,
+  batPercent: number | undefined,
+): Promise<number | undefined> {
+  if (batPercent === undefined) return undefined;
+  if (batPercent >= 100) return batPercent;
+  const recent = await deps.store.listSamples({ camId }, at - LOW_WINDOW_S);
+  // Values before the last charge say nothing about the level now.
+  const charged = recent.filter((s) => s.charging === true || (s.batPercent ?? 0) >= 100);
+  const since = Math.max(0, ...charged.map((s) => s.at));
+  return Math.min(
+    batPercent,
+    ...recent.filter((s) => s.at > since && s.at <= at).map((s) => s.batPercent ?? 100),
+  );
+}
+
 /** The check-in's memory report (#236) with plausible byte counts only. */
 export function parseMemory(raw: unknown): HubMemory | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
@@ -1281,12 +1306,19 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
       results.set(report.camId, emptyResult(report.camId, false, false));
       continue;
     }
+    const batPercent = optionalNumber(report.batPercent);
     await deps.store.updateCamera(
       camera.camId,
       {
         model: optionalString(report.model),
         firmware: optionalString(report.firmware),
-        batPercent: optionalNumber(report.batPercent),
+        batPercent,
+        batLow12h: await lowestRecently(
+          deps,
+          camera.camId,
+          readTime(report.readAt, now),
+          batPercent,
+        ),
         sdFreeMB: optionalNumber(report.sdFreeMB),
         sdTotalMB: optionalNumber(report.sdTotalMB),
         ...sdCardTelemetry(report),

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hubFaults } from './faults';
 import { createAppUser, revokeAppUser } from './admin';
 import { createAdminSession } from './auth/admin-session';
-import { chargingSample, handleRequest } from './api';
+import { chargingSample, handleRequest, lowestRecently } from './api';
 import type { ApiRequest, ApiResponse } from './http';
 import type { Camera, CheckinRequest, CheckinResponse, MediaItem } from './model';
 import { CAM_ID, HUB_ID, hubRequest, NOW, setup } from './test-utils';
@@ -686,6 +686,27 @@ describe('charging state of a camera (#473)', () => {
     await read(NOW - 3700, {});
     const samples = await world.deps.store.listSamples({ camId: CAM_ID }, 0);
     expect(samples.map((x) => x.charging)).toEqual([true, undefined, undefined]);
+  });
+});
+
+describe('lowest camera battery value of 12 h (#472)', () => {
+  it('keeps a camera that toggles at a step low, and lets a charge clear it', async () => {
+    const world = await galleryWorld();
+    const sample = (at: number, batPercent: number, charging?: boolean) =>
+      world.deps.store.addSample({ camId: CAM_ID }, { at, batPercent, charging });
+    await sample(NOW - 5 * 3600, 20);
+    await sample(NOW - 2 * 3600, 80);
+    const low = (percent: number | undefined) => lowestRecently(world.deps, CAM_ID, NOW, percent);
+    expect(await low(80)).toBe(20);
+    expect(await low(20)).toBe(20);
+    // Older than 12 h does not count.
+    await world.deps.store.addSample({ camId: CAM_ID }, { at: NOW - 13 * 3600, batPercent: 0 });
+    expect(await low(80)).toBe(20);
+    // A full value stands alone, and so does what comes after a flagged charge.
+    expect(await low(100)).toBe(100);
+    await sample(NOW - 1 * 3600, 90, true);
+    expect(await low(80)).toBe(80);
+    expect(await low(undefined)).toBeUndefined();
   });
 });
 

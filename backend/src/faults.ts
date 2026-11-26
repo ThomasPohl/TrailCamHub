@@ -154,7 +154,9 @@ export function hubFaults(
         since: camera.lastSeen,
       });
     }
-    const cbat = camera.batPercent;
+    // The lowest value of the last 12 h: a camera that toggles between 80 and
+    // 20 % near a step stays "low" instead of flapping (#472).
+    const cbat = camera.batLow12h ?? camera.batPercent;
     // 0 is what a camera reports before its first read; only a real read counts.
     // A camera on its charger is not about to run empty (#473).
     if (camera.lastSeen > 0 && cbat !== undefined && camera.isCharging !== true) {

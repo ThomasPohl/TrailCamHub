@@ -1,4 +1,4 @@
-import type { BatteryForecast } from './forecast';
+import type { BatteryForecast, BatteryLevel } from './forecast';
 import type { UsageSummary } from './usage';
 import type { Fault, GalleryCamera, RecordingState } from './types';
 
@@ -117,6 +117,24 @@ export function forecastText(f: BatteryForecast, nowSeconds: number): string {
         ? 'Leer: nicht absehbar (mehr als ein Jahr).'
         : `Leer voraussichtlich ${clockTime(f.emptyAt, nowSeconds)} (in ${durationText(left)}).${since}`;
   return `Verbrauch: ${rate} %/h ${over}. ${when}`;
+}
+
+/** Battery state of a camera that reports steps (#472) in German. */
+export function levelText(level: BatteryLevel, nowSeconds: number): string {
+  const age = nowSeconds - level.lastAt;
+  const since = age > 3 * 3600 ? ` Letzter Wert von ${clockTime(level.lastAt, nowSeconds)}.` : '';
+  switch (level.state) {
+    case 'charging':
+      return `Lädt.${since}`;
+    case 'empty':
+      return `Akku leer.${since}`;
+    case 'low':
+      return level.lowSince !== undefined
+        ? `Akku schwach seit ${clockTime(level.lowSince, nowSeconds)}.${since}`
+        : `Akku schwach.${since}`;
+    default:
+      return `Akku gut.${since}`;
+  }
 }
 
 /** A fault for the admin (#265) in German; `camera` is the camera's name. */
