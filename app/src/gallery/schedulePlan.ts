@@ -106,7 +106,8 @@ export function parseEditPlan(text: string): PlanParse {
 }
 
 function clockText(minute: number): string {
-  return `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${two(Math.floor(minute / 60))}:${two(minute % 60)}`;
 }
 
 function boundText(bound: Bound): string {
