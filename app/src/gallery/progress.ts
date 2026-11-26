@@ -1,4 +1,4 @@
-import { clockTime } from './text';
+import { contactOverdue, nextContactText } from './text';
 import type { Recording } from './types';
 
 /** One line of the progress list in the large view (#431). */
@@ -31,9 +31,11 @@ export function progressSteps(
       return [
         thumb,
         {
-          text: nextContact
-            ? `Video angefordert – der Hub holt es gegen ${clockTime(nextContact, now)}`
-            : 'Video angefordert – der Hub holt es beim nächsten Kontakt',
+          text: !nextContact
+            ? 'Video angefordert – der Hub holt es beim nächsten Kontakt'
+            : contactOverdue(nextContact, now)
+              ? `Video angefordert – der Hub holt es beim nächsten Kontakt (${nextContactText(nextContact, now)})`
+              : `Video angefordert – der Hub holt es ${nextContactText(nextContact, now)}`,
           status: 'current',
         },
         { text: 'Im Ordner gespeichert', status: 'todo' },

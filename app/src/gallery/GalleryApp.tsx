@@ -41,7 +41,16 @@ import {
   recordingKey,
   type StateFilter,
 } from './grouping';
-import { badgeText, cameraClock, cameraHints, cameraTime, clockTime, folderName } from './text';
+import {
+  badgeText,
+  cameraClock,
+  cameraHints,
+  cameraTime,
+  clockTime,
+  contactOverdue,
+  folderName,
+  nextContactText,
+} from './text';
 import {
   MAX_CAMERA_NAME,
   type FoundCamera,
@@ -314,7 +323,7 @@ export function GalleryApp({
       setNotice(
         requested > 0
           ? `Der Hub sucht beim nächsten Kontakt${
-              nextContact ? ` (gegen ${clockTime(nextContact, now())})` : ''
+              nextContact ? ` (${nextContactText(nextContact, now())})` : ''
             } nach Kameras. Neue Kameras erscheinen danach hier unten.`
           : 'Der Hub sucht bei jedem geplanten Lesen ohnehin nach Kameras. Neue erscheinen danach hier unten.',
       );
@@ -447,12 +456,16 @@ export function GalleryApp({
       await api.changeSettings(id, changed);
       // The hub reads the camera in the wake cycle that picks up the change,
       // so its next contact is when the change goes live. An overdue contact
-      // gives no useful time, so the notice leaves it out then.
+      // gives no time to expect, so the notice says since when it is overdue.
       const next = status?.nextContact;
       const at = now();
       setNotice(
         `Die Einstellungen gehen beim nächsten Kontakt mit dem Hub an die Kamera${
-          next !== undefined && next > at ? `, voraussichtlich gegen ${clockTime(next, at)}` : ''
+          next === undefined
+            ? ''
+            : contactOverdue(next, at)
+              ? ` (Kontakt ${nextContactText(next, at)})`
+              : `, voraussichtlich ${nextContactText(next, at)}`
         }.`,
       );
       await reload();
@@ -1478,7 +1491,7 @@ function HubChip({ status, now }: { status: GalleryStatus; now: number }) {
       <summary>
         <span className={`g-dot g-dot--${line.light}`} aria-hidden="true" />
         <span className="g-hubchip__title">{line.title}</span>
-        {line.next && <span className="g-hubchip__next">· nächster Kontakt {line.next}</span>}
+        {line.next && <span className="g-hubchip__next">· {line.next}</span>}
       </summary>
       <dl className="g-hubchip__facts">
         <dt>Letzter Kontakt</dt>
@@ -1486,7 +1499,7 @@ function HubChip({ status, now }: { status: GalleryStatus; now: number }) {
         {status.nextContact !== undefined && (
           <>
             <dt>Nächster Kontakt</dt>
-            <dd>gegen {clockTime(status.nextContact, now)}</dd>
+            <dd>{nextContactText(status.nextContact, now)}</dd>
           </>
         )}
         {status.hubBatPercent !== undefined && (
@@ -1566,7 +1579,7 @@ function WaitingCamera({
       <div className="g-banner g-camera-hints" role="status" aria-label="Hinweise zur Kamera">
         <p>
           Der Hub hat diese Kamera noch nicht erreicht. Er liest sie beim nächsten Kontakt
-          {nextContact !== undefined && ` (gegen ${clockTime(nextContact, now)})`}, danach
+          {nextContact !== undefined && ` (${nextContactText(nextContact, now)})`}, danach
           erscheinen hier ihre Aufnahmen.
         </p>
       </div>

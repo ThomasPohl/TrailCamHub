@@ -21,6 +21,13 @@ describe('progressSteps', () => {
     expect(steps[1]?.text).toMatch(/^Video angefordert – der Hub holt es gegen \d\d:\d\d Uhr$/);
   });
 
+  it('says since when an overdue contact is late', () => {
+    const steps = progressSteps({ state: 'videoRequested', fileType: 2 }, false, NOW - 600, NOW);
+    expect(steps[1]?.text).toMatch(
+      /^Video angefordert – der Hub holt es beim nächsten Kontakt \(überfällig seit \d\d:\d\d Uhr\)$/,
+    );
+  });
+
   it('tells a finished video from a saved one', () => {
     const ready = progressSteps({ state: 'videoReady', fileType: 2 }, false, undefined, NOW);
     expect(ready.map((s) => s.status)).toEqual(['done', 'done', 'current']);

@@ -23,6 +23,7 @@ import {
   forecastText,
   levelText,
   memoryText,
+  nextContactText,
   skipReasonText,
   uplinkText,
   usageLines,
@@ -656,7 +657,7 @@ function HubPage({
               {hub.schedule?.nextCheckinAt !== undefined && (
                 <>
                   <dt>Nächster Kontakt</dt>
-                  <dd>gegen {clockTime(hub.schedule.nextCheckinAt, t)}</dd>
+                  <dd>{nextContactText(hub.schedule.nextCheckinAt, t)}</dd>
                 </>
               )}
               <dt>Akku</dt>
