@@ -7,6 +7,7 @@ import type { ScheduleConfig } from '../api/types';
 import type {
   AdminHub,
   AuditEntry,
+  Fault,
   GalleryApi,
   FoundCamera,
   GalleryStatus,
@@ -216,6 +217,7 @@ export class HttpGalleryApi implements GalleryApi {
             // A backend without the setting deletes on the camera and in the gallery.
             deleteTargets: latest.hubDeleteTargets ?? ['camera', 'backend'],
             deletesByTarget: latest.hubDeletesByTarget ?? false,
+            schedule: latest.hubSchedule,
           }
         : undefined,
       cameras: cameras.map((c) => ({
@@ -455,6 +457,18 @@ export class HttpGalleryApi implements GalleryApi {
 
   latestFirmware(): Promise<string | undefined> {
     return fetchLatestRelease(this.fetchFn);
+  }
+
+  hubHistory(hubId: string): Promise<HubHistory> {
+    return this.request<HubHistory>('GET', `/v1/hubs/${encodeURIComponent(hubId)}/history`);
+  }
+
+  hubUsage(hubId: string): Promise<HubUsage> {
+    return this.request<HubUsage>('GET', `/v1/hubs/${encodeURIComponent(hubId)}/usage`);
+  }
+
+  hubHints(hubId: string): Promise<Fault[]> {
+    return this.request<Fault[]>('GET', `/v1/hubs/${encodeURIComponent(hubId)}/hints`);
   }
 
   adminHubs(): Promise<AdminHub[]> {
