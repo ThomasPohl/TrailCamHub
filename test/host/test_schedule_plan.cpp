@@ -842,3 +842,56 @@ TEST_CASE("the energy factor does not apply at a low hub battery")
     // Low level: the stretched 60 minutes, not shortened.
     CHECK(next_times(settings, state, at(8, 1), kLocal).checkin == at(9));
 }
+
+TEST_CASE("a read due shortly after a check-in runs with it (#436)")
+{
+    Settings settings = settings_with("*=120", 30);
+    settings.align_min = 10;
+    State state = initial_state();
+    // Read and sync at 8:00; the next read is due at 10:00, check-ins every
+    // 30 min.
+    cycle_started(state, true, at(8));
+    CycleEnd end;
+    end.camera_ok = true;
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    // Check-in at 9:30, the read 30 min later: not aligned.
+    cycle_started(state, false, at(9));
+    end = CycleEnd{};
+    end.sync_attempted = true;
+    end.sync_ok = true;
+    cycle_finished(state, end);
+    Times times = next_times(settings, state, at(9, 1), kLocal);
+    CHECK(times.checkin == at(9, 30));
+    CHECK(times.camera == at(10));
+
+    // Check-in at 9:52 (an earlier one ran late): the read at 10:00 comes
+    // along.
+    state.last_checkin = at(9, 22);
+    times = next_times(settings, state, at(9, 23), kLocal);
+    CHECK(times.checkin == at(9, 52));
+    CHECK(times.camera == at(9, 52));
+    CHECK(due(times, at(9, 52)) == Task::camera);
+
+    // Off: two wake-ups.
+    settings.align_min = 0;
+    times = next_times(settings, state, at(9, 23), kLocal);
+    CHECK(times.camera == at(10));
+}
+
+TEST_CASE("alignment does not pull a read into the quiet hours")
+{
+    Settings settings = settings_with("*=120", 30);
+    settings.align_min = 10;
+    std::string error;
+    REQUIRE(parse_quiet("23:00-06:00", settings.quiet, &error));
+    State state = initial_state();
+    state.last_camera = at(21);
+    state.last_checkin = at(22, 25);
+    // Check-in at 22:55; the read due at 23:00 waits for 06:00, so it does
+    // not come along.
+    const Times times = next_times(settings, state, at(22, 30), kLocal);
+    CHECK(times.checkin == at(22, 55));
+    CHECK(times.camera == at(6, 0, 1));
+}

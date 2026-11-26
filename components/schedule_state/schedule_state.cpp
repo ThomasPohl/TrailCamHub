@@ -491,6 +491,7 @@ Effective effective()
     out.settings.checkin_energy_permille = out.energy_permille;
     out.settings.min_interval_min = CONFIG_SCHEDULE_MIN_INTERVAL_MIN;
 #endif
+    out.settings.align_min = CONFIG_SCHEDULE_ALIGN_MIN;
     out.settings.low_battery_percent = CONFIG_SCHEDULE_LOW_BATTERY_PERCENT;
     out.settings.low_battery_factor = CONFIG_SCHEDULE_LOW_BATTERY_FACTOR;
     out.settings.power = power_settings();

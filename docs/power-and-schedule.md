@@ -125,9 +125,19 @@ are none unless `config set quiet …` is used.
 - Without a valid clock the window is ignored, as the read windows are.
 - `status` prints `quiet hours … (origin)`.
 
-Not yet there: alignment of reads and check-ins, the
-energy factor in the check-in report and the app, and the fields in the
-installer and the app (all planned in #436).
+The installer's *Device setup* has the fields *Quiet hours* and *Location for
+sunrise and sunset*, the latter with a button that takes the computer's
+position (browser geolocation, only on a click, rounded to 0.1°).
+
+### Reads with the check-in
+
+A camera read that falls due at most `CONFIG_SCHEDULE_ALIGN_MIN` (10) minutes
+after a check-in runs at once, with that check-in (#436): the read syncs
+anyway, so the hub wakes once instead of twice. A read that the quiet hours
+push to the morning is not pulled forward. Day intervals that are multiples
+of the check-in interval (120 = 4 × 30) meet by themselves; the alignment
+catches the cases where a late or failed check-in shifted them. `0` turns it
+off.
 
 ### Energy factor
 

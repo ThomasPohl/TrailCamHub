@@ -363,6 +363,15 @@
                 <input name="checkin_min" inputmode="numeric" placeholder="30" spellcheck="false">
                 <small>Stored: <span id="ds-current-checkin_min">–</span> · 0 = only after camera reads</small>
               </label>
+              <label>Quiet hours
+                <input name="quiet" placeholder="23:00-06:00" spellcheck="false">
+                <small>Stored: <span id="ds-current-quiet">–</span> · no reads and no check-ins in this window; on battery 23:00-06:00 by default, <code>off</code> for none</small>
+              </label>
+              <label>Location for sunrise and sunset
+                <input name="location" placeholder="52.5,13.4" spellcheck="false" inputmode="decimal">
+                <small>Stored: <span id="ds-current-location">–</span> · latitude,longitude, rounded to about 10 km; for read windows at the sun
+                  <button type="button" class="link-button" id="ds-geolocate">Use this computer's location</button></small>
+              </label>
             </fieldset>
             <fieldset class="ds-group">
               <legend>WebDAV folder</legend>

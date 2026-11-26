@@ -71,6 +71,15 @@ config SCHEDULE_MIN_INTERVAL_MIN
     range 5 120
     default 10
 
+config SCHEDULE_ALIGN_MIN
+    int "Read with the check-in if a read is due within (minutes)"
+    range 0 60
+    default 10
+    help
+        When a check-in is due and a camera read would be due within this
+        many minutes, the read runs now, with the check-in: one wake-up
+        instead of two (#436). The read syncs anyway. 0 turns it off.
+
 config SCHEDULE_CHECKIN_INTERVAL_MIN
     int "Backend check-in interval (minutes, 0 = off)"
     range 0 1440
