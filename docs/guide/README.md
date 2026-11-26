@@ -19,6 +19,10 @@ flowchart TD
     Pull --> G3["web-ui.md"]
 ```
 
+The diagram is drawn where Markdown diagrams are shown, for example
+[on GitHub](https://github.com/ThomasPohl/TrailCamHub/blob/main/docs/guide/README.md#what-do-you-want-to-achieve);
+the table below says the same.
+
 | I want … | Mode | Guide | Parts |
 | --- | --- | --- | --- |
 | Pictures from a camera far from any Wi-Fi, looked at on a laptop or phone | 4G modem + own backend + gallery | [modem-gallery.md](modem-gallery.md) | [shopping list A](shopping-list.md#a-garden-hub-over-4g-modem--own-backend--gallery) |
@@ -30,8 +34,8 @@ flowchart TD
 | Board | Fits best | Note |
 | --- | --- | --- |
 | Waveshare ESP32-S3-A7670E-4G | [4G + gallery](modem-gallery.md); also home Wi-Fi + WebDAV | the main, best tested board |
-| LilyGO T-Dongle-C5 | [web page](web-ui.md) | display, button, own access point |
-| LilyGO T-Dongle-S3 | [web page](web-ui.md) | no PSRAM; not tested on hardware |
+| LilyGO T-Dongle-C5 | [web page](web-ui.md) | display, button, own access point; [operating it](dongle.md) |
+| LilyGO T-Dongle-S3 | [web page](web-ui.md) | no PSRAM; not tested on hardware; [operating it](dongle.md) |
 | Waveshare ESP32-S3-ETH, ESP32-P4-NANO | [web page](web-ui.md) over Ethernet; [WebDAV](home-webdav.md) | wired network |
 | ESP32-WROOM-32D with an SPI microSD reader | [WebDAV](home-webdav.md); [wiring](../wiring-wroom32d.md) | little memory (#244) |
 

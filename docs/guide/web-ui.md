@@ -33,8 +33,8 @@ file downloads answer "503"; wait until the search is finished.
 
 ## The dongle's display and button
 
-The T-Dongles show the state of the hub on their display; the screens are in
-[`docs/images/dongle`](../images/dongle). Short press starts a camera search,
-long press stops it.
+The T-Dongles show the state of the hub on their display. Short press starts
+a camera search, long press stops it. Every screen, the LED colours and what
+to do: [operating a dongle](dongle.md).
 
 If something does not work, see [troubleshooting](troubleshooting.md).
