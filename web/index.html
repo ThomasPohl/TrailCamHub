@@ -15,6 +15,7 @@
     <script src="./wizard.js" defer></script>
     <script src="./advanced.js" defer></script>
     <script src="./camera.js" defer></script>
+    <script src="./camera-settings.js" defer></script>
     <script src="./sd-card.js" defer></script>
     <script src="./mock.js" defer></script>
     <script src="./shell.js" defer></script>
@@ -450,6 +451,15 @@
               </table>
             </div>
             <p class="cam-format"><button id="cam-format" class="secondary-button danger" type="button">Erase the camera's SD card…</button></p>
+          </section>
+
+          <section id="cam-settings-section" aria-labelledby="cam-settings-heading">
+            <div class="pv-head">
+              <h2 id="cam-settings-heading">Camera settings</h2>
+              <button id="cam-settings-read" class="secondary-button" type="button">Read settings</button>
+            </div>
+            <p id="cam-settings-note" class="note" aria-live="polite">The settings each camera reported at its last read. A change is queued and sent at the camera's next read, with the same checks as the gallery and the hub's web page.</p>
+            <div id="cam-settings"></div>
           </section>
 
           <section aria-labelledby="cam-actions-heading">

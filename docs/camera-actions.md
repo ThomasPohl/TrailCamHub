@@ -134,7 +134,10 @@ The *Camera* tab of the installer's advanced view
 ([installer.md](installer.md)) sends these console commands over USB: buttons
 for `photo`, `video start` and `video stop`, the media list of `camlist` as a
 table with a *Delete* button per recording, *Erase the camera's SD card* and
-the list of `actions`. Deleting and erasing ask in a dialog first (erasing
+the list of `actions`. *Camera settings* (#197) reads `camset` and shows each
+camera's settings as a form (choices from the camera's capability, fields it
+does not support left out, the detection area left out); *Apply changes*
+sends only the changed fields with `camset <devId> name=value …`. Deleting and erasing ask in a dialog first (erasing
 wants the word "erase" typed); the page then sends the command, takes the
 code from the hub's answer and sends the confirmation.
 
