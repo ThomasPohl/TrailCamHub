@@ -183,17 +183,23 @@ export class HttpGalleryApi implements GalleryApi {
   private cameras = new Map<string, Camera>();
   /** The admin session (#259): used instead of the token while it lasts. */
   private session?: { value: string; expiresAt: number };
+  /** Whether `/v1/me` says admin; asked only for the debug switches (#431). */
+  private adminCheck?: Promise<boolean>;
 
   constructor(
     baseUrl: string,
     private readonly token: string,
     private readonly fetchFn: typeof fetch = (...args) => fetch(...args),
-    /** With `?debug` in the address: log how videos and photos are paired. */
+    /**
+     * With `?debug` in the address: log how videos and photos are paired.
+     * Debugging tools are the admin's (#431): it takes effect only when
+     * `/v1/me` says admin.
+     */
     private readonly debug = false,
     private readonly now: () => number = () => Math.floor(Date.now() / 1000),
     /** Where the admin session survives a reload (one browser tab). */
     private readonly storage?: SessionStorageLike,
-    /** With `?pairing=off`: no tile joins a video and a photo (#347). */
+    /** With `?pairing=off`: no tile joins a video and a photo (#347); admin only (#431). */
     private readonly pairing = true,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
@@ -238,10 +244,28 @@ export class HttpGalleryApi implements GalleryApi {
     };
   }
 
+  /**
+   * Whether the debug switches in the address apply: only for the admin
+   * (#431). Asks `/v1/me` once, and only when a switch is set.
+   */
+  private diagnostics(): Promise<boolean> {
+    if (!this.debug && this.pairing) return Promise.resolve(false);
+    this.adminCheck ??= this.request<{ role: string }>('GET', '/v1/me').then(
+      (me) => me.role === 'admin',
+      () => false,
+    );
+    return this.adminCheck;
+  }
+
   async recordings(camId: string): Promise<Recording[]> {
-    const items = await this.request<MediaItem[]>('GET', `${this.camera(camId)}/media`);
+    const [items, admin] = await Promise.all([
+      this.request<MediaItem[]>('GET', `${this.camera(camId)}/media`),
+      this.diagnostics(),
+    ]);
+    const debug = this.debug && admin;
+    const pairing = this.pairing || !admin;
     const name = this.cameras.get(camId)?.name ?? 'Kamera';
-    const log = this.debug
+    const log = debug
       ? (rows: Record<string, unknown>[]) => {
           console.info(`[gallery] ${items.length} files of ${camId}:`);
           console.table(
@@ -257,10 +281,10 @@ export class HttpGalleryApi implements GalleryApi {
           void logStampDifferences(items, this.fetchFn);
         }
       : undefined;
-    const grouped = groupRecordings(items, log, this.pairing);
+    const grouped = groupRecordings(items, log, pairing);
     // The numbers say which photo belongs to a video; the date and time in
     // the thumbnails have the last word (#347).
-    const groups = this.pairing
+    const groups = pairing
       ? await splitMismatchedPairs(grouped, (video, photo) => this.sameMoment(video, photo))
       : grouped;
     return groups.map((files) => {
