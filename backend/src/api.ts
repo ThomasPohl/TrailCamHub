@@ -1326,6 +1326,10 @@ async function checkin(req: ApiRequest, _p: Record<string, string>, deps: Deps) 
         batPercent: optionalNumber(report.batPercent),
         sdFreeMB: optionalNumber(report.sdFreeMB),
         temperature: optionalNumber(report.temperature),
+        // A 100 % while charging says little about the level (#473).
+        ...(optionalBoolean(report.isCharging) !== undefined && {
+          charging: optionalBoolean(report.isCharging),
+        }),
       },
     );
     // Only new recordings are written; existing ones keep their flags.

@@ -670,6 +670,25 @@ describe('charging state of the hub (#421)', () => {
   });
 });
 
+describe('charging state of a camera (#473)', () => {
+  it('stores the flag with the camera sample and leaves it out when the hub sends none', async () => {
+    const world = await galleryWorld();
+    const read = (readAt: number, extra: Record<string, unknown>) =>
+      handleRequest(
+        hubRequest('/v1/device/checkin', world.hubKey, {
+          cameras: [{ camId: CAM_ID, readAt, batPercent: 100, media: [], ...extra }],
+        }),
+        world.deps,
+      );
+    // One sample per hour at most, so the reads are an hour apart, oldest first.
+    await read(NOW - 3 * 3700, { isCharging: true });
+    await read(NOW - 2 * 3700, { isCharging: 'yes' });
+    await read(NOW - 3700, {});
+    const samples = await world.deps.store.listSamples({ camId: CAM_ID }, 0);
+    expect(samples.map((x) => x.charging)).toEqual([undefined, true, undefined]);
+  });
+});
+
 describe('power mode (#416)', () => {
   it('stores the mode, ignores other values and drops it when it is no longer sent', async () => {
     const world = await galleryWorld();

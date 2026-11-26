@@ -156,7 +156,8 @@ export function hubFaults(
     }
     const cbat = camera.batPercent;
     // 0 is what a camera reports before its first read; only a real read counts.
-    if (camera.lastSeen > 0 && cbat !== undefined) {
+    // A camera on its charger is not about to run empty (#473).
+    if (camera.lastSeen > 0 && cbat !== undefined && camera.isCharging !== true) {
       if (cbat <= CAMERA_BATTERY_CRITICAL) {
         faults.push({ kind: 'cameraBatteryCritical', level: 'error', camId, value: cbat });
       } else if (cbat <= CAMERA_BATTERY_LOW) {

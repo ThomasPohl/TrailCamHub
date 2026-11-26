@@ -99,6 +99,16 @@ describe('hub faults (#265)', () => {
     ]);
   });
 
+  it('raises no battery fault for a camera on its charger (#473)', () => {
+    const cams = [
+      { camera: camera({ camId: 'A', batPercent: 5, isCharging: true }), commands: [] },
+      { camera: camera({ camId: 'B', batPercent: 5, isCharging: false }), commands: [] },
+    ];
+    expect(hubFaults(hub(), cams, NOW).map((f) => [f.kind, f.camId])).toEqual([
+      ['cameraBatteryCritical', 'B'],
+    ]);
+  });
+
   it('reports SD cards that are missing or full', () => {
     const cams = [
       { camera: camera({ camId: 'A', sdCard: 'missing', sdError: 'no card' }), commands: [] },
