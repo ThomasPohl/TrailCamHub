@@ -455,7 +455,17 @@ export class DemoGalleryApi implements GalleryApi {
     // A falling camera battery and a hub battery that the sun recharges.
     const days = Array.from({ length: 30 }, (_, i) => this.lastCheckin - (29 - i) * 86_400);
     return {
-      hub: days.map((at, i) => ({ at, batPercent: 70 + Math.round(15 * Math.sin(i / 3)) })),
+      // Daily values, and hourly ones for the last 12 h, so the forecast has a
+      // discharge to go by (a day between two values counts as a gap, #472).
+      hub: [
+        ...days
+          .slice(0, 29)
+          .map((at, i) => ({ at, batPercent: 70 + Math.round(15 * Math.sin(i / 3)) })),
+        ...Array.from({ length: 12 }, (_, j) => ({
+          at: this.lastCheckin - (11 - j) * 3600,
+          batPercent: 80 - j * 2,
+        })),
+      ],
       cameras: this.cameras.map((c, k) => ({
         camId: c.camId,
         name: c.name,
