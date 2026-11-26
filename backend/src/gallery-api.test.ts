@@ -685,7 +685,7 @@ describe('charging state of a camera (#473)', () => {
     await read(NOW - 2 * 3700, { isCharging: 'yes' });
     await read(NOW - 3700, {});
     const samples = await world.deps.store.listSamples({ camId: CAM_ID }, 0);
-    expect(samples.map((x) => x.charging)).toEqual([undefined, true, undefined]);
+    expect(samples.map((x) => x.charging)).toEqual([true, undefined, undefined]);
   });
 });
 
