@@ -70,6 +70,25 @@ struct ScheduleReport {
     bool sleeps = false;
     // Why the schedule is stretched ("hubBatteryLow", ...); empty: it is not.
     std::string stretch;
+    // Quiet hours ("23:00-06:00" or "off") and their origin (#436, #474).
+    std::string quiet;
+    std::string quiet_origin;
+    // Offset of the hub's local time to UTC in minutes, now (CET: 60). The
+    // quiet hours and read windows are in this local time.
+    bool has_utc_offset = false;
+    int utc_offset_min = 0;
+    // Location for the sun times ("52.5,13.4"; empty: none set, the fallback
+    // applies and `locationMissing` is sent) and its origin.
+    std::string location;
+    std::string location_origin;
+    bool location_missing = false;
+    // Today's sunrise and sunset as local minutes of the day; -1: unknown.
+    int sunrise_min = -1;
+    int sunset_min = -1;
+    // Energy factor for the check-in interval in 1/1000 (1000: none) and the
+    // morning charge it is based on (-1: unknown); sent if known.
+    int energy_permille = 1000;
+    int energy_morning = -1;
 };
 
 // Memory headroom of the hub (cycle_trace), so that "RAM is tight" on a board
@@ -202,6 +221,12 @@ struct CheckinResponse {
     // "battery"; empty = not set (the hub keeps its own). Any other value is
     // dropped by the parser.
     std::string power_setting;
+    // Quiet hours and location set in the gallery (#436); not given: the
+    // hub keeps its own (an empty string removes the gallery's value).
+    bool has_quiet = false;
+    std::string quiet;
+    bool has_location = false;
+    std::string location;
     // BLE addresses of the cameras approved in the gallery (#297, #299);
     // absent (old backend) = leave the stored list as it is.
     bool has_approved_cameras = false;

@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <sys/time.h>
+#include <time.h>
 #include <utility>
 #include <vector>
 
@@ -152,6 +153,32 @@ ScheduleReport schedule_report()
     report.sleeps = effective.sleeps;
     report.stretch = schedule::stretch_name(
         schedule::stretch(effective.settings, schedule::state()));
+    report.quiet = effective.quiet;
+    report.quiet_origin = schedule::origin_name(effective.quiet_origin);
+    report.location = effective.location;
+    report.location_origin = schedule::origin_name(effective.location_origin);
+    report.location_missing = effective.location_fallback;
+    report.energy_permille = effective.energy_permille;
+    report.energy_morning = effective.energy_morning;
+    if (time_sync_clock_valid()) {
+        // The local time's offset now; the gallery reads the quiet hours
+        // and windows in it (#474).
+        const time_t now = time(nullptr);
+        struct tm local = {};
+        localtime_r(&now, &local);
+        struct tm utc = {};
+        gmtime_r(&now, &utc);
+        const int day_diff = local.tm_yday - utc.tm_yday;
+        const int wrap = day_diff > 1 ? -1 : (day_diff < -1 ? 1 : day_diff);
+        report.utc_offset_min = wrap * 1440 +
+                                (local.tm_hour - utc.tm_hour) * 60 +
+                                (local.tm_min - utc.tm_min);
+        report.has_utc_offset = true;
+        const schedule::SunDay sun =
+            schedule::sun_day(effective.position, (std::int64_t)now);
+        report.sunrise_min = sun.sunrise;
+        report.sunset_min = sun.sunset;
+    }
     return report;
 }
 

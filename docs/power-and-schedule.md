@@ -170,15 +170,24 @@ whether it can check in more often (#436). No network and no forecast.
 
 In this order of precedence:
 
-1. **Backend** (`config` in the check-in response): set in the app per hub.
-   Removed in the app, the hub falls back to the next source.
+1. **Backend** (`config` in the check-in response): set in the app per hub
+   (`cameraPlan`, `checkinIntervalS`, `quiet`, `location`). Removed in the
+   app, the hub falls back to the next source.
 2. **Hub** (NVS, `hub_config`): `config set camera_plan …` and
    `config set checkin_min …` on the serial console or in the web installer's
    *Device setup*.
 3. **Build** (Kconfig), where the mode runs unattended (see the table above).
 
+For the location a GNSS fix (#440) comes after the hub's own value and before
+the build: gallery > hub > GNSS > build > fallback (middle of Germany).
+
 The console's `status` and every check-in report the plan and interval in
-effect, where each comes from, and the next planned read and check-in.
+effect, where each comes from, and the next planned read and check-in. The
+check-in's `schedule` block also has the quiet hours (`quiet`,
+`quietOrigin`), the UTC offset of the local time now (`utcOffsetMin`), the
+location (`location`, `locationOrigin`, or `locationMissing`), today's
+sunrise and sunset in local minutes (`sunriseMin`, `sunsetMin`) and, once
+known, the energy factor (`energyPermille`, `energyMorning`) (#474).
 
 ### Adaptive behaviour
 

@@ -81,11 +81,15 @@ import {
   validCameraName,
 } from './model';
 import {
+  formatLocation,
   formatPlan,
+  formatQuiet,
   MAX_CHECKIN_INTERVAL_S,
   MAX_PLAN_LENGTH,
   MIN_CHECKIN_INTERVAL_S,
+  parseLocation,
   parsePlan,
+  parseQuiet,
 } from './schedule';
 import type { MediaStorage } from './storage';
 import type { CameraTelemetry, Store } from './store/types';
@@ -841,6 +845,8 @@ async function setSchedule(req: ApiRequest, params: Record<string, string>, deps
   const body = parseJsonBody<{
     cameraPlan?: unknown;
     checkinIntervalS?: unknown;
+    quiet?: unknown;
+    location?: unknown;
     powerSetting?: unknown;
   }>(req);
   const config: ScheduleConfig = {};
@@ -862,6 +868,22 @@ async function setSchedule(req: ApiRequest, params: Record<string, string>, deps
       throw new HttpError(400, 'checkinIntervalS must be 300-86400 seconds');
     }
     config.checkinIntervalS = value as number;
+  }
+  if (body.quiet !== undefined && body.quiet !== null && body.quiet !== '') {
+    if (typeof body.quiet !== 'string' || body.quiet.length > 32) {
+      throw new HttpError(400, 'quiet must be a string like 23:00-06:00 or off');
+    }
+    const parsed = parseQuiet(body.quiet);
+    if (!parsed.ok) throw new HttpError(400, `Invalid quiet: ${parsed.error}`);
+    config.quiet = formatQuiet(parsed.quiet);
+  }
+  if (body.location !== undefined && body.location !== null && body.location !== '') {
+    if (typeof body.location !== 'string' || body.location.length > 40) {
+      throw new HttpError(400, 'location must be a string like 52.5,13.4');
+    }
+    const parsed = parseLocation(body.location);
+    if (!parsed.ok) throw new HttpError(400, `Invalid location: ${parsed.error}`);
+    config.location = formatLocation(parsed.location);
   }
   if (body.powerSetting !== undefined && body.powerSetting !== null) {
     // The power supply is hardware: only the admin changes it (#431).
@@ -975,7 +997,7 @@ function sdCardTelemetry(report: CameraReport): Pick<CameraTelemetry, 'sdCard' |
   return { sdCard, sdError: sdCard === 'missing' ? (optionalString(report.sdError) ?? '') : '' };
 }
 
-const ORIGINS: ScheduleOrigin[] = ['built-in', 'local', 'remote'];
+const ORIGINS: ScheduleOrigin[] = ['built-in', 'local', 'remote', 'gnss'];
 
 function origin(value: unknown): ScheduleOrigin {
   return ORIGINS.find((o) => o === value) ?? 'built-in';
@@ -1018,7 +1040,55 @@ function sanitizeSchedule(raw: unknown, now: number): HubSchedule | undefined {
     stretch: STRETCHES.includes(r.stretch as ScheduleStretch)
       ? (r.stretch as ScheduleStretch)
       : undefined,
+    ...sanitizeScheduleExtras(r),
   };
+}
+
+/** Quiet hours, location, sun times and energy factor (#436, #474); dropped when malformed. */
+function sanitizeScheduleExtras(r: Record<string, unknown>): Partial<HubSchedule> {
+  const out: Partial<HubSchedule> = {};
+  if (typeof r.quiet === 'string') {
+    const parsed = parseQuiet(r.quiet);
+    if (parsed.ok) {
+      out.quiet = formatQuiet(parsed.quiet);
+      out.quietOrigin = origin(r.quietOrigin);
+    }
+  }
+  const offset = r.utcOffsetMin;
+  if (Number.isInteger(offset) && Math.abs(offset as number) <= 14 * 60) {
+    out.utcOffsetMin = offset as number;
+  }
+  if (typeof r.location === 'string') {
+    const parsed = parseLocation(r.location);
+    if (parsed.ok) {
+      out.location = formatLocation(parsed.location);
+      out.locationOrigin = origin(r.locationOrigin);
+    }
+  } else if (r.locationMissing === true) {
+    out.locationMissing = true;
+  }
+  const minuteOfDay = (v: unknown) =>
+    Number.isInteger(v) && (v as number) >= 0 && (v as number) < 1440 ? (v as number) : undefined;
+  const sunrise = minuteOfDay(r.sunriseMin);
+  const sunset = minuteOfDay(r.sunsetMin);
+  if (sunrise !== undefined && sunset !== undefined) {
+    out.sunriseMin = sunrise;
+    out.sunsetMin = sunset;
+  }
+  const permille = r.energyPermille;
+  const morning = r.energyMorning;
+  if (
+    Number.isInteger(permille) &&
+    (permille as number) > 0 &&
+    (permille as number) <= 1000 &&
+    Number.isInteger(morning) &&
+    (morning as number) >= 0 &&
+    (morning as number) <= 100
+  ) {
+    out.energyPermille = permille as number;
+    out.energyMorning = morning as number;
+  }
+  return out;
 }
 
 function sanitizeMedia(raw: CameraReport['media'], camId: string): MediaRecord[] {
