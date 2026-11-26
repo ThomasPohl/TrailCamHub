@@ -302,6 +302,39 @@ describe('pairing switched off (#347)', () => {
   });
 });
 
+describe('debug switches only for the admin (#431)', () => {
+  const t = 1_794_731_000;
+  const media = [
+    item({ mediaId: 42, num: 42, fileType: 2, mediaTime: t + 12 }),
+    item({ mediaId: 43, num: 43, fileType: 0, mediaTime: t }),
+  ];
+
+  async function tiles(role: string, pairing: boolean) {
+    const { fn, calls } = fakeFetch({
+      'GET https://api/v1/cameras/CAM1/media': media,
+      'GET https://api/v1/me': { name: 'X', role },
+    });
+    const api = new HttpGalleryApi('https://api', 't', fn, false, undefined, undefined, pairing);
+    const recordings = await api.recordings('CAM1');
+    return {
+      count: recordings.length,
+      asked: calls.filter((c) => c.url.endsWith('/v1/me')).length,
+    };
+  }
+
+  it('ignores ?pairing=off for a user', async () => {
+    expect(await tiles('user', false)).toEqual({ count: 1, asked: 1 });
+  });
+
+  it('applies ?pairing=off for the admin', async () => {
+    expect(await tiles('admin', false)).toEqual({ count: 2, asked: 1 });
+  });
+
+  it('does not ask who the user is without a switch', async () => {
+    expect(await tiles('admin', true)).toEqual({ count: 1, asked: 0 });
+  });
+});
+
 describe('pairing with a missing photo', () => {
   it('does not let a video take the photo of the next pair', async () => {
     const { groupRecordings } = await import('./http');
