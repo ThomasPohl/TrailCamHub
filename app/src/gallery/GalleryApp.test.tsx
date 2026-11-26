@@ -191,7 +191,9 @@ describe('GalleryApp', () => {
     fireEvent.change(screen.getByLabelText('Code aus der Authenticator-App'), {
       target: { value: '123456' },
     });
+    fireEvent.click(await screen.findByRole('button', { name: /^Hub Garten:/ }));
     const hub = await screen.findByRole('article', { name: 'Hub Garten' });
+    fireEvent.click(within(hub).getByRole('tab', { name: 'Nutzer' }));
     const users = within(hub).getByRole('list', { name: 'Nutzer Garten' });
     // Only ordinary users get buttons, never the admin account.
     expect(within(users).getAllByRole('button', { name: 'Neuer Link' })).toHaveLength(1);
@@ -206,6 +208,8 @@ describe('GalleryApp', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Sperren' }));
     expect(await screen.findByText(/ist gesperrt/)).toBeInTheDocument();
 
+    // The log is on the overview (#431).
+    fireEvent.click(within(hub).getByRole('button', { name: 'Verwaltung' }));
     fireEvent.click(screen.getByRole('button', { name: 'Protokoll anzeigen' }));
     expect(await screen.findByText(/Admin angemeldet/)).toBeInTheDocument();
   });
@@ -230,19 +234,26 @@ describe('GalleryApp', () => {
     );
     // Two hints in the demo: the button counts them (#265).
     fireEvent.click(await screen.findByRole('button', { name: 'Verwaltung (2)' }));
-    expect(await screen.findByText(/2 Hinweise/)).toBeInTheDocument();
+    // The overview (#431): what needs attention, then one card per hub.
+    const attention = await screen.findByRole('region', { name: 'Braucht Aufmerksamkeit' });
+    expect(attention).toHaveTextContent('Kamera „Wiese“: Akku schwach (18 %).');
+    fireEvent.click(screen.getByRole('button', { name: 'Hub Garten: 2 Hinweise' }));
     const hub = await screen.findByRole('article', { name: 'Hub Garten' });
+    expect(within(hub).getByText('84 %')).toBeInTheDocument();
+    fireEvent.click(within(hub).getByRole('tab', { name: 'Hinweise (2)' }));
     const faults = within(hub).getByRole('list', { name: 'Störungen Garten' });
     expect(faults).toHaveTextContent('Kamera „Wiese“: Akku schwach (18 %).');
-    expect(within(hub).getByText('84 %')).toBeInTheDocument();
+    fireEvent.click(within(hub).getByRole('tab', { name: 'Nutzer' }));
     const users = within(hub).getByRole('list', { name: 'Nutzer Garten' });
     expect(users).toHaveTextContent('Anwender');
     expect(users).toHaveTextContent('Admin (Admin)');
+    fireEvent.click(within(hub).getByRole('tab', { name: 'Übersicht' }));
 
     const row = within(hub).getByRole('row', { name: /Wiese/ });
     fireEvent.click(within(row).getByRole('button', { name: 'Jetzt lesen' }));
     expect(await within(row).findByText('Lesen angefordert')).toBeInTheDocument();
 
+    fireEvent.click(within(hub).getByRole('tab', { name: 'Zeitplan' }));
     const interval = within(hub).getByLabelText(/Kontakt alle/);
     fireEvent.change(interval, { target: { value: '3' } });
     const apply = within(hub).getByRole('button', { name: 'Übernehmen' });
@@ -250,11 +261,13 @@ describe('GalleryApp', () => {
     fireEvent.change(interval, { target: { value: '60' } });
     fireEvent.click(apply);
     expect(await screen.findByText(/übernimmt den Plan/)).toBeInTheDocument();
+    fireEvent.click(within(hub).getByRole('tab', { name: 'Übersicht' }));
     expect(await within(hub).findByText(/alle 1 h \(aus der App\)/)).toBeInTheDocument();
 
     // Connection with the mobile network, and the firmware events (#149): the
     // latest in the line, the last five on tap.
     expect(within(hub).getByText('Mobilfunk (Telekom.de), Signal -91 dBm (mittel)')).toBeVisible();
+    fireEvent.click(within(hub).getByRole('tab', { name: 'Firmware' }));
     expect(
       within(hub).getByText(/v0\.1\.13 → v0\.1\.14 .*übersprungen: Akku zu schwach/),
     ).toBeVisible();
@@ -267,6 +280,7 @@ describe('GalleryApp', () => {
     expect(within(hub).queryByRole('list', { name: 'Firmware-Verlauf Garten' })).toBeNull();
 
     // Battery history (#76), loaded when asked for.
+    fireEvent.click(within(hub).getByRole('tab', { name: 'Akku & Daten' }));
     fireEvent.click(within(hub).getByRole('button', { name: 'Akku-Verlauf (30 Tage)' }));
     expect(await within(hub).findByRole('img', { name: /^Hub: Akku/ })).toBeInTheDocument();
     expect(

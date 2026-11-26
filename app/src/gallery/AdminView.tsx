@@ -212,6 +212,9 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [latest, setLatest] = useState<string>();
+  /** The hub page shown instead of the overview (#431). */
+  const [openHub, setOpenHub] = useState<string>();
+  const [hubTab, setHubTab] = useState<HubTab>('overview');
 
   useEffect(() => {
     api.latestFirmware().then(setLatest, () => setLatest(undefined));
@@ -285,6 +288,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
   const t = now();
   const userName = (id?: number) =>
     hubs?.flatMap((h) => h.users).find((u) => u.userId === id)?.name ?? `User ${id}`;
+  const open = hubs?.find((h) => h.hubId === openHub);
 
   return (
     <section className="g-admin" aria-label="Verwaltung">
@@ -364,13 +368,439 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
       )}
       {hubs === undefined && !error && <p className="g-hint">Hubs werden geladen …</p>}
       {hubs && hubs.length === 0 && <p className="g-hint">Noch kein Hub angemeldet.</p>}
-      {hubs && hubs.length > 0 && <FaultSummary hubs={hubs} />}
-      {hubs?.map((hub) => (
-        <article key={hub.hubId} className="g-hub" aria-label={`Hub ${hub.name}`}>
-          <h2>
-            Hub „{hub.name}“{hub.name !== hub.hubId && <small> ({hub.hubId})</small>}
-          </h2>
-          {hub.faults.length > 0 && (
+      {open ? (
+        <HubPage
+          key={open.hubId}
+          api={api}
+          hub={open}
+          now={t}
+          latest={latest}
+          busy={busy}
+          tab={hubTab}
+          onTab={setHubTab}
+          onBack={() => setOpenHub(undefined)}
+          act={act}
+          onConfirm={setConfirm}
+        />
+      ) : (
+        hubs &&
+        hubs.length > 0 && (
+          <>
+            <Attention
+              hubs={hubs}
+              now={t}
+              onOpen={(hubId) => {
+                setOpenHub(hubId);
+                setHubTab('hints');
+              }}
+            />
+            <h2>Hubs ({hubs.length})</h2>
+            <div className="g-hubcards">
+              {hubs.map((hub) => (
+                <HubCard
+                  key={hub.hubId}
+                  hub={hub}
+                  now={t}
+                  latest={latest}
+                  onOpen={() => {
+                    setOpenHub(hub.hubId);
+                    setHubTab('overview');
+                  }}
+                />
+              ))}
+            </div>
+            <section className="g-audit" aria-label="Protokoll">
+              <h2>Protokoll</h2>
+              {audit === undefined ? (
+                <button
+                  type="button"
+                  className="g-btn g-btn--small g-btn--quiet"
+                  onClick={() => void showAudit()}
+                >
+                  Protokoll anzeigen
+                </button>
+              ) : audit.length === 0 ? (
+                <p className="g-hint">Noch nichts protokolliert.</p>
+              ) : (
+                <ul className="g-audit-list">
+                  {audit.map((entry, i) => (
+                    <li key={i}>
+                      {clockTime(entry.at, t)} · {AUDIT_TEXT[entry.action]}
+                      {entry.target !== undefined && ` (${userName(entry.target)})`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
+        )
+      )}
+    </section>
+  );
+}
+
+type HubTab = 'overview' | 'schedule' | 'battery' | 'hints' | 'users' | 'firmware' | 'tech';
+
+const HUB_TABS: Array<{ id: HubTab; label: string }> = [
+  { id: 'overview', label: 'Übersicht' },
+  { id: 'schedule', label: 'Zeitplan' },
+  { id: 'battery', label: 'Akku & Daten' },
+  { id: 'hints', label: 'Hinweise' },
+  { id: 'users', label: 'Nutzer' },
+  { id: 'firmware', label: 'Firmware' },
+  { id: 'tech', label: 'Technik' },
+];
+
+/** Hub-level faults that mean the hub is not heard from. */
+const silent = (hub: AdminHub) =>
+  hub.lastSeen === 0 || hub.faults.some((f) => f.kind === 'hubSilent' || f.kind === 'hubNeverSeen');
+
+/** "OK", "2 Hinweise", "1 Störung", "Keine Meldung" (#431). */
+function hubPill(hub: AdminHub): { text: string; tone: 'ok' | 'warn' | 'error' } {
+  if (silent(hub)) return { text: 'Keine Meldung', tone: 'error' };
+  const errors = hub.faults.filter((f) => f.level === 'error').length;
+  if (errors > 0)
+    return { text: errors === 1 ? '1 Störung' : `${errors} Störungen`, tone: 'error' };
+  const n = hub.faults.length;
+  if (n > 0) return { text: n === 1 ? '1 Hinweis' : `${n} Hinweise`, tone: 'warn' };
+  return { text: 'OK', tone: 'ok' };
+}
+
+/**
+ * "Braucht Aufmerksamkeit" (#431): the faults of every hub, errors first,
+ * each with the hub it belongs to and a way there.
+ */
+function Attention({
+  hubs,
+  now,
+  onOpen,
+}: {
+  hubs: AdminHub[];
+  now: number;
+  onOpen(hubId: string): void;
+}) {
+  const items = hubs
+    .flatMap((hub) => hub.faults.map((fault) => ({ hub, fault })))
+    .sort((a, b) => Number(b.fault.level === 'error') - Number(a.fault.level === 'error'));
+  if (items.length === 0) {
+    return <p className="g-notice g-notice--ok">Alles in Ordnung.</p>;
+  }
+  return (
+    <section className="g-attention" aria-label="Braucht Aufmerksamkeit">
+      <h2>Braucht Aufmerksamkeit ({items.length})</h2>
+      <ul>
+        {items.map(({ hub, fault }, i) => (
+          <li key={i} className={`g-fault g-fault--${fault.level}`}>
+            <span>
+              {fault.level === 'error' ? 'Störung: ' : 'Hinweis: '}
+              {faultText(fault, hub.cameras.find((c) => c.camId === fault.camId)?.name, now)}
+            </span>
+            <button
+              type="button"
+              className="g-btn g-btn--small g-btn--quiet"
+              aria-label={`${hub.name} öffnen`}
+              onClick={() => onOpen(hub.hubId)}
+            >
+              {hub.name} ›
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function meterClass(percent: number): string {
+  if (percent < 20) return 'g-meter g-meter--low';
+  return percent < 40 ? 'g-meter g-meter--mid' : 'g-meter';
+}
+
+function signalText(hub: AdminHub): string {
+  if (hub.uplink === 'modem') {
+    return hub.modemSignalDbm !== undefined ? `${hub.modemSignalDbm} dBm` : 'Mobilfunk';
+  }
+  if (hub.uplink === 'ethernet') return 'LAN';
+  if (hub.uplink === 'wifi') return 'WLAN';
+  return '–';
+}
+
+/** One hub on the overview (#431); the whole card opens the hub page. */
+function HubCard({
+  hub,
+  now,
+  latest,
+  onOpen,
+}: {
+  hub: AdminHub;
+  now: number;
+  latest?: string;
+  onOpen(): void;
+}) {
+  const pill = hubPill(hub);
+  const next = hub.schedule?.nextCheckinAt;
+  return (
+    <button
+      type="button"
+      className="g-hubcard"
+      aria-label={`Hub ${hub.name}: ${pill.text}`}
+      onClick={onOpen}
+    >
+      <span className="g-hubcard__head">
+        <span className={`g-dot g-dot--${pill.tone}`} aria-hidden="true" />
+        <strong>{hub.name}</strong>
+        {hub.name !== hub.hubId && <small>{hub.hubId}</small>}
+        <span className={`g-pill g-pill--${pill.tone}`}>{pill.text}</span>
+      </span>
+      <span className="g-hubcard__tiles">
+        <span className="g-tile">
+          <small>Akku</small>
+          {hub.batPercent !== undefined ? `${hub.batPercent} %` : '–'}
+        </span>
+        <span className="g-tile">
+          <small>Signal</small>
+          {signalText(hub)}
+        </span>
+        <span className="g-tile">
+          <small>{next !== undefined && next > now ? 'Nächster Kontakt' : 'Kontakt'}</small>
+          {next !== undefined && next > now
+            ? clockTime(next, now)
+            : hub.lastSeen > 0
+              ? clockTime(hub.lastSeen, now)
+              : 'noch nie'}
+        </span>
+        <span className="g-tile">
+          <small>Firmware</small>
+          {hub.firmware ?? '–'}
+          {isNewer(latest, hub.firmware) && <span title={`Update ${latest}`}> ↑</span>}
+        </span>
+      </span>
+      {hub.cameras.length > 0 && (
+        <span className="g-hubcard__cams">
+          {hub.cameras.map((c) => (
+            <span key={c.camId} className="g-hubcard__cam">
+              <span>{c.name}</span>
+              <span className={meterClass(c.batPercent)}>
+                <span className="g-meter__bar" style={{ width: `${c.batPercent}%` }} />
+                <span className="g-meter__text">{c.batPercent} %</span>
+              </span>
+            </span>
+          ))}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/**
+ * One hub for the admin (#431): the facts in tabs, the technical ones on
+ * their own so the overview stays readable.
+ */
+function HubPage({
+  api,
+  hub,
+  now: t,
+  latest,
+  busy,
+  tab,
+  onTab,
+  onBack,
+  act,
+  onConfirm: setConfirm,
+}: {
+  api: GalleryApi;
+  hub: AdminHub;
+  now: number;
+  latest?: string;
+  busy: boolean;
+  tab: HubTab;
+  onTab(tab: HubTab): void;
+  onBack(): void;
+  act(run: () => Promise<void>, success: string): Promise<void>;
+  onConfirm(confirm: Confirm): void;
+}) {
+  const pill = hubPill(hub);
+  return (
+    <article className="g-hub" aria-label={`Hub ${hub.name}`}>
+      <nav className="g-breadcrumb" aria-label="Pfad">
+        <button type="button" className="g-link" onClick={onBack}>
+          Verwaltung
+        </button>{' '}
+        › Hub
+      </nav>
+      <h2>
+        <span className={`g-dot g-dot--${pill.tone}`} aria-hidden="true" /> Hub „{hub.name}“
+        {hub.name !== hub.hubId && <small> ({hub.hubId})</small>}{' '}
+        <span className={`g-pill g-pill--${pill.tone}`}>{pill.text}</span>
+      </h2>
+      <div className="g-tabs" role="tablist" aria-label={`Hub ${hub.name}`}>
+        {HUB_TABS.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === x.id}
+            className={tab === x.id ? 'g-tab g-tab--active' : 'g-tab'}
+            onClick={() => onTab(x.id)}
+          >
+            {x.label}
+            {x.id === 'hints' && hub.faults.length > 0 && ` (${hub.faults.length})`}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" aria-label={HUB_TABS.find((x) => x.id === tab)?.label}>
+        {tab === 'overview' && (
+          <>
+            <dl className="g-facts">
+              <dt>Letzter Kontakt</dt>
+              <dd>{hub.lastSeen > 0 ? clockTime(hub.lastSeen, t) : 'noch nie'}</dd>
+              {hub.schedule?.nextCheckinAt !== undefined && (
+                <>
+                  <dt>Nächster Kontakt</dt>
+                  <dd>gegen {clockTime(hub.schedule.nextCheckinAt, t)}</dd>
+                </>
+              )}
+              <dt>Akku</dt>
+              <dd>{hub.batPercent !== undefined ? `${hub.batPercent} %` : '–'}</dd>
+              {hub.uplink && (
+                <>
+                  <dt>Verbindung</dt>
+                  <dd>{uplinkText(hub.uplink, hub.modemSignalDbm, hub.modemOperator)}</dd>
+                </>
+              )}
+              {hub.schedule && (
+                <>
+                  <dt>Kamera lesen</dt>
+                  <dd>
+                    {hub.schedule.cameraPlan} ({ORIGIN[hub.schedule.cameraPlanOrigin]})
+                  </dd>
+                  <dt>Kontakt</dt>
+                  <dd>
+                    {`${minutes(hub.schedule.checkinIntervalS)} (${ORIGIN[hub.schedule.checkinOrigin]})`}
+                    {hub.schedule.sleeps && ', schläft dazwischen'}
+                  </dd>
+                  {hub.schedule.stretch && (
+                    <>
+                      <dt>Gestreckt</dt>
+                      <dd>{STRETCH[hub.schedule.stretch]}</dd>
+                    </>
+                  )}
+                  {hub.schedule.quiet !== undefined && (
+                    <>
+                      <dt>Nachtruhe</dt>
+                      <dd>
+                        {hub.schedule.quiet === 'off'
+                          ? 'aus'
+                          : `${hub.schedule.quiet.replace('-', '–')} Uhr`}
+                        {hub.schedule.quietOrigin && ` (${ORIGIN[hub.schedule.quietOrigin]})`}
+                      </dd>
+                    </>
+                  )}
+                  {(hub.schedule.location !== undefined || hub.schedule.locationMissing) && (
+                    <>
+                      <dt>Standort</dt>
+                      <dd>{locationText(hub.schedule)}</dd>
+                    </>
+                  )}
+                  {hub.schedule.energyPermille !== undefined &&
+                    hub.schedule.energyPermille < 1000 && (
+                      <>
+                        <dt>Mehr Kontakte</dt>
+                        <dd>{`Akku gut geladen (Faktor ${(hub.schedule.energyPermille / 1000).toFixed(2).replace('.', ',')}, morgens ${hub.schedule.energyMorning ?? '?'} %)`}</dd>
+                      </>
+                    )}
+                </>
+              )}
+            </dl>
+            <table className="g-table">
+              <caption>Kameras</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Modell</th>
+                  <th scope="col">Akku</th>
+                  <th scope="col">SD-Karte</th>
+                  <th scope="col">Temp.</th>
+                  <th scope="col">Zuletzt gelesen</th>
+                  <th scope="col">
+                    <span className="g-visually-hidden">Aktion</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {hub.cameras.length === 0 && (
+                  <tr>
+                    <td colSpan={7}>Noch keine Kamera gemeldet.</td>
+                  </tr>
+                )}
+                {hub.cameras.map((c) => (
+                  <tr key={c.camId}>
+                    <th scope="row">
+                      {c.name}
+                      {c.name !== c.camId && <small> {c.camId}</small>}
+                      {c.hidden && <small> (ausgeblendet)</small>}
+                    </th>
+                    <td>
+                      {c.model} · {c.firmware}
+                    </td>
+                    <td>
+                      {c.batPercent} %{c.isCharging ? ' (lädt)' : ''}
+                    </td>
+                    <td>{sdText(c)}</td>
+                    <td>{c.temperature !== undefined ? `${c.temperature} °C` : '–'}</td>
+                    <td>{c.lastSeen > 0 ? clockTime(c.lastSeen, t) : 'noch nie'}</td>
+                    <td>
+                      {c.readRequested ? (
+                        'Lesen angefordert'
+                      ) : (
+                        <button
+                          type="button"
+                          className="g-btn g-btn--plain"
+                          disabled={busy}
+                          onClick={() =>
+                            void act(
+                              () => api.readCamera(c.camId),
+                              `Kamera „${c.name}“ wird beim nächsten Kontakt gelesen.`,
+                            )
+                          }
+                        >
+                          Jetzt lesen
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+        {tab === 'schedule' && (
+          <ScheduleForm
+            key={`${hub.hubId}:${hub.scheduleConfig.cameraPlan ?? ''}:${hub.scheduleConfig.checkinIntervalS ?? ''}:${hub.scheduleConfig.powerSetting ?? ''}`}
+            hub={hub}
+            disabled={busy}
+            onSave={(config) =>
+              act(
+                () => api.setSchedule(hub.hubId, config),
+                'Der Hub übernimmt den Plan beim nächsten Kontakt.',
+              )
+            }
+          />
+        )}
+        {tab === 'battery' && (
+          <>
+            <HistoryPanel
+              api={api}
+              hubId={hub.hubId}
+              now={t}
+              quiet={quietHours(hub.schedule?.quiet, hub.schedule?.utcOffsetMin)}
+            />
+            <UsagePanel api={api} hubId={hub.hubId} now={t} />
+          </>
+        )}
+        {tab === 'hints' &&
+          (hub.faults.length === 0 ? (
+            <p className="g-notice g-notice--ok">Keine Störungen.</p>
+          ) : (
             <ul className="g-faults" aria-label={`Störungen ${hub.name}`}>
               {hub.faults.map((f, i) => (
                 <li key={i} className={`g-fault g-fault--${f.level}`}>
@@ -379,91 +809,9 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
                 </li>
               ))}
             </ul>
-          )}
+          ))}
+        {tab === 'users' && (
           <dl className="g-facts">
-            <dt>Letzter Kontakt</dt>
-            <dd>{hub.lastSeen > 0 ? clockTime(hub.lastSeen, t) : 'noch nie'}</dd>
-            {hub.schedule?.nextCheckinAt !== undefined && (
-              <>
-                <dt>Nächster Kontakt</dt>
-                <dd>gegen {clockTime(hub.schedule.nextCheckinAt, t)}</dd>
-              </>
-            )}
-            <dt>Akku</dt>
-            <dd>{hub.batPercent !== undefined ? `${hub.batPercent} %` : '–'}</dd>
-            {hub.uplink && (
-              <>
-                <dt>Verbindung</dt>
-                <dd>{uplinkText(hub.uplink, hub.modemSignalDbm, hub.modemOperator)}</dd>
-              </>
-            )}
-            {hub.memory && (
-              <>
-                <dt>Speicher</dt>
-                <dd>{memoryText(hub.memory)}</dd>
-              </>
-            )}
-            <dt>Firmware</dt>
-            <dd>
-              {hub.firmware ?? '–'}
-              {isNewer(latest, hub.firmware) && (
-                <span className="g-update-available">
-                  {' '}
-                  · Update verfügbar: {latest} (installiert der Hub selbst beim nächsten Abruf)
-                </span>
-              )}
-            </dd>
-            {hub.firmwareChanges && hub.firmwareChanges.length > 0 && (
-              <>
-                <dt>Firmware-Wechsel</dt>
-                <dd>
-                  <FirmwareHistory hubName={hub.name} changes={hub.firmwareChanges} now={t} />
-                </dd>
-              </>
-            )}
-            {hub.schedule && (
-              <>
-                <dt>Kamera lesen</dt>
-                <dd>
-                  {hub.schedule.cameraPlan} ({ORIGIN[hub.schedule.cameraPlanOrigin]})
-                </dd>
-                <dt>Kontakt</dt>
-                <dd>
-                  {`${minutes(hub.schedule.checkinIntervalS)} (${ORIGIN[hub.schedule.checkinOrigin]})`}
-                  {hub.schedule.sleeps && ', schläft dazwischen'}
-                </dd>
-                {hub.schedule.stretch && (
-                  <>
-                    <dt>Gestreckt</dt>
-                    <dd>{STRETCH[hub.schedule.stretch]}</dd>
-                  </>
-                )}
-                {hub.schedule.quiet !== undefined && (
-                  <>
-                    <dt>Nachtruhe</dt>
-                    <dd>
-                      {hub.schedule.quiet === 'off'
-                        ? 'aus'
-                        : `${hub.schedule.quiet.replace('-', '–')} Uhr`}
-                      {hub.schedule.quietOrigin && ` (${ORIGIN[hub.schedule.quietOrigin]})`}
-                    </dd>
-                  </>
-                )}
-                {(hub.schedule.location !== undefined || hub.schedule.locationMissing) && (
-                  <>
-                    <dt>Standort</dt>
-                    <dd>{locationText(hub.schedule)}</dd>
-                  </>
-                )}
-                {hub.schedule.energyPermille !== undefined &&
-                  hub.schedule.energyPermille < 1000 && (
-                    <>
-                      <dt>Mehr Kontakte</dt>
-                      <dd>{`Akku gut geladen (Faktor ${(hub.schedule.energyPermille / 1000).toFixed(2).replace('.', ',')}, morgens ${hub.schedule.energyMorning ?? '?'} %)`}</dd>
-                    </>
-                  )}
-              </>
-            )}
             <dt>Nutzer</dt>
             <dd>
               {hub.users.length === 0 ? (
@@ -505,113 +853,61 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
               )}
             </dd>
           </dl>
-
-          <table className="g-table">
-            <caption>Kameras</caption>
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Modell</th>
-                <th scope="col">Akku</th>
-                <th scope="col">SD-Karte</th>
-                <th scope="col">Temp.</th>
-                <th scope="col">Zuletzt gelesen</th>
-                <th scope="col">
-                  <span className="g-visually-hidden">Aktion</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {hub.cameras.length === 0 && (
-                <tr>
-                  <td colSpan={7}>Noch keine Kamera gemeldet.</td>
-                </tr>
-              )}
-              {hub.cameras.map((c) => (
-                <tr key={c.camId}>
-                  <th scope="row">
-                    {c.name}
-                    {c.name !== c.camId && <small> {c.camId}</small>}
-                    {c.hidden && <small> (ausgeblendet)</small>}
-                  </th>
-                  <td>
-                    {c.model} · {c.firmware}
-                  </td>
-                  <td>
-                    {c.batPercent} %{c.isCharging ? ' (lädt)' : ''}
-                  </td>
-                  <td>{sdText(c)}</td>
-                  <td>{c.temperature !== undefined ? `${c.temperature} °C` : '–'}</td>
-                  <td>{c.lastSeen > 0 ? clockTime(c.lastSeen, t) : 'noch nie'}</td>
-                  <td>
-                    {c.readRequested ? (
-                      'Lesen angefordert'
-                    ) : (
-                      <button
-                        type="button"
-                        className="g-btn g-btn--plain"
-                        disabled={busy}
-                        onClick={() =>
-                          void act(
-                            () => api.readCamera(c.camId),
-                            `Kamera „${c.name}“ wird beim nächsten Kontakt gelesen.`,
-                          )
-                        }
-                      >
-                        Jetzt lesen
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <HistoryPanel
-            api={api}
-            hubId={hub.hubId}
-            now={t}
-            quiet={quietHours(hub.schedule?.quiet, hub.schedule?.utcOffsetMin)}
-          />
-          <UsagePanel api={api} hubId={hub.hubId} now={t} />
-
-          <ScheduleForm
-            key={`${hub.hubId}:${hub.scheduleConfig.cameraPlan ?? ''}:${hub.scheduleConfig.checkinIntervalS ?? ''}:${hub.scheduleConfig.powerSetting ?? ''}`}
-            hub={hub}
-            disabled={busy}
-            onSave={(config) =>
-              act(
-                () => api.setSchedule(hub.hubId, config),
-                'Der Hub übernimmt den Plan beim nächsten Kontakt.',
-              )
-            }
-          />
-        </article>
-      ))}
-      <section className="g-audit" aria-label="Protokoll">
-        <h2>Protokoll</h2>
-        {audit === undefined ? (
-          <button
-            type="button"
-            className="g-btn g-btn--small g-btn--quiet"
-            onClick={() => void showAudit()}
-          >
-            Protokoll anzeigen
-          </button>
-        ) : audit.length === 0 ? (
-          <p className="g-hint">Noch nichts protokolliert.</p>
-        ) : (
-          <ul className="g-audit-list">
-            {audit.map((entry, i) => (
-              <li key={i}>
-                {clockTime(entry.at, t)} · {AUDIT_TEXT[entry.action]}
-                {entry.target !== undefined && ` (${userName(entry.target)})`}
-              </li>
-            ))}
-          </ul>
         )}
-      </section>
-    </section>
+        {tab === 'firmware' && (
+          <dl className="g-facts">
+            <dt>Firmware</dt>
+            <dd>
+              {hub.firmware ?? '–'}
+              {isNewer(latest, hub.firmware) && (
+                <span className="g-update-available">
+                  {' '}
+                  · Update verfügbar: {latest} (installiert der Hub selbst beim nächsten Abruf)
+                </span>
+              )}
+            </dd>
+            {hub.firmwareChanges && hub.firmwareChanges.length > 0 && (
+              <>
+                <dt>Firmware-Wechsel</dt>
+                <dd>
+                  <FirmwareHistory hubName={hub.name} changes={hub.firmwareChanges} now={t} />
+                </dd>
+              </>
+            )}
+          </dl>
+        )}
+        {tab === 'tech' && (
+          <dl className="g-facts">
+            <dt>Hub-ID</dt>
+            <dd>{hub.hubId}</dd>
+            {hub.uplink && (
+              <>
+                <dt>Verbindung</dt>
+                <dd>{uplinkText(hub.uplink, hub.modemSignalDbm, hub.modemOperator)}</dd>
+              </>
+            )}
+            {hub.memory && (
+              <>
+                <dt>Speicher</dt>
+                <dd>{memoryText(hub.memory)}</dd>
+              </>
+            )}
+            {hub.powerMode && (
+              <>
+                <dt>Stromversorgung</dt>
+                <dd>{hub.powerMode === 'mains' ? 'Netz' : 'Akku'} (beim letzten Kontakt)</dd>
+              </>
+            )}
+            <dt>Kameras</dt>
+            <dd>
+              {hub.cameras.length === 0
+                ? 'keine'
+                : hub.cameras.map((c) => `${c.name}: ${c.camId}`).join(', ')}
+            </dd>
+          </dl>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -884,24 +1180,6 @@ export function BatteryChart({
         ))}
       </svg>
     </figure>
-  );
-}
-
-/** One line over all hubs, so a fault is seen without scrolling (#265). */
-function FaultSummary({ hubs }: { hubs: AdminHub[] }) {
-  const errors = hubs.flatMap((h) => h.faults).filter((f) => f.level === 'error').length;
-  const warnings = hubs.flatMap((h) => h.faults).length - errors;
-  if (errors + warnings === 0) {
-    return <p className="g-notice g-notice--ok">Keine Störungen.</p>;
-  }
-  const parts = [
-    errors > 0 && (errors === 1 ? '1 Störung' : `${errors} Störungen`),
-    warnings > 0 && (warnings === 1 ? '1 Hinweis' : `${warnings} Hinweise`),
-  ].filter(Boolean);
-  return (
-    <p className={errors > 0 ? 'g-error' : 'g-banner'} role="status">
-      {parts.join(' und ')} – Einzelheiten beim jeweiligen Hub.
-    </p>
   );
 }
 
