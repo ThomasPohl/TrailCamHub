@@ -35,6 +35,7 @@
 #include "camera_actions.hpp"
 #include "command_parser.hpp"
 #include "diagnostics.hpp"
+#include "camera_settings.hpp"
 #include "device_info.hpp"
 #include "cycle_trace.hpp"
 #include "hub_battery.hpp"
@@ -521,6 +522,61 @@ void run_action(const char *type, const hub_console::Command &command)
     }
 }
 
+// "camset": per camera on the SD card the settings and the capability of its
+// last read (#197), in the words `camset <devId> ...` takes:
+//   camset F4_C1_56_06_A1_F0 workMode=0 pirSens=2 languageCode=de
+//   capability F4_C1_56_06_A1_F0 images=1,2 videos=3 languages=de,en
+void print_camera_settings()
+{
+    bool any = false;
+    for (const std::string &id : camera::store::list_cameras()) {
+        camera::artemis::DeviceInfo info;
+        std::int64_t read_at = 0;
+        if (!camera::store::load_camera_info(id, info, read_at)) {
+            continue;
+        }
+        any = true;
+        const std::string values =
+            camera::settings::console_line(info.settings);
+        if (values.empty()) {
+            reply("INFO", "camset " + id + " (no settings read yet)");
+            continue;
+        }
+        reply("INFO", "camset " + id + " " + values);
+        const std::string capability =
+            camera::settings::capability_line(info.settings.capability);
+        if (!capability.empty()) {
+            reply("INFO", "capability " + id + " " + capability);
+        }
+    }
+    if (!any) {
+        reply("INFO", "no camera read yet");
+    }
+}
+
+// "camset <devId|any> a=1 b=de": the same path as the web UI and the gallery
+// (session_actions::request_settings()); the session checks the values
+// against the camera's capability before it sends them (#197).
+void change_camera_settings(const hub_console::Command &command)
+{
+    std::vector<camera::settings::Value> values;
+    if (!camera::settings::decode_change(command.value, values)) {
+        reply("ERR", "unknown setting or value in '" + command.value +
+                         "' (see 'camset'; flags as 0 or 1)");
+        return;
+    }
+    const session_actions::Reply reply_of = session_actions::request_settings(
+        session_actions::From::console, command.key,
+        camera::settings::change_object(values));
+    if (reply_of.ok) {
+        reply("OK", format_line("action %u: ", reply_of.id) + reply_of.text +
+                        (reply_of.session_started ? "; results with 'actions'"
+                                                  : std::string()));
+    } else {
+        reply("ERR", reply_of.text);
+    }
+}
+
 void set_setting(const hub_console::Command &command)
 {
     hub_config::Key key;
@@ -616,6 +672,12 @@ void execute(const hub_console::Command &command)
         break;
     case CommandType::actions:
         print_actions();
+        break;
+    case CommandType::camset_show:
+        print_camera_settings();
+        break;
+    case CommandType::camset:
+        change_camera_settings(command);
         break;
     case CommandType::upload:
         request_cycle(session_controller_request_upload(), "upload");

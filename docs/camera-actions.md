@@ -11,7 +11,7 @@ how that works from every front end. The camera commands are described in
 | `video-stop` | stop it | 644 | console, web UI, backend |
 | `delete` | delete one recording by `mediaId` | 773 | console, web UI, backend |
 | `format` | erase the camera's SD card | 518 | console, web UI |
-| `settings` | change settings, e.g. `workMode=1;pirSens=2` | 513 | web UI, backend (gallery); console not yet (#197) |
+| `settings` | change settings, e.g. `workMode=1;pirSens=2` | 513 | console, web UI, backend (gallery) |
 
 Formatting is never remote (#196); it and deleting need a confirmation.
 Settings follow [`camera-settings.md`](camera-settings.md) (#368). Live video
@@ -125,6 +125,8 @@ is queued once when the front end gives a key.
 | `delete <mediaId>` / `delete <mediaId> confirm <code>` | delete one recording |
 | `format` / `format confirm <code>` | erase the camera's SD card |
 | `actions` | the queue with the results: `action 3 delete 2653775860 failed: …` |
+| `camset` | per camera the settings and the capability of its last read: `camset F4_C1_56_06_A1_F0 workMode=0 pirSens=2 … languageCode=en` and `capability F4_C1_56_06_A1_F0 images=1,2,6,10 videos=1,2,4 languages=en,de,fr unsupported=supportSidePir` (#197) |
+| `camset <devId\|any> <name=value…>` | queue a `settings` action, e.g. `camset any pirSens=2 osdInfoEnable=1` (flags as 0 or 1); the same path and checks as the web UI |
 
 ## Web installer
 

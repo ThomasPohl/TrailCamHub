@@ -745,4 +745,60 @@ void apply_change(Settings &settings, const std::vector<Value> &change)
     sort_by_table(settings.values);
 }
 
+std::string console_line(const Settings &settings)
+{
+    std::vector<Value> supported;
+    for (const Value &value : settings.values) {
+        const Field *field = find_field(value.name);
+        if (field != nullptr && settings.capability.supports(*field)) {
+            supported.push_back(value);
+        }
+    }
+    std::string line = encode_change(supported);
+    std::replace(line.begin(), line.end(), ';', ' ');
+    return line;
+}
+
+std::string capability_line(const Capability &capability)
+{
+    if (!capability.present) {
+        return "";
+    }
+    std::string line;
+    const auto add = [&line](const char *name, const std::string &list) {
+        if (list.empty()) {
+            return;
+        }
+        if (!line.empty()) {
+            line += ' ';
+        }
+        line += std::string(name) + "=" + list;
+    };
+    const auto join_numbers = [](const std::vector<std::int64_t> &numbers) {
+        std::string out;
+        for (const std::int64_t n : numbers) {
+            out += (out.empty() ? "" : ",") +
+                   std::to_string(static_cast<long long>(n));
+        }
+        return out;
+    };
+    const auto join_words = [](const std::vector<std::string> &words) {
+        std::string out;
+        for (const std::string &word : words) {
+            out += (out.empty() ? "" : ",") + word;
+        }
+        return out;
+    };
+    add("images", join_numbers(capability.image));
+    add("videos", join_numbers(capability.video));
+    add("languages", join_words(capability.languages));
+    add("unsupported", join_words(capability.unsupported));
+    return line;
+}
+
+std::string change_object(const std::vector<Value> &change)
+{
+    return "{" + values_json(change, false) + "}";
+}
+
 }  // namespace camera::settings

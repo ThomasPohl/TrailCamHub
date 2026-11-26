@@ -162,6 +162,32 @@ TEST_CASE("the check-in form leaves out what the camera does not support")
           std::string::npos);
 }
 
+TEST_CASE("the console shows the settings in the words camset takes (#197)")
+{
+    const Settings settings = parse_settings(kDeviceInfo);
+    const std::string line = console_line(settings);
+    CHECK(line.rfind("workMode=0 shootMode=2 ", 0) == 0);
+    CHECK(line.find("osdInfoEnable=1") != std::string::npos);
+    CHECK(line.find("languageCode=en") != std::string::npos);
+    CHECK(line.find("sidePirOnOff") == std::string::npos);
+    CHECK(line.find(';') == std::string::npos);
+    CHECK(capability_line(settings.capability) ==
+          "images=1,2,6,10 videos=1,2,4 languages=en,de,fr "
+          "unsupported=supportSidePir,supportSpkVolume");
+    CHECK(console_line(Settings{}).empty());
+    CHECK(capability_line(Capability{}).empty());
+
+    // What the console reads back is the object request_settings() takes.
+    std::vector<Value> change;
+    REQUIRE(decode_change("pirSens=2;osdInfoEnable=0;languageCode=de", change));
+    CHECK(change_object(change) ==
+          "{\"pirSens\":2,\"osdInfoEnable\":false,\"languageCode\":\"de\"}");
+    std::vector<Value> parsed;
+    std::string error;
+    CHECK(parse_change(change_object(change), parsed, error));
+    CHECK(parsed.size() == 3);
+}
+
 TEST_CASE("parse_change reads a flat object of known fields")
 {
     const std::vector<Value> change = change_of(

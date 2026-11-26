@@ -125,4 +125,18 @@ bool decode_change(const std::string &text, std::vector<Value> &out);
 // The settings after the camera accepted the change.
 void apply_change(Settings &settings, const std::vector<Value> &change);
 
+// The console form (#197): the supported settings as "workMode=0 pirSens=2
+// languageCode=de" (flags as 0 / 1), the same words `camset` takes; empty if
+// none is known.
+std::string console_line(const Settings &settings);
+
+// The capability for the console: "images=1,2 videos=3,4 languages=de,en
+// unsupported=supportSidePir" (empty parts left out); empty if the camera
+// reported none.
+std::string capability_line(const Capability &capability);
+
+// A change as the flat JSON object request_settings() and the backend take,
+// e.g. {"pirSens":2,"osdInfoEnable":true,"languageCode":"de"}.
+std::string change_object(const std::vector<Value> &change);
+
 }  // namespace camera::settings

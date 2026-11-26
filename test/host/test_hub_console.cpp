@@ -629,6 +629,29 @@ TEST_CASE("camera action commands")
     CHECK(parse_command("actions all").type == CommandType::invalid);
 }
 
+TEST_CASE("camset shows and changes camera settings (#197)")
+{
+    CHECK(parse_command("camset").type == CommandType::camset_show);
+
+    Command one =
+        parse_command("camset F4_C1_56_06_A1_F0 pirSens=2 osdInfoEnable=1");
+    CHECK(one.type == CommandType::camset);
+    CHECK(one.key == "F4_C1_56_06_A1_F0");
+    CHECK(one.value == "pirSens=2;osdInfoEnable=1");
+
+    Command any = parse_command("camset any languageCode=de");
+    CHECK(any.type == CommandType::camset);
+    CHECK(any.key.empty());
+    CHECK(any.value == "languageCode=de");
+
+    for (const char *line : {"camset any", "camset any pirSens",
+                             "camset any =2", "camset any pirSens=",
+                             "camset any a=1;b=2", "camset cam/1 pirSens=2"}) {
+        CAPTURE(line);
+        CHECK(parse_command(line).type == CommandType::invalid);
+    }
+}
+
 TEST_CASE("delete and format take a code in a second step")
 {
     Command first = parse_command("delete 2653775860");
