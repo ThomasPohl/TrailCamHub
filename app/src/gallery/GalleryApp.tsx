@@ -5,6 +5,7 @@ import { AdminView } from './AdminView';
 import { showFaultBadge } from './badge';
 import { FoundCameras } from './FoundCameras';
 import { SettingsDialog } from './SettingsDialog';
+import { SettingsPage } from './SettingsPage';
 import { hubStatusLine } from './hubStatus';
 import {
   AlertIcon,
@@ -167,6 +168,8 @@ export function GalleryApp({
   const [hideAsk, setHideAsk] = useState<{ camId: string; name: string }>();
   // The tab "Kameras verwalten" instead of a camera's recordings.
   const [manage, setManage] = useState(false);
+  /** The user's settings page (#431) instead of the gallery. */
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // The camera whose name is being edited, in its tab or in the manage table.
   const [renaming, setRenaming] = useState<string>();
   // Cameras the hub heard (#298) and asking before one is no longer read.
@@ -579,7 +582,7 @@ export function GalleryApp({
           <h1>Wildkamera</h1>
         </div>
         {status && <HubChip status={status} now={t} />}
-        {status && !adminView && status.cameras.length > 0 && (
+        {status && !adminView && !settingsOpen && status.cameras.length > 0 && (
           <button
             type="button"
             className="g-btn g-btn--quiet g-header__switch"
@@ -588,7 +591,7 @@ export function GalleryApp({
             Aktivität
           </button>
         )}
-        {status?.hub && !adminView && (
+        {status?.hub && !adminView && !settingsOpen && (
           <button
             type="button"
             className="g-btn g-btn--quiet g-header__switch"
@@ -598,12 +601,32 @@ export function GalleryApp({
             Löschen auf …
           </button>
         )}
+        {status && !adminView && (
+          <button
+            type="button"
+            className="g-btn g-btn--quiet g-header__switch"
+            aria-pressed={settingsOpen}
+            title={settingsOpen ? 'Zur Galerie' : 'Einstellungen'}
+            onClick={() => setSettingsOpen((on) => !on)}
+          >
+            {settingsOpen ? (
+              'Zur Galerie'
+            ) : (
+              <>
+                <GearIcon /> Einstellungen
+              </>
+            )}
+          </button>
+        )}
         {isAdmin && (
           <button
             type="button"
             className="g-btn g-btn--quiet g-header__switch"
             aria-pressed={adminView}
-            onClick={() => setAdminView((on) => !on)}
+            onClick={() => {
+              setSettingsOpen(false);
+              setAdminView((on) => !on);
+            }}
           >
             {adminView
               ? 'Zur Galerie'
@@ -616,6 +639,23 @@ export function GalleryApp({
 
       {adminView ? (
         <AdminView api={api} now={now} />
+      ) : settingsOpen && status ? (
+        <SettingsPage
+          api={api}
+          status={status}
+          now={t}
+          onCameraSettings={(camId) => {
+            setSettingsOpen(false);
+            setSettingsFor(camId);
+          }}
+          onManageCameras={() => {
+            setSettingsOpen(false);
+            setManage(true);
+            setRenaming(undefined);
+            setPendingKey(undefined);
+          }}
+          onChanged={() => void reload()}
+        />
       ) : (
         <main className="g-main">
           {api.isDemo && (
