@@ -39,6 +39,8 @@ const char *TAG = "trailcamhub_schedule";
 const char *kNamespace = "schedule";
 const char *kRemotePlanKey = "plan";
 const char *kRemoteCheckinKey = "checkin_min";
+const char *kRemoteQuietKey = "quiet";
+const char *kRemoteLocationKey = "location";
 // Changed with the layout of RtcData: "TCH4" since it holds the day's energy
 // readings.
 constexpr std::uint32_t kMagic = 0x54434834;
@@ -72,6 +74,8 @@ void (*s_change_callback)(void);
 // Remote settings as stored ("" = not set); guarded by s_lock.
 std::string s_remote_plan;
 std::string s_remote_checkin;
+std::string s_remote_quiet;
+std::string s_remote_location;
 
 class Lock
 {
@@ -126,6 +130,8 @@ void load_remote()
     }
     s_remote_plan = read_nvs_string(handle, kRemotePlanKey);
     s_remote_checkin = read_nvs_string(handle, kRemoteCheckinKey);
+    s_remote_quiet = read_nvs_string(handle, kRemoteQuietKey);
+    s_remote_location = read_nvs_string(handle, kRemoteLocationKey);
     nvs_close(handle);
 }
 
@@ -300,6 +306,12 @@ void init()
                  s_remote_checkin.empty() ? "(default)"
                                           : s_remote_checkin.c_str());
     }
+    if (!s_remote_quiet.empty() || !s_remote_location.empty()) {
+        ESP_LOGI(TAG, "From the backend: quiet hours %s, location %s",
+                 s_remote_quiet.empty() ? "(not set)" : s_remote_quiet.c_str(),
+                 s_remote_location.empty() ? "(not set)"
+                                           : s_remote_location.c_str());
+    }
 }
 
 // Defined below, with the energy helpers.
@@ -311,7 +323,12 @@ bool gnss_wanted()
     if (hub_config::load(local) != ESP_OK) {
         local = hub_config::Settings{};
     }
-    return local.location.empty() &&
+    std::string remote_location;
+    {
+        Lock lock;
+        remote_location = s_remote_location;
+    }
+    return remote_location.empty() && local.location.empty() &&
            std::strlen(CONFIG_SCHEDULE_LOCATION) == 0 &&
            stored_gnss_location().empty();
 }
@@ -417,10 +434,14 @@ Effective effective()
     }
     std::string remote_plan;
     std::string remote_checkin;
+    std::string remote_quiet;
+    std::string remote_location;
     {
         Lock lock;
         remote_plan = s_remote_plan;
         remote_checkin = s_remote_checkin;
+        remote_quiet = s_remote_quiet;
+        remote_location = s_remote_location;
     }
 
     Effective out;
@@ -454,16 +475,25 @@ Effective effective()
     const std::string kBuiltInQuiet = mode.power == hub_config::Power::battery
                                           ? std::string(CONFIG_SCHEDULE_QUIET)
                                           : std::string();
-    out.quiet = pick(nullptr, &local.quiet, kBuiltInQuiet, &out.quiet_origin);
+    out.quiet =
+        pick(&remote_quiet, &local.quiet, kBuiltInQuiet, &out.quiet_origin);
     if (!parse_quiet(out.quiet, out.settings.quiet, &error)) {
         ESP_LOGW(TAG, "Quiet hours \"%s\" ignored: %s", out.quiet.c_str(),
                  error.c_str());
         out.settings.quiet = Quiet{};
     }
     out.quiet = format_quiet(out.settings.quiet);
-    out.location =
-        pick(nullptr, &local.location, std::string(CONFIG_SCHEDULE_LOCATION),
-             &out.location_origin);
+    // Set in the gallery > set on the hub > GNSS fix > build (#436).
+    const std::string gnss_location = stored_gnss_location();
+    out.location = pick(&remote_location, &local.location, gnss_location,
+                        &out.location_origin);
+    if (out.location_origin == Origin::built_in) {
+        if (!gnss_location.empty()) {
+            out.location_origin = Origin::gnss;
+        } else {
+            out.location = CONFIG_SCHEDULE_LOCATION;
+        }
+    }
     if (!out.location.empty() &&
         parse_location(out.location, out.position, &error)) {
         out.location = format_location(out.position);
@@ -543,11 +573,51 @@ bool apply_remote(const Remote &remote)
         checkin_valid = false;
     }
 
+    // Quiet hours and location: empty removes the gallery's value.
+    bool quiet_valid = true;
+    std::string quiet;
+    if (remote.has_quiet && !remote.quiet.empty()) {
+        Quiet parsed;
+        std::string error = "too long";
+        if (remote.quiet.size() <= 32 &&
+            parse_quiet(remote.quiet, parsed, &error)) {
+            quiet = format_quiet(parsed);
+        } else {
+            ESP_LOGW(TAG, "Ignoring the quiet hours from the backend: %s",
+                     error.c_str());
+            quiet_valid = false;
+        }
+    }
+    bool location_valid = true;
+    std::string location;
+    if (remote.has_location && !remote.location.empty()) {
+        Location parsed;
+        std::string error = "too long";
+        if (remote.location.size() <= 40 &&
+            parse_location(remote.location, parsed, &error)) {
+            location = format_location(parsed);
+        } else {
+            ESP_LOGW(TAG, "Ignoring the location from the backend: %s",
+                     error.c_str());
+            location_valid = false;
+        }
+    }
+
     bool any_change = false;
     std::string stored_plan;
     std::string stored_checkin;
     {
         Lock lock;
+        if (quiet_valid && quiet != s_remote_quiet &&
+            store_remote(kRemoteQuietKey, quiet)) {
+            s_remote_quiet = quiet;
+            any_change = true;
+        }
+        if (location_valid && location != s_remote_location &&
+            store_remote(kRemoteLocationKey, location)) {
+            s_remote_location = location;
+            any_change = true;
+        }
         if (plan_valid && plan != s_remote_plan &&
             store_remote(kRemotePlanKey, plan)) {
             s_remote_plan = plan;
@@ -567,7 +637,7 @@ bool apply_remote(const Remote &remote)
                  stored_checkin.empty() ? "(not set)" : stored_checkin.c_str());
         changed();
     }
-    return plan_valid && checkin_valid;
+    return plan_valid && checkin_valid && quiet_valid && location_valid;
 }
 
 State state()

@@ -99,6 +99,8 @@ export interface GalleryStatus {
     deleteTargets: DeleteTarget[];
     /** The hub's firmware can delete by target; else only camera and gallery (#461). */
     deletesByTarget: boolean;
+    /** What the hub reported at its last check-in (#431). */
+    schedule?: HubSchedule;
   };
   cameras: GalleryCamera[];
 }
@@ -312,6 +314,12 @@ export interface GalleryApi {
     name?: string,
   ): Promise<void>;
   me(): Promise<Me>;
+  /** Battery history of one of the user's hubs and its cameras (#431). */
+  hubHistory(hubId: string): Promise<HubHistory>;
+  /** Data volume of one of the user's hubs (#431). */
+  hubUsage(hubId: string): Promise<HubUsage>;
+  /** What needs a look at one of the user's hubs, without the technical faults (#431). */
+  hubHints(hubId: string): Promise<Fault[]>;
   /** Admin only: every hub with cameras and users. */
   adminHubs(): Promise<AdminHub[]>;
   /** Admin only: battery history of a hub and its cameras (#76). */

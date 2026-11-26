@@ -188,6 +188,82 @@ TEST_CASE("the check-in says why the schedule is stretched")
           "\"sleeps\":false},\"cameras\":[]}");
 }
 
+TEST_CASE("the check-in reports quiet hours, location and energy (#474)")
+{
+    CheckinRequest request;
+    request.hub_firmware = "dev";
+    request.schedule.present = true;
+    request.schedule.camera_plan = "*=120";
+    request.schedule.camera_plan_origin = "built-in";
+    request.schedule.checkin_interval_s = 1800;
+    request.schedule.checkin_origin = "built-in";
+    request.schedule.sleeps = true;
+    request.schedule.quiet = "23:00-06:00";
+    request.schedule.quiet_origin = "built-in";
+    request.schedule.has_utc_offset = true;
+    request.schedule.utc_offset_min = 60;
+    request.schedule.location = "52.5,13.4";
+    request.schedule.location_origin = "gnss";
+    request.schedule.sunrise_min = 488;
+    request.schedule.sunset_min = 954;
+    request.schedule.energy_permille = 750;
+    request.schedule.energy_morning = 82;
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"schedule\":{\"cameraPlan\":\"*=120\","
+          "\"cameraPlanOrigin\":\"built-in\",\"checkinIntervalS\":1800,"
+          "\"checkinOrigin\":\"built-in\",\"quiet\":\"23:00-06:00\","
+          "\"quietOrigin\":\"built-in\",\"utcOffsetMin\":60,"
+          "\"location\":\"52.5,13.4\",\"locationOrigin\":\"gnss\","
+          "\"sunriseMin\":488,\"sunsetMin\":954,\"energyPermille\":750,"
+          "\"energyMorning\":82,\"sleeps\":true},\"cameras\":[]}");
+}
+
+TEST_CASE("the check-in says when no location is set")
+{
+    CheckinRequest request;
+    request.hub_firmware = "dev";
+    request.schedule.present = true;
+    request.schedule.camera_plan = "*=120";
+    request.schedule.camera_plan_origin = "built-in";
+    request.schedule.checkin_origin = "built-in";
+    request.schedule.quiet = "off";
+    request.schedule.quiet_origin = "local";
+    request.schedule.has_utc_offset = true;
+    request.schedule.utc_offset_min = -300;
+    request.schedule.location_missing = true;
+    CHECK(build_checkin_json(request) ==
+          "{\"hubFirmware\":\"dev\",\"schedule\":{\"cameraPlan\":\"*=120\","
+          "\"cameraPlanOrigin\":\"built-in\",\"checkinIntervalS\":0,"
+          "\"checkinOrigin\":\"built-in\",\"quiet\":\"off\","
+          "\"quietOrigin\":\"local\",\"utcOffsetMin\":-300,"
+          "\"locationMissing\":true,\"sleeps\":false},\"cameras\":[]}");
+}
+
+TEST_CASE("quiet hours and location from the backend's config (#436)")
+{
+    CheckinResponse response;
+    REQUIRE(parse_checkin_response(
+        "{\"serverTime\":1,\"config\":{\"quiet\":\"22:00-05:30\","
+        "\"location\":\"48.1,11.6\"}}",
+        response));
+    CHECK(response.has_quiet);
+    CHECK(response.quiet == "22:00-05:30");
+    CHECK(response.has_location);
+    CHECK(response.location == "48.1,11.6");
+
+    REQUIRE(parse_checkin_response(
+        "{\"serverTime\":1,\"config\":{\"cameraPlan\":\"*=60\"}}", response));
+    CHECK_FALSE(response.has_quiet);
+    CHECK_FALSE(response.has_location);
+
+    REQUIRE(parse_checkin_response(
+        "{\"serverTime\":1,\"config\":{\"quiet\":\"\",\"location\":\"\"}}",
+        response));
+    CHECK(response.has_quiet);
+    CHECK(response.quiet.empty());
+    CHECK(response.has_location);
+}
+
 TEST_CASE("brackets inside strings and entries without camId")
 {
     CheckinResponse response;

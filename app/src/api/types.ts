@@ -88,7 +88,7 @@ export interface CameraCapability {
 }
 
 /** Where the hub got a schedule setting from. */
-export type ScheduleOrigin = 'built-in' | 'local' | 'remote';
+export type ScheduleOrigin = 'built-in' | 'local' | 'remote' | 'gnss';
 
 /**
  * Why the hub stretches its schedule: its own battery is critical (no camera
@@ -110,6 +110,22 @@ export interface HubSchedule {
   sleeps: boolean;
   /** Why the schedule is stretched; absent if it is not. */
   stretch?: ScheduleStretch;
+  /** Quiet hours ("23:00-06:00" or "off") and their origin (#436, #474). */
+  quiet?: string;
+  quietOrigin?: ScheduleOrigin;
+  /** Offset of the hub's local time to UTC at the check-in, minutes (CET: 60). */
+  utcOffsetMin?: number;
+  /** Location for the sun times ("52.5,13.4") and its origin. */
+  location?: string;
+  locationOrigin?: ScheduleOrigin;
+  /** No location set: the sun times use a fallback in the middle of Germany. */
+  locationMissing?: boolean;
+  /** Today's sunrise and sunset, local minutes of the day. */
+  sunriseMin?: number;
+  sunsetMin?: number;
+  /** Energy factor for the check-in interval, 1/1000 (500: twice as often), and the morning charge. */
+  energyPermille?: number;
+  energyMorning?: number;
 }
 
 /** What the hub's `power` setting can be set to from the app (#197). */
@@ -118,6 +134,10 @@ export type PowerSetting = 'auto' | 'mains' | 'battery';
 export interface ScheduleConfig {
   cameraPlan?: string;
   checkinIntervalS?: number;
+  /** Quiet hours ("23:00-06:00", "off"); absent: the hub's own (#436). */
+  quiet?: string;
+  /** Location for the sun times ("52.5,13.4"); absent: the hub's own (#436). */
+  location?: string;
   /** The hub stores it if its board can use it; absent: it keeps what it has. */
   powerSetting?: PowerSetting;
 }

@@ -276,6 +276,32 @@ std::string build_checkin_json(const CheckinRequest &request)
         if (!schedule.stretch.empty()) {
             out += ",\"stretch\":\"" + json_escape(schedule.stretch) + "\"";
         }
+        if (!schedule.quiet.empty()) {
+            out += ",\"quiet\":\"" + json_escape(schedule.quiet) +
+                   "\",\"quietOrigin\":\"" +
+                   json_escape(schedule.quiet_origin) + "\"";
+        }
+        if (schedule.has_utc_offset) {
+            out +=
+                ",\"utcOffsetMin\":" + std::to_string(schedule.utc_offset_min);
+        }
+        if (!schedule.location.empty()) {
+            out += ",\"location\":\"" + json_escape(schedule.location) +
+                   "\",\"locationOrigin\":\"" +
+                   json_escape(schedule.location_origin) + "\"";
+        } else if (schedule.location_missing) {
+            out += ",\"locationMissing\":true";
+        }
+        if (schedule.sunrise_min >= 0 && schedule.sunset_min >= 0) {
+            out += ",\"sunriseMin\":" + std::to_string(schedule.sunrise_min) +
+                   ",\"sunsetMin\":" + std::to_string(schedule.sunset_min);
+        }
+        if (schedule.energy_morning >= 0) {
+            out +=
+                ",\"energyPermille\":" +
+                std::to_string(schedule.energy_permille) +
+                ",\"energyMorning\":" + std::to_string(schedule.energy_morning);
+        }
         out += schedule.sleeps ? ",\"sleeps\":true}" : ",\"sleeps\":false}";
     }
     const FirmwareUpdateReport &update = request.firmware_update;
@@ -501,6 +527,8 @@ bool parse_checkin_response(const std::string &json, CheckinResponse &out)
             (power == "auto" || power == "mains" || power == "battery")) {
             out.power_setting = power;
         }
+        out.has_quiet = json_find_string(config, "quiet", out.quiet);
+        out.has_location = json_find_string(config, "location", out.location);
     }
 
     out.has_approved_cameras =

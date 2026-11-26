@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { batteryForecast, batteryLevel, reportsLevels } from './forecast';
+import {
+  batteryForecast,
+  batteryLevel,
+  DEFAULT_SLEEP_PER_HOUR,
+  inQuiet,
+  quietHours,
+  reportsLevels,
+} from './forecast';
 import { forecastText, levelText } from './text';
 
 const H = 3600;
@@ -349,5 +356,63 @@ describe('camera battery steps (#472)', () => {
   it('mentions an old latest value', () => {
     const level = batteryLevel(steps([[0, 80]]));
     expect(level && levelText(level, at(10))).toMatch(/^Akku gut\. Letzter Wert von /);
+  });
+});
+
+describe('battery forecast with quiet hours (#474)', () => {
+  // 2026-11-26 00:00 UTC; CET is UTC+1.
+  const MIDNIGHT_UTC = Date.UTC(2026, 10, 26) / 1000;
+  const quiet = quietHours('23:00-06:00', 60);
+
+  it("reads the quiet hours in the hub's local time", () => {
+    expect(quiet).toEqual({ start: 23 * 60, end: 6 * 60, utcOffsetMin: 60 });
+    if (!quiet) return;
+    expect(inQuiet(MIDNIGHT_UTC + 22 * H + 30 * 60, quiet)).toBe(true); // 23:30 CET
+    expect(inQuiet(MIDNIGHT_UTC + 4 * H, quiet)).toBe(true); // 05:00 CET
+    expect(inQuiet(MIDNIGHT_UTC + 5 * H, quiet)).toBe(false); // 06:00 CET
+    expect(inQuiet(MIDNIGHT_UTC + 12 * H, quiet)).toBe(false);
+    expect(quietHours('off', 60)).toBeUndefined();
+    expect(quietHours('23:00-06:00', undefined)).toBeUndefined();
+    expect(quietHours(undefined, 60)).toBeUndefined();
+  });
+
+  it('puts the empty time outside the quiet hours', () => {
+    if (!quiet) throw new Error('no quiet hours');
+    // 2 %/h from 08:00 to 20:00 CET, 30 % left at 20:00: 15 h at 2 %/h would
+    // end at 11:00 tomorrow; the night 23-06 costs little, so later.
+    const start = MIDNIGHT_UTC + 7 * H; // 08:00 CET
+    const samples = Array.from({ length: 13 }, (_, i) => ({
+      at: start + i * H,
+      batPercent: 54 - 2 * i,
+    }));
+    const plain = batteryForecast(samples);
+    const f = batteryForecast(samples, quiet);
+    expect(f?.drainPerHour).toBeCloseTo(2, 5);
+    expect(f?.sleepPerHour).toBe(DEFAULT_SLEEP_PER_HOUR);
+    if (!f?.emptyAt || !plain?.emptyAt) throw new Error('no empty time');
+    expect(f.emptyAt).toBeGreaterThan(plain.emptyAt + 6 * H);
+    expect(inQuiet(f.emptyAt, quiet)).toBe(false);
+  });
+
+  it('measures the sleep drain from the nights in the history', () => {
+    if (!quiet) throw new Error('no quiet hours');
+    // Awake 06:00-23:00 at 1 %/h, night 23:00-06:00 loses 2 % (7 h).
+    const day0 = MIDNIGHT_UTC + 5 * H; // 06:00 CET
+    const samples: { at: number; batPercent: number }[] = [];
+    let level = 90;
+    for (let h = 0; h <= 17; h++) samples.push({ at: day0 + h * H, batPercent: level - h });
+    level -= 17 + 2;
+    for (let h = 0; h <= 5; h++) samples.push({ at: day0 + 24 * H + h * H, batPercent: level - h });
+    const f = batteryForecast(samples, quiet);
+    expect(f?.drainPerHour).toBeCloseTo(1, 5);
+    expect(f?.sleepPerHour).toBeCloseTo(2 / 7, 5);
+  });
+
+  it('says how much the night costs', () => {
+    if (!quiet) throw new Error('no quiet hours');
+    const start = MIDNIGHT_UTC + 7 * H;
+    const samples = [0, 1, 2, 3].map((i) => ({ at: start + i * H, batPercent: 60 - 2 * i }));
+    const f = batteryForecast(samples, quiet);
+    expect(f && forecastText(f, start + 3 * H)).toMatch(/In der Nachtruhe 0,1 %\/h\./);
   });
 });

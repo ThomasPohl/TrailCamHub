@@ -6,11 +6,13 @@ import type {
   CameraCapability,
   CameraSettings,
   DeleteTarget,
+  HubSchedule,
   ScheduleConfig,
 } from '../api/types';
 import type {
   AdminHub,
   AuditEntry,
+  Fault,
   GalleryApi,
   FoundCamera,
   GalleryCamera,
@@ -147,6 +149,7 @@ export class DemoGalleryApi implements GalleryApi {
         config: this.scheduleConfig,
         deleteTargets: [...this.deleteTargets],
         deletesByTarget: true,
+        schedule: this.hubSchedule(),
       },
       cameras: this.cameras.map((c, i) => ({
         ...c,
@@ -355,6 +358,34 @@ export class DemoGalleryApi implements GalleryApi {
     ];
   }
 
+  /** What the demo hub reports at its check-in: sun windows and quiet hours (#431). */
+  private hubSchedule(): HubSchedule {
+    const c = this.scheduleConfig;
+    return {
+      cameraPlan: c.cameraPlan ?? 'sunrise-60..sunrise+90=30,sunset-90..sunset+60=30,*=120',
+      cameraPlanOrigin: c.cameraPlan ? 'remote' : 'local',
+      checkinIntervalS: c.checkinIntervalS ?? this.checkinS,
+      checkinOrigin: c.checkinIntervalS ? 'remote' : 'local',
+      nextCheckinAt: this.lastCheckin + this.checkinS,
+      sleeps: true,
+      quiet: c.quiet ?? '23:00-05:00',
+      quietOrigin: c.quiet ? 'remote' : 'local',
+      utcOffsetMin: 60,
+      location: c.location ?? '51.3,9.5',
+      locationOrigin: c.location ? 'remote' : 'gnss',
+      sunriseMin: 7 * 60 + 40,
+      sunsetMin: 16 * 60 + 25,
+    };
+  }
+
+  async hubHints(): Promise<Fault[]> {
+    this.catchUp();
+    return [
+      { kind: 'cameraBatteryLow', level: 'warning', camId: 'A1B2C3D4E5F6', value: 18 },
+      { kind: 'sdNearlyFull', level: 'warning', camId: 'A1B2C3D4E5F6', value: 950 },
+    ];
+  }
+
   private requireSession(): void {
     if (!this.elevated()) throw new ApiError(403, 'Admin session required');
   }
@@ -392,14 +423,7 @@ export class DemoGalleryApi implements GalleryApi {
         memory: { cycle: 412, heapMin: 41_200, psramMin: 3_250_000, stackSession: 1_400 },
         batPercent: 84,
         lastSeen: this.lastCheckin,
-        schedule: {
-          cameraPlan: this.scheduleConfig.cameraPlan ?? '05:00-09:00=30,*=120',
-          cameraPlanOrigin: this.scheduleConfig.cameraPlan ? 'remote' : 'local',
-          checkinIntervalS: this.scheduleConfig.checkinIntervalS ?? this.checkinS,
-          checkinOrigin: this.scheduleConfig.checkinIntervalS ? 'remote' : 'local',
-          nextCheckinAt: this.lastCheckin + this.checkinS,
-          sleeps: true,
-        },
+        schedule: this.hubSchedule(),
         scheduleConfig: { ...this.scheduleConfig },
         cameras,
         users: [
@@ -432,6 +456,10 @@ export class DemoGalleryApi implements GalleryApi {
 
   async adminUsage(): Promise<HubUsage> {
     this.requireSession();
+    return this.hubUsage();
+  }
+
+  async hubUsage(): Promise<HubUsage> {
     // Ten days of a modem hub: a few MB a day and a video now and then.
     const days = Array.from({ length: 10 }, (_, i) => {
       const at = this.now() - (9 - i) * 86_400;
@@ -452,6 +480,10 @@ export class DemoGalleryApi implements GalleryApi {
 
   async adminHistory(): Promise<HubHistory> {
     this.requireSession();
+    return this.hubHistory();
+  }
+
+  async hubHistory(): Promise<HubHistory> {
     // A falling camera battery and a hub battery that the sun recharges.
     const days = Array.from({ length: 30 }, (_, i) => this.lastCheckin - (29 - i) * 86_400);
     return {
