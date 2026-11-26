@@ -18,7 +18,7 @@ import {
   type EditPlan,
   type SunTimes,
 } from './schedulePlan';
-import { clockTime, faultText, usageLines } from './text';
+import { clockTime, faultText, nextContactText, usageLines } from './text';
 import type { Fault, GalleryApi, GalleryStatus, HubHistory, HubUsage } from './types';
 import { monthlyUsage } from './usage';
 
@@ -233,7 +233,7 @@ function CamerasTab({
       {requested.size > 0 && (
         <p className="g-hint" role="status">
           Der Hub liest beim nächsten Kontakt
-          {next ? ` (gegen ${clockTime(next, now)})` : ''}.
+          {next ? ` (${nextContactText(next, now)})` : ''}.
         </p>
       )}
       <div className="g-card__actions">
@@ -395,7 +395,7 @@ export function ScheduleEditor({
       setMessage({
         ok: true,
         text: nextContact
-          ? `Gespeichert. Der Hub übernimmt es beim nächsten Kontakt (gegen ${clockTime(nextContact, now)}).`
+          ? `Gespeichert. Der Hub übernimmt es beim nächsten Kontakt (${nextContactText(nextContact, now)}).`
           : 'Gespeichert. Der Hub übernimmt es beim nächsten Kontakt.',
       });
       onSaved();

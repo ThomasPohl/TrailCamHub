@@ -295,7 +295,14 @@ describe('GalleryApp', () => {
 
   it('renames a camera in the manage tab (#273)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
-    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    render(
+      <GalleryApp
+        api={api}
+        folder={fakeFolder({ kind: 'none' })}
+        now={() => 1_000_000}
+        pollMs={0}
+      />,
+    );
     await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
@@ -374,7 +381,14 @@ describe('GalleryApp', () => {
 
   it('hides a camera and shows it again (#273)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
-    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    render(
+      <GalleryApp
+        api={api}
+        folder={fakeFolder({ kind: 'none' })}
+        now={() => 1_000_000}
+        pollMs={0}
+      />,
+    );
     await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     const panel = screen.getByRole('region', { name: 'Kameras verwalten' });
@@ -433,7 +447,14 @@ describe('GalleryApp', () => {
 
   it('shows a camera taken in before the hub has read it', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
-    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    render(
+      <GalleryApp
+        api={api}
+        folder={fakeFolder({ kind: 'none' })}
+        now={() => 1_000_000}
+        pollMs={0}
+      />,
+    );
     await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     const fresh = await screen.findByRole('group', { name: 'Neue Kamera TC100_77A1' });
@@ -578,7 +599,14 @@ describe('GalleryApp', () => {
 
   it('asks the hub to look for cameras (#308)', async () => {
     const api = new DemoGalleryApi(() => 1_000_000, 20);
-    render(<GalleryApp api={api} folder={fakeFolder({ kind: 'none' })} pollMs={0} />);
+    render(
+      <GalleryApp
+        api={api}
+        folder={fakeFolder({ kind: 'none' })}
+        now={() => 1_000_000}
+        pollMs={0}
+      />,
+    );
     await screen.findByRole('heading', { name: 'Alle Kameras' });
     fireEvent.click(screen.getByRole('tab', { name: /^Kameras verwalten/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Nach Kameras suchen' }));

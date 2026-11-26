@@ -29,6 +29,20 @@ export function clockTime(unixSeconds: number, nowSeconds: number): string {
   return today ? `${time} Uhr` : `${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${time} Uhr`;
 }
 
+/** Whether the hub's announced contact lies in the past. */
+export function contactOverdue(nextContact: number, nowSeconds: number): boolean {
+  return nextContact < nowSeconds;
+}
+
+/**
+ * When the hub's announced contact is due: "gegen 21:51 Uhr", or
+ * "überfällig seit 21:51 Uhr" once that time has passed.
+ */
+export function nextContactText(nextContact: number, nowSeconds: number): string {
+  const at = clockTime(nextContact, nowSeconds);
+  return contactOverdue(nextContact, nowSeconds) ? `überfällig seit ${at}` : `gegen ${at}`;
+}
+
 /**
  * The camera's name for a file on its SD card without suffix, e.g.
  * "DSCF0012": DSCF + the 4-digit number of the media list.
@@ -74,9 +88,10 @@ export function stateText(
     case 'new':
       return 'Neu';
     case 'videoRequested':
-      return nextContact
-        ? `Video kommt, voraussichtlich gegen ${clockTime(nextContact, now)}`
-        : 'Video kommt beim nächsten Kontakt';
+      if (!nextContact) return 'Video kommt beim nächsten Kontakt';
+      return contactOverdue(nextContact, now)
+        ? `Video kommt beim nächsten Kontakt (${nextContactText(nextContact, now)})`
+        : `Video kommt, voraussichtlich ${nextContactText(nextContact, now)}`;
     case 'videoReady':
       return saved ? 'Video ist gespeichert' : 'Video ist da';
     case 'deleteRequested':
@@ -353,9 +368,10 @@ export function badgeText(
     case 'new':
       return 'Neu';
     case 'videoRequested':
-      return nextContact
-        ? `Kommt gegen ${clockTime(nextContact, now)}`
-        : 'Kommt beim nächsten Kontakt';
+      if (!nextContact) return 'Kommt beim nächsten Kontakt';
+      return contactOverdue(nextContact, now)
+        ? `Kommt · ${nextContactText(nextContact, now)}`
+        : `Kommt ${nextContactText(nextContact, now)}`;
     case 'videoReady':
       return saved ? 'Gespeichert' : 'Video da';
     case 'deleteRequested':

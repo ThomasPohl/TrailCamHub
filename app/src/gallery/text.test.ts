@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   badgeText,
+  nextContactText,
   cameraFile,
   cameraHints,
   cameraTime,
@@ -143,6 +144,17 @@ describe('badgeText', () => {
     expect(badgeText('videoRequested', false, 1_000_600, 1_000_000)).toMatch(
       /^Kommt gegen \d\d:\d\d Uhr$/,
     );
+    expect(badgeText('videoRequested', false, 999_400, 1_000_000)).toMatch(
+      /^Kommt · überfällig seit \d\d:\d\d Uhr$/,
+    );
     expect(badgeText('failed', false, undefined, 1_000_000)).toBe('Fehlgeschlagen');
+  });
+});
+
+describe('nextContactText', () => {
+  it('names the expected time, or since when the contact is overdue', () => {
+    expect(nextContactText(1_000_600, 1_000_000)).toMatch(/^gegen \d\d:\d\d Uhr$/);
+    expect(nextContactText(1_000_000, 1_000_000)).toMatch(/^gegen /);
+    expect(nextContactText(999_999, 1_000_000)).toMatch(/^überfällig seit \d\d:\d\d Uhr$/);
   });
 });

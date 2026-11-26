@@ -1,4 +1,4 @@
-import { clockTime } from './text';
+import { contactOverdue, nextContactText } from './text';
 
 /** How the hub's contact looks in the header (#431): a dot and a short word. */
 export type HubLight = 'ok' | 'late' | 'silent';
@@ -7,7 +7,10 @@ export interface HubStatusLine {
   light: HubLight;
   /** "Hub verbunden", "Kontakt verspätet" … */
   title: string;
-  /** "nächster Kontakt 21:51 Uhr", if the hub announced one. */
+  /**
+   * "nächster Kontakt gegen 21:51 Uhr", or "Kontakt überfällig seit 21:51 Uhr"
+   * once that time has passed; only if the hub announced one.
+   */
   next?: string;
 }
 
@@ -26,7 +29,12 @@ export function hubStatusLine(
   now: number,
 ): HubStatusLine {
   if (lastContact <= 0) return { light: 'silent', title: 'Der Hub hat sich noch nicht gemeldet' };
-  const next = nextContact !== undefined ? clockTime(nextContact, now) : undefined;
+  const next =
+    nextContact === undefined
+      ? undefined
+      : contactOverdue(nextContact, now)
+        ? `Kontakt ${nextContactText(nextContact, now)}`
+        : `nächster Kontakt ${nextContactText(nextContact, now)}`;
   const overdue = nextContact !== undefined ? now - nextContact : now - lastContact - 24 * 3600;
   if (overdue > SILENT_S) {
     return { light: 'silent', title: 'Der Hub meldet sich nicht', next };

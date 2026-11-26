@@ -21,6 +21,12 @@ describe('hubStatusLine', () => {
       light: 'late',
       title: 'Kontakt verspätet',
     });
+    expect(hubStatusLine(NOW - 4000, NOW - 301, NOW).next).toMatch(
+      /^Kontakt überfällig seit \d\d:\d\d Uhr$/,
+    );
+    expect(hubStatusLine(NOW - 600, NOW + 60, NOW).next).toMatch(
+      /^nächster Kontakt gegen \d\d:\d\d Uhr$/,
+    );
     expect(hubStatusLine(NOW - 4000, NOW - 1801, NOW)).toMatchObject({
       light: 'silent',
       title: 'Der Hub meldet sich nicht',
