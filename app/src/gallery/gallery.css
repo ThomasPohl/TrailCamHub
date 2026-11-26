@@ -2125,3 +2125,115 @@ body {
   border-color: var(--g-danger-border);
   background: var(--g-danger-soft);
 }
+
+/* Admin overview (#431) */
+.g-dot--warn {
+  background: var(--g-warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-warn) 25%, transparent);
+}
+.g-dot--error {
+  background: var(--g-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-danger) 25%, transparent);
+}
+.g-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--g-ok-border);
+  background: var(--g-ok-soft);
+  color: var(--g-ok);
+}
+.g-pill--warn {
+  border-color: var(--g-warn-border);
+  background: var(--g-warn-soft);
+  color: var(--g-warn);
+}
+.g-pill--error {
+  border-color: var(--g-danger-border);
+  background: var(--g-danger-soft);
+  color: var(--g-danger);
+}
+.g-attention ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+}
+.g-attention li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.g-hubcards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.g-hubcard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--g-surface);
+  border: 1px solid var(--g-border);
+  border-radius: var(--g-radius-lg);
+  box-shadow: var(--g-shadow);
+  cursor: pointer;
+}
+.g-hubcard:hover {
+  border-color: var(--g-border-strong);
+}
+.g-hubcard:focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 2px;
+}
+.g-hubcard__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.g-hubcard__head small {
+  color: var(--g-hint);
+}
+.g-hubcard__head .g-pill {
+  margin-left: auto;
+}
+.g-hubcard__tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.g-tile {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.g-tile small {
+  font-weight: 400;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--g-hint);
+}
+.g-hubcard__cams {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.g-hubcard__cam {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.g-breadcrumb {
+  color: var(--g-hint);
+  margin-bottom: 4px;
+}
