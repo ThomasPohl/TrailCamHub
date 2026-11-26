@@ -222,6 +222,44 @@ Command parse_delete(const std::string &rest)
     return command;
 }
 
+// "camset" or "camset <devId|any> name=value ..." (#197). The values are
+// read by camera::settings::decode_change() in the console; here only the
+// form is checked: a camera, then at least one name=value without ';'.
+Command parse_camset(const std::string &rest)
+{
+    if (rest.empty()) {
+        return simple(CommandType::camset_show);
+    }
+    const char *usage =
+        "usage: camset, or camset <devId|any> <name=value...>, e.g. camset "
+        "any pirSens=2 osdInfoEnable=1";
+    std::string after;
+    const std::string camera = next_word(rest, after);
+    if (after.empty() || camera.size() > 40) {
+        return invalid(usage);
+    }
+    for (const char c : camera) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' &&
+            c != '-' && c != ':') {
+            return invalid(usage);
+        }
+    }
+    Command command = simple(CommandType::camset);
+    command.key = camera == "any" ? "" : camera;
+    while (!after.empty()) {
+        std::string more;
+        const std::string pair = next_word(after, more);
+        const std::size_t eq = pair.find('=');
+        if (eq == 0 || eq == std::string::npos || eq + 1 == pair.size() ||
+            pair.find(';') != std::string::npos) {
+            return invalid(usage);
+        }
+        command.value += (command.value.empty() ? "" : ";") + pair;
+        after = more;
+    }
+    return command;
+}
+
 Command parse_format(const std::string &rest)
 {
     Command command = simple(CommandType::format_sd);
@@ -300,6 +338,9 @@ Command parse_command(const std::string &line)
     if (word == "format") {
         return parse_format(rest);
     }
+    if (word == "camset") {
+        return parse_camset(rest);
+    }
     if (word == "video") {
         return parse_video(rest);
     }
@@ -365,6 +406,9 @@ const char *help_text()
            "format                     erase the camera's SD card (asks for "
            "a code)\n"
            "actions                    queued camera actions and results\n"
+           "camset                     the cameras' settings and what they "
+           "can do\n"
+           "camset <devId|any> <a=1..> change camera settings (flags 0/1)\n"
            "restart                    restart the hub (like the reset "
            "button)\n"
            "ping                       keep the hub awake a while longer\n"

@@ -11,6 +11,8 @@
 //   config set <key> <value...>   value = rest of the line (empty erases)
 //   config set-hex <key> <hex>    value as hex-encoded bytes (any characters)
 //   config unset <key>
+//   camset                        the cameras' settings (#197)
+//   camset <devId|any> <name=value...>  change camera settings
 //
 // and the diagnostic commands for the SD card and the memory:
 //
@@ -52,6 +54,8 @@ enum class CommandType {
     config_show,
     config_clear,
     config_set,
+    camset_show,  // the stored settings of every camera (#197)
+    camset,       // change settings: key = devId ("" any), value = "a=1;b=de"
     invalid,
 };
 
