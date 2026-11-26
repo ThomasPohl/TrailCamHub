@@ -99,6 +99,21 @@ describe('hub faults (#265)', () => {
     ]);
   });
 
+  it('judges a camera by its lowest value of 12 h, so a step edge does not flap (#472)', () => {
+    const cams = [
+      // Reads 80 % now, but was at 20 % within 12 h: still low.
+      { camera: camera({ camId: 'A', batPercent: 80, batLow12h: 20 }), commands: [] },
+      // Lowest value is fine.
+      { camera: camera({ camId: 'B', batPercent: 80, batLow12h: 80 }), commands: [] },
+      // Older record without the field: the latest value.
+      { camera: camera({ camId: 'C', batPercent: 20 }), commands: [] },
+    ];
+    expect(hubFaults(hub(), cams, NOW).map((f) => [f.kind, f.camId])).toEqual([
+      ['cameraBatteryLow', 'A'],
+      ['cameraBatteryLow', 'C'],
+    ]);
+  });
+
   it('raises no battery fault for a camera on its charger (#473)', () => {
     const cams = [
       { camera: camera({ camId: 'A', batPercent: 5, isCharging: true }), commands: [] },

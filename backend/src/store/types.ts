@@ -37,6 +37,7 @@ export type CameraTelemetry = Partial<
     | 'model'
     | 'firmware'
     | 'batPercent'
+    | 'batLow12h'
     | 'sdFreeMB'
     | 'sdTotalMB'
     | 'sdCard'
