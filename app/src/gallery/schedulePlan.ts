@@ -10,8 +10,7 @@
  */
 
 export type Bound =
-  | { kind: 'clock'; minute: number }
-  | { kind: 'sunrise' | 'sunset'; offset: number };
+  { kind: 'clock'; minute: number } | { kind: 'sunrise' | 'sunset'; offset: number };
 
 export interface PlanWindow {
   start: Bound;
@@ -99,7 +98,9 @@ export function parseEditPlan(text: string): PlanParse {
       };
     }
     if (sameBound(start, end)) return { ok: false, error: `„${range}“ ist leer` };
-    if (plan.windows.length >= MAX_WINDOWS) return { ok: false, error: 'Höchstens 8 Zeitfenster' };
+    if (plan.windows.length >= MAX_WINDOWS) {
+      return { ok: false, error: 'Höchstens 8 Zeitfenster' };
+    }
     plan.windows.push({ start, end, intervalMin: minutes });
   }
   return { ok: true, plan };
@@ -151,7 +152,7 @@ function contains(start: number, end: number, minute: number): boolean {
   return start < end ? minute >= start && minute < end : minute >= start || minute < end;
 }
 
-/** Interval in minutes at a local minute of the day; the first window that contains it applies. */
+/** Interval in minutes at a local minute of the day; the first matching window applies. */
 export function intervalAt(plan: EditPlan, minute: number, sun: SunTimes): number {
   for (const w of plan.windows) {
     const s = resolve(w.start, sun);
@@ -183,7 +184,8 @@ export function daySegments(plan: EditPlan, sun: SunTimes): Segment[] {
     const intervalMin = intervalAt(plan, minute, sun);
     const window = inWindow(minute);
     const last = segments[segments.length - 1];
-    if (last && last.intervalMin === intervalMin && last.window === window) last.end = minute + 1;
+    const same = last && last.intervalMin === intervalMin && last.window === window;
+    if (last && same) last.end = minute + 1;
     else segments.push({ start: minute, end: minute + 1, intervalMin, window });
   }
   return segments;
@@ -251,7 +253,8 @@ export function parseQuietText(text: string): { start: number; end: number } | u
   if (!match) return undefined;
   const start = parseClock(match[1] ?? '');
   const end = parseClock(match[2] ?? '');
-  if (start === undefined || end === undefined || start === 1440 || start === end) return undefined;
+  if (start === undefined || end === undefined) return undefined;
+  if (start === 1440 || start === end) return undefined;
   return { start, end };
 }
 
