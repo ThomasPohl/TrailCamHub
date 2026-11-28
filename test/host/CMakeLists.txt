@@ -89,6 +89,7 @@ add_executable(host_tests
     test_deferred_command.cpp
     test_playback_policy.cpp
     test_schedule_plan.cpp
+    test_scheduler_step.cpp
     test_sun.cpp
     test_energy.cpp
     test_sd_log_files.cpp
@@ -163,6 +164,7 @@ add_executable(host_tests
     ${schedule_dir}/schedule_plan.cpp
     ${schedule_dir}/sun.cpp
     ${schedule_dir}/energy.cpp
+    ${schedule_dir}/scheduler_step.cpp
     ${sd_log_dir}/log_files.cpp
     ${ota_dir}/ota_policy.cpp
     ${modem_dir}/modem_operator.cpp
@@ -300,6 +302,7 @@ add_executable(cycle_tests
     cycle/test_cycle.cpp
     cycle/host_http.cpp
     cycle/test_http.cpp
+    cycle/test_day.cpp
     ${uplink_dir}/http_util.cpp
     ${uplink_dir}/data_usage.cpp
     ${uplink_dir}/data_usage_store.cpp
@@ -308,7 +311,8 @@ add_executable(cycle_tests
     ${config_dir}/hub_config_rules.cpp
     ${schedule_dir}/schedule_plan.cpp
     ${schedule_dir}/sun.cpp
-    ${schedule_dir}/energy.cpp)
+    ${schedule_dir}/energy.cpp
+    ${schedule_dir}/scheduler_step.cpp)
 target_include_directories(cycle_tests BEFORE PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/cycle/stubs
     ${CMAKE_CURRENT_SOURCE_DIR}/esp_stubs)

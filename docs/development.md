@@ -149,7 +149,14 @@ sleep (`schedule_state` with `hub_config`).
 handler the test sets (`host_http::set_handler()`), in process; without a
 handler a request fails like without a network. The uplink's `http_util` and
 the data usage counter run on it. Phase 2 sets a handler that forwards to the
-local backend. Next: the `scheduler` sleep seam.
+local backend.
+
+The scheduler's decision while the controller is idle (request a read or a
+check-in, sleep, or wait) is the pure `schedule::scheduler_step()`
+(`components/schedule/scheduler_step.cpp`); `scheduler_task` acts on it.
+`cycle/test_day.cpp` runs a battery hub over a virtual day with it (boots,
+deep sleeps, quiet hours) and checks the list of cycles. Next: the scenario
+"first cycle" with two mock cameras and the backend.
 
 ## Camera mock
 
