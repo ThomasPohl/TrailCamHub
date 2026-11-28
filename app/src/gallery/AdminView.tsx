@@ -16,6 +16,7 @@ import {
   type QuietHours,
 } from './forecast';
 import { ScheduleEditor } from './SettingsPage';
+import { sparkPoints } from './sparkline';
 import { monthlyUsage } from './usage';
 import { isNewer } from './release';
 import {
@@ -402,6 +403,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
               {hubs.map((hub) => (
                 <HubCard
                   key={hub.hubId}
+                  api={api}
                   hub={hub}
                   now={t}
                   latest={latest}
@@ -530,11 +532,13 @@ function signalText(hub: AdminHub): string {
 
 /** One hub on the overview (#431); the whole card opens the hub page. */
 function HubCard({
+  api,
   hub,
   now,
   latest,
   onOpen,
 }: {
+  api: GalleryApi;
   hub: AdminHub;
   now: number;
   latest?: string;
@@ -542,6 +546,20 @@ function HubCard({
 }) {
   const pill = hubPill(hub);
   const next = hub.schedule?.nextCheckinAt;
+  // The battery of the last 30 days (#431); a card without it looks the same.
+  const [spark, setSpark] = useState<string>();
+  useEffect(() => {
+    let live = true;
+    api
+      .adminHistory(hub.hubId)
+      .then((history) => live && setSpark(sparkPoints(history.hub, now)))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+    // `now` moves every minute; the line is loaded once per card.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, hub.hubId]);
   return (
     <button
       type="button"
@@ -578,6 +596,13 @@ function HubCard({
           {isNewer(latest, hub.firmware) && <span title={`Update ${latest}`}> ↑</span>}
         </span>
       </span>
+      {spark && (
+        <span className="g-hubcard__spark" title="Akku des Hubs, letzte 30 Tage">
+          <svg viewBox="0 0 120 28" preserveAspectRatio="none" aria-hidden="true">
+            <polyline points={spark} />
+          </svg>
+        </span>
+      )}
       {hub.cameras.length > 0 && (
         <span className="g-hubcard__cams">
           {hub.cameras.map((c) => (
