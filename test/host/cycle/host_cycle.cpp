@@ -5,12 +5,14 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <cstddef>
 #include <deque>
 #include <map>
 #include <mutex>
 #include <set>
 
 #include "esp_err.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -357,6 +359,25 @@ bool time_sync_trusted(void)
 bool time_sync_set(int64_t, time_sync_source_t)
 {
     return false;
+}
+
+}  // extern "C"
+
+extern "C" {
+
+size_t heap_caps_get_largest_free_block(unsigned)
+{
+    return 4 * 1024 * 1024;
+}
+
+size_t heap_caps_get_free_size(unsigned)
+{
+    return 4 * 1024 * 1024;
+}
+
+size_t heap_caps_get_minimum_free_size(unsigned)
+{
+    return 4 * 1024 * 1024;
 }
 
 }  // extern "C"
