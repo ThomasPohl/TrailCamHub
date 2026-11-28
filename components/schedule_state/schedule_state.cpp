@@ -124,6 +124,12 @@ std::string read_nvs_string(nvs_handle_t handle, const char *key)
 
 void load_remote()
 {
+    // What is stored, nothing else (also for a second init() in the host
+    // test, #446).
+    s_remote_plan.clear();
+    s_remote_checkin.clear();
+    s_remote_quiet.clear();
+    s_remote_location.clear();
     nvs_handle_t handle;
     if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) {
         return;  // nothing stored yet
