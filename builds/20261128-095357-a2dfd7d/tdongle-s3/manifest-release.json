@@ -1,0 +1,15 @@
+{
+  "name": "TrailCamHub LilyGO T-Dongle-S3 (Release)",
+  "version": "20261128-095357-a2dfd7d",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "./trailcamhub-tdongle-s3-release.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

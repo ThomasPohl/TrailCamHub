@@ -1,0 +1,24 @@
+{
+  "name": "TrailCamHub camera mock",
+  "version": "20261128-095357-a2dfd7d",
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "./camera-mock-esp32.bin",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "./camera-mock-esp32s3.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
