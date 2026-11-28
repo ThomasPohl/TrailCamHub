@@ -254,13 +254,13 @@ describe('GalleryApp', () => {
     expect(await within(row).findByText('Lesen angefordert')).toBeInTheDocument();
 
     fireEvent.click(within(hub).getByRole('tab', { name: 'Zeitplan' }));
-    const interval = within(hub).getByLabelText(/Kontakt alle/);
-    fireEvent.change(interval, { target: { value: '3' } });
-    const apply = within(hub).getByRole('button', { name: 'Übernehmen' });
-    expect(apply).toBeDisabled();
-    fireEvent.change(interval, { target: { value: '60' } });
-    fireEvent.click(apply);
-    expect(await screen.findByText(/übernimmt den Plan/)).toBeInTheDocument();
+    // The user's schedule editor (#431), the power supply on its own.
+    expect(within(hub).getByRole('button', { name: 'Stromversorgung übernehmen' })).toBeDisabled();
+    fireEvent.change(within(hub).getByLabelText('Der Hub meldet sich'), {
+      target: { value: '60' },
+    });
+    fireEvent.click(within(hub).getByRole('button', { name: 'Übernehmen' }));
+    expect(await within(hub).findByText(/Gespeichert/)).toBeInTheDocument();
     fireEvent.click(within(hub).getByRole('tab', { name: 'Übersicht' }));
     expect(await within(hub).findByText(/alle 1 h \(aus der App\)/)).toBeInTheDocument();
 

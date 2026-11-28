@@ -2237,3 +2237,15 @@ body {
   color: var(--g-hint);
   margin-bottom: 4px;
 }
+
+.g-hubcard__spark svg {
+  display: block;
+  width: 100%;
+  height: 28px;
+}
+.g-hubcard__spark polyline {
+  fill: none;
+  stroke: var(--g-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
