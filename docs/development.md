@@ -136,6 +136,16 @@ The backend side is `backend/src/handler.ts` with `store/memory.ts` (phase 2).
 Phase 1 is therefore: NVS stub, `esp_http_client` stub, `Sleep` seam in
 `scheduler`, then the scenario "first cycle" with two mock cameras.
 
+First step done: `test/host/cycle/` builds `cycle_tests` (part of `ctest`,
+also with sanitizers). `cycle/host_cycle.cpp` provides NVS in memory, a
+virtual wall clock (`gettimeofday` and `time` are wrapped at link time), a
+boot-relative `esp_timer` and the reset reason; the driver calls
+`host_cycle::power_on()`, `restart()` or `deep_sleep()` and then
+`schedule::init()` like `app_main`. `cycle/stubs/` comes before `esp_stubs/`
+in the include path. The tests cover the hub's state across restarts and deep
+sleep (`schedule_state` with `hub_config`). Next: the `esp_http_client` stub
+and the `scheduler` sleep seam.
+
 ## Camera mock
 
 For bench tests without the real camera, an ESP32-WROOM can play the TC100:

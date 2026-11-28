@@ -290,3 +290,32 @@ if(HOST_TESTS_SANITIZE)
 endif()
 add_test(NAME session_virtual_tests COMMAND session_virtual_tests)
 set_tests_properties(session_virtual_tests PROPERTIES TIMEOUT 120)
+
+# The whole hub cycle (#446): the real cycle components with NVS in memory,
+# a virtual wall clock and simulated restarts and deep sleeps
+# (cycle/host_cycle.cpp). cycle/stubs comes before esp_stubs.
+add_executable(cycle_tests
+    test_main.cpp
+    cycle/host_cycle.cpp
+    cycle/test_cycle.cpp
+    ${repo_root}/components/schedule_state/schedule_state.cpp
+    ${config_dir}/hub_config.cpp
+    ${config_dir}/hub_config_rules.cpp
+    ${schedule_dir}/schedule_plan.cpp
+    ${schedule_dir}/sun.cpp
+    ${schedule_dir}/energy.cpp)
+target_include_directories(cycle_tests BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/cycle/stubs
+    ${CMAKE_CURRENT_SOURCE_DIR}/esp_stubs)
+target_include_directories(cycle_tests PRIVATE
+    ${repo_root}/components/schedule_state/include ${config_dir}/include
+    ${schedule_dir} ${time_dir}/include ${CMAKE_CURRENT_SOURCE_DIR}/cycle)
+target_include_directories(cycle_tests SYSTEM PRIVATE ${doctest_SOURCE_DIR})
+target_compile_options(cycle_tests PRIVATE -Wall -Wextra -Werror)
+# The components' wall clock is the test's (host_cycle.cpp).
+target_link_options(cycle_tests PRIVATE -Wl,--wrap=gettimeofday -Wl,--wrap=time)
+if(HOST_TESTS_SANITIZE)
+    target_compile_options(cycle_tests PRIVATE ${sanitize_flags})
+    target_link_options(cycle_tests PRIVATE ${sanitize_flags})
+endif()
+add_test(NAME cycle_tests COMMAND cycle_tests)
