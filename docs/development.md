@@ -143,8 +143,13 @@ boot-relative `esp_timer` and the reset reason; the driver calls
 `host_cycle::power_on()`, `restart()` or `deep_sleep()` and then
 `schedule::init()` like `app_main`. `cycle/stubs/` comes before `esp_stubs/`
 in the include path. The tests cover the hub's state across restarts and deep
-sleep (`schedule_state` with `hub_config`). Next: the `esp_http_client` stub
-and the `scheduler` sleep seam.
+sleep (`schedule_state` with `hub_config`).
+
+`cycle/host_http.cpp` stands in for `esp_http_client`: each request goes to a
+handler the test sets (`host_http::set_handler()`), in process; without a
+handler a request fails like without a network. The uplink's `http_util` and
+the data usage counter run on it. Phase 2 sets a handler that forwards to the
+local backend. Next: the `scheduler` sleep seam.
 
 ## Camera mock
 
