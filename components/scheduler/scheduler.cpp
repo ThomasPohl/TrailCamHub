@@ -28,6 +28,7 @@
 #include "modem_uplink.hpp"
 #include "ota_update.hpp"
 #include "schedule_state.hpp"
+#include "scheduler_step.hpp"
 #include "sd_log.h"
 #include "session_controller.h"
 
@@ -42,6 +43,22 @@ namespace
 {
 
 const char *TAG = "trailcamhub_sched";
+
+schedule::StepLimits make_limits()
+{
+    schedule::StepLimits limits;
+#if CONFIG_POWER_DEEP_SLEEP
+    limits.deep_sleep = true;
+    limits.awake_after_activity_s = CONFIG_POWER_AWAKE_AFTER_ACTIVITY_MIN * 60;
+    limits.min_sleep_s = CONFIG_POWER_MIN_SLEEP_S;
+    limits.max_sleep_s = CONFIG_POWER_MAX_SLEEP_MIN * 60;
+#endif
+    limits.max_wait_ms = SCHEDULER_MAX_WAIT_MS;
+    limits.request_wait_ms = SCHEDULER_REQUEST_WAIT_MS;
+    return limits;
+}
+
+const schedule::StepLimits kLimits = make_limits();
 
 TaskHandle_t s_task;
 // Only touched by the session controller task (status listener).
@@ -173,17 +190,6 @@ void describe(std::int64_t t, std::int64_t now, char *text, size_t size)
     }
 }
 
-std::int64_t earliest(std::int64_t a, std::int64_t b)
-{
-    if (a == schedule::kNever) {
-        return b;
-    }
-    if (b == schedule::kNever) {
-        return a;
-    }
-    return a < b ? a : b;
-}
-
 // The modem is taken down after a sync in its own task (data call ended,
 // radio off); sleeping or restarting before that would leave its radio on.
 void wait_for_modem_down(const char *what)
@@ -281,9 +287,6 @@ void scheduler_task(void *arg)
             update_hub_battery();
             const std::int64_t now = schedule::now();
             const schedule::Times times = schedule::next_times();
-            const schedule::Task task = now >= start_at
-                                            ? schedule::due(times, now)
-                                            : schedule::Task::none;
             esp_err_t error = ESP_OK;
 #if CONFIG_HUB_BOOT_BUTTON
             if (button_wake) {
@@ -302,68 +305,49 @@ void scheduler_task(void *arg)
                 continue;
             }
 #endif
-            if (task != schedule::Task::none) {
+            schedule::StepInput input;
+            input.now = now;
+            input.times = times;
+            input.start_at = start_at;
+#if CONFIG_POWER_DEEP_SLEEP
+            input.awake_until_boot = awake_until_boot;
+            input.last_activity = schedule::last_activity();
+            // Only on battery power (the mode can change at run time).
+            input.sleeps = [](void *) { return schedule::effective().sleeps; };
+#endif
+            const schedule::Step step =
+                schedule::scheduler_step(input, kLimits);
+            if (step.action == schedule::Step::Action::camera ||
+                step.action == schedule::Step::Action::checkin) {
                 // The cycle journal names who asked for a cycle.
                 cycle_trace::note_trigger("schedule");
-            }
-            if (task == schedule::Task::camera) {
-                ESP_LOGI(TAG, "Camera read due");
-                error = session_controller_request_scan();
-            } else if (task == schedule::Task::checkin) {
-                ESP_LOGI(TAG, "Backend check-in due");
-                error = session_controller_request_upload();
-            }
-            if (task != schedule::Task::none) {
+                if (step.action == schedule::Step::Action::camera) {
+                    ESP_LOGI(TAG, "Camera read due");
+                    error = session_controller_request_scan();
+                } else {
+                    ESP_LOGI(TAG, "Backend check-in due");
+                    error = session_controller_request_upload();
+                }
                 if (error != ESP_OK) {
                     cycle_trace::note_trigger(nullptr);
                     ESP_LOGW(TAG, "Could not start the cycle: %s",
                              esp_err_to_name(error));
                 } else {
                     // The status listener wakes the task when it starts.
-                    wait_ms = SCHEDULER_REQUEST_WAIT_MS;
+                    wait_ms = step.wait_ms;
                 }
-            } else {
-                std::int64_t next = earliest(times.camera, times.checkin);
-                if (now < start_at) {
-                    next = earliest(next, start_at);
-                }
+            } else if (step.action == schedule::Step::Action::sleep) {
 #if CONFIG_POWER_DEEP_SLEEP
-                std::int64_t awake_until = awake_until_boot;
-                const std::int64_t activity = schedule::last_activity();
-                if (activity != schedule::kNever &&
-                    activity + CONFIG_POWER_AWAKE_AFTER_ACTIVITY_MIN * 60 >
-                        awake_until) {
-                    awake_until =
-                        activity + CONFIG_POWER_AWAKE_AFTER_ACTIVITY_MIN * 60;
-                }
-                // Only on battery power (the mode can change at run time).
-                if (now >= awake_until && schedule::effective().sleeps) {
-                    std::int64_t sleep_s = next == schedule::kNever
-                                               ? CONFIG_POWER_MAX_SLEEP_MIN * 60
-                                               : next - now;
-                    if (sleep_s > CONFIG_POWER_MAX_SLEEP_MIN * 60) {
-                        sleep_s = CONFIG_POWER_MAX_SLEEP_MIN * 60;
-                    }
-                    if (sleep_s >= CONFIG_POWER_MIN_SLEEP_S) {
-                        char camera[48];
-                        char checkin[48];
-                        describe(times.camera, now, camera, sizeof(camera));
-                        describe(times.checkin, now, checkin, sizeof(checkin));
-                        ESP_LOGI(TAG, "Next read %s, next check-in %s", camera,
-                                 checkin);
-                        sleep_for(sleep_s);
-                    }
-                } else if (now < awake_until) {
-                    next = earliest(next, awake_until);
-                }
+                char camera[48];
+                char checkin[48];
+                describe(times.camera, now, camera, sizeof(camera));
+                describe(times.checkin, now, checkin, sizeof(checkin));
+                ESP_LOGI(TAG, "Next read %s, next check-in %s", camera,
+                         checkin);
+                sleep_for(step.sleep_s);
 #endif
-                if (next != schedule::kNever) {
-                    const std::int64_t left_ms = (next - now) * 1000;
-                    if (left_ms < (std::int64_t)wait_ms) {
-                        wait_ms =
-                            left_ms < 1000 ? 1000 : (std::uint32_t)left_ms;
-                    }
-                }
+            } else {
+                wait_ms = step.wait_ms;
             }
         }
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(wait_ms));
