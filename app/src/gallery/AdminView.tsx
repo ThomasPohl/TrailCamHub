@@ -15,6 +15,7 @@ import {
   reportsLevels,
   type QuietHours,
 } from './forecast';
+import { ScheduleEditor } from './SettingsPage';
 import { monthlyUsage } from './usage';
 import { isNewer } from './release';
 import {
@@ -380,6 +381,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
           tab={hubTab}
           onTab={setHubTab}
           onBack={() => setOpenHub(undefined)}
+          onReload={() => void load()}
           act={act}
           onConfirm={setConfirm}
         />
@@ -440,7 +442,7 @@ export function AdminView({ api, now }: { api: GalleryApi; now: () => number }) 
   );
 }
 
-type HubTab = 'overview' | 'schedule' | 'battery' | 'hints' | 'users' | 'firmware' | 'tech';
+type HubTab = 'overview' | 'schedule' | 'battery' | 'hints' | 'users' | 'firmware' | 'tech' | 'log';
 
 const HUB_TABS: Array<{ id: HubTab; label: string }> = [
   { id: 'overview', label: 'Übersicht' },
@@ -450,6 +452,7 @@ const HUB_TABS: Array<{ id: HubTab; label: string }> = [
   { id: 'users', label: 'Nutzer' },
   { id: 'firmware', label: 'Firmware' },
   { id: 'tech', label: 'Technik' },
+  { id: 'log', label: 'Protokoll' },
 ];
 
 /** Hub-level faults that mean the hub is not heard from. */
@@ -605,6 +608,7 @@ function HubPage({
   tab,
   onTab,
   onBack,
+  onReload,
   act,
   onConfirm: setConfirm,
 }: {
@@ -616,6 +620,8 @@ function HubPage({
   tab: HubTab;
   onTab(tab: HubTab): void;
   onBack(): void;
+  /** Load the hubs again (after the schedule editor saved). */
+  onReload(): void;
   act(run: () => Promise<void>, success: string): Promise<void>;
   onConfirm(confirm: Confirm): void;
 }) {
@@ -775,17 +781,32 @@ function HubPage({
           </>
         )}
         {tab === 'schedule' && (
-          <ScheduleForm
-            key={`${hub.hubId}:${hub.scheduleConfig.cameraPlan ?? ''}:${hub.scheduleConfig.checkinIntervalS ?? ''}:${hub.scheduleConfig.powerSetting ?? ''}`}
-            hub={hub}
-            disabled={busy}
-            onSave={(config) =>
-              act(
-                () => api.setSchedule(hub.hubId, config),
-                'Der Hub übernimmt den Plan beim nächsten Kontakt.',
-              )
-            }
-          />
+          <>
+            <ScheduleEditor
+              api={api}
+              hubId={hub.hubId}
+              config={hub.scheduleConfig}
+              schedule={hub.schedule}
+              cameraCount={hub.cameras.length}
+              nextContact={hub.schedule?.nextCheckinAt}
+              now={t}
+              onSaved={onReload}
+            />
+            <PowerForm
+              key={`${hub.hubId}:${hub.scheduleConfig.powerSetting ?? ''}`}
+              hub={hub}
+              disabled={busy}
+              onSave={(powerSetting) => {
+                const config: ScheduleConfig = { ...hub.scheduleConfig };
+                if (powerSetting === '') delete config.powerSetting;
+                else config.powerSetting = powerSetting;
+                return act(
+                  () => api.setSchedule(hub.hubId, config),
+                  'Der Hub übernimmt die Stromversorgung beim nächsten Kontakt.',
+                );
+              }}
+            />
+          </>
         )}
         {tab === 'battery' && (
           <>
@@ -877,6 +898,7 @@ function HubPage({
             )}
           </dl>
         )}
+        {tab === 'log' && <HubLog api={api} hub={hub} now={t} />}
         {tab === 'tech' && (
           <dl className="g-facts">
             <dt>Hub-ID</dt>
@@ -909,6 +931,49 @@ function HubPage({
         )}
       </div>
     </article>
+  );
+}
+
+/**
+ * The log of one hub (#431): what the admin did to its users (new link,
+ * locked, shared) and its firmware events, newest first. Admin logins are
+ * not about a hub; they stay in the log on the overview.
+ */
+function HubLog({ api, hub, now }: { api: GalleryApi; hub: AdminHub; now: number }) {
+  const [audit, setAudit] = useState<AuditEntry[]>();
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    let live = true;
+    api
+      .adminAudit()
+      .then((entries) => live && setAudit(entries))
+      .catch((e: unknown) => live && setError(errorText(e)));
+    return () => {
+      live = false;
+    };
+  }, [api]);
+  if (error) return <p className="g-error">Das Protokoll konnte nicht geladen werden: {error}</p>;
+  if (!audit) return <p className="g-hint">Lade …</p>;
+  const name = (id: number) => hub.users.find((u) => u.userId === id)?.name ?? `User ${id}`;
+  const lines = [
+    ...audit
+      .filter((e) => e.target !== undefined && hub.users.some((u) => u.userId === e.target))
+      .map((e) => ({
+        at: e.at,
+        text: `${clockTime(e.at, now)} · ${AUDIT_TEXT[e.action]} (${name(e.target ?? 0)})`,
+      })),
+    ...(hub.firmwareChanges ?? []).map((c) => ({
+      at: c.at,
+      text: `Firmware ${changeText(c, now)}`,
+    })),
+  ].sort((a, b) => b.at - a.at);
+  if (lines.length === 0) return <p className="g-hint">Noch nichts protokolliert.</p>;
+  return (
+    <ul className="g-audit-list" aria-label={`Protokoll ${hub.name}`}>
+      {lines.map((line, i) => (
+        <li key={i}>{line.text}</li>
+      ))}
+    </ul>
   );
 }
 
@@ -1184,83 +1249,56 @@ export function BatteryChart({
   );
 }
 
-/** The schedule set in the app; empty fields leave the setting to the hub. */
-function ScheduleForm({
+/**
+ * The power supply (#197, #431): the admin's alone, so it is not in the
+ * schedule editor the user shares.
+ */
+function PowerForm({
   hub,
   disabled,
   onSave,
 }: {
   hub: AdminHub;
   disabled: boolean;
-  onSave(config: ScheduleConfig): Promise<void>;
+  onSave(power: PowerSetting | ''): Promise<void>;
 }) {
-  const [plan, setPlan] = useState(hub.scheduleConfig.cameraPlan ?? '');
-  const [interval, setIntervalText] = useState(
-    hub.scheduleConfig.checkinIntervalS ? String(hub.scheduleConfig.checkinIntervalS / 60) : '',
-  );
   const [power, setPower] = useState<PowerSetting | ''>(hub.scheduleConfig.powerSetting ?? '');
-  const minutesValue = interval.trim() === '' ? undefined : Number(interval);
-  const invalid =
-    minutesValue !== undefined &&
-    !(Number.isInteger(minutesValue) && minutesValue >= 5 && minutesValue <= 1440);
-  const planId = `g-plan-${hub.hubId}`;
-  const intervalId = `g-interval-${hub.hubId}`;
   const powerId = `g-power-${hub.hubId}`;
-
   return (
     <form
-      className="g-schedule"
+      className="g-editor"
       onSubmit={(event) => {
         event.preventDefault();
-        if (invalid) return;
-        const config: ScheduleConfig = {};
-        if (plan.trim()) config.cameraPlan = plan.trim();
-        if (minutesValue !== undefined) config.checkinIntervalS = minutesValue * 60;
-        if (power !== '') config.powerSetting = power;
-        void onSave(config);
+        void onSave(power);
       }}
     >
-      <h3>Weckplan aus der App</h3>
-      <p className="g-hint">Leere Felder: der Hub nimmt seine eigene Einstellung.</p>
-      <label htmlFor={planId}>Kamera lesen (z. B. 05:00-09:00=30,*=120)</label>
-      <input
-        id={planId}
-        type="text"
-        value={plan}
-        placeholder={hub.schedule?.cameraPlan ?? ''}
-        autoComplete="off"
-        onChange={(event) => setPlan(event.target.value)}
-      />
-      <label htmlFor={intervalId}>Kontakt alle … Minuten (5–1440)</label>
-      <input
-        id={intervalId}
-        type="number"
-        min={5}
-        max={1440}
-        value={interval}
-        aria-invalid={invalid}
-        onChange={(event) => setIntervalText(event.target.value)}
-      />
-      <label htmlFor={powerId}>Stromversorgung</label>
-      <select
-        id={powerId}
-        value={power}
-        onChange={(event) => setPower(event.target.value as PowerSetting | '')}
-      >
-        <option value="">Der Hub behält seine Einstellung</option>
-        <option value="auto">Automatisch (Akku erkennen)</option>
-        <option value="mains">Netzbetrieb (kein Tiefschlaf)</option>
-        <option value="battery">Akkubetrieb (Tiefschlaf)</option>
-      </select>
-      <p className="g-hint">
-        Der Hub speichert die Einstellung, wenn sein Board sie kann, und nutzt sie ab dem nächsten
-        Start. Akkubetrieb am Netz-Hub: Er ist dann nur noch zu den Kontaktzeiten erreichbar.
-      </p>
-      <div className="g-card__actions">
-        <button type="submit" className="g-btn" disabled={disabled || invalid}>
-          Übernehmen
-        </button>
-      </div>
+      <fieldset>
+        <legend>Stromversorgung (nur Admin)</legend>
+        <label htmlFor={powerId}>Stromversorgung</label>
+        <select
+          id={powerId}
+          value={power}
+          onChange={(event) => setPower(event.target.value as PowerSetting | '')}
+        >
+          <option value="">Der Hub behält seine Einstellung</option>
+          <option value="auto">Automatisch (Akku erkennen)</option>
+          <option value="mains">Netzbetrieb (kein Tiefschlaf)</option>
+          <option value="battery">Akkubetrieb (Tiefschlaf)</option>
+        </select>
+        <p className="g-hint">
+          Der Hub speichert die Einstellung, wenn sein Board sie kann, und nutzt sie ab dem nächsten
+          Start. Akkubetrieb am Netz-Hub: Er ist dann nur noch zu den Kontaktzeiten erreichbar.
+        </p>
+        <div className="g-card__actions">
+          <button
+            type="submit"
+            className="g-btn"
+            disabled={disabled || power === (hub.scheduleConfig.powerSetting ?? '')}
+          >
+            Stromversorgung übernehmen
+          </button>
+        </div>
+      </fieldset>
     </form>
   );
 }
